@@ -79,6 +79,15 @@ describe("관리 정책", () => {
     expect(viewOf(sanitizeManagedPart({ permissions: { allow: ["Bash(*)"], ask: 3 } })).allow).toEqual([]);
     expect(viewOf(sanitizeManagedPart({ permissions: { allow: ["Bash(*)"], deny: ["Read(.env)"] } })).allow).toEqual(["Bash(*)"]);
     expect(viewOf(sanitizeManagedPart({ permissions: { allow: ["Bash(*)"], deny: null } })).allow).toEqual(["Bash(*)"]);
+    // additionalDirectories도 함께 보류한다. viewOf는 이 칸을 내지 않으므로 고친 결과를 직접 본다(계획 리뷰 7차 짝 2 X01)
+    for (const limit of [{ deny: "bad" }, { ask: 3 }]) {
+      const withheld = sanitizeManagedPart({ permissions: { allow: ["Bash(*)"], additionalDirectories: ["/x"], ...limit } }).permissions as Record<string, unknown>;
+      expect(Object.hasOwn(withheld, "allow") || Object.hasOwn(withheld, "additionalDirectories")).toBe(false);
+    }
+    for (const limit of [{ deny: ["Read(.env)"] }, { ask: ["Bash(rm *)"] }, { deny: null }]) {
+      const kept = sanitizeManagedPart({ permissions: { allow: ["Bash(*)"], additionalDirectories: ["/x"], ...limit } }).permissions as Record<string, unknown>;
+      expect(kept.additionalDirectories).toEqual(["/x"]);
+    }
     // 허용 목록이 틀리면 빈 허용 목록이다(사용자가 더한 서버를 모두 막는다)
     await rm(join(root, "managed-settings.d"), { recursive: true, force: true });
     await put(join(root, "managed-settings.json"), JSON.stringify({ allowedMcpServers: "x" }));

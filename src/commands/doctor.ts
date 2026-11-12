@@ -11,10 +11,6 @@ export interface DoctorReport {
   state: { dir: string; writable: boolean };
 }
 
-export function defaultStateDir(homedir: string): string {
-  return join(homedir, ".chunsik-garage");
-}
-
 export function hasZstd(): boolean {
   return typeof (zlib as unknown as Record<string, unknown>).createZstdDecompress === "function";
 }

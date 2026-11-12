@@ -1,0 +1,27 @@
+{
+  "name": "chunsik-garage",
+  "version": "0.1.0",
+  "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yeunlee1/chunsik-garage.git"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && node scripts/check-bundle.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}

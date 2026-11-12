@@ -8,11 +8,14 @@ import {
   canonicalDay,
   emptyDay,
   emptySkillSignalCounts,
+  emptyToolCounts,
   type DayCell,
   type SessionKind,
   type SessionSummary,
   type SkillSignalCounts,
+  type ToolCounts,
 } from "../types.ts";
+import { classifyUser, denialOf, isInterruptMarker, slashCommandOf, type DenialKind } from "./classify.ts";
 import { ResponseTable } from "./responses.ts";
 
 export const CLAUDE_PARSER_VERSION = 1;
@@ -20,6 +23,16 @@ export const CLAUDE_PARSER_VERSION = 1;
 /** 숫자를 세는 종류. 그 밖의 종류는 풀리는지와 날짜만 본다(설계 9.4) */
 const COUNTED_TYPES: ReadonlySet<string> = new Set(["assistant", "user", "attachment", "system"]);
 const FIRST_RESPONSE_IDS = 20;
+export const SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "PowerShell"]);
+export const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(["Agent", "Task"]);
+export const UNKNOWN_TOOL = "?";
+
+/** 도구 이름을 세는 열쇠로 바꾼다. MCP 도구(mcp__<서버>__<도구>)는 서버로 묶는다. */
+export function toolKey(name: string): string {
+  if (!name.startsWith("mcp__")) return name;
+  const parts = name.split("__");
+  return `mcp__${parts[1] !== undefined && parts[1] !== "" ? parts[1] : UNKNOWN_TOOL}`;
+}
 
 type Json = Record<string, unknown>;
 
@@ -62,6 +75,10 @@ export class ClaudeSessionParser {
   private responsesWithoutId = 0;
   private undatedLines = 0;
   private readonly unknownHookKinds = nameRecord<number>();
+  private readonly toolNames = new Map<string, string>();
+  private pendingCommand: { date: LocalDate; mode: string | null } | null = null;
+  private readonly slashCommands: Array<{ name: string; date: LocalDate }> = [];
+  private lastUserWasUserRejection = false;
 
   constructor(private readonly ctx: ParserContext) {}
 
@@ -192,34 +209,151 @@ export class ClaudeSessionParser {
   private handle(line: Json, date: LocalDate | null): void {
     if (this.cwd === null) this.cwd = str(line.cwd);
     if (line.type === "assistant") this.onAssistant(line, date);
+    else if (line.type === "user") this.onUser(line, date);
   }
 
   private onAssistant(line: Json, date: LocalDate | null): void {
+    this.lastUserWasUserRejection = false;
     const version = str(line.version);
     if (version !== null) this.version = maxVersion([this.version, version]);
     const message = obj(line.message) ?? {};
     const id = str(message.id);
     if (id === null) {
       this.responsesWithoutId++;
+    } else {
+      const { row, isNew } = this.responses.row(id, date, message.model === "<synthetic>");
+      if (isNew && !this.responses.isSynthetic(row)) {
+        if (this.firstIds.length < FIRST_RESPONSE_IDS) this.firstIds.push(id);
+        this.resolvePending(true);
+      }
+      this.responses.fillFirst(row, "model", str(message.model));
+      this.responses.fillFirst(row, "effort", str(line.effort));
+      const usage = obj(message.usage);
+      if (usage !== null) {
+        this.responses.setUsage(row, {
+          input: num(usage.input_tokens),
+          cacheRead: num(usage.cache_read_input_tokens),
+          cacheWrite: num(usage.cache_creation_input_tokens),
+          output: num(usage.output_tokens),
+          thinking: num(obj(usage.output_tokens_details)?.thinking_tokens),
+        });
+      }
+      const stop = str(message.stop_reason);
+      if (stop !== null) this.responses.setStop(row, stop);
+      this.responses.setLast(row, "skill", str(line.attributionSkill));
+      this.responses.setLast(row, "mcpServer", str(line.attributionMcpServer));
+    }
+    if (date === null || !Array.isArray(message.content)) return;
+    for (const raw of message.content) {
+      const block = obj(raw);
+      if (block === null || block.type !== "tool_use") continue;
+      const blockId = str(block.id);
+      if (blockId === null || this.toolNames.has(blockId)) continue;
+      const name = str(block.name) ?? UNKNOWN_TOOL;
+      const key = toolKey(name);
+      this.toolNames.set(blockId, key);
+      const day = this.day(date);
+      this.tool(day, key).calls++;
+      if (key.startsWith("mcp__")) bump(day.mcpCalls, key.slice("mcp__".length));
+      if (SUBAGENT_TOOLS.has(name)) day.subagentCalls++;
+      if (name === "Skill") {
+        const skill = str(obj(block.input)?.skill);
+        if (skill !== null) this.skillSignal(day, skill).tool++;
+      }
+    }
+  }
+
+  /**
+   * user 줄. 사람 요청은 판별표로 가르고(하위 세션은 세지 않는다), 도구 결과·거절·끊은 표지·슬래시 명령은
+   * 판별표와 따로 본다. 하위 세션의 도구 결과, 끊은 표지, 슬래시 명령도 센다(설계 9.2, 9.5).
+   */
+  private onUser(line: Json, date: LocalDate | null): void {
+    const verdict = classifyUser(line, this.ctx.kind === "sub");
+    const denial = denialOf(line);
+    const afterUserRejection = this.lastUserWasUserRejection;
+    this.lastUserWasUserRejection = denial !== null && denial.kind === "user";
+    if (date === null) return;
+    const day = this.day(date);
+    this.toolResults(line, day, denial);
+    if (isInterruptMarker(line) && !afterUserRejection) day.interruptedTurns++;
+    const slash = slashCommandOf(line);
+    if (slash !== null) this.slashCommands.push({ name: slash, date });
+    switch (verdict.kind) {
+      case "human":
+        this.resolvePending(false);
+        day.humanRequests++;
+        if (verdict.weak) day.weakHumanRequests++;
+        this.countMode(day, line);
+        break;
+      case "command":
+        this.resolvePending(false);
+        this.pendingCommand = { date, mode: str(line.permissionMode) };
+        break;
+      case "skip":
+        bump(day.nonHumanInputs, verdict.reason);
+        break;
+      case "tool-result":
+        break;
+    }
+  }
+
+  /** 도구 결과를 센다. 거절 표시가 붙은 줄은 한 건으로, 첫 결과의 도구에 종류별로 적는다. 결과도 거절 표시도 없으면 아무것도 세지 않는다. */
+  private toolResults(line: Json, day: DayCell, denial: { kind: DenialKind; raw: string | null } | null): void {
+    const message = obj(line.message) ?? {};
+    const results: Json[] = [];
+    if (Array.isArray(message.content)) {
+      for (const raw of message.content) {
+        const block = obj(raw);
+        if (block !== null && block.type === "tool_result") results.push(block);
+      }
+    }
+    if (denial !== null) {
+      const first = results[0];
+      const counts = this.tool(day, first === undefined ? UNKNOWN_TOOL : this.toolNameOf(first));
+      if (denial.kind === "user") counts.deniedByUser++;
+      else if (denial.kind === "hook") counts.deniedByHook++;
+      else if (denial.kind === "permission") counts.deniedByPermission++;
+      else if (denial.kind === "interrupted") counts.interrupted++;
+      else {
+        counts.unknownDenial++;
+        bump(day.unknownDenialKinds, denial.raw ?? UNKNOWN_TOOL);
+      }
       return;
     }
-    const { row, isNew } = this.responses.row(id, date, message.model === "<synthetic>");
-    if (isNew && !this.responses.isSynthetic(row) && this.firstIds.length < FIRST_RESPONSE_IDS) this.firstIds.push(id);
-    this.responses.fillFirst(row, "model", str(message.model));
-    this.responses.fillFirst(row, "effort", str(line.effort));
-    const usage = obj(message.usage);
-    if (usage !== null) {
-      this.responses.setUsage(row, {
-        input: num(usage.input_tokens),
-        cacheRead: num(usage.cache_read_input_tokens),
-        cacheWrite: num(usage.cache_creation_input_tokens),
-        output: num(usage.output_tokens),
-        thinking: num(obj(usage.output_tokens_details)?.thinking_tokens),
-      });
+    for (const block of results) {
+      const counts = this.tool(day, this.toolNameOf(block));
+      counts.results++;
+      if (block.is_error === true) counts.errors++;
     }
-    const stop = str(message.stop_reason);
-    if (stop !== null) this.responses.setStop(row, stop);
-    this.responses.setLast(row, "skill", str(line.attributionSkill));
-    this.responses.setLast(row, "mcpServer", str(line.attributionMcpServer));
+  }
+
+  private toolNameOf(block: Json): string {
+    const id = str(block.tool_use_id);
+    return (id === null ? undefined : this.toolNames.get(id)) ?? UNKNOWN_TOOL;
+  }
+
+  private tool(day: DayCell, name: string): ToolCounts {
+    let counts = day.tools[name];
+    if (counts === undefined) {
+      counts = emptyToolCounts();
+      day.tools[name] = counts;
+    }
+    return counts;
+  }
+
+  private countMode(day: DayCell, line: Json): void {
+    const mode = str(line.permissionMode);
+    if (mode !== null) bump(day.permissionModes, mode);
+  }
+
+  /** 기다리는 명령을 정리한다. 응답이 뒤따랐으면 명령의 날짜에 사람 요청으로 센다. */
+  private resolvePending(responded: boolean): void {
+    if (this.pendingCommand === null) return;
+    if (responded) {
+      const day = this.day(this.pendingCommand.date);
+      day.humanRequests++;
+      if (this.pendingCommand.mode !== null) bump(day.permissionModes, this.pendingCommand.mode);
+    }
+    this.pendingCommand = null;
   }
 }

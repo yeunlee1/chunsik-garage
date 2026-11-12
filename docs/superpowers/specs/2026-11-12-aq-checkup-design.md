@@ -692,9 +692,9 @@ Codex 기록에는 도구가 두 층으로 남는다. 두 층은 같은 작업�
 | 프로젝트 지침 | 프로젝트 뿌리의 `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md`와 프로젝트 규칙 파일(`.claude/rules/` 아래의 `.md`). 앞의 셋이 하나도 없으면 `AGENTS.md`와 `.claude/AGENTS.md`도 든다(아래 「지침 파일의 범위」) | 작업 폴더에서 저장소 뿌리까지의 `AGENTS.md` |
 | 설정 층(뒤가 앞을 이긴다) | 사용자 `<홈>/settings.json` → 프로젝트 `.claude/settings.json` → 로컬 `.claude/settings.local.json`. 관리 정책이 있으면 그것이 맨 위다. 관리 정책은 파일로 둔 것만 읽는다(아래 「관리 정책」) | 사용자 `<홈>/config.toml` → 프로젝트 `.codex/config.toml` |
 | 스킬을 찾는 곳 | `<홈>/skills/`, 프로젝트 `.claude/skills/`, 켜져 있는 플러그인의 스킬 | `~/.agents/skills/`(사용자), 작업 폴더에서 저장소 뿌리까지의 `.agents/skills/`(저장소), `/etc/codex/skills`(관리자), Codex에 든 기본 스킬, 켜져 있는 플러그인의 스킬. 옛 위치 `<홈>/skills/`도 함께 본다(이 위치의 경로가 0.166.0의 세션 스킬 목록에 실려 있었다) |
-| 스킬을 끈 표시 | `skillOverrides`(스킬 이름마다 `on`, `name-only`, `user-invocable-only`, `off`. 플러그인 스킬에는 듣지 않는다) | `[[skills.config]]`(경로나 이름 하나와 `enabled`. 뒤에 나온 항목이 이긴다) |
+| 스킬을 끈 표시 | `skillOverrides`(스킬 이름마다 `on`, `name-only`, `user-invocable-only`, `off`. 이 넷 밖의 값은 그 층이 정하지 않은 것으로 본다. 플러그인 스킬에는 듣지 않는다) | `[[skills.config]]`(경로나 이름 하나와 `enabled`. 뒤에 나온 항목이 이긴다) |
 | MCP 서버 | `~/.claude.json`의 사용자 서버와 프로젝트별 서버, 프로젝트의 `.mcp.json`, 플러그인이 넣은 서버, claude.ai에 연결한 서버(이름만 안다. 세션 기록과 `~/.claude.json`의 `claudeAiMcpEverConnected`에서 얻는다) | `[mcp_servers.<이름>]`, 플러그인이 넣은 서버 |
-| MCP를 막거나 승인한 표시 | `deniedMcpServers`(`{ "serverName": … }` 객체의 목록), `enabledMcpjsonServers`, `disabledMcpjsonServers`(이 둘은 설정 층의 것과 `~/.claude.json`의 프로젝트마다의 것을 함께 본다), `~/.claude.json`의 프로젝트마다의 `disabledMcpServers`(아래 「`~/.claude.json`」) | 서버마다 `enabled` |
+| MCP를 막거나 승인한 표시 | `deniedMcpServers`(`{ "serverName": … }` 객체의 목록), `enabledMcpjsonServers`, `disabledMcpjsonServers`(이 둘은 설정 층의 것과 `~/.claude.json`의 프로젝트마다의 것을 함께 본다), `~/.claude.json`의 프로젝트마다의 `disabledMcpServers`(아래 「`~/.claude.json`」), `enableAllProjectMcpServers`(우선순위가 가장 높은 층이 정한 값이다. 신뢰한 폴더에서는 위 층의 거짓이 아래 층의 참을 덮는다. 스캐너는 목록의 프로젝트를 신뢰한 폴더로 본다. 27절) | 서버마다 `enabled` |
 | 플러그인 | 설정 층마다의 `enabledPlugins`, 설치된 플러그인의 폴더 구성과 매니페스트, 마켓 항목. 놓인 곳은 `<홈>/plugins/installed_plugins.json`에서, 마켓 항목은 `<홈>/plugins/known_marketplaces.json`이 가리키는 마켓 파일에서 얻는다. 스킬 폴더에 둔 플러그인은 스킬 폴더에서 찾는다(아래 「플러그인의 구성」) | `[plugins."이름@마켓"]`의 `enabled` |
 | 권한과 훅(S2와 F6이 본다. 11.3절) | S2는 `permissions`의 `defaultMode`, `hooks`의 `PreToolUse`(매처와 처리기마다의 `type`·`async`·`asyncRewake`·`if`), 사용자 설정과 관리 정책의 `disableAllHooks`, 관리 정책의 `allowManagedHooksOnly`와 `enabledPlugins`(관리 정책이 강제로 켠 플러그인), 켜져 있는 플러그인이 넣은 `PreToolUse` 훅을 본다. F6은 전역 쪽(사용자 설정)과 프로젝트 쪽(프로젝트 설정과 로컬 설정)에서 `permissions`의 `allow`와 `deny`의 규칙을 본다 | `approval_policy`, `sandbox_mode` |
 | 도구가 세는 사용 집계 | `~/.claude.json`의 `skillUsage`, `pluginUsage` | 찾지 못함 |
@@ -759,7 +759,7 @@ Codex 기록에는 도구가 두 층으로 남는다. 두 층은 같은 작업�
   - 프로젝트 지침은 프로젝트 뿌리에서만 찾는다. Claude Code는 작업 폴더와 그 위의 모든 폴더에서 지침을 읽지만(공식 문서), 뿌리와 작업 폴더 사이의 폴더나 뿌리보다 위의 폴더에 있는 지침은 보지 않는다(27절).
   - 세션에 실제로 실린 지침의 크기(E4)는 기록의 첨부로 재므로 이 범위와 상관없다.
 - **관리 정책은 파일로 둔 것만 읽는다.** `managed-settings.json`과 그 옆 `managed-settings.d/` 폴더의 `.json` 파일이다. 놓이는 폴더는 macOS가 `/Library/Application Support/ClaudeCode/`, Linux와 WSL이 `/etc/claude-code/`, Windows가 `C:\Program Files\ClaudeCode\`다(공식 문서).
-  - `managed-settings.json`을 먼저 읽고 `managed-settings.d/`의 파일을 이름 차례로 합친다. 값 하나짜리는 뒤의 것이 이기고, 목록은 합쳐서 중복을 빼고, 묶음은 열쇠마다 같은 규칙으로 합친다. 숨김 파일과 `.json`으로 끝나지 않는 파일은 읽지 않는다(공식 문서). 합치기 전에 파일마다 스캐너가 읽는 열쇠의 틀린 값을 도구의 규칙대로 고친다(공식 문서 managed-settings 「Find entries Claude Code dropped」). `null`은 그 열쇠를 지운다. `disableAllHooks`는 틀리면(글자 참거짓도) 버린다. 엄한 값이 하나인 열쇠는 틀리면 그 엄한 값으로 읽고 글자 `"true"`·`"false"`는 그 참거짓으로 읽는다(`allowManagedHooksOnly`는 참, `enableAllProjectMcpServers`는 거짓). `permissions`는 칸마다 고치고 `defaultMode`가 틀리면 `default`로 읽는다. `allowedMcpServers`가 틀리면 빈 허용 목록이다. `enabledPlugins`와 `skillOverrides`는 틀린 항목을 버린다. 고치지 않고 합치면 뒤 파일의 틀린 값이 앞 파일의 맞는 값을 덮는다. 훅은 합친 값이 아니라 파일마다 본다(11.3절의 ㉠과 E5 ⑤).
+  - `managed-settings.json`을 먼저 읽고 `managed-settings.d/`의 파일을 이름 차례로 합친다. 값 하나짜리는 뒤의 것이 이기고, 목록은 합쳐서 중복을 빼고, 묶음은 열쇠마다 같은 규칙으로 합친다. 숨김 파일과 `.json`으로 끝나지 않는 파일은 읽지 않는다(공식 문서). 합치기 전에 파일마다 스캐너가 읽는 열쇠의 틀린 값을 도구의 규칙대로 고친다(공식 문서 managed-settings 「Find entries Claude Code dropped」). `null`은 그 열쇠를 지운다. `disableAllHooks`는 틀리면(글자 참거짓도) 버린다. 엄한 값이 하나인 열쇠는 틀리면 그 엄한 값으로 읽고 글자 `"true"`·`"false"`는 그 참거짓으로 읽는다(`allowManagedHooksOnly`는 참, `enableAllProjectMcpServers`는 거짓). `permissions`는 칸마다 고치고 `defaultMode`가 틀리면 `default`로 읽는다. `allowedMcpServers`가 틀리면 빈 허용 목록이다. `enabledPlugins`와 `skillOverrides`는 틀린 항목을 버린다(`skillOverrides`는 위 표의 네 값만 맞는 값이다). `permissions`의 `deny`나 `ask`를 전혀 읽지 못하면 그 파일의 `allow`와 `additionalDirectories`를 보류한다(공식 문서). 고치지 않고 합치면 뒤 파일의 틀린 값이 앞 파일의 맞는 값을 덮는다. 훅은 합친 값이 아니라 파일마다 본다(11.3절의 ㉠과 E5 ⑤).
   - 서버가 내려 주는 설정과 기기 관리로 둔 정책(macOS의 plist, Windows의 레지스트리)은 파일이 아니라서 읽지 않는다. 관리 정책의 출처에는 차례가 있고, 기본으로는 정책이 든 첫 출처 하나만 쓰인다. 파일은 그 둘보다 뒤다(공식 문서). 그래서 스캐너가 읽은 파일의 값이 실제로 듣는 값이 아닐 수 있고, 파일이 없어도 관리 정책이 있을 수 있다(27절).
   - 관리 정책 파일에서도 다른 설정 층에서 읽는 열쇠와 S2가 관리 정책에서 보는 열쇠(위 표)만 읽는다. 권한 우회 모드를 막는 `permissions.disableBypassPermissionsMode`와 관리 정책의 권한 규칙만 듣게 하는 `allowManagedPermissionRulesOnly`는 첫 버전에서 보지 않는다(27절).
 - **`~/.claude.json`.** 이 문서가 `~/.claude.json`이라고 적은 파일은 `CLAUDE_CONFIG_DIR`이 있으면 그 폴더 안의 `.claude.json`이고, 없으면 홈 폴더 바로 아래의 것이다(공식 문서).
@@ -1765,6 +1765,11 @@ Codex의 기본 설정(작업 공간 쓰기 샌드박스, 필요할 때 승인 �
 | 관리 정책 파일의 `permissions.defaultMode`가 숫자다 | `default`로 읽는다. 관리 정책이 권한 우회가 아닌 모드로 정한 것이다 |
 | 관리 정책 파일의 `allowedMcpServers`가 목록이 아니다 | 빈 허용 목록이다. 사용자가 더한 서버는 막힌다 |
 | 정상 `managed-settings.json`의 훅 명령이 사용자 스킬의 경로를 가리키고, 뒤 드롭인의 `hooks`가 글자다 | 그 스킬은 훅이 내용을 넣어 주는 스킬이다. 뒤 파일의 틀린 값이 앞 파일의 명령을 지우지 않는다 |
+| 사용자 설정이 스킬 `s`를 `off`로, 프로젝트 설정이 `offf`로 적었다 | 프로젝트의 값은 맞는 값이 아니라 정하지 않은 것이다. `s`는 꺼져 있다 |
+| 관리 정책 파일이 `skillOverrides`를 `{ "s": "off" }`로, 뒤 드롭인이 `{ "s": "OFF" }`로 적었다 | 뒤 파일의 틀린 값은 버린다. `s`는 꺼져 있다 |
+| 목록의 프로젝트에서 사용자 설정은 `enableAllProjectMcpServers`를 참으로, 관리 정책은 거짓으로 적었다. 프로젝트 `.mcp.json`의 서버는 켠 목록에 없다 | 일괄 승인이 아니다. 그 서버는 승인되지 않았다 |
+| 같은 프로젝트에서 사용자 설정만 참이고 다른 층은 정하지 않았다 | 일괄 승인이다. 정하지 않은 층은 위 층이라도 덮지 않는다 |
+| 관리 정책 파일의 `permissions`에 `allow`가 있고 `deny`가 목록이 아니다 | 그 파일의 `allow`를 보류한다 |
 | 관리 정책 파일이 `permissions.disableBypassPermissionsMode`를 켰고 사용자 설정의 기본 모드가 권한 우회다 | 기본 모드를 권한 우회로 본다. 한계로 적어 둔 경우다 |
 | `CLAUDE_CONFIG_DIR`이 있다 | `.claude.json`을 그 폴더 안에서 읽는다 |
 | 사용자 범위 MCP 서버가 한 프로젝트의 `disabledMcpServers`(`~/.claude.json`의 프로젝트마다의 값)에만 들어 있다 | 그 프로젝트에서만 꺼진 것이다. 사용자 범위에서는 켜져 있다 |
@@ -2123,6 +2128,7 @@ Codex의 기본 설정(작업 공간 쓰기 샌드박스, 필요할 때 승인 �
 - Claude Code 훅의 형식 검사 전부. 스캐너는 뼈대(10절)와 처리기의 종류·필수 값(11.3절)만 보고, 거기에 걸린 출처의 확인 훅은 세지 않는다. 뼈대 밖의 값(값의 종류, 사건 이름)이 형식에 맞지 않아 도구가 플러그인 훅 파일을 싣지 않거나 관리 정책의 그 출처 `hooks`를 통째로 버리는 경우, 사용자 설정의 훅 밖의 값이 형식에 맞지 않아 도구가 그 파일 없이 시작하는 경우(공식 문서의 Settings Error), 매니페스트의 인라인 훅이 형식에 맞지 않을 때 도구가 매니페스트 전체를 싣지 않는지는 알아보지 못한다. 앞의 둘은 확인 훅을 있다고 잘못 셀 수 있는 쪽이다
 - 플러그인의 구성 요소 경로. 같은 마켓 안의 다른 플러그인을 가리키는 링크와 로컬 마켓 안으로 풀리는 기본 `hooks/hooks.json`(도구가 받는다)을 스캐너는 밖으로 본다. 경로가 `./`로 시작하지 않을 때 도구가 플러그인을 통째로 싣지 않는지 그 경로만 버리는지, 훅·스킬 경로의 안쪽을 가리키는 `..` 부분을 도구가 받는지는 확인하지 못했고, 스캐너는 그런 경로를 쓰지 않는다(엄한 쪽). 기본 `skills/`와 `.mcp.json`이 밖을 가리키는 링크일 때 도구가 받는지도 확인하지 못했고, 스캐너는 그대로 풀어 읽는다. macOS·Linux에서 도구는 역슬래시가 든 경로를 받지 않는데 스캐너는 따로 보지 않는다(그런 경로는 대개 없는 파일이 되어 읽지 못한 것으로 남는다)
 - 관리 정책의 틀린 값. 도구가 파일마다 고친 뒤 합치는지 합친 뒤 고치는지는 문서에 없다(스캐너는 파일마다 고친다). `allowManagedHooksOnly`와 `enableAllProjectMcpServers`가 엄한 값으로 읽는 열쇠에 드는지, `skillOverrides`의 틀린 항목을 버리는지는 문서가 예만 들어 추정이다. 서버가 내려 주는 설정과 기기 관리로 둔 정책은 읽지 않는다(10절)
+- 프로젝트 MCP 서버의 승인. 스캐너는 신뢰 기록을 읽지 않고 목록의 프로젝트(주 세션이 돈 폴더)를 신뢰한 폴더로 본다. 신뢰하지 않은 폴더에서는 공유 프로젝트 설정의 승인을 듣지 않고, 인정되는 파일 하나의 참이면 일괄 승인이다(공식 문서). 스캐너는 이 경우를 가르지 않는다
 - MIT 전문을 둔 `LICENSE`와 따로 둔 그림 이용 조건이 함께 있을 때 어떻게 읽히는지, `LICENSE`에 범위를 적는 문장을 더해도 깃허브가 라이선스를 알아보는지(법률 검토는 이 문서의 범위 밖이다)
 
 ## 부록 A. 기록에서 쓰는 필드
@@ -2762,3 +2768,14 @@ S2와 F1은 계속 "결정 대기"다.
 | 10(관리 정책은 파일로 둔 것만 읽는다) | 합치기 전에 파일마다 스캐너가 읽는 열쇠의 틀린 값을 도구의 규칙대로 고친다(`null`, `disableAllHooks`, 엄한 값으로 읽는 열쇠, `defaultMode`, `allowedMcpServers`, `enabledPlugins`, `skillOverrides`). 훅 명령도 파일마다 모은다 | 고치지 않고 합치면 뒤 파일의 틀린 값이 앞 파일의 맞는 값을 덮는다. 도구가 엄한 값으로 읽는 `allowManagedHooksOnly`를 거짓으로 읽으면 돌지 않는 사용자 훅을 ㉠으로 센다. 합친 훅에서 명령을 모으면 훅이 내용을 넣어 주는 스킬을 "안 쓴 것이 확인됨"으로 잘못 볼 수 있다 |
 | 21.1 | 반례 여덟 줄 | 스캐너 시험의 재료 |
 | 27 | 구성 요소 경로의 한계를 고쳐 적었다(로컬 마켓 안의 기본 훅 파일, `..` 부분을 엄하게 본 것, 기본 `skills/`와 `.mcp.json`, 역슬래시). 관리 정책의 틀린 값을 고치는 차례와 추정한 열쇠를 더했다 | 확인한 것과 엄한 쪽으로 고른 것, 추정을 나눴다 |
+
+### 2단계 1부 계획 리뷰 6차에서 보완(2026-11-13, 주 세션)
+
+고친 계획을 짝 Codex 둘과 주 세션이 여섯 번째로 리뷰했다. 짝 Codex 둘이 같은 결함을 짚었다. 관리 정책의 `skillOverrides`를 글자이기만 하면 받아, 오타(`offf`, `OFF`, 빈 글자)가 앞 파일의 맞는 `off`를 덮는다. 짝 Codex 1은 `enableAllProjectMcpServers`를 한 층이라도 참이면 일괄 승인으로 보아, 위 층의 거짓이 아래 층의 참을 덮는 규칙을 어긴다는 것도 짚었다. 짝 Codex 2는 `permissions`의 `deny`나 `ask`를 읽지 못할 때 같은 곳의 `allow`를 보류하는 규칙을 권했다. 주 세션은 셋 모두 공식 문서 원문으로 확인했다. settings-reference의 「skillOverrides」(`on`, `name-only`, `user-invocable-only`, `off`)와 「enableAllProjectMcpServers」("In a trusted folder, a `false` in a higher-precedence file overrides a `true` in a lower one; in a folder you haven't trusted, a `true` in any honored file is enough"), managed-settings의 「Keys that fail closed」("While a `deny` or `ask` list in `permissions` can't be read at all, Claude Code withholds `allow` and `additionalDirectories`"), settings의 「Settings precedence」("Claude Code uses the value from the highest level that sets it")다. **이 절도 설계 리뷰어의 확인을 아직 받지 않았다.**
+
+| 고친 절 | 무엇을 | 까닭 |
+|---|---|---|
+| 10(읽는 것의 표) | `skillOverrides`는 네 값만 맞는 값이고 그 밖은 그 층이 정하지 않은 것이다. `enableAllProjectMcpServers`는 우선순위가 가장 높은 층이 정한 값이다(정하지 않은 층은 덮지 않는다) | 틀린 값이나 아래 층의 참이 맞는 값과 위 층의 거짓을 덮으면 꺼진 스킬이 켜지고 승인되지 않은 서버가 켜진다 |
+| 10(관리 정책은 파일로 둔 것만 읽는다) | `deny`나 `ask`를 읽지 못하면 그 파일의 `allow`와 `additionalDirectories`를 보류한다 | 도구는 곁의 제한 없이 허용만 듣게 하지 않는다. 지금의 셋팅 사실은 관리 정책의 `allow`를 쓰지 않지만 문서와 같게 둔다 |
+| 21.1 | 반례 다섯 줄 | 스캐너 시험의 재료 |
+| 27 | 프로젝트 MCP 서버의 승인에서 신뢰 기록을 읽지 않는 한계 | 신뢰하지 않은 폴더의 규칙은 다르다 |

@@ -1,0 +1,12 @@
+# 의존성과 시험 산출물
+node_modules/
+coverage/
+
+# 로그와 운영체제가 만드는 파일
+*.log
+.DS_Store
+Thumbs.db
+
+# 이 PC에만 두는 것(사용량 숫자가 든 화면 시안, 개인 권한 설정)
+.superpowers/
+.claude/settings.local.json

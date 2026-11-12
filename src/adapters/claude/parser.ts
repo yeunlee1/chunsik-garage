@@ -7,9 +7,11 @@ import { maxVersion } from "../common/version.ts";
 import {
   canonicalDay,
   emptyDay,
+  emptyHookCounts,
   emptySkillSignalCounts,
   emptyToolCounts,
   type DayCell,
+  type HookCounts,
   type SessionKind,
   type SessionSummary,
   type SkillSignalCounts,
@@ -34,6 +36,24 @@ export function toolKey(name: string): string {
   return `mcp__${parts[1] !== undefined && parts[1] !== "" ? parts[1] : UNKNOWN_TOOL}`;
 }
 
+export const KNOWN_HOOK_ATTACHMENTS: ReadonlySet<string> = new Set([
+  "hook_success",
+  "hook_non_blocking_error",
+  "hook_blocking_error",
+  "hook_additional_context",
+]);
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+
+/** 훅이 실패해서 동작이 막혔을 때 도구가 오류 글에 붙이는 문구(설계 9.5 「훅」). `timed out` 하나만으로는 표지로 삼지 않는다. */
+export const HOOK_FAILURE_MARKERS: readonly string[] = ["blocking because onFailure is", "blocking because Git Bash wasn't found"];
+
+/** 막음 첨부의 오류 글에 실패 표지가 있는지만 본다. 글은 어디에도 남기지 않는다. */
+function hasFailureMarker(blockingError: unknown): boolean {
+  const text = typeof blockingError === "string" ? blockingError : (str(obj(blockingError)?.blockingError) ?? "");
+  return HOOK_FAILURE_MARKERS.some((marker) => text.includes(marker));
+}
+
 type Json = Record<string, unknown>;
 
 export interface ParserContext {
@@ -41,6 +61,13 @@ export interface ParserContext {
   kind: SessionKind;
   parentSessionId: string | null;
   timeZone: string;
+}
+
+interface LoadedNames {
+  skills: Set<string>;
+  mcp: Set<string>;
+  reloadedSkills: Set<string>;
+  reloadedMcp: Set<string>;
 }
 
 const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
@@ -79,6 +106,17 @@ export class ClaudeSessionParser {
   private pendingCommand: { date: LocalDate; mode: string | null } | null = null;
   private readonly slashCommands: Array<{ name: string; date: LocalDate }> = [];
   private lastUserWasUserRejection = false;
+  private loadedSkills = new Set<string>();
+  private readonly everLoadedSkills = new Set<string>();
+  private readonly droppedSkills = new Set<string>();
+  private readonly loadedMcp = new Set<string>();
+  private readonly droppedMcp = new Set<string>();
+  private readonly dayLoaded = new Map<LocalDate, LoadedNames>();
+  private loadedMarkDate: LocalDate | null = null;
+  private loadedDirty = false;
+  private instructionChars: { ascii: number; other: number } | null = null;
+  private initialSkills: string[] | null = null;
+  private initialMcp: string[] | null = null;
 
   constructor(private readonly ctx: ParserContext) {}
 
@@ -106,6 +144,16 @@ export class ClaudeSessionParser {
       else this.missing(tail, inProgress ? "tail" : "broken");
     }
     const syntheticResponses = this.foldResponses();
+    for (const command of this.slashCommands) {
+      if (this.everLoadedSkills.has(command.name)) this.skillSignal(this.day(command.date), command.name).slash++;
+    }
+    for (const [date, loaded] of this.dayLoaded) {
+      const day = this.day(date);
+      day.loadedSkills = [...loaded.skills].sort();
+      day.loadedMcpServers = [...loaded.mcp].sort();
+      day.reloadedSkills = [...loaded.reloadedSkills].sort();
+      day.reloadedMcpServers = [...loaded.reloadedMcp].sort();
+    }
     const days: Record<LocalDate, DayCell> = {};
     for (const date of [...this.days.keys()].sort()) days[date] = canonicalDay(this.days.get(date)!);
     return {
@@ -117,9 +165,9 @@ export class ClaudeSessionParser {
       version: this.version,
       firstDate: this.firstDate,
       days,
-      instructionChars: null,
-      initialSkills: null,
-      initialMcpServers: null,
+      instructionChars: this.instructionChars,
+      initialSkills: this.initialSkills,
+      initialMcpServers: this.initialMcp,
       missing: {
         lines: this.lines,
         brokenLines: this.brokenLines,
@@ -208,8 +256,13 @@ export class ClaudeSessionParser {
 
   private handle(line: Json, date: LocalDate | null): void {
     if (this.cwd === null) this.cwd = str(line.cwd);
-    if (line.type === "assistant") this.onAssistant(line, date);
-    else if (line.type === "user") this.onUser(line, date);
+    if (line.type === "assistant") {
+      if (this.initialMcp === null) this.initialMcp = [...this.loadedMcp].sort();
+      this.onAssistant(line, date);
+    } else if (line.type === "user") this.onUser(line, date);
+    else if (line.type === "attachment") this.onAttachment(line, date);
+    else if (line.type === "system") this.onSystem(line, date);
+    this.markLoaded(date);
   }
 
   private onAssistant(line: Json, date: LocalDate | null): void {
@@ -355,5 +408,120 @@ export class ClaudeSessionParser {
       if (this.pendingCommand.mode !== null) bump(day.permissionModes, this.pendingCommand.mode);
     }
     this.pendingCommand = null;
+  }
+
+  private onAttachment(line: Json, date: LocalDate | null): void {
+    const body = obj(line.attachment);
+    const type = body === null ? null : str(body.type);
+    if (body === null || type === null) return;
+    if (type === "skill_listing") {
+      const names = strings(body.names);
+      if (body.isInitial === true) {
+        const next = new Set(names);
+        if (this.initialSkills === null) this.initialSkills = [...next].sort();
+        for (const name of this.loadedSkills) if (!next.has(name)) this.droppedSkills.add(name);
+        this.loadedSkills = next;
+      } else {
+        for (const name of names) this.loadedSkills.add(name);
+      }
+      for (const name of names) {
+        this.everLoadedSkills.add(name);
+        if (this.droppedSkills.delete(name) && date !== null) this.loadedOn(date).reloadedSkills.add(name);
+      }
+      this.loadedDirty = true;
+      return;
+    }
+    if (type === "mcp_instructions_delta") {
+      for (const name of strings(body.removedNames)) {
+        this.loadedMcp.delete(name);
+        this.droppedMcp.add(name);
+      }
+      for (const name of strings(body.addedNames)) {
+        this.loadedMcp.add(name);
+        if (this.droppedMcp.delete(name) && date !== null) this.loadedOn(date).reloadedMcp.add(name);
+      }
+      this.loadedDirty = true;
+      return;
+    }
+    if (type === "instructions") {
+      if (this.instructionChars !== null || !Array.isArray(body.files)) return;
+      let ascii = 0;
+      let other = 0;
+      for (const file of body.files) {
+        const content = obj(file)?.content;
+        if (typeof content !== "string") continue;
+        for (const ch of content) {
+          if (ch.codePointAt(0)! < 0x80) ascii++;
+          else other++;
+        }
+      }
+      this.instructionChars = { ascii, other };
+      return;
+    }
+    if (date === null) return;
+    const day = this.day(date);
+    if (type === "invoked_skills") {
+      for (const skill of Array.isArray(body.skills) ? body.skills : []) {
+        const name = str(obj(skill)?.name);
+        if (name !== null) this.skillSignal(day, name).injected++;
+      }
+      return;
+    }
+    if (type === "deferred_tools_delta") {
+      if (Array.isArray(body.failedMcpServers) && body.failedMcpServers.length > 0) day.mcpConnectionFailure = true;
+      return;
+    }
+    if (type === "hook_success" || type === "hook_non_blocking_error") {
+      const counts = this.hook(day, str(body.hookEvent) ?? UNKNOWN_TOOL);
+      counts.runs++;
+      if (type === "hook_non_blocking_error") counts.failures++;
+      return;
+    }
+    if (type === "hook_blocking_error") {
+      const counts = this.hook(day, str(body.hookEvent) ?? UNKNOWN_TOOL);
+      if (hasFailureMarker(body.blockingError)) {
+        counts.runs++;
+        counts.failures++;
+      } else {
+        counts.unclassifiedBlocks++;
+      }
+      return;
+    }
+    if (type.startsWith("hook_") && !KNOWN_HOOK_ATTACHMENTS.has(type)) bump(this.unknownHookKinds, type);
+  }
+
+  private onSystem(line: Json, date: LocalDate | null): void {
+    if (line.subtype !== "compact_boundary" || date === null) return;
+    const trigger = obj(line.compactMetadata)?.trigger;
+    if (trigger === "auto") this.day(date).autoCompactions++;
+    else if (trigger !== "manual") this.day(date).unknownCompactions++;
+  }
+
+  private loadedOn(date: LocalDate): LoadedNames {
+    let loaded = this.dayLoaded.get(date);
+    if (loaded === undefined) {
+      loaded = { skills: new Set(), mcp: new Set(), reloadedSkills: new Set(), reloadedMcp: new Set() };
+      this.dayLoaded.set(date, loaded);
+    }
+    return loaded;
+  }
+
+  /** 그 날짜 칸에 지금 실려 있는 스킬과 MCP 서버의 이름을 더한다. 날짜나 실린 것이 바뀔 때만 계산한다. */
+  private markLoaded(date: LocalDate | null): void {
+    if (date === null || (date === this.loadedMarkDate && !this.loadedDirty)) return;
+    const loaded = this.loadedOn(date);
+    for (const name of this.loadedSkills) loaded.skills.add(name);
+    for (const name of this.loadedMcp) loaded.mcp.add(name);
+    this.loadedMarkDate = date;
+    this.loadedDirty = false;
+  }
+
+  private hook(day: DayCell, event: string): HookCounts {
+    let counts = day.hooks[event];
+    if (counts === undefined) {
+      counts = emptyHookCounts();
+      day.hooks[event] = counts;
+    }
+    return counts;
   }
 }

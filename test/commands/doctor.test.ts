@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { main } from "../../src/cli.ts";
-import { defaultStateDir, doctor } from "../../src/commands/doctor.ts";
+import { doctor } from "../../src/commands/doctor.ts";
+import { stateDir } from "../../src/state/folder.ts";
 
 let root: string;
 beforeEach(async () => {
@@ -19,7 +20,7 @@ describe("doctor", () => {
   it("기록 폴더와 세션 파일 수, 상태 폴더에 쓸 수 있는지를 낸다", async () => {
     await mkdir(join(root, ".claude", "projects", "p"), { recursive: true });
     await writeFile(join(root, ".claude", "projects", "p", "s.jsonl"), "{}\n");
-    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: defaultStateDir(root) });
+    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
     expect(report.claudeCode).toEqual({ home: join(root, ".claude"), projectsFound: true, sessionFiles: 1, unreadable: 0 });
     expect(report.state).toEqual({ dir: join(root, ".chunsik-garage"), writable: true });
     expect(typeof report.zstd).toBe("boolean");
@@ -28,7 +29,7 @@ describe("doctor", () => {
   it("기록 폴더를 읽지 못하면 찾았지만 읽지 못한 폴더의 수를 낸다", async () => {
     await mkdir(join(root, ".claude"), { recursive: true });
     await writeFile(join(root, ".claude", "projects"), "x");
-    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: defaultStateDir(root) });
+    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
     expect(report.claudeCode).toMatchObject({ projectsFound: true, sessionFiles: 0, unreadable: 1 });
   });
   it("상태 폴더를 만들 수 없으면 쓸 수 없다고 낸다", async () => {

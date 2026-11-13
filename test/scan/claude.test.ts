@@ -376,6 +376,23 @@ describe("scanClaudeSetup의 플러그인", () => {
     expect(find(scanned.skills, "pa:s1")).toMatchObject({ usageLastUsedMs: 1_760_000_500_000, usageUndated: false });
   });
 
+  it("플러그인의 놓인 곳이 링크이면 실제 경로를 따로 낸다. 그 플러그인의 스킬은 실제 경로가 그 안에 있다(설계 18.1 「읽지 못한 곳」)", async () => {
+    const real = join(root, "store", "linked-plugin");
+    await put(join(real, ".claude-plugin", "plugin.json"), json({ name: "linked" }));
+    await put(join(real, "skills", "one", "SKILL.md"), skill("one"));
+    const link = join(root, "plugins", "linked");
+    await linkDir(real, link);
+    await addPlugin("linked@demo", link, { name: "linked", source: "./linked" });
+    const scanned = await scanClaudeSetup(input);
+    const plugin = find(scanned.plugins, "linked");
+    expect(plugin.installPath).toBe(link);
+    expect(plugin.installRealPath).toBe(normalizePath(await realpath(real)));
+    expect(find(scanned.skills, "linked:one").realPath!.startsWith(`${plugin.installRealPath}/`)).toBe(true);
+    // 놓인 곳이 없으면 실제 경로도 없다
+    await addPlugin("gone@demo", join(root, "plugins", "gone"), { name: "gone", source: "./gone" });
+    expect(find((await scanClaudeSetup(input)).plugins, "gone")).toMatchObject({ exists: false, installRealPath: null });
+  });
+
   it("enabledPlugins에 @builtin으로 끝나는 ID가 켜져 있어도 설치 기록이 없는 플러그인으로 세지 않는다", async () => {
     await setEnabled("cc-plugin-agents-md@builtin", true);
     expect((await scanClaudeSetup(input)).pluginsWithoutInstall).toEqual(["ghost@m"]);

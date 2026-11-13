@@ -279,6 +279,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       scopes: plugin.scopes,
       projectRoots: plugin.projectPaths,
       installPath: plugin.installPath,
+      installRealPath: plugin.installRealPath,
       exists: plugin.exists,
       manifest: plugin.manifest,
       marketplaceEntry: plugin.marketplaceEntry,

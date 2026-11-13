@@ -125,6 +125,8 @@ export interface PluginInstall {
   /** 프로젝트·로컬 범위 기록의 프로젝트(정규화, 차례대로) */
   projectPaths: string[];
   installPath: string;
+  /** 놓인 곳의 링크를 푼 실제 경로(정규화). 놓인 곳이 없거나 풀지 못하면 null이다. 플러그인 스킬을 그 플러그인에 이을 때 쓴다(설계 18.1 「읽지 못한 곳」) */
+  installRealPath: string | null;
   exists: boolean;
   manifest: "ok" | "missing" | "unparsable" | "unreadable";
   /** 마켓 항목. missing은 마켓의 목록 파일이나 그 이름의 항목이 없는 것이다. none은 마켓에서 오지 않은 플러그인(스킬 폴더에 둔 것)이라 항목이 없는 것이 정상이다 */
@@ -237,6 +239,7 @@ export async function readPluginInstall(group: InstallGroup, markets: Marketplac
     scopes: [...group.scopes].sort(),
     projectPaths: [...group.projectPaths].sort(),
     installPath,
+    installRealPath: null,
     exists: false,
     manifest: "missing",
     marketplaceEntry: "missing",
@@ -266,8 +269,10 @@ export async function readPluginInstall(group: InstallGroup, markets: Marketplac
   const marketUnreadable = market === "unreadable" || (market === undefined && markets.file === "unreadable");
   plugin.marketplaceEntry = fromSkillsDir ? "none" : entry !== undefined ? "ok" : marketUnreadable ? "unreadable" : "missing";
 
-  plugin.exists = (await entryInfo(installPath)).isDir;
+  const installInfo = await entryInfo(installPath);
+  plugin.exists = installInfo.isDir;
   if (!plugin.exists) return unknown();
+  plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
   const manifestRead = await readJson(join(installPath, ".claude-plugin", "plugin.json"));
   let manifest: Json | null = null;
@@ -348,7 +353,7 @@ export async function readPluginInstall(group: InstallGroup, markets: Marketplac
   // (공식 문서 plugins loading 「Paths that escape the plugin directory」, errors 「Path escapes plugin directory」). 같은 마켓 안의 다른 플러그인이나 로컬 마켓 안을 가리키는 링크는 도구가 받지만
   // 여기서는 밖으로 본다(엄한 쪽, 설계 27). 선언한 경로는 꼴(wellFormedPath)도 맞아야 하고, 그 꼴이면 표기로 풀어도 뿌리 밖으로 나가지 않는다
   const root = normalizePath(installPath);
-  const rootReal = (await entryInfo(installPath)).realPath;
+  const rootReal = plugin.installRealPath;
   const within = (path: string, base: string): boolean => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
   const insideRoot = async (path: string): Promise<boolean> => {
     const real = (await entryInfo(path)).realPath;

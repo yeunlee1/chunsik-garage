@@ -68,6 +68,8 @@ export interface PluginFact {
   /** 프로젝트·로컬 범위 기록의 프로젝트(정규화) */
   projectRoots: string[];
   installPath: string;
+  /** 놓인 곳의 링크를 푼 실제 경로(정규화). 놓인 곳이 없거나 풀지 못하면 null이다. 플러그인 스킬의 실제 경로가 이 안에 있는지로 그 플러그인의 스킬인지 가린다(설계 18.1 「읽지 못한 곳」) */
+  installRealPath: string | null;
   exists: boolean;
   manifest: FileStatus;
   /** none은 스킬 폴더에 둔 플러그인(<name>@skills-dir)이라 마켓 항목이 없는 것이 정상이다 */

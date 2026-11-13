@@ -35,8 +35,10 @@ export interface SkillFact {
   managedFixed: boolean;
   /** 훅을 가진 플러그인에 들었거나, 어느 훅 명령에 이 스킬의 경로가 나온다(E5 ⑤) */
   hookProvided: boolean;
-  /** 도구가 세는 집계(skillUsage)에서 이 스킬의 이름 꼴 가운데 가장 늦은 마지막 사용 시각. 없으면 null. .claude.json을 읽지 못했으면(ClaudeSetupFacts.claudeJson이 ok가 아님) 없는 것이 아니라 모르는 것이다(설계 10) */
+  /** 도구가 세는 집계(skillUsage)에서 이 스킬의 이름 꼴 가운데 시각이 읽힌 것의 가장 늦은 마지막 사용 시각. 그런 것이 없으면 null. .claude.json을 읽지 못했으면(ClaudeSetupFacts.claudeJson이 ok가 아님) 없는 것이 아니라 모르는 것이다(설계 10) */
   usageLastUsedMs: number | null;
+  /** 이름 꼴 가운데 집계의 항목은 있는데 시각을 읽을 수 없는 것이 있다. 참이면 "30일 안"으로 본다(설계 11.3 「30일의 경계」) */
+  usageUndated: boolean;
 }
 
 export interface McpFact {
@@ -84,8 +86,10 @@ export interface PluginFact {
   mcpUnreadable: boolean;
   /** 이 플러그인의 스킬 위치의 설치 이름(SkillFact.name, 이름 차례). 같은 위치는 한 번만 들고, 같은 원본을 가리키는 다른 링크는 위치마다 든다 */
   skills: string[];
-  /** 도구의 집계(pluginUsage)에서 두 이름(마켓 항목의 이름, 구성 요소의 이름)으로 찾은 마지막 사용 시각 가운데 늦은 것. 없으면 null. .claude.json을 읽지 못했으면 claudeJson의 상태로 가린다 */
+  /** 도구의 집계(pluginUsage)에서 두 이름(마켓 항목의 이름, 구성 요소의 이름)으로 찾은 마지막 사용 시각 가운데 늦은 것. 시각이 읽힌 것이 없으면 null. .claude.json을 읽지 못했으면 claudeJson의 상태로 가린다 */
   usageLastUsedMs: number | null;
+  /** 두 이름 가운데 집계의 항목은 있는데 시각을 읽을 수 없는 것이 있다. 참이면 "30일 안"으로 본다(설계 11.3 「30일의 경계」, 16.2 A2 ④) */
+  usageUndated: boolean;
 }
 
 export interface ProjectFact {

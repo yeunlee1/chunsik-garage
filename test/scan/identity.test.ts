@@ -23,6 +23,7 @@ const skill = (over: Partial<SkillFact>): SkillFact => ({
   managedFixed: false,
   hookProvided: false,
   usageLastUsedMs: null,
+  usageUndated: false,
   ...over,
 });
 const server = (over: Partial<McpFact>): McpFact => ({

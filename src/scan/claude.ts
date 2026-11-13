@@ -80,8 +80,20 @@ function managedHits(managed: SettingsView, names: readonly string[], definition
 
 const normalizedCommand = (text: string): string => text.replace(/\\/g, "/").toLowerCase();
 
-/** 시각들 가운데 가장 늦은 것. 하나도 없으면 null이다. */
-const latest = (times: readonly (number | undefined)[]): number | null => times.reduce<number | null>((max, t) => (t === undefined || (max !== null && max >= t) ? max : t), null);
+/**
+ * 이름들의 집계를 합친다. 시각이 읽힌 것 가운데 가장 늦은 것과, 항목은 있는데 시각을 읽을 수 없는 것(null)이 하나라도 있었는지를 낸다.
+ * 집계에 없는 이름(undefined)은 어느 쪽에도 들지 않는다(설계 11.3 「30일의 경계」).
+ */
+function usageOf(times: readonly (number | null | undefined)[]): { usageLastUsedMs: number | null; usageUndated: boolean } {
+  let usageLastUsedMs: number | null = null;
+  let usageUndated = false;
+  for (const at of times) {
+    if (at === undefined) continue;
+    if (at === null) usageUndated = true;
+    else if (usageLastUsedMs === null || at > usageLastUsedMs) usageLastUsedMs = at;
+  }
+  return { usageLastUsedMs, usageUndated };
+}
 
 export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFacts> {
   const home = claudeHome(input.env, input.homedir);
@@ -164,15 +176,6 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     const fragments = [normalizePath(skill.path), skill.realPath ?? "", `/skills/${skill.dirName}`].filter((f) => f !== "").map((f) => f.toLowerCase());
     return commandTexts.some((text) => fragments.some((fragment) => text.includes(fragment)));
   };
-  const usageOf = (names: readonly string[]): number | null => {
-    let latest: number | null = null;
-    for (const name of names) {
-      const at = claudeJson.skillUsage[name];
-      if (at !== undefined && (latest === null || at > latest)) latest = at;
-    }
-    return latest;
-  };
-
   // 스킬
   const skills: SkillFact[] = [];
   const unreadableDirs: string[] = [];
@@ -187,7 +190,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       targetCreatedMs: folder.targetCreatedMs,
       readable: folder.readable,
       nameUnreadable: folder.nameUnreadable,
-      usageLastUsedMs: usageOf(fields.recordNames),
+      ...usageOf(fields.recordNames.map((name) => claudeJson.skillUsage[name])),
     });
   };
   const addOwnSkills = (scan: SkillRootScan, scope: "user" | "project", projectRoot: string | null, scopeContexts: readonly Context[]): void => {
@@ -291,7 +294,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       mcpUnreadable: plugin.mcpUnreadable,
       skills: skillNames.sort(),
       // 집계의 열쇠가 어느 이름인지 확인하지 못해 두 이름으로 모두 찾는다(설계 10 「~/.claude.json」)
-      usageLastUsedMs: latest(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`])),
+      ...usageOf(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`])),
     });
   }
 

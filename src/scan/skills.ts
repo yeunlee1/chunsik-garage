@@ -138,7 +138,11 @@ export function readScalar(raw: string): string | null {
 const YAML_TRUE = new Set(["true", "True", "TRUE"]);
 const YAML_FALSE = new Set(["false", "False", "FALSE"]);
 
-/** 맨 앞의 --- 줄과 닫는 --- 줄 사이에서 들여쓰지 않은 "열쇠: 값" 줄만 읽는다. 들여쓴 줄(묶음의 안쪽)은 보지 않는다. */
+/**
+ * 맨 앞의 --- 줄과 닫는 --- 줄 사이에서 들여쓰지 않은 "열쇠: 값" 줄만 읽는다. 들여쓴 줄(묶음의 안쪽)은 보지 않는다.
+ * 이름을 정할 수 있는 줄을 이 방법으로 다 읽지 못하면 name을 읽지 못한 열쇠로 둔다. 이 방법으로 읽지 못하는 최상위 줄(따옴표로 쓴 열쇠, 여러 줄 열쇠, 흐름 꼴)이 있거나 name의 값이 다음 줄로 이어질 때다.
+ * 이름이 없는 것으로 넘기면 그 스킬의 이름 꼴이 모자란다는 것을 평가가 알 수 없다(설계 11.3 E5)
+ */
 export function parseFrontmatter(text: string): Frontmatter {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
   const none: Frontmatter = { present: false, fields: Object.create(null) as Record<string, string>, unreadable: [] };
@@ -147,11 +151,32 @@ export function parseFrontmatter(text: string): Frontmatter {
   if (end === -1) return none;
   const fields: Record<string, string> = Object.create(null) as Record<string, string>;
   const unreadable: string[] = [];
+  const mark = (key: string): void => {
+    if (!unreadable.includes(key)) unreadable.push(key);
+  };
+  /** 바로 앞의 열쇠. 들여쓴 줄은 그 값이 이어지는 것이거나 그 묶음의 안쪽이다 */
+  let previous: string | null = null;
   for (const line of lines.slice(1, end)) {
+    if (line.trim() === "") continue;
+    if (/^\s/.test(line)) {
+      // name의 값이 다음 줄로 이어진다. 읽은 앞부분은 이름이 아니다(주석 줄은 빼고)
+      if (previous === "name" && !line.trimStart().startsWith("#")) {
+        mark("name");
+        delete fields.name;
+      }
+      continue;
+    }
+    if (line.startsWith("#")) continue;
     const match = /^([A-Za-z0-9_-]+):(?:\s+(.*))?$/.exec(line);
-    if (match === null) continue;
+    if (match === null) {
+      // 이 방법으로 읽지 못하는 줄이다. 그 줄이 이름을 정할 수 있다
+      mark("name");
+      previous = null;
+      continue;
+    }
+    previous = match[1]!;
     const value = readScalar(match[2] ?? "");
-    if (value === null) unreadable.push(match[1]!);
+    if (value === null) mark(match[1]!);
     else fields[match[1]!] = value;
   }
   return { present: true, fields, unreadable };

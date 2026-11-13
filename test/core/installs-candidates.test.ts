@@ -84,6 +84,15 @@ describe("A1 스킬 끄기", () => {
     expect(ids(run({ skills: both }))).toEqual(["A1:claude-code:x", "A1:claude-code:z"]);
     expect(ids(run({ skills: both }, { usedSkills: ["z"] }))).toEqual([]);
   });
+  it("머리말의 이름을 모르는 스킬이 하나라도 있으면 내지 않는다. 그 이름이 끌 이름일 수 있다. 범위와 켜짐을 가리지 않는다", () => {
+    // busy의 머리말 이름은 블록 값이라 읽지 못했다. 실제 이름이 idle이면 idle을 끌 때 쓰이는 busy도 꺼진다
+    expect(ids(run({ skills: [skill("idle"), inProject("busy", { nameUnreadable: true })] }, { usedSkills: ["busy"] }))).toEqual([]);
+    expect(ids(run({ skills: [skill("idle"), inProject("busy", { readable: false })] }, { usedSkills: ["busy"] }))).toEqual([]);
+    expect(ids(run({ skills: [skill("idle"), skill("off", { enabled: false, nameUnreadable: true })] }))).toEqual([]);
+    expect(ids(run({ skills: [skill("idle"), ofPlugin("p@m", "a", { nameUnreadable: true })], plugins: [plugin("p@m", { enabled: false })] }))).toEqual([]);
+    // 이름을 다 읽었으면 낸다
+    expect(ids(run({ skills: [skill("idle"), inProject("busy")] }, { usedSkills: ["busy"] }))).toEqual(["A1:claude-code:idle"]);
+  });
   it("이름 꼴이 같은 플러그인 스킬도 따진다. 이 설정이 플러그인 스킬에 듣지 않는다는 것은 문서로만 봤으므로 엄한 쪽으로 둔다", () => {
     // 사용자 스킬의 이름이 플러그인 스킬의 이름 꼴과 같은 경우다
     const skills = [skill("p:s"), ofPlugin("p@m", "s")];
@@ -148,6 +157,8 @@ describe("A2 플러그인 끄기", () => {
   it("① 스킬이 하나라도 쓰였거나 쓰는지 모르면 내지 않는다. 스킬이 없는 플러그인도 내지 않는다", () => {
     expect(a2({}, {}, { usedSkills: ["p:a"] })).toEqual([]);
     expect(a2({}, {}, { watched: [SKILLS[0]!] })).toEqual([]);
+    // 머리말의 이름을 모르는 스킬은 안 쓴 것이 확인될 수 없다
+    expect(a2({}, { skills: [ofPlugin("p@m", "a", { nameUnreadable: true }), SKILLS[1]!] })).toEqual([]);
     expect(a2({}, { skills: [] })).toEqual([]);
   });
   it("② 스킬 말고 다른 것이 들었거나 ③ 알아보지 못한 것이 있으면 내지 않는다", () => {

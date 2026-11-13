@@ -54,6 +54,8 @@ export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: S
    */
   const turnedOffBy = (target: string): SkillBundle[] => skills.bundles.filter((bundle) => bundle.positions.some((position) => position.recordNames.includes(target)));
   const confirmed = (bundle: SkillBundle): boolean => bundle.verdict === "unused" && bundle.excluded === null;
+  // 머리말의 이름을 모르는 스킬이 있으면 그 이름이 끄는 이름과 같을 수 있다. 같이 꺼지는 것을 다 알 수 없다. 범위와 켜짐을 가리지 않는다
+  const namesUnknown = setup.skills.some((skill) => skill.nameUnreadable || !skill.readable);
 
   const a1 = new Set<string>();
   const a2 = new Set<string>();
@@ -61,13 +63,15 @@ export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: S
 
   if (!hooksUnseen) {
     // A1. 사용자 범위 위치의 이름으로 끈다. 이름으로 듣는 설정이라 같이 꺼지는 스킬이 모두 안 쓴 것이 확인됨이어야 하고, 그 가운데 이 도구 자신이 없어야 한다
-    for (const bundle of skills.bundles) {
-      if (!bundle.enabled || !confirmed(bundle)) continue;
-      for (const skill of bundle.positions) {
-        if (skill.scope !== "user" || !skill.enabled || skill.managedFixed) continue;
-        // 이 묶음도 같이 꺼지는 것에 든다(그 이름이 이 위치의 이름 꼴이다)
-        const affected = turnedOffBy(skill.name);
-        if (affected.every(confirmed) && !affected.some(isSelfBundle)) a1.add(skill.name);
+    if (!namesUnknown) {
+      for (const bundle of skills.bundles) {
+        if (!bundle.enabled || !confirmed(bundle)) continue;
+        for (const skill of bundle.positions) {
+          if (skill.scope !== "user" || !skill.enabled || skill.managedFixed) continue;
+          // 이 묶음도 같이 꺼지는 것에 든다(그 이름이 이 위치의 이름 꼴이다)
+          const affected = turnedOffBy(skill.name);
+          if (affected.every(confirmed) && !affected.some(isSelfBundle)) a1.add(skill.name);
+        }
       }
     }
 

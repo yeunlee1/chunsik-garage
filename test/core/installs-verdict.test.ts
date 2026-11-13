@@ -165,6 +165,13 @@ describe("스킬 위치의 판정", () => {
     expect(verdict(old("x", { hookProvided: true }), { sessions: [loaded("x"), signal("2026-11-13", "x")] })).toBe("unknown");
     expect(verdict(skill("x", { createdMs: LAST_WEEK, hookProvided: true }), { sessions: [signal("2026-10-15", "x")] })).toBe("unknown");
   });
+  it("머리말의 이름을 모르는 스킬은 안 쓴 것이 확인될 수 없다. 폴더 이름으로 쓴 신호가 있으면 썼다", () => {
+    // 이름 값을 읽지 못했거나 SKILL.md를 읽지 못했으면 기록의 이름 꼴에 폴더 이름만 든다. 머리말 이름으로 남은 신호와 집계를 이 위치에 잇지 못한다
+    for (const input of [{ nameUnreadable: true }, { readable: false }]) {
+      expect(verdict(old("x", input), { sessions: [loaded("x")] })).toBe("unknown");
+      expect(verdict(old("x", input), { sessions: [loaded("x"), signal("2026-11-13", "x")] })).toBe("used");
+    }
+  });
 });
 
 describe("MCP 서버의 판정", () => {

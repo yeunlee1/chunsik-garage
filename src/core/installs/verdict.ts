@@ -76,6 +76,8 @@ function usageStale(skill: SkillFact, claudeJson: FileStatus, day: EvalDay): boo
 export function skillVerdict(skill: SkillFact, claudeJson: FileStatus, context: VerdictContext): Verdict {
   if (skill.hookProvided) return "unknown"; // ⑤
   if (anyIn(skill.recordNames, context.used.inScore)) return "used";
+  // 머리말의 이름을 모르면(값을 읽지 못했거나 SKILL.md를 읽지 못했다) 그 이름으로 남은 신호와 집계를 이 위치에 잇지 못한다. 안 쓴 것이 확인될 수 없다
+  if (skill.nameUnreadable || !skill.readable) return "unknown";
   const unused =
     !anyIn(skill.recordNames, context.used.inCollect) && // ①
     usageStale(skill, claudeJson, context.day) && // ②

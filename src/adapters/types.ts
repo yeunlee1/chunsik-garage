@@ -5,6 +5,29 @@ import type { LocalDate } from "./common/dates.ts";
 export type ToolId = "claude-code";
 export type SessionKind = "main" | "sub";
 
+/** measured는 봄, proxy는 대신 봄(가까운 값), unsupported는 못 봄이다. 못 봄은 0이 아니다(설계 9.7) */
+export type Coverage = "measured" | "proxy" | "unsupported";
+
+/** 설계 9.7의 표의 줄. 어댑터가 도구와 형식마다 낸다 */
+export type CoverageKey =
+  | "responsesAndTokens"
+  | "humanRequests"
+  | "toolCalls"
+  | "toolErrors"
+  | "shellExitCodes"
+  | "deniedAndLengthStops"
+  | "interruptedTurns"
+  | "autoCompaction"
+  | "effort"
+  | "loadedNames"
+  | "skillUsage"
+  | "mcpCalls"
+  | "mcpFailuresAndHooks"
+  | "instructionSize"
+  | "subagents";
+
+export type ToolCoverage = Record<CoverageKey, Coverage>;
+
 export interface TokenCounts {
   input: number;
   cacheRead: number;

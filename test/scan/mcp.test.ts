@@ -61,8 +61,15 @@ describe(".claude.json", () => {
           "C:/dev/app": { mcpServers: { local1: { command: "x" } }, enabledMcpjsonServers: ["p1"], disabledMcpjsonServers: [], disabledMcpServers: ["ctx"] },
           broken: "nope",
         },
-        skillUsage: { a: { usageCount: 3, lastUsedAt: 1_700_000_000_000 }, "p:b": { usageCount: 1, lastUsedAt: 1_700_000_100_000 }, bad: { lastUsedAt: "x" } },
-        pluginUsage: { "p@m": { usageCount: 1, lastUsedAt: 1_700_000_200_000, lastUsedNumStartups: 4 } },
+        skillUsage: {
+          a: { usageCount: 3, lastUsedAt: 1_700_000_000_000 },
+          "p:b": { usageCount: 1, lastUsedAt: 1_700_000_100_000 },
+          bad: { lastUsedAt: "x" },
+          "no-time": { usageCount: 2 },
+          "too-big": { lastUsedAt: 9_000_000_000_000_000 },
+          "not-an-entry": 7,
+        },
+        pluginUsage: { "p@m": { usageCount: 1, lastUsedAt: 1_700_000_200_000, lastUsedNumStartups: 4 }, "q@m": { usageCount: 1 } },
         claudeAiMcpEverConnected: ["claude.ai Gmail", "claude.ai Gmail", 5],
       }),
     );
@@ -72,8 +79,9 @@ describe(".claude.json", () => {
     expect(facts.projects).toHaveLength(1);
     expect(facts.projects[0]).toMatchObject({ key: "C:/dev/app", enabledMcpjsonServers: ["p1"], disabledMcpServers: ["ctx"] });
     expect(facts.projects[0]!.mcpServers.map((s) => s.name)).toEqual(["local1"]);
-    expect({ ...facts.skillUsage }).toEqual({ a: 1_700_000_000_000, "p:b": 1_700_000_100_000 });
-    expect({ ...facts.pluginUsage }).toEqual({ "p@m": 1_700_000_200_000 });
+    // 항목은 있는데 시각을 읽을 수 없으면(없다, 숫자가 아니다, 날짜가 나타낼 수 있는 범위 밖이다) 버리지 않고 null로 남긴다(설계 11.3 「30일의 경계」)
+    expect({ ...facts.skillUsage }).toEqual({ a: 1_700_000_000_000, "p:b": 1_700_000_100_000, bad: null, "no-time": null, "too-big": null, "not-an-entry": null });
+    expect({ ...facts.pluginUsage }).toEqual({ "p@m": 1_700_000_200_000, "q@m": null });
     expect(facts.claudeAiEverConnected).toEqual(["claude.ai Gmail"]);
     expect(JSON.stringify({ ...facts, userMcpServers: [], projects: [] })).not.toContain("someone@example.com");
   });

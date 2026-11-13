@@ -35,8 +35,12 @@ export interface SkillFact {
   managedFixed: boolean;
   /** 훅을 가진 플러그인에 들었거나, 어느 훅 명령에 이 스킬의 경로가 나온다(E5 ⑤) */
   hookProvided: boolean;
-  /** 도구가 세는 집계(skillUsage)에서 이 스킬의 이름 꼴 가운데 가장 늦은 마지막 사용 시각. 없으면 null. .claude.json을 읽지 못했으면(ClaudeSetupFacts.claudeJson이 ok가 아님) 없는 것이 아니라 모르는 것이다(설계 10) */
+  /** 도구가 세는 집계(skillUsage)에서 이 스킬의 이름 꼴 가운데 시각이 읽힌 것의 가장 늦은 마지막 사용 시각. 그런 것이 없으면 null. .claude.json을 읽지 못했으면(ClaudeSetupFacts.claudeJson이 ok가 아님) 없는 것이 아니라 모르는 것이다(설계 10) */
   usageLastUsedMs: number | null;
+  /** 이름 꼴 가운데 집계의 항목은 있는데 시각을 읽을 수 없는 것이 있다. 참이면 "30일 안"으로 본다(설계 11.3 「30일의 경계」) */
+  usageUndated: boolean;
+  /** 설치의 정체 열쇠(identity.ts의 skillInstallKey). 관측 기록의 열쇠와 같다(설계 11.3 「설치의 정체」, 18.1) */
+  installKey: string;
 }
 
 export interface McpFact {
@@ -52,6 +56,8 @@ export interface McpFact {
   enabled: boolean;
   /** 관리 정책이 막거나 허용 목록으로 정한다(바꿀 수 없음) */
   managedFixed: boolean;
+  /** 설치의 정체 열쇠(identity.ts의 mcpInstallKey). 정의의 지문이 없어 정체를 만들 수 없으면 null이다 */
+  installKey: string | null;
 }
 
 export interface PluginFact {
@@ -66,6 +72,8 @@ export interface PluginFact {
   /** 프로젝트·로컬 범위 기록의 프로젝트(정규화) */
   projectRoots: string[];
   installPath: string;
+  /** 놓인 곳의 링크를 푼 실제 경로(정규화). 놓인 곳이 없거나 풀지 못하면 null이다. 플러그인 스킬의 실제 경로가 이 안에 있는지로 그 플러그인의 스킬인지 가린다(설계 18.1 「읽지 못한 곳」) */
+  installRealPath: string | null;
   exists: boolean;
   manifest: FileStatus;
   /** none은 스킬 폴더에 둔 플러그인(<name>@skills-dir)이라 마켓 항목이 없는 것이 정상이다 */
@@ -84,8 +92,10 @@ export interface PluginFact {
   mcpUnreadable: boolean;
   /** 이 플러그인의 스킬 위치의 설치 이름(SkillFact.name, 이름 차례). 같은 위치는 한 번만 들고, 같은 원본을 가리키는 다른 링크는 위치마다 든다 */
   skills: string[];
-  /** 도구의 집계(pluginUsage)에서 두 이름(마켓 항목의 이름, 구성 요소의 이름)으로 찾은 마지막 사용 시각 가운데 늦은 것. 없으면 null. .claude.json을 읽지 못했으면 claudeJson의 상태로 가린다 */
+  /** 도구의 집계(pluginUsage)에서 두 이름(마켓 항목의 이름, 구성 요소의 이름)으로 찾은 마지막 사용 시각 가운데 늦은 것. 시각이 읽힌 것이 없으면 null. .claude.json을 읽지 못했으면 claudeJson의 상태로 가린다 */
   usageLastUsedMs: number | null;
+  /** 두 이름 가운데 집계의 항목은 있는데 시각을 읽을 수 없는 것이 있다. 참이면 "30일 안"으로 본다(설계 11.3 「30일의 경계」, 16.2 A2 ④) */
+  usageUndated: boolean;
 }
 
 export interface ProjectFact {
@@ -162,4 +172,9 @@ export interface ClaudeSetupFacts {
   problems: SetupProblem[];
   /** 목록을 읽지 못한 스킬 폴더 */
   unreadableDirs: string[];
+  /**
+   * unreadableDirs의 폴더가 누구의 것인지. 사용자 스킬 폴더인지, 어느 프로젝트의 스킬 폴더인지(정규화한 뿌리), 어느 플러그인의 스킬을 찾는 폴더인지(ID)다.
+   * 사용자와 프로젝트의 것은 F5와 E5를 못 재게 하고, 플러그인의 것은 그 플러그인의 스킬만 세지 않게 한다(설계 11.3)
+   */
+  unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };
 }

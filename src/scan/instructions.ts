@@ -10,6 +10,8 @@ export interface InstructionFile {
   /** 링크를 푼 실제 경로(정규화). 전역과 프로젝트가 같은 파일인지 견줄 때 쓴다 */
   realPath: string | null;
   bytes: number;
+  /** 공백이 아닌 글자가 하나라도 있다. 0바이트 파일과 공백만 있는 파일은 거짓이다(설계 11.3 F3 「지침이 있다는 것」) */
+  hasContent: boolean;
   /** 전역 지침과 같은 파일(링크이거나 실제 경로가 같음)이다. F4에서 견주지 않으므로 줄 지문에 넣지 않는다(설계 11.3 F4) */
   sameAsGlobal: boolean;
 }
@@ -140,7 +142,7 @@ export async function readInstructionSet(
     const info = await entryInfo(path);
     const same = info.realPath !== null && sameAsGlobal.has(info.realPath);
     const bytes = Buffer.byteLength(read.text, "utf8");
-    set.files.push({ path, realPath: info.realPath, bytes, sameAsGlobal: same });
+    set.files.push({ path, realPath: info.realPath, bytes, hasContent: /\S/u.test(read.text), sameAsGlobal: same });
     set.bytes += bytes;
     const chars = countChars(read.text);
     set.chars.ascii += chars.ascii;

@@ -1,7 +1,5 @@
 // Claude Code가 지표마다 무엇을 기록하는지(설계 9.7)와, 스킬 사용·MCP 호출의 관측이 빠짐없는지(설계 9.8), 절반 넘게 깨진 파일인지(설계 20.1)를 가른다(순수 함수)
-import type { SessionSummary } from "../types.ts";
-
-export type Coverage = "measured" | "proxy" | "unsupported";
+import type { SessionSummary, ToolCoverage } from "../types.ts";
 
 /** 설계 9.7의 Claude Code 열. Claude Code는 모든 지표를 기록한다. */
 export const CLAUDE_COVERAGE = {
@@ -20,7 +18,7 @@ export const CLAUDE_COVERAGE = {
   mcpFailuresAndHooks: "measured",
   instructionSize: "measured",
   subagents: "measured",
-} as const satisfies Record<string, Coverage>;
+} as const satisfies ToolCoverage;
 
 /** 깨진 줄이나 끝 조각이 이 종류로 온전히 읽히면 그 지표의 사용 신호가 실릴 수 없다(설계 9.8 표). */
 export const SKILL_NON_SIGNAL_TYPES: ReadonlySet<string> = new Set([

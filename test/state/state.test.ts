@@ -106,4 +106,39 @@ describe("관측 기록 고치기", () => {
       { key: changed, firstSeen: "2026-11-13", appeared: true },
     ]);
   });
+
+  it("읽지 못한 곳에 든 보이지 않는 설치의 기록은 고치지 않는다. 첫날과 새로 나타남 표시가 그대로 남는다(설계 18.1)", () => {
+    const previous = [
+      { key: B, firstSeen: "2026-10-01", appeared: true },
+      { key: A, firstSeen: "2026-09-01", appeared: false },
+    ];
+    // B가 든 곳만 읽지 못했다. A는 든 곳을 읽었는데 보이지 않으므로 지운다
+    expect(updateInstalls(previous, [], "2026-11-13", (key) => key === B)).toEqual([{ key: B, firstSeen: "2026-10-01", appeared: true }]);
+  });
+
+  it("남겨 둔 기록은 그 곳이 다시 읽힌 점검에서 평소대로 견준다", () => {
+    const kept = updateInstalls([{ key: B, firstSeen: "2026-10-01", appeared: false }], [], "2026-11-01", () => true);
+    // 같은 정체로 있으면 첫날이 이어지고, 없으면 그때 지운다
+    expect(updateInstalls(kept, [B], "2026-11-16")).toEqual([{ key: B, firstSeen: "2026-10-01", appeared: false }]);
+    expect(updateInstalls(kept, [], "2026-11-16")).toEqual([]);
+  });
+
+  it("이번에 보인 설치는 남길지를 묻지 않는다. 첫 점검에는 남길 기록이 없다", () => {
+    const asked: string[] = [];
+    const keep = (key: string): boolean => {
+      asked.push(key);
+      return true;
+    };
+    expect(updateInstalls([{ key: A, firstSeen: "2026-10-01", appeared: false }], [A, B], "2026-11-13", keep)).toHaveLength(2);
+    expect(updateInstalls(null, [A], "2026-11-13", keep)).toEqual([{ key: A, firstSeen: "2026-11-13", appeared: false }]);
+    expect(asked).toEqual([]);
+  });
+
+  it("남긴 기록과 이번에 본 기록을 함께 열쇠 차례로 낸다", () => {
+    const previous = [{ key: A, firstSeen: "2026-09-01", appeared: false }];
+    expect(updateInstalls(previous, [B], "2026-11-13", () => true)).toEqual([
+      { key: B, firstSeen: "2026-11-13", appeared: true },
+      { key: A, firstSeen: "2026-09-01", appeared: false },
+    ]);
+  });
 });

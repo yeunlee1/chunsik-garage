@@ -52,9 +52,23 @@ describe("readInstructionSet", () => {
     await linkDir(join(root, "global"), join(root, "proj", ".claude"));
     const global = await readInstructionSet([join(root, "global", "CLAUDE.md")]);
     const project = await readInstructionSet([join(root, "proj", ".claude", "CLAUDE.md")], [], realPaths(global.set));
-    expect(project.set.files).toEqual([{ path: join(root, "proj", ".claude", "CLAUDE.md"), realPath: normalizePath(join(root, "global", "CLAUDE.md")), bytes: Buffer.byteLength(line), sameAsGlobal: true }]);
+    expect(project.set.files).toEqual([
+      { path: join(root, "proj", ".claude", "CLAUDE.md"), realPath: normalizePath(join(root, "global", "CLAUDE.md")), bytes: Buffer.byteLength(line), hasContent: true, sameAsGlobal: true },
+    ]);
     expect(project.set.lineHashes).toEqual([]);
     expect(global.set.lineHashes).toEqual([lineHash(line)]);
+  });
+
+  it("공백이 아닌 글자가 하나라도 있어야 내용이 있는 파일이다(설계 11.3 F3 「지침이 있다는 것」)", async () => {
+    await put(join(root, "empty.md"), "");
+    await put(join(root, "blank.md"), " \r\n\t\n﻿");
+    await put(join(root, "one-line.md"), "\n# 제목\n");
+    const { set } = await readInstructionSet([join(root, "empty.md"), join(root, "blank.md"), join(root, "one-line.md")]);
+    expect(set.files.map((f) => [f.path, f.hasContent])).toEqual([
+      [join(root, "blank.md"), false],
+      [join(root, "empty.md"), false],
+      [join(root, "one-line.md"), true],
+    ]);
   });
 
   it("폴더처럼 읽을 수 없는 경로는 읽지 못한 것으로 적는다", async () => {

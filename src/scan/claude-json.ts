@@ -24,22 +24,37 @@ export interface ClaudeJsonFacts {
   userMcpServers: McpDefinitionEntry[];
   /** 정규화한 열쇠 차례. 같은 곳을 가리키는 열쇠가 여럿이면 따로 둔다 */
   projects: ClaudeJsonProject[];
-  /** 스킬 이름(사용자 스킬은 맨이름, 플러그인 스킬은 '<플러그인>:<스킬>') → 마지막 사용 시각(밀리초) */
-  skillUsage: Record<string, number>;
-  /** '<이름>@<마켓>' → 마지막 사용 시각(밀리초) */
-  pluginUsage: Record<string, number>;
+  /** 스킬 이름(사용자 스킬은 맨이름, 플러그인 스킬은 '<플러그인>:<스킬>') → 마지막 사용 시각(밀리초). 항목은 있는데 시각을 읽을 수 없으면 null이다 */
+  skillUsage: UsageTimes;
+  /** '<이름>@<마켓>' → 마지막 사용 시각(밀리초). 항목은 있는데 시각을 읽을 수 없으면 null이다 */
+  pluginUsage: UsageTimes;
   claudeAiEverConnected: string[];
 }
+
+/** 집계의 이름마다 마지막 사용 시각. 열쇠가 없으면 집계가 없는 것이고, 값이 null이면 항목은 있는데 시각을 모르는 것이다(설계 11.3 「30일의 경계」) */
+export type UsageTimes = Record<string, number | null>;
+
+/** 날짜가 나타낼 수 있는 가장 먼 밀리초. 이보다 큰 수는 날짜로 바꿀 수 없다 */
+export const MAX_DATE_MS = 8_640_000_000_000_000;
 
 type Json = Record<string, unknown>;
 const isObject = (v: unknown): v is Json => v !== null && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
 
-function lastUsed(v: unknown): Record<string, number> {
-  const out: Record<string, number> = Object.create(null) as Record<string, number>;
+/** 날짜로 바꿀 수 있는 시각인지. 유한한 수이고 날짜가 나타낼 수 있는 범위 안이다. */
+export function isDateMs(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= MAX_DATE_MS;
+}
+
+/**
+ * 집계의 항목을 버리지 않는다. 시각이 없거나, 숫자가 아니거나, 날짜로 바꿀 수 없는 수이면 null로 남긴다.
+ * 그런 항목을 버리면 "집계가 없다"가 되어 언제 썼는지 모르는 것을 안 쓴 것으로 치게 된다.
+ */
+function lastUsed(v: unknown): UsageTimes {
+  const out: UsageTimes = Object.create(null) as UsageTimes;
   if (!isObject(v)) return out;
   for (const [name, entry] of Object.entries(v)) {
-    if (isObject(entry) && typeof entry.lastUsedAt === "number" && Number.isFinite(entry.lastUsedAt)) out[name] = entry.lastUsedAt;
+    out[name] = isObject(entry) && isDateMs(entry.lastUsedAt) ? entry.lastUsedAt : null;
   }
   return out;
 }
@@ -49,8 +64,8 @@ export function emptyClaudeJson(status: ClaudeJsonFacts["status"]): ClaudeJsonFa
     status,
     userMcpServers: [],
     projects: [],
-    skillUsage: Object.create(null) as Record<string, number>,
-    pluginUsage: Object.create(null) as Record<string, number>,
+    skillUsage: Object.create(null) as UsageTimes,
+    pluginUsage: Object.create(null) as UsageTimes,
     claudeAiEverConnected: [],
   };
 }

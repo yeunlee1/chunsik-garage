@@ -4,6 +4,7 @@ import { claudeHome, normalizePath } from "../adapters/claude/locate.ts";
 import { claudeJsonPath, readClaudeJson, type ClaudeJsonProject } from "./claude-json.ts";
 import { entryInfo, readJson } from "./fs.ts";
 import { hookCommandTexts, hookMapValid, preToolUseGuards, type ShellGuard } from "./hooks.ts";
+import { mcpInstallKey, skillInstallKey } from "./identity.ts";
 import { emptyInstructionSet, readGlobalInstructions, readProjectInstructions } from "./instructions.ts";
 import { definitionHash, mcpAllowed, projectServerApproved, type McpContext } from "./mcp.ts";
 import { mcpRecordNames, skillRecordNames } from "./names.ts";
@@ -80,8 +81,20 @@ function managedHits(managed: SettingsView, names: readonly string[], definition
 
 const normalizedCommand = (text: string): string => text.replace(/\\/g, "/").toLowerCase();
 
-/** 시각들 가운데 가장 늦은 것. 하나도 없으면 null이다. */
-const latest = (times: readonly (number | undefined)[]): number | null => times.reduce<number | null>((max, t) => (t === undefined || (max !== null && max >= t) ? max : t), null);
+/**
+ * 이름들의 집계를 합친다. 시각이 읽힌 것 가운데 가장 늦은 것과, 항목은 있는데 시각을 읽을 수 없는 것(null)이 하나라도 있었는지를 낸다.
+ * 집계에 없는 이름(undefined)은 어느 쪽에도 들지 않는다(설계 11.3 「30일의 경계」).
+ */
+function usageOf(times: readonly (number | null | undefined)[]): { usageLastUsedMs: number | null; usageUndated: boolean } {
+  let usageLastUsedMs: number | null = null;
+  let usageUndated = false;
+  for (const at of times) {
+    if (at === undefined) continue;
+    if (at === null) usageUndated = true;
+    else if (usageLastUsedMs === null || at > usageLastUsedMs) usageLastUsedMs = at;
+  }
+  return { usageLastUsedMs, usageUndated };
+}
 
 export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFacts> {
   const home = claudeHome(input.env, input.homedir);
@@ -164,18 +177,11 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     const fragments = [normalizePath(skill.path), skill.realPath ?? "", `/skills/${skill.dirName}`].filter((f) => f !== "").map((f) => f.toLowerCase());
     return commandTexts.some((text) => fragments.some((fragment) => text.includes(fragment)));
   };
-  const usageOf = (names: readonly string[]): number | null => {
-    let latest: number | null = null;
-    for (const name of names) {
-      const at = claudeJson.skillUsage[name];
-      if (at !== undefined && (latest === null || at > latest)) latest = at;
-    }
-    return latest;
-  };
-
   // 스킬
-  const skills: SkillFact[] = [];
+  // 정체 열쇠는 사실을 다 만든 뒤 마지막에 붙인다
+  const skills: Omit<SkillFact, "installKey">[] = [];
   const unreadableDirs: string[] = [];
+  const unreadableSkillPlaces: ClaudeSetupFacts["unreadableSkillPlaces"] = { user: false, projects: [], plugins: [] };
   const addSkill = (folder: SkillFolder, fields: Pick<SkillFact, "scope" | "name" | "recordNames" | "projectRoot" | "pluginId" | "enabled" | "listed" | "managedFixed" | "hookProvided">): void => {
     skills.push({
       ...fields,
@@ -187,12 +193,16 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       targetCreatedMs: folder.targetCreatedMs,
       readable: folder.readable,
       nameUnreadable: folder.nameUnreadable,
-      usageLastUsedMs: usageOf(fields.recordNames),
+      ...usageOf(fields.recordNames.map((name) => claudeJson.skillUsage[name])),
     });
   };
   const addOwnSkills = (scan: SkillRootScan, scope: "user" | "project", projectRoot: string | null, scopeContexts: readonly Context[]): void => {
     for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path });
     unreadableDirs.push(...scan.unreadableDirs);
+    if (scan.unreadableDirs.length > 0) {
+      if (projectRoot === null) unreadableSkillPlaces.user = true;
+      else unreadableSkillPlaces.projects.push(projectRoot);
+    }
     for (const folder of scan.skills) {
       const recordNames = skillRecordNames(folder.dirName, folder.declaredName, null);
       const modes = scopeContexts.map((context) => overrideIn(context, recordNames));
@@ -214,7 +224,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot)!, "project", ref.normRoot, [contexts.get(ref.normRoot)!]);
 
   const plugins: PluginFact[] = [];
-  const mcpServers: McpFact[] = [];
+  const mcpServers: Omit<McpFact, "installKey">[] = [];
   for (const plugin of allPlugins) {
     if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join(plugin.installPath, ".claude-plugin", "plugin.json") });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
@@ -232,6 +242,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
         const scan = await scanSkillPath(root);
         for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path });
         unreadableDirs.push(...scan.unreadableDirs);
+        if (scan.unreadableDirs.length > 0) unreadableSkillPlaces.plugins.push(plugin.id);
         for (const folder of scan.skills) {
           const at = normalizePath(folder.path);
           if (seenPaths.has(at)) continue;
@@ -276,6 +287,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       scopes: plugin.scopes,
       projectRoots: plugin.projectPaths,
       installPath: plugin.installPath,
+      installRealPath: plugin.installRealPath,
       exists: plugin.exists,
       manifest: plugin.manifest,
       marketplaceEntry: plugin.marketplaceEntry,
@@ -291,7 +303,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       mcpUnreadable: plugin.mcpUnreadable,
       skills: skillNames.sort(),
       // 집계의 열쇠가 어느 이름인지 확인하지 못해 두 이름으로 모두 찾는다(설계 10 「~/.claude.json」)
-      usageLastUsedMs: latest(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`])),
+      ...usageOf(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`])),
     });
   }
 
@@ -436,10 +448,11 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     pluginsFile: pluginsScan.file,
     plugins,
     pluginsWithoutInstall,
-    skills,
-    mcpServers,
+    skills: skills.map((skill) => ({ ...skill, installKey: skillInstallKey(skill) })),
+    mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
+    unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };
 }

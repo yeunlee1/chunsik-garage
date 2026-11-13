@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
 import { scanClaudeSetup, type ScanInput } from "../../src/scan/claude.ts";
+import { installKeysOf, mcpInstallKey, skillInstallKey } from "../../src/scan/identity.ts";
 import type { ClaudeSetupFacts } from "../../src/scan/types.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -200,6 +201,15 @@ describe("scanClaudeSetup", () => {
     expect(scanned.problems.some((p) => p.path.endsWith("unreadable-skill") || p.path.endsWith("s-bad"))).toBe(false);
   });
 
+  it("스킬과 MCP 서버의 사실에 설치의 정체 열쇠가 실려 있다. 모으면 installKeysOf와 같고 정의가 없는 서버는 null이다(설계 11.3 「설치의 정체」)", () => {
+    expect(facts.skills.every((s) => s.installKey === skillInstallKey(s))).toBe(true);
+    expect(facts.mcpServers.every((s) => s.installKey === mcpInstallKey(s))).toBe(true);
+    expect(find(facts.mcpServers, "claude.ai Gmail").installKey).toBeNull();
+    expect(find(facts.mcpServers, "ctx").installKey).toContain(find(facts.mcpServers, "ctx").definitionHash);
+    const keys = [...facts.skills.map((s) => s.installKey), ...facts.mcpServers.flatMap((s) => (s.installKey === null ? [] : [s.installKey]))];
+    expect([...new Set(keys)].sort()).toEqual(installKeysOf(facts));
+  });
+
   it("켜져 있는데 설치 기록이 없는 플러그인은 따로 적는다(꺼 둔 것은 넣지 않는다)", () => {
     expect(facts.pluginsWithoutInstall).toEqual(["ghost@m"]);
   });
@@ -352,7 +362,45 @@ describe("scanClaudeSetup의 플러그인", () => {
     const scanned = await scanClaudeSetup(input);
     expect(find(scanned.skills, "runtime-name:one")).toMatchObject({ pluginId: "store-alias@demo", recordNames: ["runtime-name:one", "store-alias:one"], usageLastUsedMs: 1_760_000_800_000 });
     expect(find(scanned.mcpServers, "db2").recordNames).toEqual(["plugin:runtime-name:db2", "plugin:store-alias:db2", "plugin_runtime-name_db2", "plugin_store-alias_db2"]);
-    expect(find(scanned.plugins, "runtime-name")).toMatchObject({ id: "store-alias@demo", entryName: "store-alias", usageLastUsedMs: 1_760_000_900_000 });
+    expect(find(scanned.plugins, "runtime-name")).toMatchObject({ id: "store-alias@demo", entryName: "store-alias", usageLastUsedMs: 1_760_000_900_000, usageUndated: false });
+  });
+
+  it("집계의 항목은 있는데 시각을 읽을 수 없으면 시각 모름으로 낸다. 이름 꼴 하나라도 그러면 그렇다(설계 11.3 「30일의 경계」)", async () => {
+    const p = join(root, "plugins", "store-alias");
+    await put(join(p, ".claude-plugin", "plugin.json"), json({ name: "runtime-name" }));
+    await put(join(p, "skills", "one", "SKILL.md"), skill("one"));
+    await addPlugin("store-alias@demo", p, { name: "store-alias", source: "./store-alias" });
+    const claudeJson = await readJsonFile(join(input.homedir, ".claude.json"));
+    claudeJson.pluginUsage["runtime-name@demo"] = { usageCount: 1, lastUsedAt: 1_760_000_900_000 };
+    claudeJson.pluginUsage["store-alias@demo"] = { usageCount: 3 };
+    claudeJson.skillUsage["store-alias:one"] = { usageCount: 1, lastUsedAt: 1_760_000_800_000 };
+    claudeJson.skillUsage["runtime-name:one"] = { usageCount: 1, lastUsedAt: "yesterday" };
+    claudeJson.skillUsage["active-skill"] = { usageCount: 1, lastUsedAt: 9_000_000_000_000_000 };
+    await put(join(input.homedir, ".claude.json"), json(claudeJson));
+    const scanned = await scanClaudeSetup(input);
+    // 읽힌 시각은 그대로 남기고, 시각 모름이 하나라도 있었다는 것을 따로 낸다
+    expect(find(scanned.skills, "runtime-name:one")).toMatchObject({ usageLastUsedMs: 1_760_000_800_000, usageUndated: true });
+    expect(find(scanned.plugins, "runtime-name")).toMatchObject({ usageLastUsedMs: 1_760_000_900_000, usageUndated: true });
+    expect(find(scanned.skills, "active-skill")).toMatchObject({ usageLastUsedMs: null, usageUndated: true });
+    // 집계에 항목이 없는 것은 시각 모름이 아니다
+    expect(find(scanned.skills, "pa:s1")).toMatchObject({ usageLastUsedMs: 1_760_000_500_000, usageUndated: false });
+  });
+
+  it("플러그인의 놓인 곳이 링크이면 실제 경로를 따로 낸다. 그 플러그인의 스킬은 실제 경로가 그 안에 있다(설계 18.1 「읽지 못한 곳」)", async () => {
+    const real = join(root, "store", "linked-plugin");
+    await put(join(real, ".claude-plugin", "plugin.json"), json({ name: "linked" }));
+    await put(join(real, "skills", "one", "SKILL.md"), skill("one"));
+    const link = join(root, "plugins", "linked");
+    await linkDir(real, link);
+    await addPlugin("linked@demo", link, { name: "linked", source: "./linked" });
+    const scanned = await scanClaudeSetup(input);
+    const plugin = find(scanned.plugins, "linked");
+    expect(plugin.installPath).toBe(link);
+    expect(plugin.installRealPath).toBe(normalizePath(await realpath(real)));
+    expect(find(scanned.skills, "linked:one").realPath!.startsWith(`${plugin.installRealPath}/`)).toBe(true);
+    // 놓인 곳이 없으면 실제 경로도 없다
+    await addPlugin("gone@demo", join(root, "plugins", "gone"), { name: "gone", source: "./gone" });
+    expect(find((await scanClaudeSetup(input)).plugins, "gone")).toMatchObject({ exists: false, installRealPath: null });
   });
 
   it("enabledPlugins에 @builtin으로 끝나는 ID가 켜져 있어도 설치 기록이 없는 플러그인으로 세지 않는다", async () => {

@@ -210,6 +210,15 @@ describe("S5 MCP 연결이 안정적이다", () => {
     expect(s5({})).toEqual({ status: "unmeasured", reason: "not_applicable", evidence: { enabledServers: 0, failedSessions: 1, mainSessions: 4 } });
     expect(s5({ mcpServers: [mcpServer("db", { enabled: false })] })).toMatchObject({ status: "unmeasured", reason: "not_applicable" });
   });
+  it("정체가 같은 서버 사실 둘은 켜진 서버 하나로 센다", () => {
+    // 스캐너가 같은 플러그인을 두 길로 찾으면 그 서버의 사실이 둘 온다
+    const twin = (enabled: boolean) => mcpServer("db", { scope: "plugin", pluginId: "r@skills-dir", enabled });
+    expect(s5({ mcpServers: [twin(true), twin(true)] })).toMatchObject({ status: "scored", evidence: { enabledServers: 1 } });
+    expect(s5({ mcpServers: [twin(true), twin(false), mcpServer("mail")] })).toMatchObject({ status: "scored", evidence: { enabledServers: 2 } });
+    // 정체가 없는 서버는 견줄 수 없으므로 사실마다 센다
+    const remote = () => mcpServer("claude.ai Mail", { scope: "claude-ai", definitionHash: null });
+    expect(s5({ mcpServers: [remote(), remote()] })).toMatchObject({ status: "scored", evidence: { enabledServers: 2 } });
+  });
   it("범위를 가리지 않고 켜져 있는 서버를 모두 본다. 정의가 PC에 없는 연결도 서버다", () => {
     expect(s5({ mcpServers: [mcpServer("claude.ai Mail", { scope: "claude-ai", definitionHash: null })] })).toMatchObject({ status: "scored", value: 0.25 });
     expect(s5({ mcpServers: [mcpServer("db", { enabled: false }), mcpServer("p", { scope: "plugin", pluginId: "p@m" })] })).toMatchObject({ status: "scored", evidence: { enabledServers: 1 } });

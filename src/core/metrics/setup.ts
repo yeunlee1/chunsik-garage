@@ -4,6 +4,7 @@ import type { SessionSummary, ToolId } from "../../adapters/types.ts";
 import type { ShellGuard } from "../../scan/hooks.ts";
 import type { ClaudeHooksFacts, ClaudeSetupFacts, SetupProblem } from "../../scan/types.ts";
 import { blank, countGate, scored, unmeasured, type Measurement } from "../measure.ts";
+import { sameInstall } from "../installs/same.ts";
 import { enablementUnread, globalSettingsUnread, mcpPlacesUnread, projectSettingsUnread } from "../readability.ts";
 import type { ToolUsage } from "../totals.ts";
 
@@ -94,7 +95,8 @@ function s3(tools: readonly ToolSetup[]): Measurement {
 
 function s5(tool: ToolSetup): Measurement {
   const { setup, totals } = tool;
-  const enabledServers = setup.mcpServers.filter((server) => server.enabled).length;
+  // 정체가 같은 서버 사실은 설치 하나로 센다(E6과 같다)
+  const enabledServers = sameInstall(setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
   const failedSessions = totals.mainSessions.filter((session) => session.mcpConnectionFailure).length;
   const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));

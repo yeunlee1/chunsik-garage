@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
 import { scanClaudeSetup, type ScanInput } from "../../src/scan/claude.ts";
+import { installKeysOf, mcpInstallKey, skillInstallKey } from "../../src/scan/identity.ts";
 import type { ClaudeSetupFacts } from "../../src/scan/types.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -198,6 +199,15 @@ describe("scanClaudeSetup", () => {
     expect(find(scanned.skills, "pa:s-bad")).toMatchObject({ scope: "plugin", readable: false });
     expect(find(scanned.skills, "active-skill").readable).toBe(true);
     expect(scanned.problems.some((p) => p.path.endsWith("unreadable-skill") || p.path.endsWith("s-bad"))).toBe(false);
+  });
+
+  it("스킬과 MCP 서버의 사실에 설치의 정체 열쇠가 실려 있다. 모으면 installKeysOf와 같고 정의가 없는 서버는 null이다(설계 11.3 「설치의 정체」)", () => {
+    expect(facts.skills.every((s) => s.installKey === skillInstallKey(s))).toBe(true);
+    expect(facts.mcpServers.every((s) => s.installKey === mcpInstallKey(s))).toBe(true);
+    expect(find(facts.mcpServers, "claude.ai Gmail").installKey).toBeNull();
+    expect(find(facts.mcpServers, "ctx").installKey).toContain(find(facts.mcpServers, "ctx").definitionHash);
+    const keys = [...facts.skills.map((s) => s.installKey), ...facts.mcpServers.flatMap((s) => (s.installKey === null ? [] : [s.installKey]))];
+    expect([...new Set(keys)].sort()).toEqual(installKeysOf(facts));
   });
 
   it("켜져 있는데 설치 기록이 없는 플러그인은 따로 적는다(꺼 둔 것은 넣지 않는다)", () => {

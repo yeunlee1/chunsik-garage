@@ -4,13 +4,13 @@ import { normalizePath } from "../adapters/claude/locate.ts";
 import { installKey } from "../state/observations.ts";
 import type { ClaudeSetupFacts, FileStatus, McpFact, SkillFact } from "./types.ts";
 
-export function skillInstallKey(skill: SkillFact): string {
+export function skillInstallKey(skill: Omit<SkillFact, "installKey">): string {
   // 범위가 프로젝트이면 어느 프로젝트의 것인지도 정체다. 두 프로젝트가 같은 원본을 같은 이름의 링크로 걸면 설치는 둘이다(설계 11.3 「설치의 정체」)
   return installKey(["skill", "claude-code", skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
 }
 
 /** 정의를 읽지 못했거나 PC에 없는 서버(claude.ai에 연결한 서버 포함)는 null이다. */
-export function mcpInstallKey(server: McpFact): string | null {
+export function mcpInstallKey(server: Omit<McpFact, "installKey">): string | null {
   if (server.definitionHash === null) return null;
   return installKey(["mcp", "claude-code", server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
 }

@@ -26,6 +26,7 @@ const skill = (over: Partial<SkillFact>): SkillFact => ({
   hookProvided: false,
   usageLastUsedMs: null,
   usageUndated: false,
+  installKey: "",
   ...over,
 });
 const server = (over: Partial<McpFact>): McpFact => ({
@@ -37,6 +38,7 @@ const server = (over: Partial<McpFact>): McpFact => ({
   definitionHash: "h1",
   enabled: true,
   managedFixed: false,
+  installKey: null,
   ...over,
 });
 

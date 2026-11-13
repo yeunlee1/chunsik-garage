@@ -39,6 +39,8 @@ export interface SkillFact {
   usageLastUsedMs: number | null;
   /** 이름 꼴 가운데 집계의 항목은 있는데 시각을 읽을 수 없는 것이 있다. 참이면 "30일 안"으로 본다(설계 11.3 「30일의 경계」) */
   usageUndated: boolean;
+  /** 설치의 정체 열쇠(identity.ts의 skillInstallKey). 관측 기록의 열쇠와 같다(설계 11.3 「설치의 정체」, 18.1) */
+  installKey: string;
 }
 
 export interface McpFact {
@@ -54,6 +56,8 @@ export interface McpFact {
   enabled: boolean;
   /** 관리 정책이 막거나 허용 목록으로 정한다(바꿀 수 없음) */
   managedFixed: boolean;
+  /** 설치의 정체 열쇠(identity.ts의 mcpInstallKey). 정의의 지문이 없어 정체를 만들 수 없으면 null이다 */
+  installKey: string | null;
 }
 
 export interface PluginFact {

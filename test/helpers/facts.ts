@@ -40,7 +40,7 @@ export function project(root: string, input: Partial<ProjectFact> = {}): Project
 /** 사용자 범위의 켜져 있는 스킬 하나. 만든 지 오래됐고 집계에는 없다 */
 export function skill(name: string, input: Partial<SkillFact> = {}): SkillFact {
   const path = input.path ?? `${HOME}/skills/${name}`;
-  return {
+  const fact: Omit<SkillFact, "installKey"> = {
     scope: "user",
     name,
     recordNames: [name],
@@ -62,11 +62,15 @@ export function skill(name: string, input: Partial<SkillFact> = {}): SkillFact {
     usageUndated: false,
     ...input,
   };
+  // 정체는 (범위, 프로젝트, 이름, 실제 경로)다. 스캐너의 열쇠와 글자는 다르지만 같은 것끼리 같고 다른 것끼리 다르다
+  return { ...fact, installKey: input.installKey ?? JSON.stringify(["skill", fact.scope, fact.projectRoot ?? "", fact.name, fact.realPath ?? fact.path]) };
 }
 
-/** 사용자 범위의 켜져 있는 MCP 서버 하나 */
+/** 사용자 범위의 켜져 있는 MCP 서버 하나. 정의의 지문이 없으면 정체도 없다 */
 export function mcpServer(name: string, input: Partial<McpFact> = {}): McpFact {
-  return { scope: "user", name, recordNames: [name], projectRoot: null, pluginId: null, definitionHash: `def-${name}`, enabled: true, managedFixed: false, ...input };
+  const fact: Omit<McpFact, "installKey"> = { scope: "user", name, recordNames: [name], projectRoot: null, pluginId: null, definitionHash: `def-${name}`, enabled: true, managedFixed: false, ...input };
+  const key = fact.definitionHash === null ? null : JSON.stringify(["mcp", fact.scope, fact.projectRoot ?? "", fact.pluginId ?? "", fact.name, fact.definitionHash]);
+  return { ...fact, installKey: input.installKey === undefined ? key : input.installKey };
 }
 
 /** 사용자 범위로 설치해 켜 둔 플러그인 하나. 구성을 알고 스킬만 든다 */

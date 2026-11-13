@@ -4,6 +4,7 @@ import { claudeHome, normalizePath } from "../adapters/claude/locate.ts";
 import { claudeJsonPath, readClaudeJson, type ClaudeJsonProject } from "./claude-json.ts";
 import { entryInfo, readJson } from "./fs.ts";
 import { hookCommandTexts, hookMapValid, preToolUseGuards, type ShellGuard } from "./hooks.ts";
+import { mcpInstallKey, skillInstallKey } from "./identity.ts";
 import { emptyInstructionSet, readGlobalInstructions, readProjectInstructions } from "./instructions.ts";
 import { definitionHash, mcpAllowed, projectServerApproved, type McpContext } from "./mcp.ts";
 import { mcpRecordNames, skillRecordNames } from "./names.ts";
@@ -177,7 +178,8 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     return commandTexts.some((text) => fragments.some((fragment) => text.includes(fragment)));
   };
   // 스킬
-  const skills: SkillFact[] = [];
+  // 정체 열쇠는 사실을 다 만든 뒤 마지막에 붙인다
+  const skills: Omit<SkillFact, "installKey">[] = [];
   const unreadableDirs: string[] = [];
   const unreadableSkillPlaces: ClaudeSetupFacts["unreadableSkillPlaces"] = { user: false, projects: [], plugins: [] };
   const addSkill = (folder: SkillFolder, fields: Pick<SkillFact, "scope" | "name" | "recordNames" | "projectRoot" | "pluginId" | "enabled" | "listed" | "managedFixed" | "hookProvided">): void => {
@@ -222,7 +224,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot)!, "project", ref.normRoot, [contexts.get(ref.normRoot)!]);
 
   const plugins: PluginFact[] = [];
-  const mcpServers: McpFact[] = [];
+  const mcpServers: Omit<McpFact, "installKey">[] = [];
   for (const plugin of allPlugins) {
     if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join(plugin.installPath, ".claude-plugin", "plugin.json") });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
@@ -446,8 +448,8 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     pluginsFile: pluginsScan.file,
     plugins,
     pluginsWithoutInstall,
-    skills,
-    mcpServers,
+    skills: skills.map((skill) => ({ ...skill, installKey: skillInstallKey(skill) })),
+    mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
     unreadableDirs: [...new Set(unreadableDirs)].sort(),

@@ -4119,7 +4119,7 @@ Expected: 타입 검사 통과, 시험 파일 68개·시험 1,001개 통과(2단
 과제 16에서 묶어 커밋한 실행 파일이 원본과 맞는지 본다.
 
 Run: `npm run build && git status --short skills/aq/scripts/aq.mjs`
-Expected: 아무것도 내지 않는다.
+Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공하고, 뒤의 `git status --short skills/aq/scripts/aq.mjs`는 아무것도 내지 않는다.
 
 - [ ] **Step 3: Node.js 22에서도 돌린다**
 

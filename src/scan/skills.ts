@@ -140,7 +140,8 @@ const YAML_FALSE = new Set(["false", "False", "FALSE"]);
 
 /**
  * 맨 앞의 --- 줄과 닫는 --- 줄 사이에서 들여쓰지 않은 "열쇠: 값" 줄만 읽는다. 들여쓴 줄(묶음의 안쪽)은 보지 않는다.
- * 이름을 정할 수 있는 줄을 이 방법으로 다 읽지 못하면 name을 읽지 못한 열쇠로 둔다. 이 방법으로 읽지 못하는 최상위 줄(따옴표로 쓴 열쇠, 여러 줄 열쇠, 흐름 꼴)이 있거나 name의 값이 다음 줄로 이어질 때다.
+ * 이름을 정할 수 있는 줄을 이 방법으로 다 읽지 못하면 name을 읽지 못한 열쇠로 둔다. 이 방법으로 읽지 못하는 최상위 줄(따옴표로 쓴 열쇠, 여러 줄 열쇠, 흐름 꼴)이 있거나, name의 값이 다음 줄로 이어지거나,
+ * 최상위 열쇠 앞에 들여쓴 줄이 있거나(머리말 전체를 들여썼다), 닫는 --- 줄이 들여써 있거나(블록 값 안의 줄일 수 있다), name이 두 번 나올 때다.
  * 이름이 없는 것으로 넘기면 그 스킬의 이름 꼴이 모자란다는 것을 평가가 알 수 없다(설계 11.3 E5)
  */
 export function parseFrontmatter(text: string): Frontmatter {
@@ -154,13 +155,19 @@ export function parseFrontmatter(text: string): Frontmatter {
   const mark = (key: string): void => {
     if (!unreadable.includes(key)) unreadable.push(key);
   };
+  // 닫는 줄이 들여써 있으면 블록 값 안의 줄을 끝으로 본 것일 수 있다. 그 뒤의 name을 읽지 못했을 수 있다
+  if (lines[end] !== lines[end]!.trimStart()) mark("name");
   /** 바로 앞의 열쇠. 들여쓴 줄은 그 값이 이어지는 것이거나 그 묶음의 안쪽이다 */
   let previous: string | null = null;
+  let nameSeen = false;
   for (const line of lines.slice(1, end)) {
     if (line.trim() === "") continue;
     if (/^\s/.test(line)) {
-      // name의 값이 다음 줄로 이어진다. 읽은 앞부분은 이름이 아니다(주석 줄은 빼고)
-      if (previous === "name" && !line.trimStart().startsWith("#")) {
+      if (line.trimStart().startsWith("#")) continue;
+      // 최상위 열쇠 앞의 들여쓴 줄이다. 머리말 전체를 들여써서 열쇠를 읽지 못한다
+      if (previous === null) mark("name");
+      // name의 값이 다음 줄로 이어진다. 읽은 앞부분은 이름이 아니다
+      if (previous === "name") {
         mark("name");
         delete fields.name;
       }
@@ -175,6 +182,15 @@ export function parseFrontmatter(text: string): Frontmatter {
       continue;
     }
     previous = match[1]!;
+    if (previous === "name") {
+      // name이 두 번 나오면 어느 값이 이름인지 모른다
+      if (nameSeen) {
+        mark("name");
+        delete fields.name;
+        continue;
+      }
+      nameSeen = true;
+    }
     const value = readScalar(match[2] ?? "");
     if (value === null) mark(match[1]!);
     else fields[match[1]!] = value;

@@ -144,6 +144,16 @@ describe("머리말 값 읽기(YAML 한 줄 값)", () => {
       expect(front.fields.name).toBeUndefined();
     }
   });
+  it("최상위 열쇠 앞의 들여쓴 줄, 들여쓴 닫는 경계, 두 번 나온 name도 이름을 모르는 것으로 둔다", () => {
+    // 머리말 전체를 들여써 적었다. 열쇠를 하나도 읽지 못한다
+    expect(parseFrontmatter("---\n  name: idle\n  description: x\n---\n").unreadable).toEqual(["name"]);
+    // 블록 값 안의 들여쓴 --- 줄을 머리말의 끝으로 봤다. 그 뒤의 name을 읽지 못했을 수 있다
+    expect(parseFrontmatter("---\ndescription: |\n  설명\n  ---\n  이어지는 설명\nname: idle\n---\n").unreadable).toContain("name");
+    // 같은 열쇠가 두 번 나오면 어느 값이 이름인지 모른다
+    const twice = parseFrontmatter("---\nname: a\nname: b\n---\n");
+    expect(twice.unreadable).toEqual(["name"]);
+    expect(twice.fields.name).toBeUndefined();
+  });
   it("다른 열쇠의 값이 다음 줄로 이어지거나 묶음이면 이름은 그대로 읽는다. 들여쓴 주석 줄과 맨 앞의 주석 줄도 그렇다", () => {
     const front = parseFrontmatter("---\n# 맨 앞의 주석\nname: idle\n  # 들여쓴 주석\ndescription: |\n  여러 줄\n  설명\nmetadata:\n  version: 1\n\n---\n");
     expect(front.fields.name).toBe("idle");
@@ -152,6 +162,10 @@ describe("머리말 값 읽기(YAML 한 줄 값)", () => {
     const empty = parseFrontmatter("---\nname:\ndescription: x\n---\n");
     expect(empty.fields.name).toBe("");
     expect(empty.unreadable).toEqual([]);
+    // 묶음 안의 name은 최상위 이름이 아니다
+    const nested = parseFrontmatter("---\nmetadata:\n  name: other\nname: idle\n---\n");
+    expect(nested.fields.name).toBe("idle");
+    expect(nested.unreadable).toEqual([]);
   });
   it("이름에 붙은 주석은 셋팅 사실로 넘어가지 않고, 읽지 못한 name은 표시한다", async () => {
     await put(join(root, "c", "SKILL.md"), "---\nname: sample # PRIVATE-COMMENT-123\ndisable-model-invocation: true # off\n---\n");

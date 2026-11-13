@@ -353,6 +353,14 @@ describe("순수성 검사가 실제로 잡는다", () => {
     expect(leaksOf(source)).toEqual([]);
     expect(sandboxed({ source }, "run", "0")).toBe(JSON.stringify(["January", "January", "January", "January"]));
   });
+  it("날짜 꼴의 맞춤 방식을 지원 여부를 묻는 데에 그대로 넘긴다", () => {
+    // 두 맞춤 방식(lookup, best fit)의 지원 여부가 갈리는 로캘을 찾지 못해서 결과로는 가를 수 없다. 막는 글이 챙겨 두는 함수를 먼저 감싸, 받은 맞춤 방식을 적어 두고 그대로 위임한다
+    const context = createContext(Object.create(null), { codeGeneration: { strings: false, wasm: false } });
+    inContext(`var seen = []; (() => { const real = Intl.DateTimeFormat.supportedLocalesOf; Intl.DateTimeFormat.supportedLocalesOf = function (locales, options) { seen.push(options === undefined ? "없음" : String(options.localeMatcher)); return real.call(this, locales, options); }; })();`, context);
+    inContext(GUARD, context);
+    inContext(`["lookup", "best fit", undefined].forEach((localeMatcher) => new Intl.DateTimeFormat("en-US", { localeMatcher, timeZone: "UTC" }).format(0));`, context);
+    expect(inContext("JSON.stringify(seen)", context)).toBe(JSON.stringify(["lookup", "best fit", "undefined"]));
+  });
   it("이름을 계산해서 가져오는 것은 글로 걸린다. 따라갈 수 없으므로 꼴 자체를 허용하지 않는다", () => {
     expect(leaksOf(`export const run = (name: string) => import(name);`)).toEqual(["import()"]);
   });

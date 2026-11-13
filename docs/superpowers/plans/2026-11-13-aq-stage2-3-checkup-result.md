@@ -4136,7 +4136,7 @@ Expected: 종료 코드 0. 표준 출력의 JSON에 `summary`와 `run` 둘만 �
 
 - [ ] **Step 5: 원장을 고치고 커밋한다**
 
-원장의 2단계 3부 구현 과제를 끝남으로 적고 커밋 해시와 확인한 것을 세부에 적는다. 원장은 node로 고친다(메모리 `task-master-register-every-task`).
+원장의 2단계 3부 구현 과제는 진행으로 두고, 커밋 해시와 확인한 것, 짝 검증과 병합을 기다린다는 것을 세부에 적는다. 과제에 병합까지 들어 있으므로 끝남은 Step 8에서 병합하고 병합한 develop을 검사한 뒤에 적는다. 원장은 node로 고친다(메모리 `task-master-register-every-task`).
 
 ```bash
 git add .taskmaster/tasks/tasks.json
@@ -4165,7 +4165,15 @@ gh pr merge 2단계-3-점검결과 --merge --subject "feat: 2단계 3부 점검 
 git switch develop && git pull --ff-only
 ```
 
-병합한 develop에서 `npm run check`를 한 번 더 돌린다(병합 결과는 아무도 시험한 적이 없다). 병합이 끝난 원격 브랜치는 되살리기 스크립트를 남기고 정리한다(메모리 `clean-merged-remote-branches`).
+병합한 develop에서 `npm run check`를 한 번 더 돌린다(병합 결과는 아무도 시험한 적이 없다). 통과하면 원장의 과제를 끝남으로 바꾸고 병합 커밋과 검사 결과를 세부에 적어 develop에 커밋하고 올린다.
+
+```bash
+git add .taskmaster/tasks/tasks.json
+git commit -m "chore: 원장에 2단계 3부 병합 결과를 적음"
+git push origin develop
+```
+
+병합이 끝난 원격 브랜치는 되살리기 스크립트를 남기고 정리한다(메모리 `clean-merged-remote-branches`).
 
 ---
 

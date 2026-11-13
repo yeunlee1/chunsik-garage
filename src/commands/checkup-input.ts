@@ -6,6 +6,7 @@ import { makeWindows } from "../adapters/common/dates.ts";
 import { collectClaude, unreadableCount, type ClaudeCollectResult, type EvalClock } from "../collect/claude.ts";
 import type { EvaluationInput } from "../core/evaluate.ts";
 import type { SelfIdentity } from "../core/installs/candidates.ts";
+import type { CollectedTool } from "../core/result/tools.ts";
 import { scanClaudeSetup } from "../scan/claude.ts";
 import type { ClaudeSetupFacts } from "../scan/types.ts";
 import type { StateFile } from "../state/state.ts";
@@ -33,6 +34,8 @@ export interface CheckupInput {
   input: EvaluationInput;
   collected: ClaudeCollectResult;
   facts: ClaudeSetupFacts;
+  /** 평가 결과에 싣는 수집 결과(도구마다). 캐시를 쓴 파일 수처럼 실행마다 다른 것은 뺐다 */
+  tools: CollectedTool[];
 }
 
 const CLAUDE_AI_PREFIX = "claude.ai ";
@@ -68,6 +71,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
   });
 
   const unreadable = unreadableCount(collected.read);
+  const observation = { skills: claudeObservation(summaries, unreadable, "skill"), mcp: claudeObservation(summaries, unreadable, "mcp") };
   const input: EvaluationInput = {
     clock: options.clock,
     tools: [
@@ -76,7 +80,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
         summaries,
         coverage: CLAUDE_COVERAGE,
         shellTools: [...SHELL_TOOLS].sort(),
-        complete: { skills: claudeObservation(summaries, unreadable, "skill").complete, mcp: claudeObservation(summaries, unreadable, "mcp").complete },
+        complete: { skills: observation.skills.complete, mcp: observation.mcp.complete },
         setup: facts,
       },
     ],
@@ -85,5 +89,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
     installs: options.state.installs,
     self: options.self,
   };
-  return { input, collected, facts };
+  const { fromCache: _fromCache, ...read } = collected.read;
+  const tools: CollectedTool[] = [{ tool: "claude-code", detected: collected.detected, visibleFrom: collected.visibleFrom, overlappingSessions: collected.overlappingSessions, read, observation }];
+  return { input, collected, facts, tools };
 }

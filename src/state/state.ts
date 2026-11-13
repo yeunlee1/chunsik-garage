@@ -1,6 +1,6 @@
 // 상태 파일(state.json)을 읽고 쓴다. 이 PC에서 만든 무작위 값, 마지막 점검 시각, 설치마다의 관측 기록을 둔다. 임시 파일에 쓰고 이름을 바꾼다(설계 18.1, 19.1)
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LocalDate } from "../adapters/common/dates.ts";
 
@@ -67,7 +67,9 @@ export async function loadState(dir: string): Promise<StateLoad> {
   try {
     text = await readFile(join(dir, STATE_FILE), "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { status: "missing" };
+    // 상태 폴더 자리에 파일이 있으면(ENOTDIR) 그 안에 상태 파일이 있을 수 없다. 깨진 것이 아니라 없는 것이다
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { status: "missing" };
     return { status: "broken" };
   }
   try {
@@ -82,6 +84,12 @@ export async function saveState(dir: string, state: StateFile): Promise<void> {
   await mkdir(dir, { recursive: true });
   const target = join(dir, STATE_FILE);
   const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`);
-  await rename(temporary, target);
+  try {
+    await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`);
+    await rename(temporary, target);
+  } catch (error) {
+    // 쓰다 막히면 임시 파일을 남기지 않는다. 상태 폴더 바로 아래의 임시 파일은 aq clean이 모른다
+    await rm(temporary, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }

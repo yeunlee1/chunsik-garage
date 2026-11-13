@@ -1,6 +1,6 @@
 // 도구 하나의 날짜별 세션 요약을 점수 구간으로 잘라 더한다(순수 함수, 설계 9.2, 9.3). 어느 숫자에 주 세션만 넣고 어느 숫자에 하위 세션을 합치는지는 9.2절의 표를 따른다
 import type { LocalDate, Windows } from "../adapters/common/dates.ts";
-import type { SessionSummary, TokenCounts } from "../adapters/types.ts";
+import type { SessionSummary, TokenCounts, ToolCoverage, ToolId } from "../adapters/types.ts";
 import { byContent } from "./order.ts";
 
 /** 점수 구간에 응답이 있는 주 세션 하나의 숫자. 세션을 단위로 따지는 규칙(E3, E4, S5, F2)과 프로젝트를 세는 규칙(F3, I4)이 쓴다 */
@@ -44,6 +44,13 @@ export interface ToolTotals {
   activeDates: LocalDate[];
   /** 점수 구간에 응답이 있는 주 세션(세션 ID 차례) */
   mainSessions: MainSessionTotals[];
+}
+
+/** 도구 하나의 구간 합계와 그 도구의 관측 범위. 도구를 합쳐서 재는 규칙이 도구들을 이 모양으로 받는다 */
+export interface ToolUsage {
+  tool: ToolId;
+  totals: ToolTotals;
+  coverage: ToolCoverage;
 }
 
 /** ASCII 글자는 4글자를 1토큰으로, 그 밖의 글자는 1글자를 1토큰으로 어림한다. 글자가 없으면 표본이 아니라서 null이다(설계 11.3 E4). */

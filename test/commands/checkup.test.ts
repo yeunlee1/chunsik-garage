@@ -113,10 +113,16 @@ describe("저장하는 점검", () => {
 
   it("상태 폴더에 쓰지 못하면 남은 저장을 멈추고 결과 파일을 OS 임시 폴더에 쓴다. 실패로 끝나지 않는다", async () => {
     await put(stateDir, "not a folder");
+    // 실행 알림은 실제 파일 오류 코드를 그대로 싣는다. 같은 자리에 결과 폴더를 만들 때 나는 코드와 같다
+    const expected = await mkdir(join(stateDir, "reports"), { recursive: true }).then(
+      () => "none",
+      (error: NodeJS.ErrnoException) => error.code,
+    );
+    expect(expected).toMatch(/^E[A-Z]+$/);
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(false);
     expect(outcome.run.resultPath).toBe(join(tmp, `chunsik-garage-result-${STAMP}.json`));
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expect.any(String) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expected }]);
     expect(JSON.parse(await readFile(outcome.run.resultPath!, "utf8"))).toEqual(outcome.result);
     // 상태 폴더 자리에 파일이 있으면 상태 파일이 있을 수 없다. 깨진 것이 아니라 없는 것이다
     expect(outcome.result.notices.map((notice) => notice.kind)).not.toContain("state_reset");
@@ -127,7 +133,7 @@ describe("저장하는 점검", () => {
     for (let index = 0; index < 21; index++) await put(join(stateDir, "reports", `${resultStamp(NOW - (index + 1) * 60_000)}.json`), "{}");
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(false);
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "state", code: expect.any(String) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "state", code: expect.stringMatching(/^E[A-Z]+$/) }]);
     expect(outcome.run.resultPath).toBe(join(stateDir, "reports", `${STAMP}.json`));
     expect(JSON.parse(await readFile(outcome.run.resultPath!, "utf8"))).toEqual(outcome.result);
     await expect(readFile(join(stateDir, "history.jsonl"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
@@ -139,7 +145,7 @@ describe("저장하는 점검", () => {
     await mkdir(join(stateDir, "history.jsonl"), { recursive: true });
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(false);
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "history", code: expect.any(String) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "history", code: expect.stringMatching(/^E[A-Z]+$/) }]);
     expect(JSON.parse(await readFile(join(stateDir, "state.json"), "utf8")).lastCheckupAt).toBe("2026-11-12T03:00:00.000Z");
     expect(outcome.run.resultPath).toBe(join(stateDir, "reports", `${STAMP}.json`));
   });
@@ -147,7 +153,7 @@ describe("저장하는 점검", () => {
   it("결과 파일 자리가 막혀 있으면 결과를 OS 임시 폴더에 쓰고 결과 폴더에 임시 파일을 남기지 않는다", async () => {
     await mkdir(join(stateDir, "reports", `${STAMP}.json`), { recursive: true });
     const outcome = await runCheckup(options());
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expect.any(String) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expect.stringMatching(/^E[A-Z]+$/) }]);
     expect(outcome.run.resultPath).toBe(join(tmp, `chunsik-garage-result-${STAMP}.json`));
     expect(await readdir(join(stateDir, "reports"))).toEqual([`${STAMP}.json`]);
   });
@@ -191,7 +197,7 @@ describe("저장하지 않는 점검", () => {
   it("임시 폴더에도 쓰지 못하면 결과 파일 없이 요약만 내고 알린다", async () => {
     const outcome = await runCheckup(options({ save: false, tmpdir: join(root, "missing", "tmp") }));
     expect(outcome.run.resultPath).toBeNull();
-    expect(outcome.run.notices).toEqual([{ kind: "not_saved" }, { kind: "result_unwritten", code: expect.any(String) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "not_saved" }, { kind: "result_unwritten", code: "ENOENT" }]);
   });
 });
 

@@ -1,6 +1,6 @@
 // 상태 폴더(~/.chunsik-garage)의 위치와 그 안에 두는 것, 크기 재기와 지우기. 링크(심볼릭 링크·정션)는 따라가지 않는다(설계 7.4, 19.2)
 import { lstat, readdir, realpath, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 
 export const STATE_DIR_NAME = ".chunsik-garage";
@@ -92,6 +92,43 @@ async function assertInside(path: string, boundary: string, allowEqual: boolean)
   const real = normalizePath(await realpath(path));
   if (real === boundary ? allowEqual : real.startsWith(`${boundary}/`)) return;
   throw outside(path);
+}
+
+export interface RemoveFilesReport {
+  /** 지운 파일의 수 */
+  removed: number;
+  /** 고른 뒤 위 폴더가 상태 폴더 안의 다른 곳을 가리키는 링크로 바뀌어 지우지 않은 파일의 수 */
+  linked: number;
+}
+
+/**
+ * 보통 파일만 지운다. 폴더 안으로 내려가지 않는다. 고른 뒤 지우기 전에 다른 프로그램이 그 자리를 폴더나 링크로 바꿨으면 지우지 않고 넘긴다.
+ * 지우기 직전에 다시 보통 파일인지와 위 폴더의 실제 경로가 boundary 안인지 본다. 벗어나면 EOUTSIDE로 던진다.
+ * 위 폴더의 실제 경로가 있어야 할 자리(root에서 그 폴더까지의 이름을 boundary 아래에 둔 것)와 다르면, 그 사이의 폴더가 상태 폴더 안의 다른 곳을 가리키는 링크로 바뀐 것이라 넘기고 linked로 센다.
+ * 없어진 것은 넘긴다. 지운 파일과 링크 때문에 넘긴 파일의 수를 돌려준다. root는 상태 폴더, boundary는 그 실제 경로(expectedRealDir)다.
+ * 점검 때의 정리(오래된 결과, 원본이 없어진 캐시)가 쓴다. 사용자가 시킨 aq clean의 지우기는 removeTree다(설계 19.2).
+ */
+export async function removeFiles(paths: readonly string[], root: string, boundary: string): Promise<RemoveFilesReport> {
+  const report: RemoveFilesReport = { removed: 0, linked: 0 };
+  for (const path of paths) {
+    let info;
+    try {
+      info = await lstat(path);
+    } catch (error) {
+      if (isMissing(error)) continue;
+      throw error;
+    }
+    if (!info.isFile()) continue;
+    const parent = dirname(path);
+    await assertInside(parent, boundary, true);
+    if (normalizePath(await realpath(parent)) !== normalizePath(join(boundary, relative(root, parent)))) {
+      report.linked++;
+      continue;
+    }
+    await unlink(path);
+    report.removed++;
+  }
+  return report;
 }
 
 /**

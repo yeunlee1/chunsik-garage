@@ -168,4 +168,9 @@ export interface ClaudeSetupFacts {
   problems: SetupProblem[];
   /** 목록을 읽지 못한 스킬 폴더 */
   unreadableDirs: string[];
+  /**
+   * unreadableDirs의 폴더가 누구의 것인지. 사용자 스킬 폴더인지, 어느 프로젝트의 스킬 폴더인지(정규화한 뿌리), 어느 플러그인의 스킬을 찾는 폴더인지(ID)다.
+   * 사용자와 프로젝트의 것은 F5와 E5를 못 재게 하고, 플러그인의 것은 그 플러그인의 스킬만 세지 않게 한다(설계 11.3)
+   */
+  unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };
 }

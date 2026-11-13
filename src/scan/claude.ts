@@ -179,6 +179,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   // 스킬
   const skills: SkillFact[] = [];
   const unreadableDirs: string[] = [];
+  const unreadableSkillPlaces: ClaudeSetupFacts["unreadableSkillPlaces"] = { user: false, projects: [], plugins: [] };
   const addSkill = (folder: SkillFolder, fields: Pick<SkillFact, "scope" | "name" | "recordNames" | "projectRoot" | "pluginId" | "enabled" | "listed" | "managedFixed" | "hookProvided">): void => {
     skills.push({
       ...fields,
@@ -196,6 +197,10 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   const addOwnSkills = (scan: SkillRootScan, scope: "user" | "project", projectRoot: string | null, scopeContexts: readonly Context[]): void => {
     for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path });
     unreadableDirs.push(...scan.unreadableDirs);
+    if (scan.unreadableDirs.length > 0) {
+      if (projectRoot === null) unreadableSkillPlaces.user = true;
+      else unreadableSkillPlaces.projects.push(projectRoot);
+    }
     for (const folder of scan.skills) {
       const recordNames = skillRecordNames(folder.dirName, folder.declaredName, null);
       const modes = scopeContexts.map((context) => overrideIn(context, recordNames));
@@ -235,6 +240,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
         const scan = await scanSkillPath(root);
         for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path });
         unreadableDirs.push(...scan.unreadableDirs);
+        if (scan.unreadableDirs.length > 0) unreadableSkillPlaces.plugins.push(plugin.id);
         for (const folder of scan.skills) {
           const at = normalizePath(folder.path);
           if (seenPaths.has(at)) continue;
@@ -445,5 +451,6 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     projects,
     problems: uniqueProblems,
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
+    unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };
 }

@@ -25,6 +25,8 @@ export function enablementUnread(facts: ClaudeSetupFacts): boolean {
 /**
  * MCP 서버를 찾는 곳 가운데 읽지 못한 곳이 있다. ~/.claude.json, 프로젝트의 .mcp.json, 플러그인의 설치 기록 파일,
  * 켜져 있는 플러그인의 구성과 MCP 정의다. 켜 둔 플러그인이 설치 기록에 없는 것도 구성을 모르는 플러그인이다(설계 10, 11.3 S5).
+ * 사용자 스킬 폴더와 프로젝트의 스킬 폴더도 서버를 찾는 곳이다. 거기에 둔 플러그인은 설정에 열쇠가 없어도 켜지고 서버를 넣을 수 있어서,
+ * 그 폴더의 목록을 읽지 못하면 그런 플러그인을 찾지 못한 것이다(설계 10 「스킬 폴더에 둔 플러그인」). 플러그인 안의 스킬을 찾는 폴더는 서버와 상관없다.
  */
 export function mcpPlacesUnread(facts: ClaudeSetupFacts): boolean {
   return (
@@ -32,6 +34,8 @@ export function mcpPlacesUnread(facts: ClaudeSetupFacts): boolean {
     unread(facts.pluginsFile) ||
     facts.projects.some((project) => unread(project.mcpJsonStatus)) ||
     facts.plugins.some((plugin) => plugin.enabled && (!plugin.compositionKnown || plugin.mcpUnreadable)) ||
-    facts.pluginsWithoutInstall.length > 0
+    facts.pluginsWithoutInstall.length > 0 ||
+    facts.unreadableSkillPlaces.user ||
+    facts.unreadableSkillPlaces.projects.length > 0
   );
 }

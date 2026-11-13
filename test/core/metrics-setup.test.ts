@@ -222,6 +222,9 @@ describe("S5 MCP 연결이 안정적이다", () => {
     ["켜져 있는 플러그인의 구성을 모른다", { plugins: [plugin("p@m", { compositionKnown: false })] }],
     ["켜져 있는 플러그인의 MCP 정의를 읽지 못한다", { plugins: [plugin("p@m", { mcpUnreadable: true })] }],
     ["설정에 켜 둔 플러그인이 설치 기록에 없다", { pluginsWithoutInstall: ["p@m"] }],
+    // 스킬 폴더에 둔 플러그인은 설정에 열쇠가 없어도 켜지고 MCP 서버를 넣을 수 있다. 그 폴더의 목록을 읽지 못하면 그런 플러그인을 찾지 못한 것이다
+    ["사용자 스킬 폴더의 목록을 읽지 못한다", { unreadableSkillPlaces: { user: true, projects: [], plugins: [] } }],
+    ["프로젝트 스킬 폴더의 목록을 읽지 못한다", { unreadableSkillPlaces: { user: false, projects: ["/work/a"], plugins: [] } }],
   ] as [string, Partial<ClaudeSetupFacts>][])("서버를 찾는 곳을 읽지 못했다: %s", (_name, setup) => {
     // 보이는 켜진 서버가 없으면 없다고 할 수 없다. 보이는 켜진 서버가 하나라도 있으면 잰다
     expect(s5(setup)).toEqual({ status: "unmeasured", reason: "unreadable", evidence: { enabledServers: null, failedSessions: 1, mainSessions: 4 } });
@@ -234,6 +237,10 @@ describe("S5 MCP 연결이 안정적이다", () => {
       projects: [project("/work/a")],
       plugins: [plugin("off@m", { enabled: false, compositionKnown: false, mcpUnreadable: true })],
     };
+    expect(s5(setup)).toMatchObject({ status: "unmeasured", reason: "not_applicable" });
+  });
+  it("플러그인 안의 스킬을 찾는 폴더를 읽지 못한 것은 서버를 찾는 곳을 읽지 못한 것이 아니다", () => {
+    const setup: Partial<ClaudeSetupFacts> = { plugins: [plugin("p@m")], unreadableSkillPlaces: { user: false, projects: [], plugins: ["p@m"] } };
     expect(s5(setup)).toMatchObject({ status: "unmeasured", reason: "not_applicable" });
   });
   it.each([

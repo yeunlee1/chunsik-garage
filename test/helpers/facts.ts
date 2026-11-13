@@ -119,6 +119,7 @@ export function facts(input: Partial<ClaudeSetupFacts> = {}): ClaudeSetupFacts {
     projects: [],
     problems: [],
     unreadableDirs: [],
+    unreadableSkillPlaces: { user: false, projects: [], plugins: [] },
     ...input,
   };
 }

@@ -1,5 +1,7 @@
 // aq 명령의 입구. Node.js 버전을 확인하고 하위 명령으로 나눠 보낸다. 예상하지 못한 오류는 이유를 담은 JSON과 종료 코드 1로 낸다(설계 20.1)
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+import type { EvalClock } from "./collect/claude.ts";
+import { runCheckup } from "./commands/checkup.ts";
 import { clean } from "./commands/clean.ts";
 import { doctor } from "./commands/doctor.ts";
 import { where } from "./commands/where.ts";
@@ -14,7 +16,18 @@ export function nodeMajorOk(version: string): boolean {
 export interface CliContext {
   env: Record<string, string | undefined>;
   homedir: string;
+  /** 아래는 주지 않으면 실제 값이다. 시험이 고정한다 */
+  tmpdir?: string;
+  platform?: NodeJS.Platform;
+  /** 평가 시계. 주지 않으면 지금 시각과 이 PC의 시간대다 */
+  clock?: EvalClock;
+  /** 실행한 파일. 주지 않으면 process.argv[1]이다 */
+  entryFile?: string;
+  managedDir?: string;
 }
+
+/** aq checkup이 받는 옵션. --no-open은 결과 화면(3단계)을 열지 않는 것이라 지금은 할 일이 없다. --lang은 문구(4부)와 함께 받는다 */
+const CHECKUP_FLAGS: ReadonlySet<string> = new Set(["--no-open", "--no-save", "--rescan"]);
 
 const printJson = (value: unknown): void => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -40,6 +53,23 @@ async function run(command: string | undefined, rest: string[], context: CliCont
   }
   if (command === "clean" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--all"))) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "checkup" && rest.every((flag) => CHECKUP_FLAGS.has(flag))) {
+    const outcome = await runCheckup({
+      env: context.env,
+      homedir: context.homedir,
+      tmpdir: context.tmpdir ?? tmpdir(),
+      platform: context.platform ?? process.platform,
+      clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      stateDir: stateDir(context.homedir),
+      save: !rest.includes("--no-save"),
+      rescan: rest.includes("--rescan"),
+      entryFile: context.entryFile ?? process.argv[1] ?? "",
+      ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
+    });
+    // 평가 결과 전체(이름 목록이 든 것)는 파일로만 두고 표준 출력에는 요약과 실행 기록만 낸다(설계 12.3, 19.1)
+    printJson({ summary: outcome.summary, run: outcome.run });
     return 0;
   }
   return null;

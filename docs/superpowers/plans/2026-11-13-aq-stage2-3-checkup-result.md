@@ -4095,7 +4095,7 @@ Expected: `묶음 완료: skills/aq/scripts/aq.mjs`와 `묶음 검사 통과`. �
 
 ```bash
 git add test/commands/checkup-cli.test.ts test/core/result-determinism.test.ts skills/aq/scripts/aq.mjs src/cli.ts
-git commit -m "feat: aq checkup 명령 입구 추가"
+git commit -m "feat: 점검 명령의 입구 추가"
 ```
 
 ---

@@ -44,6 +44,8 @@ export interface UnjudgedServer {
   name: string;
   scope: McpFact["scope"];
   projectRoot: string | null;
+  /** projectRoot의 프로젝트 폴더 이름(ProjectFact.name). 프로젝트의 것이 아니면 null이다. 결과 화면은 경로 대신 이것을 보인다(설계 19.1) */
+  projectName: string | null;
   pluginId: string | null;
   /** no_definition은 정의가 PC에 없거나 읽지 못한 것, plugin_unread는 정의를 읽지 못한 플러그인의 것, not_established는 아직 지켜보는 중인 것, observation_incomplete는 관측이 빠짐없지 않은 것이다 */
   why: "no_definition" | "plugin_unread" | "not_established" | "observation_incomplete";
@@ -86,6 +88,7 @@ const SCOPE_ORDER: readonly McpFact["scope"][] = ["user", "local", "project", "p
 
 function unjudgedServers(input: EvaluationInput, evaluation: Evaluation): UnjudgedServer[] {
   const windows = makeWindows(input.clock.nowMs, input.clock.timeZone);
+  const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   const servers: UnjudgedServer[] = [];
   for (const tool of evaluation.tools) {
     const source = input.tools.find((item) => item.tool === tool.tool)!;
@@ -94,7 +97,7 @@ function unjudgedServers(input: EvaluationInput, evaluation: Evaluation): Unjudg
       const { server } = judged;
       if (!server.enabled || judged.verdict !== "unknown" || anyIn(server.recordNames, called.inCollect)) continue;
       const why = judged.excluded ?? (source.complete.mcp ? "not_established" : "observation_incomplete");
-      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, pluginId: server.pluginId, why });
+      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, projectName: server.projectRoot === null ? null : (names.get(server.projectRoot) ?? null), pluginId: server.pluginId, why });
     }
   }
   return servers.sort((a, b) => byText(a.name, b.name) || SCOPE_ORDER.indexOf(a.scope) - SCOPE_ORDER.indexOf(b.scope) || byText(a.projectRoot ?? "", b.projectRoot ?? "") || byText(a.pluginId ?? "", b.pluginId ?? "") || byText(a.tool, b.tool));

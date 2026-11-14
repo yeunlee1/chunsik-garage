@@ -110,6 +110,7 @@ describe("읽지 못한 곳에 든 설치(설계 18.1 「읽지 못한 곳」)",
   });
   const project = (over: Partial<ProjectFact>): ProjectFact => ({
     root: app,
+    name: "app",
     normRoot: norm(app),
     kind: "git",
     exists: true,

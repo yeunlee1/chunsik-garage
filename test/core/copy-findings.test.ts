@@ -134,7 +134,7 @@ describe("규칙마다 덧붙는 것", () => {
   });
 
   it("E6에는 판정에서 뺀 서버를 까닭마다 세어 적고, claude.ai에 연결한 서버가 있으면 직접 막는 방법을 적는다. 이름은 넣지 않는다", () => {
-    const server = (name: string, why: UnjudgedServer["why"], scope: UnjudgedServer["scope"] = "user"): UnjudgedServer => ({ tool: "claude-code", name, scope, projectRoot: null, pluginId: null, why });
+    const server = (name: string, why: UnjudgedServer["why"], scope: UnjudgedServer["scope"] = "user"): UnjudgedServer => ({ tool: "claude-code", name, scope, projectRoot: null, projectName: null, pluginId: null, why });
     const unjudgedServers = [server("secret-a", "not_established"), server("secret-b", "not_established"), server("claude.ai secret", "no_definition", "claude-ai")];
     const e6 = finding("E6", { status: "unmeasured", reason: "watching", value: null, score: null, category: "unmeasured", tools: [toolValue({ status: "unmeasured", reason: "watching", value: null, score: null, evidence: E5_EVIDENCE })] });
     const notes = findingText(e6, { safeguards: [], unjudgedServers }, "ko").notes;

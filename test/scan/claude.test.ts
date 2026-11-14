@@ -136,6 +136,57 @@ describe("scanClaudeSetup", () => {
     expect(byRoot[join(root, "work", "deleted")]).toMatchObject({ exists: false, kind: "folder", settingsStatus: null, localSettingsStatus: null, mcpJsonStatus: null });
   });
 
+  it("프로젝트 폴더 이름은 정규화하기 전 뿌리 경로의 마지막 이름이다. 하위 폴더에서 연 세션도 깃 뿌리의 이름이고 대소문자가 그대로다", async () => {
+    expect(facts.projects.find((p) => p.root === join(root, "work", "proj"))!.name).toBe("proj");
+    const mixed = join(root, "work", "MyApp");
+    await put(join(mixed, ".git", "HEAD"), "ref: refs/heads/main\n");
+    await put(join(mixed, "src", "x.txt"), "x");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [join(mixed, "src")] });
+    expect(scanned.projects.map((p) => p.name)).toEqual(["MyApp"]);
+  });
+
+  it("읽는 프로젝트 가운데 폴더 이름이 같은 것(대소문자를 가리지 않는다)은 정규화한 뿌리 차례로 둘째부터 차례 번호를 붙인다. 읽지 않는 폴더는 세지 않는다", async () => {
+    const first = join(root, "a", "app");
+    const second = join(root, "b", "App");
+    const third = join(root, "c", "app");
+    for (const dir of [first, second, third]) await put(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const gone = join(root, "0", "app");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [third, gone, first, second] });
+    const nameOf = (dir: string) => scanned.projects.find((p) => p.root === dir)!.name;
+    expect([nameOf(first), nameOf(second), nameOf(third)]).toEqual(["app", "App (2)", "app (3)"]);
+    expect(nameOf(gone)).toBe("app");
+  });
+
+  it("붙인 번호는 다른 읽는 프로젝트의 원래 이름과도 겹치지 않는다. 원래 이름을 먼저 잡아 두고 비어 있는 가장 작은 번호를 고른다", async () => {
+    const first = join(root, "a", "app");
+    const second = join(root, "b", "app");
+    const numbered = join(root, "c", "app (2)");
+    const twice = join(root, "d", "App (2)");
+    for (const dir of [first, second, numbered, twice]) await put(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [twice, numbered, second, first] });
+    const names = [first, second, numbered, twice].map((dir) => scanned.projects.find((p) => p.root === dir)!.name);
+    expect(names).toEqual(["app", "app (3)", "app (2)", "App (2) (2)"]);
+    expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(names.length);
+  });
+
+  it("사용자 범위 위치의 앞머리(~, $CLAUDE_CONFIG_DIR)와 같은 이름의 프로젝트에도 번호를 붙인다. S3 위치가 사용자 설정과 같은 글이 되지 않게 한다", async () => {
+    const tilde = join(root, "x", "~");
+    const config = join(root, "y", "$claude_config_dir");
+    for (const dir of [tilde, config]) await put(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [tilde, config] });
+    expect([tilde, config].map((dir) => scanned.projects.find((p) => p.root === dir)!.name)).toEqual(["~ (2)", "$claude_config_dir (2)"]);
+  });
+
+  it("있지만 프로젝트로 보지 않는 폴더(홈)는 이름을 받지 않아, 같은 이름의 읽는 프로젝트가 번호 없이 이름을 받는다. 입력 차례와 상관없다", async () => {
+    const namesake = join(root, "x", "home");
+    await put(join(namesake, ".git", "HEAD"), "ref: refs/heads/main\n");
+    for (const cwds of [[input.homedir, namesake], [namesake, input.homedir]]) {
+      const scanned = await scanClaudeSetup({ ...input, cwds });
+      expect(scanned.projects.find((p) => p.root === input.homedir)).toMatchObject({ excluded: true, name: "home" });
+      expect(scanned.projects.find((p) => p.root === namesake)).toMatchObject({ excluded: false, name: "home" });
+    }
+  });
+
   it("스킬: skillOverrides의 off는 꺼짐, user-invocable-only와 disable-model-invocation은 켜져 있지만 목록에 실리지 않는다", () => {
     expect(find(facts.skills, "active-skill")).toMatchObject({ scope: "user", enabled: true, listed: true, hookProvided: false, nameUnreadable: false, usageLastUsedMs: 1_760_000_000_000 });
     expect(find(facts.skills, "old-skill")).toMatchObject({ enabled: false, listed: false });

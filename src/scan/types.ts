@@ -100,6 +100,8 @@ export interface PluginFact {
 
 export interface ProjectFact {
   root: string;
+  /** 프로젝트 폴더의 이름. 정규화하기 전 뿌리 경로의 마지막 이름이다. 결과 화면이 경로 대신 보인다(설계 19.1, 「3단계 계획 전 결정」의 10번) */
+  name: string;
   normRoot: string;
   kind: "git" | "folder";
   exists: boolean;

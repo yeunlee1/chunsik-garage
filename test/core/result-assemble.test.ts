@@ -7,7 +7,7 @@ import { noticeText } from "../../src/core/copy/notices.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, RESULT_SCHEMA, type ResultInput } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
-import { mcpServer } from "../helpers/facts.ts";
+import { mcpServer, project } from "../helpers/facts.ts";
 import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
@@ -64,11 +64,17 @@ describe("평가 결과의 조립", () => {
     expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
-      { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, pluginId: null, why: "not_established" },
-      { tool: "claude-code", name: "zeta", scope: "user", projectRoot: null, pluginId: null, why: "no_definition" },
+      { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established" },
+      { tool: "claude-code", name: "zeta", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "no_definition" },
     ]);
     const incomplete = checkupResult(resultInput({ sessions, setup: { mcpServers: servers }, complete: { mcp: false } }));
     expect(incomplete.details.unjudgedServers.map((server) => server.why)).toEqual(["observation_incomplete", "no_definition"]);
+  });
+
+  it("프로젝트 범위의 판정에서 뺀 서버에는 그 프로젝트의 폴더 이름을 함께 싣는다. 경로는 정규화한 것 그대로 둔다", () => {
+    const local = mcpServer("local-db", { scope: "local", projectRoot: "c:/work/myapp" });
+    const result = checkupResult(resultInput({ setup: { mcpServers: [local], projects: [project("C:/Work/MyApp", { normRoot: "c:/work/myapp", cwds: ["c:/work/myapp"] })] } }));
+    expect(result.details.unjudgedServers).toEqual([{ tool: "claude-code", name: "local-db", scope: "local", projectRoot: "c:/work/myapp", projectName: "MyApp", pluginId: null, why: "not_established" }]);
   });
 
   it("JSON으로 바꿨다가 되살려도 같다. 값이 없는 자리는 null이다", () => {

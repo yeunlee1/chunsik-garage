@@ -1,5 +1,5 @@
 // Claude Code의 지금 셋팅을 읽어 셋팅 사실로 낸다. 설정 층·지침·스킬·플러그인·MCP 서버·권한과 훅의 겉모양을 프로젝트 목록과 함께 본다. 값과 글은 메모리에서 쓰고 버린다(설계 7.2, 10, 11.3, 19.1)
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { claudeHome, normalizePath } from "../adapters/claude/locate.ts";
 import { claudeJsonPath, readClaudeJson, type ClaudeJsonProject } from "./claude-json.ts";
 import { entryInfo, readJson } from "./fs.ts";
@@ -96,6 +96,37 @@ function usageOf(times: readonly (number | null | undefined)[]): { usageLastUsed
   return { usageLastUsedMs, usageUndated };
 }
 
+/** 사용자 범위 설정 문제의 위치가 시작하는 앞머리. 설정 폴더를 옮기지 않았으면 ~(~/.claude/…), 옮겼으면 환경 변수의 이름이다 */
+const USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
+
+/**
+ * 프로젝트마다 결과 화면에 보일 폴더 이름(정규화하기 전 뿌리 경로의 마지막 이름). 읽는 프로젝트(있고 프로젝트로 보지 않는 폴더가 아닌 것)는 이름이 서로 다르게 정한다.
+ * 읽는 프로젝트의 원래 이름을 모두 먼저 잡아 두고 정규화한 뿌리 차례로 보며, 원래 이름을 아직 아무도 받지 않았으면 그 이름이고, 이미 받았으면
+ * " (2)", " (3)"… 가운데 잡아 둔 원래 이름과도 이미 정한 이름과도 겹치지 않는 가장 작은 번호를 붙인다. 겹치는지는 대소문자를 가리지 않는다.
+ * 사용자 범위 위치의 앞머리(USER_PLACE_HEADS)는 처음부터 받은 것으로 본다. 이름이 ~인 프로젝트의 S3 위치가 사용자 설정과 같은 글이 되지 않게 하려는 것이다.
+ * 위 폴더 이름을 보이지 않고도 두 프로젝트를 가른다(설계 「3단계 계획 전 결정」의 10번)
+ */
+function projectNamesOf(refs: readonly { root: string; normRoot: string; exists: boolean; excluded: boolean }[]): Map<string, string> {
+  const sorted = [...refs].sort((x, y) => (x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0));
+  const original = (ref: { root: string }): string => basename(ref.root) || ref.root;
+  const reading = (ref: { exists: boolean; excluded: boolean }): boolean => ref.exists && !ref.excluded;
+  const reserved = new Set(sorted.filter(reading).map((ref) => original(ref).toLowerCase()));
+  const taken = new Set<string>(USER_PLACE_HEADS.map((head) => head.toLowerCase()));
+  const names = new Map<string, string>();
+  for (const ref of sorted) {
+    const name = original(ref);
+    if (!reading(ref)) {
+      names.set(ref.normRoot, name);
+      continue;
+    }
+    let label = name;
+    for (let n = 2; taken.has(label.toLowerCase()) || (label !== name && reserved.has(label.toLowerCase())); n++) label = `${name} (${n})`;
+    taken.add(label.toLowerCase());
+    names.set(ref.normRoot, label);
+  }
+  return names;
+}
+
 export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFacts> {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
@@ -120,6 +151,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   const projectLayers = new Map<string, { project: SettingsLayer; local: SettingsLayer }>();
   const contexts = new Map<string, Context>();
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
+  const projectNames = projectNamesOf(refs);
   for (const ref of active) {
     const project = await readLayer(join(ref.root, ".claude", "settings.json"));
     const local = await readLayer(join(ref.root, ".claude", "settings.local.json"));
@@ -375,6 +407,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     const hasLocalSettings = localSettingsStatus !== null && localSettingsStatus !== "missing";
     projects.push({
       root: ref.root,
+      name: projectNames.get(ref.normRoot)!,
       normRoot: ref.normRoot,
       kind: ref.kind,
       exists: ref.exists,

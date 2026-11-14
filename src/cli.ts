@@ -36,7 +36,7 @@ export interface CliContext {
 const CHECKUP_FLAGS: ReadonlySet<string> = new Set(["--no-open", "--no-save", "--rescan"]);
 
 /** aq checkup의 옵션을 읽는다. 모르는 옵션이 있거나 --lang 뒤에 값이 없으면(값 자리에 -로 시작하는 것이 와도) null이다. --lang이 여럿이면 마지막 것이다 */
-function checkupArgs(rest: readonly string[]): { flags: Set<string>; lang: string | null } | null {
+export function checkupArgs(rest: readonly string[]): { flags: Set<string>; lang: string | null } | null {
   const flags = new Set<string>();
   let lang: string | null = null;
   for (let index = 0; index < rest.length; index++) {

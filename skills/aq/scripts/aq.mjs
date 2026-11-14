@@ -825,10 +825,10 @@ function rateTools(spec, id, tools) {
     if (measurement.status === "unmeasured") return { tool: tool.tool, status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, candidates };
     return { tool: tool.tool, status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, candidates };
   });
-  const measured = values.filter((value) => value.status === "scored");
-  if (measured.length === 0) return { status: "unmeasured", reason: ruleReason(values.map((value) => value.reason)), value: null, score: null, evidence: {}, tools: values };
-  const weight = measured.reduce((sum2, value) => sum2 + responses.get(value.tool), 0);
-  const mean = (pick) => measured.reduce((sum2, value) => sum2 + pick(value) * responses.get(value.tool), 0) / weight;
+  const measured2 = values.filter((value) => value.status === "scored");
+  if (measured2.length === 0) return { status: "unmeasured", reason: ruleReason(values.map((value) => value.reason)), value: null, score: null, evidence: {}, tools: values };
+  const weight = measured2.reduce((sum2, value) => sum2 + responses.get(value.tool), 0);
+  const mean = (pick) => measured2.reduce((sum2, value) => sum2 + pick(value) * responses.get(value.tool), 0) / weight;
   return { status: "scored", reason: null, value: mean((value) => value.value), score: mean((value) => value.score), evidence: {}, tools: values };
 }
 var settled = (score) => score === null ? null : settleScore(score);
@@ -847,10 +847,10 @@ function severityOf(category, rawScore, weight) {
   return score < 0.6 && weight >= 2 ? "caution" : "info";
 }
 function axisScore(rules) {
-  const measured = rules.filter((rule2) => rule2.score !== null);
-  if (measured.length === 0) return null;
-  const weight = measured.reduce((sum2, rule2) => sum2 + rule2.weight, 0);
-  return roundHalfUp(measured.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / weight * 100);
+  const measured2 = rules.filter((rule2) => rule2.score !== null);
+  if (measured2.length === 0) return null;
+  const weight = measured2.reduce((sum2, rule2) => sum2 + rule2.weight, 0);
+  return roundHalfUp(measured2.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / weight * 100);
 }
 function compareFindings(a, b, order) {
   const byTable = order.get(a.ruleId) - order.get(b.ruleId);
@@ -863,9 +863,9 @@ function compareFindings(a, b, order) {
   }
   return byTable;
 }
-function scoreboard(measured) {
-  const tools = [...measured.tools].sort((a, b) => byText6(a.tool, b.tool));
-  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured.merged[spec.id]) : rateTools(spec, spec.id, tools)]));
+function scoreboard(measured2) {
+  const tools = [...measured2.tools].sort((a, b) => byText6(a.tool, b.tool));
+  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured2.merged[spec.id]) : rateTools(spec, spec.id, tools)]));
   const scores = new Map(AXES.map((axis) => [axis, axisScore(RULES.filter((spec) => spec.axis === axis).map((spec) => ({ weight: spec.weight, score: rated.get(spec.id).score })))]));
   const findings = RULES.map((spec) => {
     const rule2 = rated.get(spec.id);
@@ -885,14 +885,14 @@ function scoreboard(measured) {
 var MIN_REQUESTS_FOR_AQ = 20;
 var MIN_DAYS_FOR_AQ = 3;
 function overall(axes, humanRequests, activeDays2) {
-  const measured = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
+  const measured2 = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
   const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
   const withheld = [];
   if (humanRequests < MIN_REQUESTS_FOR_AQ) withheld.push("too_few_requests");
   if (activeDays2 < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
-  if (measured.length === 0) withheld.push("no_axes");
+  if (measured2.length === 0) withheld.push("no_axes");
   if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
-  const aq = roundHalfUp(measured.reduce((sum2, score) => sum2 + score, 0) / measured.length);
+  const aq = roundHalfUp(measured2.reduce((sum2, score) => sum2 + score, 0) / measured2.length);
   return { aq, ...gradeOf(aq), withheld, missingAxes };
 }
 
@@ -995,13 +995,13 @@ function evaluate(input) {
     const skills = judgeSkills(setup, { ...base, used: usedSkillNames(summaries, windows), listings: sessionListings(summaries, "skill", input.normalizedCwds, lookup), complete: tool.input.complete.skills });
     const servers = judgeServers(setup, { ...base, used: calledMcpNames(summaries, windows), listings: sessionListings(summaries, "mcp", input.normalizedCwds, lookup), complete: tool.input.complete.mcp });
     const candidates = candidatesOf(setup, skills, servers, day, input.self);
-    const measured = {
+    const measured2 = {
       tool: setup.tool,
       responses: setup.totals.responses,
       rules: { ...usageRules(setup.totals, setup.coverage), ...setupToolRules(setup), ...fitToolRules(setup), E5: skills.measurement, E6: servers.measurement },
       candidates
     };
-    return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured };
+    return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured: measured2 };
   });
   const { S1, S2, S3, safeguards } = mergedSetupRules(setups);
   const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage);
@@ -1025,6 +1025,1102 @@ function evaluate(input) {
     worstOverlap,
     projects: usage
   };
+}
+
+// src/core/copy/common.ts
+var TOOL_NAMES = {
+  "claude-code": { en: "Claude Code", ko: "Claude Code" }
+};
+var AXIS_NAMES = {
+  setup: { en: "Setup", ko: "\uC14B\uD305" },
+  efficiency: { en: "Efficiency", ko: "\uD6A8\uC728" },
+  fit: { en: "Fit", ko: "\uC0C1\uD669 \uC801\uD569" },
+  intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
+};
+var SUMMARY_COPY = {
+  en: { best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+};
+var REASON_COPY = {
+  unsupported: {
+    en: { word: "Not recorded", text: "This tool or record format does not record what this rule needs." },
+    ko: { word: "\uAE30\uB85D\uB418\uC9C0 \uC54A\uC74C", text: "\uC774 \uB3C4\uAD6C\uB098 \uAE30\uB85D \uD615\uC2DD\uC740 \uC774 \uADDC\uCE59\uC774 \uBCF4\uB294 \uAC83\uC744 \uB0A8\uAE30\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." }
+  },
+  unreadable: {
+    en: { word: "Could not read", text: "A file this rule needs could not be read. See the notices as well." },
+    ko: { word: "\uC77D\uC9C0 \uBABB\uD568", text: "\uC774 \uADDC\uCE59\uC5D0 \uD544\uC694\uD55C \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC54C\uB9BC\uB3C4 \uD568\uAED8 \uBCF4\uC138\uC694." }
+  },
+  not_applicable: {
+    en: { word: "Not applicable", text: "There is nothing for this rule to look at." },
+    ko: { word: "\uD574\uB2F9 \uC5C6\uC74C", text: "\uC774 \uADDC\uCE59\uC774 \uBCFC \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }
+  },
+  incomplete: {
+    en: { word: "Incomplete records", text: "The records could not all be read, so this was not measured." },
+    ko: { word: "\uAE30\uB85D\uC774 \uBE60\uC9D0", text: "\uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD574 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+  },
+  no_data: {
+    en: { word: "No records", text: "There is nothing in the records to measure yet." },
+    ko: { word: "\uAE30\uB85D \uC5C6\uC74C", text: "\uC7B4 \uAE30\uB85D\uC774 \uC544\uC9C1 \uC5C6\uC2B5\uB2C8\uB2E4." }
+  },
+  too_little: {
+    en: { word: "Too few records", text: "Not enough records have built up to measure this." },
+    ko: { word: "\uAE30\uB85D\uC774 \uC801\uC74C", text: "\uC7B4 \uB9CC\uD07C \uAE30\uB85D\uC774 \uC313\uC774\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+  },
+  watching: {
+    en: { word: "Still watching", text: "Still watching before judging." },
+    ko: { word: "\uC9C0\uCF1C\uBCF4\uB294 \uC911", text: "\uC544\uC9C1 \uC9C0\uCF1C\uBCF4\uB294 \uC911\uC785\uB2C8\uB2E4." }
+  }
+};
+var TOOL_LINE = {
+  en: { measured: "{tool}: {value} \xB7 {evidence}", unmeasured: "{tool}: not measured ({reason}) \xB7 {evidence}" },
+  ko: { measured: "{tool}: {value} \xB7 {evidence}", unmeasured: "{tool}: \uC7B4 \uC218 \uC5C6\uC74C({reason}) \xB7 {evidence}" }
+};
+var OTHER_TOOL_COPY = {
+  too_little: {
+    en: "Only {judgeable} {judgeable:installation|installations} in {tool} can be assessed for use, so its share was not calculated, but {candidates} can be cleaned up.",
+    ko: "{tool}\uB294 \uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC788\uB294 \uAC83\uC774 {judgeable}\uAC1C\uBFD0\uC774\uC5B4\uC11C \uBE44\uC728\uC744 \uB0B4\uC9C0 \uC54A\uC558\uC9C0\uB9CC \uC815\uB9AC\uD560 \uC218 \uC788\uB294 \uAC83\uC774 {candidates}\uAC1C \uC788\uC2B5\uB2C8\uB2E4."
+  },
+  watching: {
+    en: "Some installations in {tool} are still being observed, so its share was not calculated, but {candidates} of those confirmed unused can be cleaned up now.",
+    ko: "{tool}\uB294 \uC544\uC9C1 \uC9C0\uCF1C\uBCF4\uB294 \uC911\uC778 \uAC83\uC774 \uC788\uC5B4 \uBE44\uC728\uC744 \uB0B4\uC9C0 \uC54A\uC558\uC9C0\uB9CC \uC548 \uC4F0\uB294 \uAC83\uC73C\uB85C \uD655\uC778\uB41C \uAC83 \uAC00\uC6B4\uB370 {candidates}\uAC1C\uB294 \uC9C0\uAE08 \uC815\uB9AC\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+  }
+};
+var SAFEGUARD_COPY = {
+  en: {
+    line: "{tool}: {condition}",
+    hook: "a PreToolUse hook that can block covers shell commands",
+    permissions: "the default mode does not bypass permissions",
+    both: "the default mode does not bypass permissions, and a confirming hook covers shell commands too",
+    none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
+    unknown: "could not tell, because a settings file could not be read"
+  },
+  ko: {
+    line: "{tool}: {condition}",
+    hook: "\uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC74C",
+    permissions: "\uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2D8",
+    both: "\uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uACE0 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uB3C4 \uC788\uC74C",
+    none: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uC774\uACE0 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uC74C)",
+    unknown: "\uC124\uC815 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574 \uAC00\uB9AC\uC9C0 \uBABB\uD568"
+  }
+};
+var UNJUDGED_COPY = {
+  en: {
+    intro: "Servers left out of the judgment that have no record of being called. They are not suggested for turning off.",
+    line: "{tool}: {why} ({count})",
+    why: {
+      no_definition: "definition not on this PC or not fully read",
+      plugin_unread: "plugin configuration or MCP definitions could not be read",
+      not_established: "still being watched",
+      observation_incomplete: "records could not all be read"
+    },
+    deny: 'To block a claude.ai connector that Claude Code loads itself, add { "serverName": "<name>" } to the deniedMcpServers list in your user settings (~/.claude/settings.json). Connectors that the desktop app passes in directly are not blocked this way. Disconnect those at claude.ai/customize/connectors.'
+  },
+  ko: {
+    intro: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 \uAC00\uC6B4\uB370 \uBD80\uB978 \uAE30\uB85D\uC774 \uC5C6\uB294 \uAC83\uC785\uB2C8\uB2E4. \uB044\uC790\uACE0 \uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+    line: "{tool}: {why} {count}\uAC1C",
+    why: {
+      no_definition: "\uC815\uC758\uAC00 \uC774 PC\uC5D0 \uC5C6\uAC70\uB098 \uB2E4 \uC77D\uD788\uC9C0 \uC54A\uC74C",
+      plugin_unread: "\uD50C\uB7EC\uADF8\uC778 \uAD6C\uC131\uC774\uB098 MCP \uC815\uC758\uB97C \uC77D\uC9C0 \uBABB\uD568",
+      not_established: "\uC544\uC9C1 \uC9C0\uCF1C\uBCF4\uB294 \uC911",
+      observation_incomplete: "\uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD568"
+    },
+    deny: 'Claude Code\uAC00 \uC9C1\uC811 \uAC00\uC838\uC624\uB294 claude.ai \uC5F0\uACB0\uC744 \uB9C9\uC73C\uB824\uBA74 \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "<\uC774\uB984>" }\uC744 \uB354\uD558\uC138\uC694. \uB370\uC2A4\uD06C\uD1B1 \uC571\uC774 \uC9C1\uC811 \uB118\uAE30\uB294 \uC5F0\uACB0\uC740 \uC774\uB807\uAC8C \uB9C9\uD788\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uADF8\uB7F0 \uC5F0\uACB0\uC740 claude.ai/customize/connectors\uC5D0\uC11C \uB04A\uC73C\uC138\uC694.'
+  }
+};
+
+// src/core/copy/format.ts
+var UNCOUNTED = "\u2014";
+function groupDigits(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function oneDecimal(value) {
+  const tenths = roundHalfUp(value * 10);
+  const whole = groupDigits(Math.floor(tenths / 10));
+  const rest = tenths % 10;
+  return rest === 0 ? whole : `${whole}.${rest}`;
+}
+function formatValue(kind, value) {
+  if (kind === "share") return oneDecimal(value * 100);
+  if (kind === "rate") return oneDecimal(value);
+  return groupDigits(roundHalfUp(value));
+}
+var SLOT = /\{([A-Za-z]+)(?::([^|{}]*)\|([^|{}]*))?\}/g;
+function slots(template) {
+  return [...new Set([...template.matchAll(SLOT)].map((match) => match[1]))];
+}
+function fill(template, values) {
+  return template.replace(SLOT, (_match, name, one, other) => {
+    if (!(name in values)) throw new Error(`no value for {${name}} in "${template}"`);
+    const value = values[name];
+    if (one !== void 0 && other !== void 0) return value === 1 ? one : other;
+    if (value === null) return UNCOUNTED;
+    return typeof value === "number" ? groupDigits(value) : value;
+  });
+}
+
+// src/core/copy/rules-efficiency.ts
+var WATCHING = {
+  en: { word: "Still watching", text: "Some are still being watched, so the unused share was not given." },
+  ko: { word: "\uC9C0\uCF1C\uBCF4\uB294 \uC911", text: "\uC544\uC9C1 \uC9C0\uCF1C\uBCF4\uB294 \uC911\uC778 \uAC83\uC774 \uC788\uC5B4 \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+};
+var WATCHING_REPAIR = {
+  en: "Some are still being watched, so the unused share was not given. {candidates} of the ones confirmed unused can be cleaned up now.",
+  ko: "\uC544\uC9C1 \uC9C0\uCF1C\uBCF4\uB294 \uC911\uC778 \uAC83\uC774 \uC788\uC5B4 \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC548 \uC4F0\uB294 \uAC83\uC73C\uB85C \uD655\uC778\uB41C \uAC83 \uAC00\uC6B4\uB370 {candidates}\uAC1C\uB294 \uC9C0\uAE08 \uC815\uB9AC\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+};
+var FEW = { en: "Few eligible for assessment", ko: "\uAC00\uB9B4 \uC218 \uC788\uB294 \uAC83\uC774 \uC801\uC74C" };
+var EFFICIENCY_COPY = {
+  E1: {
+    en: {
+      name: "Cache hits",
+      good: "Reuses cached context instead of recomputing it",
+      why: "Cached conversation prefixes are reused rather than processed again. This rule measures the share of input read from that cache.",
+      fix: "Keep the start of sessions stable",
+      problem: "{value} of input was read from the cache.",
+      prescription: "Keep one task in one session, and avoid turning MCP servers on and off in the middle of a session. After a long pause the cache expires and is built again.",
+      method: "Share of input read from the cache. For Claude Code, the whole input is plain input plus cache reads plus cache writes.",
+      evidence: "Cache reads {cacheRead} \xB7 input {input} \xB7 cache writes {cacheWrite} (tokens)",
+      unit: "%",
+      reasons: { no_data: { text: "No input tokens were recorded in the scoring window." } }
+    },
+    ko: {
+      name: "\uCE90\uC2DC \uC801\uC911",
+      good: "\uAC19\uC740 \uB0B4\uC6A9\uC744 \uB2E4\uC2DC \uACC4\uC0B0\uC2DC\uD0A4\uC9C0 \uC54A\uC74C",
+      why: "\uCE90\uC2DC\uC5D0\uC11C \uC77D\uC740 \uB300\uD654 \uC55E\uBD80\uBD84\uC740 \uB2E4\uC2DC \uACC4\uC0B0\uD558\uC9C0 \uC54A\uACE0 \uC7AC\uC0AC\uC6A9\uD569\uB2C8\uB2E4. \uC774 \uD56D\uBAA9\uC740 \uC785\uB825 \uAC00\uC6B4\uB370 \uADF8\uB807\uAC8C \uCE90\uC2DC\uC5D0\uC11C \uC77D\uC740 \uBAAB\uC744 \uBD05\uB2C8\uB2E4.",
+      fix: "\uC138\uC158\uC758 \uC55E\uBD80\uBD84\uC744 \uC790\uC8FC \uBC14\uAFB8\uC9C0 \uC54A\uAE30",
+      problem: "\uC785\uB825 \uAC00\uC6B4\uB370 \uCE90\uC2DC\uC5D0\uC11C \uC77D\uC740 \uBAAB\uC774 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uD55C \uAC00\uC9C0 \uC77C\uC740 \uD55C \uC138\uC158\uC5D0\uC11C \uC774\uC5B4 \uD558\uACE0, \uC138\uC158 \uB3C4\uC911\uC5D0 MCP \uC11C\uBC84\uB97C \uCF1C\uACE0 \uB044\uB294 \uC77C\uC744 \uC904\uC774\uC138\uC694. \uC624\uB798 \uC26C\uBA74 \uCE90\uC2DC\uAC00 \uB9CC\uB8CC\uB418\uC5B4 \uB2E4\uC2DC \uB9CC\uB4E4\uC5B4\uC9D1\uB2C8\uB2E4.",
+      method: "\uC785\uB825 \uAC00\uC6B4\uB370 \uCE90\uC2DC\uC5D0\uC11C \uC77D\uC740 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uC785\uB825, \uCE90\uC2DC \uC77D\uAE30, \uCE90\uC2DC \uC4F0\uAE30\uB97C \uB354\uD55C \uAC83\uC774 \uC804\uCCB4 \uC785\uB825\uC785\uB2C8\uB2E4.",
+      evidence: "\uCE90\uC2DC \uC77D\uAE30 {cacheRead} \xB7 \uC785\uB825 {input} \xB7 \uCE90\uC2DC \uC4F0\uAE30 {cacheWrite} (\uD1A0\uD070)",
+      unit: "%",
+      reasons: { no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC785\uB825 \uD1A0\uD070\uC774 \uAE30\uB85D\uB418\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." } }
+    }
+  },
+  E2: {
+    en: {
+      name: "Tool errors",
+      good: "Tools rarely end in errors",
+      why: "A tool call that ends in an error has to be retried or worked around, which spends turns and tokens. Shell commands are left out, because a non-zero exit is usually the result of the work, such as a failing test.",
+      fix: "Reduce tool errors",
+      problem: "{value} of tool results ended in an error.",
+      prescription: "Look at which tools fail most often. Reading a file that has moved, editing text that has already changed, and an MCP server that does not answer are examples. If the same cause keeps coming back, such as an old path in your instructions, fix that cause.",
+      method: "Share of tool results that ended in an error. Shell commands, and results that were denied or interrupted, are left out of both counts.",
+      evidence: "Errors {errors} \xB7 tool results {results}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "There were no tool results to count in the scoring window." },
+        too_little: { text: "Fewer than 50 tool results, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uB3C4\uAD6C \uC624\uB958",
+      good: "\uB3C4\uAD6C\uAC00 \uC624\uB958\uB85C \uB05D\uB098\uB294 \uC77C\uC774 \uB4DC\uBB3E",
+      why: "\uC624\uB958\uB85C \uB05D\uB09C \uB3C4\uAD6C \uD638\uCD9C\uC740 \uB2E4\uC2DC \uD558\uAC70\uB098 \uB3CC\uC544\uAC00\uC57C \uD574\uC11C \uD134\uACFC \uD1A0\uD070\uC774 \uB4ED\uB2C8\uB2E4. \uC178 \uBA85\uB839\uC740 \uBE8D\uB2C8\uB2E4. 0\uC774 \uC544\uB2CC \uAC12\uC73C\uB85C \uB05D\uB098\uB294 \uAC83\uC740 \uC2E4\uD328\uD55C \uC2DC\uD5D8\uCC98\uB7FC \uB300\uAC1C \uC77C\uC758 \uACB0\uACFC\uC774\uAE30 \uB54C\uBB38\uC785\uB2C8\uB2E4.",
+      fix: "\uB3C4\uAD6C \uC624\uB958 \uC904\uC774\uAE30",
+      problem: "\uB3C4\uAD6C \uACB0\uACFC \uAC00\uC6B4\uB370 {value}\uAC00 \uC624\uB958\uB85C \uB05D\uB0AC\uC2B5\uB2C8\uB2E4.",
+      prescription: "\uC5B4\uB290 \uB3C4\uAD6C\uAC00 \uC790\uC8FC \uC2E4\uD328\uD558\uB294\uC9C0 \uBCF4\uC138\uC694. \uC62E\uACA8\uC9C4 \uD30C\uC77C\uC744 \uC77D\uAC70\uB098, \uC774\uBBF8 \uBC14\uB010 \uAE00\uC744 \uACE0\uCE58\uB824 \uD558\uAC70\uB098, MCP \uC11C\uBC84\uAC00 \uC751\uB2F5\uD558\uC9C0 \uC54A\uB294 \uAC83\uC774 \uADF8\uB7F0 \uC608\uC785\uB2C8\uB2E4. \uC9C0\uCE68\uC5D0 \uB0A8\uC740 \uC61B \uACBD\uB85C\uCC98\uB7FC \uAC19\uC740 \uAE4C\uB2ED\uC774 \uB418\uD480\uC774\uB418\uBA74 \uADF8 \uAE4C\uB2ED\uC744 \uACE0\uCE58\uC138\uC694.",
+      method: "\uB3C4\uAD6C \uACB0\uACFC \uAC00\uC6B4\uB370 \uC624\uB958\uB85C \uB05D\uB09C \uBAAB\uC785\uB2C8\uB2E4. \uC178 \uBA85\uB839\uACFC, \uAC70\uC808\uB418\uAC70\uB098 \uB04A\uACA8\uC11C \uB05D\uB09C \uACB0\uACFC\uB294 \uB450 \uC218\uC5D0\uC11C \uBAA8\uB450 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uC624\uB958 {errors} \xB7 \uB3C4\uAD6C \uACB0\uACFC {results}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC140 \uB3C4\uAD6C \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uB3C4\uAD6C \uACB0\uACFC\uAC00 50\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  E3: {
+    en: {
+      name: "Context overflow",
+      good: "Rarely needs automatic compaction",
+      why: "When a conversation fills the context window, Claude Code compacts it automatically and earlier details are shortened.",
+      fix: "Split long sessions",
+      problem: "Automatic compaction averaged {value}.",
+      prescription: "Run /compact yourself before the context fills, or start a new conversation with /clear when the task changes. Hand large file reads and long searches to a subagent, which works in its own context window.",
+      method: "Automatic compactions in main sessions divided by main sessions with responses in the scoring window.",
+      evidence: "Automatic compactions {autoCompactions} \xB7 main sessions {mainSessions}",
+      unit: "{value:compaction|compactions} per session",
+      reasons: {
+        no_data: { text: "No main session had responses in the scoring window." },
+        too_little: { text: "Fewer than 3 main sessions with responses, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uB300\uD654 \uB118\uCE68",
+      good: "\uC790\uB3D9 \uC555\uCD95\uC774 \uB4DC\uBB3E",
+      why: "\uB300\uD654\uAC00 \uB300\uD654 \uCC3D\uC744 \uCC44\uC6B0\uBA74 Claude Code\uAC00 \uC790\uB3D9\uC73C\uB85C \uC555\uCD95\uD558\uACE0 \uC55E\uC758 \uC790\uC138\uD55C \uB0B4\uC6A9\uC774 \uC904\uC5B4\uB4ED\uB2C8\uB2E4.",
+      fix: "\uAE34 \uC138\uC158 \uB098\uB204\uAE30",
+      problem: "\uC8FC \uC138\uC158\uC758 \uC790\uB3D9 \uC555\uCD95\uC774 \uD3C9\uADE0 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uB300\uD654 \uCC3D\uC774 \uCC28\uAE30 \uC804\uC5D0 /compact\uB85C \uC9C1\uC811 \uC904\uC774\uAC70\uB098, \uC77C\uC774 \uBC14\uB00C\uBA74 /clear\uB85C \uC0C8 \uB300\uD654\uB97C \uC2DC\uC791\uD558\uC138\uC694. \uD070 \uD30C\uC77C \uC77D\uAE30\uB098 \uAE34 \uC870\uC0AC\uB294 \uC790\uAE30 \uB300\uD654 \uCC3D\uC5D0\uC11C \uC77C\uD558\uB294 \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uC5D0 \uB9E1\uAE30\uC138\uC694.",
+      method: "\uC8FC \uC138\uC158\uC758 \uC790\uB3D9 \uC555\uCD95 \uD69F\uC218\uB97C \uC810\uC218 \uAD6C\uAC04\uC5D0 \uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158 \uC218\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4.",
+      evidence: "\uC790\uB3D9 \uC555\uCD95 {autoCompactions} \xB7 \uC8FC \uC138\uC158 {mainSessions}",
+      unit: "\uD68C/\uC138\uC158",
+      reasons: {
+        no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158\uC774 3\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  E4: {
+    en: {
+      name: "Always-loaded instructions",
+      good: "Keeps always-loaded instructions light",
+      why: "Instructions load at the start of every session and take room in the context window for the whole session. Lighter instructions leave that much more room for the work.",
+      fix: "Trim always-loaded instructions",
+      problem: "Instructions loaded in a main session come to {value} at the median.",
+      prescription: "Move instructions you do not need every time into .claude/rules/ files with paths frontmatter, so they load when Claude works on matching files. Importing a file with @ from an always-loaded CLAUDE.md does not make it load on demand.",
+      method: "Median size of the instructions loaded in main sessions. One token is estimated per 4 ASCII characters and per other character, such as Korean. Sessions whose instruction size was not left in the records are not in the sample.",
+      evidence: "Sessions in the sample {sampledSessions} \xB7 sessions whose instruction size was not recorded {skippedSessions}",
+      unit: "{value:token|tokens} (est.)",
+      reasons: {
+        no_data: {
+          word: "Size not recorded",
+          text: "The instruction size was not found in the records. Some ways of running Claude Code do not record the input sent at the start of a session, including instructions."
+        }
+      }
+    },
+    ko: {
+      name: "\uB9E4\uBC88 \uC2E4\uB9AC\uB294 \uC9C0\uCE68",
+      good: "\uB9E4\uBC88 \uC2E4\uB9AC\uB294 \uC9C0\uCE68\uC744 \uAC00\uBCCD\uAC8C \uB460",
+      why: "\uC9C0\uCE68\uC740 \uC138\uC158\uB9C8\uB2E4 \uCC98\uC74C\uC5D0 \uC2E4\uB824 \uC138\uC158 \uB0B4\uB0B4 \uB300\uD654 \uCC3D\uC758 \uC790\uB9AC\uB97C \uCC28\uC9C0\uD569\uB2C8\uB2E4. \uC9C0\uCE68\uC774 \uAC00\uBCBC\uC6B0\uBA74 \uC77C\uC5D0 \uC4F8 \uC790\uB9AC\uAC00 \uADF8\uB9CC\uD07C \uB0A8\uC2B5\uB2C8\uB2E4.",
+      fix: "\uB9E4\uBC88 \uC2E4\uB9AC\uB294 \uC9C0\uCE68 \uC904\uC774\uAE30",
+      problem: "\uC8FC \uC138\uC158\uC5D0 \uC2E4\uB9B0 \uC9C0\uCE68\uC774 \uAC00\uC6B4\uB370 \uAC12\uC73C\uB85C {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uB298 \uD544\uC694\uD558\uC9C0\uB294 \uC54A\uC740 \uC9C0\uCE68\uC740 .claude/rules/ \uC544\uB798\uC758 \uADDC\uCE59 \uD30C\uC77C\uB85C \uC62E\uAE30\uACE0 \uBA38\uB9AC\uB9D0\uC758 paths\uB85C \uD574\uB2F9 \uD30C\uC77C\uC744 \uB2E4\uB8F0 \uB54C \uC2E4\uB9AC\uAC8C \uD558\uC138\uC694. \uB9E4\uBC88 \uC2E4\uB9AC\uB294 CLAUDE.md\uC5D0\uC11C @\uB85C \uAC00\uC838\uC624\uB294 \uAC83\uB9CC\uC73C\uB85C\uB294 \uD544\uC694\uD560 \uB54C \uC2E4\uB9AC\uB294 \uADDC\uCE59\uC774 \uB418\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      method: "\uC8FC \uC138\uC158\uC5D0 \uC2E4\uB9B0 \uC9C0\uCE68\uC758 \uC5B4\uB9BC \uD1A0\uD070 \uC218\uC758 \uAC00\uC6B4\uB370 \uAC12\uC785\uB2C8\uB2E4. ASCII \uAE00\uC790\uB294 4\uAE00\uC790\uB97C, \uD55C\uAE00 \uAC19\uC740 \uADF8 \uBC16\uC758 \uAE00\uC790\uB294 1\uAE00\uC790\uB97C 1\uD1A0\uD070\uC73C\uB85C \uC5B4\uB9BC\uD569\uB2C8\uB2E4. \uC9C0\uCE68 \uD06C\uAE30\uAC00 \uAE30\uB85D\uC5D0 \uB0A8\uC9C0 \uC54A\uC740 \uC138\uC158\uC740 \uD45C\uBCF8\uC5D0\uC11C \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uD45C\uBCF8\uC5D0 \uB123\uC740 \uC138\uC158 {sampledSessions} \xB7 \uC9C0\uCE68 \uD06C\uAE30\uAC00 \uAE30\uB85D\uC5D0 \uB0A8\uC9C0 \uC54A\uC740 \uC138\uC158 {skippedSessions}",
+      unit: "\uD1A0\uD070(\uC5B4\uB9BC)",
+      reasons: {
+        no_data: {
+          word: "\uD06C\uAE30\uAC00 \uAE30\uB85D\uB418\uC9C0 \uC54A\uC74C",
+          text: "\uAE30\uB85D\uC5D0\uC11C \uC9C0\uCE68 \uD06C\uAE30\uB97C \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uC138\uC158\uC744 \uC2DC\uC791\uD560 \uB54C\uC758 \uC785\uB825 \uC815\uBCF4(\uC9C0\uCE68 \uD3EC\uD568)\uB97C \uAE30\uB85D\uC5D0 \uB0A8\uAE30\uC9C0 \uC54A\uB294 \uC2E4\uD589 \uBC29\uC2DD\uC774 \uC788\uC2B5\uB2C8\uB2E4."
+        }
+      }
+    }
+  },
+  E5: {
+    en: {
+      name: "Unused skills",
+      good: "Uses most of the skills whose use was judged",
+      why: "Automatically invocable skills can add names and descriptions to the session skill list. Visibility settings and user-only invocation can change what is listed.",
+      fix: "Turn off unused skills",
+      problem: "{value} of the judged skills went unused.",
+      prescription: 'Turn off a skill you do not use by setting its name to "off" under skillOverrides in your user settings (~/.claude/settings.json). Skills inside a plugin are managed with /plugin.',
+      method: "Skills confirmed unused, divided by skills used plus skills confirmed unused. A skill is confirmed unused only when it has been installed for more than 14 days with no sign of use. Skills whose use cannot be told are left out.",
+      evidence: "Turned on {enabled} \xB7 can be judged {judgeable} \xB7 judged {judged} (used {used}, unused {unused}) \xB7 cannot be judged by design {structural}",
+      unit: "%",
+      reasons: {
+        too_little: { word: FEW.en, text: "Only {judgeable} {judgeable:skill is|skills are} eligible for use assessment, so the unused share was not calculated." },
+        watching: WATCHING.en,
+        unsupported: { text: "Whether these skills are used cannot be told from the records." },
+        unreadable: { text: "A place where skills are found, a settings file, or the tool's usage counts could not be read." },
+        not_applicable: { text: "No skill is turned on." },
+        incomplete: { text: "The records of skill use could not all be read." }
+      },
+      repairUnmeasured: {
+        too_little: "Only {judgeable} {judgeable:skill is|skills are} eligible for use assessment, so the unused share was not calculated. Found {candidates} that can be cleaned up.",
+        watching: WATCHING_REPAIR.en
+      }
+    },
+    ko: {
+      name: "\uC548 \uC4F0\uB294 \uC2A4\uD0AC",
+      good: "\uD310\uC815\uB41C \uC2A4\uD0AC \uAC00\uC6B4\uB370 \uB300\uBD80\uBD84\uC744 \uC4F0\uACE0 \uC788\uC74C",
+      why: "\uC790\uB3D9\uC73C\uB85C \uBD80\uB97C \uC218 \uC788\uB294 \uC2A4\uD0AC\uC740 \uC138\uC158\uC758 \uC2A4\uD0AC \uBAA9\uB85D\uC5D0 \uC774\uB984\uACFC \uC124\uBA85\uC744 \uB354\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uD45C\uC2DC \uC124\uC815\uC774\uB098 \uC0AC\uC6A9\uC790\uB9CC \uBD80\uB974\uB294 \uC124\uC815\uC5D0 \uB530\uB77C \uBAA9\uB85D\uC5D0 \uC2E4\uB9AC\uB294 \uB0B4\uC6A9\uC740 \uB2EC\uB77C\uC9D1\uB2C8\uB2E4.",
+      fix: "\uC548 \uC4F0\uB294 \uC2A4\uD0AC \uB044\uAE30",
+      problem: "\uC4F0\uB294\uC9C0 \uD310\uC815\uB41C \uC2A4\uD0AC \uAC00\uC6B4\uB370 {value}\uB294 \uC4F0\uC9C0 \uC54A\uC740 \uAC83\uC73C\uB85C \uD655\uC778\uB410\uC2B5\uB2C8\uB2E4.",
+      prescription: '\uC4F0\uC9C0 \uC54A\uB294 \uC2A4\uD0AC\uC740 \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 skillOverrides\uC5D0\uC11C \uADF8 \uC774\uB984\uC744 "off"\uB85C \uC801\uC5B4 \uAEBC \uB450\uC138\uC694. \uD50C\uB7EC\uADF8\uC778\uC5D0 \uB4E0 \uC2A4\uD0AC\uC740 /plugin\uC5D0\uC11C \uAD00\uB9AC\uD569\uB2C8\uB2E4.',
+      method: "\uC548 \uC4F4 \uAC83\uC774 \uD655\uC778\uB41C \uC2A4\uD0AC\uC744, \uC4F4 \uC2A4\uD0AC\uACFC \uC548 \uC4F4 \uAC83\uC774 \uD655\uC778\uB41C \uC2A4\uD0AC\uC758 \uD569\uC73C\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4. \uAE50 \uC9C0 14\uC77C\uC774 \uB118\uC5C8\uB294\uB370 \uC4F4 \uD754\uC801\uC774 \uC5C6\uC5B4\uC57C \uC548 \uC4F4 \uAC83\uC774 \uD655\uC778\uB418\uACE0, \uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC5C6\uB294 \uC2A4\uD0AC\uC740 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uCF1C\uC838 \uC788\uC74C {enabled} \xB7 \uD310\uC815\uD560 \uC218 \uC788\uC74C {judgeable} \xB7 \uD310\uC815\uB428 {judged}(\uC500 {used}, \uC548 \uC500 {unused}) \xB7 \uAD6C\uC870\uC0C1 \uD310\uC815\uD560 \uC218 \uC5C6\uC74C {structural}",
+      unit: "%",
+      reasons: {
+        too_little: { word: FEW.ko, text: "\uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC788\uB294 \uC2A4\uD0AC\uC774 {judgeable}\uAC1C\uBFD0\uC774\uC5B4\uC11C \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." },
+        watching: WATCHING.ko,
+        unsupported: { text: "\uAE30\uB85D\uC73C\uB85C\uB294 \uC774 \uC2A4\uD0AC\uB4E4\uC744 \uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uC2A4\uD0AC\uC744 \uCC3E\uB294 \uACF3, \uC124\uC815 \uD30C\uC77C, \uB3C4\uAD6C\uC758 \uC0AC\uC6A9 \uC9D1\uACC4 \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." },
+        not_applicable: { text: "\uCF1C\uC838 \uC788\uB294 \uC2A4\uD0AC\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        incomplete: { text: "\uC2A4\uD0AC \uC0AC\uC6A9 \uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." }
+      },
+      repairUnmeasured: {
+        too_little: "\uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC788\uB294 \uC2A4\uD0AC\uC774 {judgeable}\uAC1C\uBFD0\uC774\uC5B4\uC11C \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC815\uB9AC\uD560 \uC218 \uC788\uB294 \uAC83\uC740 {candidates}\uAC1C \uCC3E\uC558\uC2B5\uB2C8\uB2E4.",
+        watching: WATCHING_REPAIR.ko
+      }
+    }
+  },
+  E6: {
+    en: {
+      name: "Unused MCP servers",
+      good: "Calls most of the servers whose use was judged",
+      why: "Enabled MCP servers can be connected to provide tools. Some connect at session start and others on first use.",
+      fix: "Turn off unused MCP servers",
+      problem: "{value} of the servers whose use was judged were confirmed uncalled.",
+      prescription: 'Turn off a server you do not call in /mcp, or block it by adding { "serverName": "<name>" } to the deniedMcpServers list in your user settings (~/.claude/settings.json).',
+      method: "Servers confirmed uncalled, divided by the sum of servers called and servers confirmed uncalled. Confirming non-use requires this tool to have watched the same definition for more than 14 days; a call in the scoring window can establish use on the first checkup. Servers whose definition is not on this PC, such as those connected through claude.ai, are left out.",
+      evidence: "Turned on {enabled} \xB7 can be judged {judgeable} \xB7 judged {judged} (called {used}, uncalled {unused}) \xB7 cannot be judged by design {structural}",
+      unit: "%",
+      reasons: {
+        too_little: { word: FEW.en, text: "Only {judgeable} MCP {judgeable:server is|servers are} eligible for use assessment, so the unused share was not calculated." },
+        watching: WATCHING.en,
+        unsupported: { text: "Whether these servers are called cannot be told from the records." },
+        unreadable: { text: "A place where servers are defined or a settings file could not be read." },
+        not_applicable: { text: "No MCP server is turned on." },
+        incomplete: { text: "The records of MCP calls could not all be read." }
+      },
+      repairUnmeasured: {
+        too_little: "Only {judgeable} MCP {judgeable:server is|servers are} eligible for use assessment, so the unused share was not calculated. Found {candidates} that can be cleaned up.",
+        watching: WATCHING_REPAIR.en
+      }
+    },
+    ko: {
+      name: "\uC548 \uC4F0\uB294 MCP \uC11C\uBC84",
+      good: "\uD310\uC815\uB41C \uC11C\uBC84 \uAC00\uC6B4\uB370 \uB300\uBD80\uBD84\uC744 \uBD80\uB974\uACE0 \uC788\uC74C",
+      why: "\uCF1C \uB454 MCP \uC11C\uBC84\uB294 \uB3C4\uAD6C\uB97C \uC81C\uACF5\uD558\uAE30 \uC704\uD574 \uC5F0\uACB0\uB420 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC138\uC158\uC744 \uC2DC\uC791\uD560 \uB54C \uC5F0\uACB0\uB418\uB294 \uC11C\uBC84\uB3C4 \uC788\uACE0 \uCC98\uC74C \uBD80\uB97C \uB54C \uC5F0\uACB0\uB418\uB294 \uC11C\uBC84\uB3C4 \uC788\uC2B5\uB2C8\uB2E4.",
+      fix: "\uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB044\uAE30",
+      problem: "\uBD80\uB974\uB294\uC9C0 \uD310\uC815\uB41C \uC11C\uBC84 \uAC00\uC6B4\uB370 {value}\uB294 \uBD80\uB974\uC9C0 \uC54A\uC740 \uAC83\uC73C\uB85C \uD655\uC778\uB410\uC2B5\uB2C8\uB2E4.",
+      prescription: '\uBD80\uB974\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB294 /mcp\uC5D0\uC11C \uB044\uAC70\uB098, \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "<\uC774\uB984>" }\uC744 \uB354\uD574 \uB9C9\uC73C\uC138\uC694.',
+      method: "\uC548 \uBD80\uB978 \uAC83\uC774 \uD655\uC778\uB41C \uC11C\uBC84\uB97C, \uBD80\uB978 \uC11C\uBC84\uC640 \uC548 \uBD80\uB978 \uAC83\uC774 \uD655\uC778\uB41C \uC11C\uBC84\uC758 \uD569\uC73C\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4. \uC548 \uBD80\uB978 \uAC83\uC744 \uD655\uC778\uD558\uB824\uBA74 \uC774 \uB3C4\uAD6C\uAC00 \uAC19\uC740 \uC815\uC758\uC758 \uC11C\uBC84\uB97C 14\uC77C \uB118\uAC8C \uC9C0\uCF1C\uBD10\uC57C \uD558\uC9C0\uB9CC, \uC810\uC218 \uAD6C\uAC04\uC5D0 \uBD80\uB978 \uAE30\uB85D\uC774 \uC788\uC73C\uBA74 \uCCAB \uC810\uAC80\uC5D0\uC11C\uB3C4 \uBD80\uB978 \uAC83\uC73C\uB85C \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. claude.ai\uC5D0 \uC5F0\uACB0\uD55C \uC11C\uBC84\uCC98\uB7FC \uC815\uC758\uAC00 \uC774 PC\uC5D0 \uC5C6\uB294 \uC11C\uBC84\uB294 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uCF1C\uC838 \uC788\uC74C {enabled} \xB7 \uD310\uC815\uD560 \uC218 \uC788\uC74C {judgeable} \xB7 \uD310\uC815\uB428 {judged}(\uBD80\uB984 {used}, \uC548 \uBD80\uB984 {unused}) \xB7 \uAD6C\uC870\uC0C1 \uD310\uC815\uD560 \uC218 \uC5C6\uC74C {structural}",
+      unit: "%",
+      reasons: {
+        too_little: { word: FEW.ko, text: "\uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC788\uB294 MCP \uC11C\uBC84\uAC00 {judgeable}\uAC1C\uBFD0\uC774\uC5B4\uC11C \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." },
+        watching: WATCHING.ko,
+        unsupported: { text: "\uAE30\uB85D\uC73C\uB85C\uB294 \uC774 \uC11C\uBC84\uB4E4\uC744 \uBD80\uB974\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uC11C\uBC84\uB97C \uCC3E\uB294 \uACF3\uC774\uB098 \uC124\uC815 \uD30C\uC77C \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." },
+        not_applicable: { text: "\uCF1C\uC838 \uC788\uB294 MCP \uC11C\uBC84\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        incomplete: { text: "MCP \uD638\uCD9C \uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." }
+      },
+      repairUnmeasured: {
+        too_little: "\uC4F0\uB294\uC9C0 \uAC00\uB9B4 \uC218 \uC788\uB294 MCP \uC11C\uBC84\uAC00 {judgeable}\uAC1C\uBFD0\uC774\uC5B4\uC11C \uC548 \uC4F0\uB294 \uBE44\uC728\uC740 \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC815\uB9AC\uD560 \uC218 \uC788\uB294 \uAC83\uC740 {candidates}\uAC1C \uCC3E\uC558\uC2B5\uB2C8\uB2E4.",
+        watching: WATCHING_REPAIR.ko
+      }
+    }
+  },
+  E7: {
+    en: {
+      name: "Stopped work",
+      good: "Work rarely stops midway",
+      why: "A denied tool call, an interrupted turn, or a reply cut off by the length limit stops work that was underway, and it has to be picked up again.",
+      fix: "Reduce stopped work",
+      problem: "Recorded stops averaged {value}.",
+      prescription: "If you often deny the same safe command, allow it with a rule in /permissions, such as Bash(npm run test *). If replies get cut off by the length limit, ask for smaller pieces of work.",
+      method: "Denied tool calls, interrupted turns, and replies cut off by the length limit, divided by requests from you. Denials include those by you, by hooks, and by permission checks.",
+      evidence: "Denied {denied} \xB7 interrupted turns {interruptedTurns} \xB7 cut off by length {lengthStops} \xB7 requests from you {humanRequests}",
+      unit: "{value:stop|stops} per request",
+      reasons: {
+        no_data: { text: "There were no requests from you in the scoring window." },
+        too_little: { text: "Fewer than 20 requests from you, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uBA48\uCD98 \uC77C",
+      good: "\uC77C\uC774 \uC911\uAC04\uC5D0 \uC798 \uBA48\uCD94\uC9C0 \uC54A\uC74C",
+      why: "\uAC70\uC808\uD55C \uB3C4\uAD6C \uC2E4\uD589, \uB04A\uC740 \uD134, \uAE38\uC774 \uC81C\uD55C\uC73C\uB85C \uB04A\uAE34 \uC751\uB2F5\uC740 \uD558\uB358 \uC77C\uC744 \uBA48\uCD94\uAC8C \uD558\uACE0 \uB2E4\uC2DC \uC774\uC5B4 \uAC00\uC57C \uD569\uB2C8\uB2E4.",
+      fix: "\uBA48\uCD94\uB294 \uC77C \uC904\uC774\uAE30",
+      problem: "\uC77C\uC774 \uBA48\uCD98 \uD69F\uC218\uAC00 \uD3C9\uADE0 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uAC19\uC740 \uC548\uC804\uD55C \uBA85\uB839\uC744 \uC790\uC8FC \uAC70\uC808\uD55C\uB2E4\uBA74 /permissions\uC5D0\uC11C Bash(npm run test *) \uAC19\uC740 \uD5C8\uC6A9 \uADDC\uCE59\uC73C\uB85C \uB354\uD558\uC138\uC694. \uC751\uB2F5\uC774 \uAE38\uC774 \uC81C\uD55C\uC73C\uB85C \uB04A\uAE30\uBA74 \uC77C\uC744 \uC791\uAC8C \uB098\uB220 \uB9E1\uAE30\uC138\uC694.",
+      method: "\uAC70\uC808\uD55C \uB3C4\uAD6C \uC2E4\uD589, \uB04A\uC740 \uD134, \uAE38\uC774 \uC81C\uD55C\uC73C\uB85C \uB04A\uAE34 \uC751\uB2F5\uC744 \uB354\uD574 \uC0AC\uB78C \uC694\uCCAD \uC218\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4. \uAC70\uC808\uC5D0\uB294 \uC0AC\uB78C\uC774 \uAC70\uC808\uD55C \uAC83, \uD6C5\uC774 \uB9C9\uC740 \uAC83, \uAD8C\uD55C \uAC80\uC0AC\uAC00 \uB9C9\uC740 \uAC83\uC774 \uBAA8\uB450 \uB4ED\uB2C8\uB2E4.",
+      evidence: "\uAC70\uC808 {denied} \xB7 \uB04A\uC740 \uD134 {interruptedTurns} \xB7 \uAE38\uC774 \uC81C\uD55C\uC73C\uB85C \uB04A\uAE40 {lengthStops} \xB7 \uC0AC\uB78C \uC694\uCCAD {humanRequests}",
+      unit: "\uD68C/\uC694\uCCAD",
+      reasons: {
+        no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC0AC\uB78C \uC694\uCCAD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  }
+};
+
+// src/core/copy/rules-fit.ts
+var FIT_COPY = {
+  F1: {
+    en: {
+      name: "Highest effort share",
+      good: "Does not lean on the highest effort for everything",
+      why: "This shows how often responses use xhigh or max. It does not judge task difficulty, so it carries a low weight.",
+      fix: "Lower the everyday effort",
+      problem: "{value} of responses with a known effort ran at the highest levels (xhigh, max).",
+      prescription: "Set a lower everyday effort with /effort and raise it only for hard tasks.",
+      method: "Share of responses with a known effort level that ran at xhigh or max. Responses with no effort recorded and unknown levels are left out.",
+      evidence: "Highest effort {highEffort} \xB7 known effort {knownEffort} \xB7 effort not recorded {unknownEffort} \xB7 unknown level {unknownLevel}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "No response had a recognized effort level." },
+        too_little: { text: "Fewer than 50 responses with a known effort, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uAC00\uC7A5 \uB192\uC740 \uCD94\uB860 \uAC15\uB3C4\uC758 \uBAAB",
+      good: "\uAC00\uC7A5 \uB192\uC740 \uCD94\uB860 \uAC15\uB3C4\uC5D0 \uC3E0\uB9AC\uC9C0 \uC54A\uC74C",
+      why: "\uC751\uB2F5\uC5D0\uC11C xhigh\uB098 max\uB97C \uC5BC\uB9C8\uB098 \uC790\uC8FC \uC37C\uB294\uC9C0 \uBD05\uB2C8\uB2E4. \uC774 \uADDC\uCE59\uC740 \uC77C\uC774 \uC5BC\uB9C8\uB098 \uC5B4\uB824\uC6E0\uB294\uC9C0 \uBAA8\uB974\uBBC0\uB85C \uBB34\uAC8C\uB97C \uB0AE\uAC8C \uB461\uB2C8\uB2E4.",
+      fix: "\uD3C9\uC18C \uCD94\uB860 \uAC15\uB3C4 \uB0AE\uCD94\uAE30",
+      problem: "\uAC15\uB3C4\uB97C \uC544\uB294 \uC751\uB2F5 \uAC00\uC6B4\uB370 {value}\uAC00 \uAC00\uC7A5 \uB192\uC740 \uAC15\uB3C4(xhigh, max)\uB85C \uB3CC\uC558\uC2B5\uB2C8\uB2E4.",
+      prescription: "/effort\uB85C \uD3C9\uC18C \uAC15\uB3C4\uB97C \uB0AE\uCD94\uACE0 \uC5B4\uB824\uC6B4 \uC77C\uC5D0\uC11C\uB9CC \uB192\uC774\uC138\uC694.",
+      method: "\uAC15\uB3C4\uB97C \uC544\uB294 \uC751\uB2F5 \uAC00\uC6B4\uB370 xhigh\uB098 max\uB85C \uB3C8 \uBAAB\uC785\uB2C8\uB2E4. \uAC15\uB3C4\uAC00 \uAE30\uB85D\uB418\uC9C0 \uC54A\uC740 \uC751\uB2F5\uACFC \uBAA8\uB974\uB294 \uB2E8\uACC4\uB294 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uAC00\uC7A5 \uB192\uC740 \uAC15\uB3C4 {highEffort} \xB7 \uAC15\uB3C4\uB97C \uC54E {knownEffort} \xB7 \uAC15\uB3C4\uAC00 \uAE30\uB85D\uB418\uC9C0 \uC54A\uC74C {unknownEffort} \xB7 \uBAA8\uB974\uB294 \uB2E8\uACC4 {unknownLevel}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "\uC54C\uC544\uBCFC \uC218 \uC788\uB294 \uCD94\uB860 \uAC15\uB3C4\uAC00 \uAE30\uB85D\uB41C \uC751\uB2F5\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uAC15\uB3C4\uB97C \uC544\uB294 \uC751\uB2F5\uC774 50\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  F2: {
+    en: {
+      name: "Delegating long work",
+      good: "Hands parts of long work to subagents",
+      why: "A subagent works in a separate context window and returns its results. This rule checks whether main sessions with automatic compaction used subagents.",
+      fix: "Hand parts of long work to subagents",
+      problem: "Subagents were used in {value} of the sessions that were compacted automatically.",
+      prescription: "In long sessions, ask Claude to give searches and large file reads to a subagent. You can also write your own subagents as Markdown files in .claude/agents/ or ~/.claude/agents/.",
+      method: "Share of main sessions with an automatic compaction that also used a subagent.",
+      evidence: "Sessions that used a subagent {delegatedSessions} \xB7 sessions with automatic compaction {compactedSessions}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "No main session was compacted automatically." },
+        too_little: { text: "Fewer than 3 main sessions were compacted automatically, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uAE34 \uC77C \uB098\uB220 \uB9E1\uAE30\uAE30",
+      good: "\uAE34 \uC77C\uC744 \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uC5D0 \uB098\uB220 \uB9E1\uAE40",
+      why: "\uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB294 \uBCC4\uB3C4 \uB300\uD654 \uCC3D\uC5D0\uC11C \uC77C\uD558\uACE0 \uACB0\uACFC\uB97C \uB3CC\uB824\uC90D\uB2C8\uB2E4. \uC774 \uD56D\uBAA9\uC740 \uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC8FC \uC138\uC158\uC5D0\uC11C \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB97C \uC37C\uB294\uC9C0 \uBD05\uB2C8\uB2E4.",
+      fix: "\uAE34 \uC77C\uC744 \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uC5D0 \uB098\uB220 \uB9E1\uAE30\uAE30",
+      problem: "\uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC138\uC158 \uAC00\uC6B4\uB370 \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB97C \uC4F4 \uC138\uC158\uC740 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uAE34 \uC138\uC158\uC5D0\uC11C\uB294 \uC870\uC0AC\uB098 \uD070 \uD30C\uC77C \uC77D\uAE30\uB97C \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uC5D0 \uB9E1\uACA8 \uB2EC\uB77C\uACE0 \uD558\uC138\uC694. \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB294 .claude/agents/\uB098 ~/.claude/agents/\uC5D0 \uB9C8\uD06C\uB2E4\uC6B4 \uD30C\uC77C\uB85C \uC9C1\uC811 \uB9CC\uB4E4 \uC218\uB3C4 \uC788\uC2B5\uB2C8\uB2E4.",
+      method: "\uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC8FC \uC138\uC158 \uAC00\uC6B4\uB370 \uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB97C \uC4F4 \uC138\uC158\uC758 \uBAAB\uC785\uB2C8\uB2E4.",
+      evidence: "\uD558\uC704 \uC5D0\uC774\uC804\uD2B8\uB97C \uC4F4 \uC138\uC158 {delegatedSessions} \xB7 \uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC138\uC158 {compactedSessions}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "\uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC8FC \uC138\uC158\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uC790\uB3D9 \uC555\uCD95\uC774 \uC788\uC5C8\uB358 \uC8FC \uC138\uC158\uC774 3\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  F3: {
+    en: {
+      name: "Project instructions",
+      good: "Projects you use often have their own instructions",
+      why: "Project instructions give the tool a reference for how a project is built and run. This rule checks whether often-used projects have those instructions.",
+      fix: "Add instructions to projects you use often",
+      problem: "{value} of the projects you use often have project instructions.",
+      prescription: "In a project you use often, run /init to create a CLAUDE.md, then keep only what that project needs.",
+      method: "Among target projects with 3 or more main sessions in the scoring window, the share that have project instructions for each tool mainly used there. Targets are folders on this PC that are Git repositories or have project instructions or settings. Folders not treated as projects, such as the home folder, are left out.",
+      evidence: "Projects with instructions {withInstructions} \xB7 projects used often {targets}",
+      unit: "%",
+      reasons: { not_applicable: { text: "No target project had 3 or more main sessions in the scoring window. Folders that are gone or not treated as projects are not targets." } }
+    },
+    ko: {
+      name: "\uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68",
+      good: "\uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uC9C0\uCE68\uC744 \uB460",
+      why: "\uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC740 \uD504\uB85C\uC81D\uD2B8\uB97C \uC5B4\uB5BB\uAC8C \uBE4C\uB4DC\uD558\uACE0 \uC2E4\uD589\uD558\uB294\uC9C0 \uCC38\uACE0\uD560 \uB0B4\uC6A9\uC744 \uC90D\uB2C8\uB2E4. \uC774 \uD56D\uBAA9\uC740 \uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uADF8\uB7F0 \uC9C0\uCE68\uC774 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4.",
+      fix: "\uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uC9C0\uCE68 \uB450\uAE30",
+      problem: "\uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370 \uC9C0\uCE68\uC774 \uC788\uB294 \uD504\uB85C\uC81D\uD2B8\uB294 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C /init\uC73C\uB85C CLAUDE.md\uB97C \uB9CC\uB4E4\uACE0 \uADF8 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uD544\uC694\uD55C \uAC83\uB9CC \uB0A8\uAE30\uC138\uC694.",
+      method: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC8FC \uC138\uC158\uC774 3\uAC1C \uC774\uC0C1\uC778 \uB300\uC0C1 \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370, \uAC70\uAE30\uC11C \uC8FC\uB85C \uC4F4 \uB3C4\uAD6C\uB9C8\uB2E4 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC774 \uC788\uB294 \uD504\uB85C\uC81D\uD2B8\uC758 \uBAAB\uC785\uB2C8\uB2E4. \uB300\uC0C1\uC740 \uC9C0\uAE08 \uC774 PC\uC5D0 \uC788\uACE0 \uAE43 \uC800\uC7A5\uC18C\uC774\uAC70\uB098 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\xB7\uC124\uC815\uC774 \uC788\uB294 \uD3F4\uB354\uC785\uB2C8\uB2E4. \uD648 \uD3F4\uB354\uCC98\uB7FC \uD504\uB85C\uC81D\uD2B8\uB85C \uBCF4\uC9C0 \uC54A\uB294 \uD3F4\uB354\uB294 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uC9C0\uCE68\uC774 \uC788\uB294 \uD504\uB85C\uC81D\uD2B8 {withInstructions} \xB7 \uC790\uC8FC \uC4F0\uB294 \uD504\uB85C\uC81D\uD2B8 {targets}",
+      unit: "%",
+      reasons: { not_applicable: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC8FC \uC138\uC158\uC774 3\uAC1C \uC774\uC0C1\uC778 \uB300\uC0C1 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uC791\uC5C5 \uD3F4\uB354\uAC00 \uC9C0\uAE08 \uC5C6\uAC70\uB098 \uD504\uB85C\uC81D\uD2B8\uB85C \uBCF4\uC9C0 \uC54A\uB294 \uD3F4\uB354\uB294 \uB300\uC0C1\uC5D0\uC11C \uBE8D\uB2C8\uB2E4." } }
+    }
+  },
+  F4: {
+    en: {
+      name: "Instruction overlap",
+      good: "Keeps overlap between global and project instructions low",
+      why: "A line that is in both global and project instructions loads twice in that project and has to be kept the same in two places.",
+      fix: "Remove repeated instruction lines",
+      problem: "In the project with the most overlap, {value} of global instruction lines appear again in its instructions.",
+      prescription: "Keep each line in one place. Rules for everywhere go in global instructions, and rules only one project needs go in that project.",
+      method: "Share of distinct global instruction lines, at least 20 characters after trimming, that appear word for word in a project's instructions. The project with the highest share is used.",
+      evidence: "Repeated lines {overlappingLines} \xB7 global lines {globalLines} \xB7 projects compared {comparedProjects}",
+      unit: "%",
+      reasons: {
+        not_applicable: { text: "There are no global instruction lines or separate project instructions to compare." },
+        unreadable: { text: "An instruction file to compare could not be read." }
+      }
+    },
+    ko: {
+      name: "\uC9C0\uCE68 \uACB9\uCE68",
+      good: "\uC804\uC5ED \uC9C0\uCE68\uACFC \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC758 \uACB9\uCE68\uC774 \uC801\uC74C",
+      why: "\uC804\uC5ED \uC9C0\uCE68\uACFC \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC5D0 \uAC19\uC740 \uC904\uC774 \uC788\uC73C\uBA74 \uADF8 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uB450 \uBC88 \uC2E4\uB9AC\uACE0, \uACE0\uCE60 \uB54C\uB3C4 \uB450 \uACF3\uC744 \uB9DE\uCDB0\uC57C \uD569\uB2C8\uB2E4.",
+      fix: "\uACB9\uCE58\uB294 \uC9C0\uCE68 \uC904 \uC815\uB9AC\uD558\uAE30",
+      problem: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uC804\uC5ED \uC9C0\uCE68 \uC904\uC758 {value}\uAC00 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC5D0 \uB2E4\uC2DC \uB098\uC635\uB2C8\uB2E4.",
+      prescription: "\uD55C \uC904\uC740 \uD55C \uACF3\uC5D0\uB9CC \uB450\uC138\uC694. \uC5B4\uB514\uC11C\uB098 \uD1B5\uD558\uB294 \uADDC\uCE59\uC740 \uC804\uC5ED \uC9C0\uCE68\uC5D0, \uADF8 \uD504\uB85C\uC81D\uD2B8\uC5D0\uB9CC \uD544\uC694\uD55C \uADDC\uCE59\uC740 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC5D0 \uB461\uB2C8\uB2E4.",
+      method: "\uC55E\uB4A4 \uACF5\uBC31\uC744 \uB5BC\uACE0 20\uC790 \uC774\uC0C1\uC778 \uC11C\uB85C \uB2E4\uB978 \uC804\uC5ED \uC9C0\uCE68 \uC904 \uAC00\uC6B4\uB370 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC5D0 \uAE00\uC790 \uADF8\uB300\uB85C \uB2E4\uC2DC \uB098\uC624\uB294 \uBAAB\uC785\uB2C8\uB2E4. \uBAAB\uC774 \uAC00\uC7A5 \uD070 \uD504\uB85C\uC81D\uD2B8\uC758 \uAC12\uC744 \uC501\uB2C8\uB2E4.",
+      evidence: "\uACB9\uCE58\uB294 \uC904 {overlappingLines} \xB7 \uC804\uC5ED \uC9C0\uCE68 \uC904 {globalLines} \xB7 \uACAC\uC900 \uD504\uB85C\uC81D\uD2B8 {comparedProjects}",
+      unit: "%",
+      reasons: {
+        not_applicable: { text: "\uACAC\uC904 \uC804\uC5ED \uC9C0\uCE68 \uC904\uC774\uB098 \uBCC4\uB3C4\uC758 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uACAC\uC8FC\uB294 \uC9C0\uCE68 \uD30C\uC77C \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  F5: {
+    en: {
+      name: "Duplicate skills",
+      good: "Limits extra copies of skills sharing a name",
+      why: "Copies of a skill can drift apart across folders, making it harder to track which copy is loaded.",
+      fix: "Keep one copy of each skill",
+      problem: "Extra copies score {value} on average.",
+      prescription: "Keep one original and remove the other copies or replace them with links to the original. Before removing a copy, check that no project sees only that copy. If you use both Claude Code and Codex, one original can be linked from both tools' folders.",
+      method: "Within one tool, each extra copy of a skill name scores 1 point if all copies are identical and 2 points if any differ or cannot be compared, divided by the number of skill names. Links and copies placed by plugins are not counted.",
+      evidence: "Extra identical copies {identicalCopies} \xB7 extra differing copies {differingCopies} \xB7 skill names {skillKinds}",
+      unit: "{value:point|points} per skill",
+      reasons: {
+        not_applicable: { text: "There are no user or project skills to compare for copies. Skills inside plugins are not counted." },
+        unreadable: { text: "A skill folder searched for copies could not be listed." }
+      }
+    },
+    ko: {
+      name: "\uAC19\uC740 \uC774\uB984\uC758 \uC2A4\uD0AC \uC0AC\uBCF8",
+      good: "\uAC19\uC740 \uC774\uB984\uC758 \uC2A4\uD0AC \uC0AC\uBCF8\uC744 \uC801\uAC8C \uB460",
+      why: "\uC2A4\uD0AC\uC744 \uC5EC\uB7EC \uD3F4\uB354\uC5D0 \uBCF5\uC0AC\uD574 \uB450\uBA74 \uB0B4\uC6A9\uC774 \uB2EC\uB77C\uC9C8 \uC218 \uC788\uACE0 \uC5B4\uB290 \uC0AC\uBCF8\uC774 \uC2E4\uB9AC\uB294\uC9C0 \uD30C\uC545\uD558\uAE30 \uC5B4\uB824\uC6B8 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      fix: "\uC2A4\uD0AC \uC0AC\uBCF8\uC744 \uD558\uB098\uB85C \uC815\uB9AC\uD558\uAE30",
+      problem: "\uB0A8\uB294 \uC0AC\uBCF8\uC758 \uC810\uC218\uAC00 \uD3C9\uADE0 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uC6D0\uBCF8 \uD558\uB098\uB9CC \uB0A8\uAE30\uACE0 \uB098\uBA38\uC9C0 \uC0AC\uBCF8\uC740 \uC9C0\uC6B0\uAC70\uB098 \uC6D0\uBCF8\uC744 \uAC00\uB9AC\uD0A4\uB294 \uB9C1\uD06C\uB85C \uBC14\uAFB8\uC138\uC694. \uC0AC\uBCF8\uC744 \uCE58\uC6B0\uAE30 \uC804\uC5D0 \uADF8 \uC0AC\uBCF8\uB9CC \uBCF4\uC774\uB294 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uB294\uC9C0 \uBCF4\uC138\uC694. Claude Code\uC640 Codex\uB97C \uD568\uAED8 \uC4F0\uBA74 \uC6D0\uBCF8 \uD558\uB098\uB97C \uB450 \uB3C4\uAD6C\uC758 \uD3F4\uB354\uC5D0\uC11C \uB9C1\uD06C\uB85C \uAC78 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      method: "\uAC19\uC740 \uB3C4\uAD6C \uC548\uC5D0\uC11C \uD55C \uC774\uB984\uC758 \uB0A8\uB294 \uC0AC\uBCF8\uB9C8\uB2E4, \uC0AC\uBCF8\uC774 \uBAA8\uB450 \uAC19\uC73C\uBA74 1\uC810, \uD558\uB098\uB77C\uB3C4 \uB2E4\uB974\uAC70\uB098 \uB0B4\uC6A9\uC744 \uACAC\uC904 \uC218 \uC5C6\uC73C\uBA74 2\uC810\uC73C\uB85C \uCCD0\uC11C \uC2A4\uD0AC \uC885 \uC218\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4. \uB9C1\uD06C\uC640 \uD50C\uB7EC\uADF8\uC778\uC774 \uB123\uC740 \uC0AC\uBCF8\uC740 \uC138\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      evidence: "\uAC19\uC740 \uC0AC\uBCF8 {identicalCopies} \xB7 \uB0B4\uC6A9\uC774 \uB2E4\uB978 \uC0AC\uBCF8 {differingCopies} \xB7 \uC2A4\uD0AC \uC885 \uC218 {skillKinds}",
+      unit: "\uC810/\uC2A4\uD0AC",
+      reasons: {
+        not_applicable: { text: "\uC0AC\uBCF8\uC744 \uACAC\uC904 \uC0AC\uC6A9\uC790\xB7\uD504\uB85C\uC81D\uD2B8 \uC2A4\uD0AC\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uD50C\uB7EC\uADF8\uC778\uC5D0 \uB4E0 \uC2A4\uD0AC\uC740 \uC138\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uC0AC\uBCF8\uC744 \uCC3E\uB294 \uC2A4\uD0AC \uD3F4\uB354 \uAC00\uC6B4\uB370 \uBAA9\uB85D\uC744 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  F6: {
+    en: {
+      name: "Settings conflicts",
+      good: "Global and project settings do not contradict each other",
+      why: "When the same permission rule is allowed on one side and denied on the other, the deny wins. The allow then has no effect, which may not be what you meant.",
+      fix: "Resolve conflicting permission rules",
+      problem: "Found {value} of conflicting rules.",
+      prescription: "Look at each rule that is allowed in one place and denied in another, and keep it on one side only. /permissions shows the rules by scope.",
+      method: "Number of pairs where the same rule text is allowed on one side and denied on the other, between your user settings and each project's project and local settings. Managed policy is not compared.",
+      evidence: "Conflicting pairs {conflicts} \xB7 projects with settings {projectsWithSettings}",
+      unit: "{value:pair|pairs}",
+      reasons: {
+        not_applicable: { text: "No listed project has project or local settings." },
+        unreadable: { text: "A settings file to compare could not be read." }
+      }
+    },
+    ko: {
+      name: "\uC124\uC815 \uCDA9\uB3CC",
+      good: "\uC804\uC5ED \uC124\uC815\uACFC \uD504\uB85C\uC81D\uD2B8 \uC124\uC815\uC774 \uBD80\uB52A\uD788\uC9C0 \uC54A\uC74C",
+      why: "\uAC19\uC740 \uAD8C\uD55C \uADDC\uCE59\uC774 \uD55C\uCABD\uC5D0\uC11C\uB294 \uD5C8\uC6A9, \uB2E4\uB978 \uCABD\uC5D0\uC11C\uB294 \uAE08\uC9C0\uB418\uC5B4 \uC788\uC73C\uBA74 \uAE08\uC9C0\uAC00 \uC774\uAE41\uB2C8\uB2E4. \uD5C8\uC6A9\uD574 \uB454 \uCABD\uC740 \uB4E3\uC9C0 \uC54A\uC73C\uBBC0\uB85C \uB73B\uACFC \uB2E4\uB974\uAC8C \uB3D9\uC791\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      fix: "\uBD80\uB52A\uD788\uB294 \uAD8C\uD55C \uADDC\uCE59 \uC815\uB9AC\uD558\uAE30",
+      problem: "\uBD80\uB52A\uD788\uB294 \uADDC\uCE59\uC774 {value} \uC788\uC2B5\uB2C8\uB2E4.",
+      prescription: "\uD55C\uCABD\uC5D0\uC11C \uD5C8\uC6A9\uD558\uACE0 \uB2E4\uB978 \uCABD\uC5D0\uC11C \uAE08\uC9C0\uD55C \uADDC\uCE59\uC744 \uBCF4\uACE0 \uD55C\uCABD\uC5D0\uB9CC \uB0A8\uAE30\uC138\uC694. /permissions\uC5D0\uC11C \uBC94\uC704\uBCC4\uB85C \uADDC\uCE59\uC744 \uBCFC \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      method: "\uC0AC\uC6A9\uC790 \uC124\uC815\uACFC \uAC01 \uD504\uB85C\uC81D\uD2B8\uC758 \uD504\uB85C\uC81D\uD2B8 \uC124\uC815\xB7\uB85C\uCEEC \uC124\uC815 \uC0AC\uC774\uC5D0\uC11C, \uAC19\uC740 \uADDC\uCE59 \uBB38\uC790\uC5F4\uC744 \uD55C\uCABD\uC740 \uD5C8\uC6A9\uC5D0 \uB2E4\uB978 \uCABD\uC740 \uAE08\uC9C0\uC5D0 \uB454 \uC30D\uC758 \uC218\uC785\uB2C8\uB2E4. \uAD00\uB9AC \uC815\uCC45\uC740 \uACAC\uC8FC\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      evidence: "\uBD80\uB52A\uD788\uB294 \uC30D {conflicts} \xB7 \uC124\uC815\uC774 \uC788\uB294 \uD504\uB85C\uC81D\uD2B8 {projectsWithSettings}",
+      unit: "\uC30D",
+      reasons: {
+        not_applicable: { text: "\uBAA9\uB85D\uC758 \uD504\uB85C\uC81D\uD2B8 \uC5B4\uB514\uC5D0\uB3C4 \uD504\uB85C\uC81D\uD2B8 \uC124\uC815\uC774\uB098 \uB85C\uCEEC \uC124\uC815\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uACAC\uC8FC\uB294 \uC124\uC815 \uD30C\uC77C \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  }
+};
+
+// src/core/copy/rules-intensity.ts
+var INTENSITY_COPY = {
+  I1: {
+    en: {
+      name: "Days used",
+      good: "Uses the tools regularly",
+      why: "This counts days with a response from any tool in the 30-day scoring window. It gives context for reading the other measurements.",
+      fix: "Use the tools on more days",
+      problem: "Tools were used on {value} in the last 30 days.",
+      prescription: "Try handing everyday tasks to the tools too, such as reading logs, drafting messages, or tidying files.",
+      method: "Days in the 30-day scoring window on which any tool had a response.",
+      evidence: "Days with responses {activeDays}",
+      unit: "{value:day|days}"
+    },
+    ko: {
+      name: "\uC0AC\uC6A9\uD55C \uB0A0",
+      good: "\uAFB8\uC900\uD788 \uC500",
+      why: "\uC810\uC218 \uAD6C\uAC04 30\uC77C \uAC00\uC6B4\uB370 \uC5B4\uB290 \uB3C4\uAD6C\uC5D0\uC11C\uB4E0 \uC751\uB2F5\uC774 \uC788\uC5C8\uB358 \uB0A0\uC744 \uC149\uB2C8\uB2E4. \uB2E4\uB978 \uCE21\uC815\uAC12\uC744 \uD574\uC11D\uD560 \uB54C \uD568\uAED8 \uBCFC \uC815\uBCF4\uC785\uB2C8\uB2E4.",
+      fix: "\uC4F0\uB294 \uB0A0 \uB298\uB9AC\uAE30",
+      problem: "\uCD5C\uADFC 30\uC77C \uAC00\uC6B4\uB370 \uC4F4 \uB0A0\uC774 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uAE30\uB85D \uC77D\uAE30, \uAE00 \uCD08\uC548, \uD30C\uC77C \uC815\uB9AC\uCC98\uB7FC \uB0A0\uB9C8\uB2E4 \uD558\uB294 \uC77C\uB3C4 \uB9E1\uACA8 \uBCF4\uC138\uC694.",
+      method: "\uC810\uC218 \uAD6C\uAC04 30\uC77C \uAC00\uC6B4\uB370 \uC5B4\uB290 \uB3C4\uAD6C\uC5D0\uC11C\uB4E0 \uC751\uB2F5\uC774 \uC788\uC5C8\uB358 \uB0A0\uC758 \uC218\uC785\uB2C8\uB2E4.",
+      evidence: "\uC751\uB2F5\uC774 \uC788\uC5C8\uB358 \uB0A0 {activeDays}",
+      unit: "\uC77C"
+    }
+  },
+  I2: {
+    en: {
+      name: "Requests per day",
+      good: "Hands over plenty of work each day",
+      why: "This is the average number of requests on days when you used the tools. It shows how often you handed work to them on those days.",
+      fix: "Hand over more work on the days you use them",
+      problem: "You sent {value} on average.",
+      prescription: 'Break your work into pieces you can hand over, such as "write a test for this function" or "summarize this log".',
+      method: "Requests from you across all tools, divided by days used.",
+      evidence: "Requests from you {humanRequests} \xB7 days used {activeDays}",
+      unit: "{value:request|requests} per day",
+      reasons: { no_data: { text: "There were no days of use in the scoring window." } }
+    },
+    ko: {
+      name: "\uD558\uB8E8\uC5D0 \uC2DC\uD0A4\uB294 \uC591",
+      good: "\uD558\uB8E8\uC5D0 \uB9CE\uC740 \uC77C\uC744 \uB9E1\uAE40",
+      why: "\uC4F4 \uB0A0 \uD558\uB8E8\uC5D0 \uBCF4\uB0B8 \uD3C9\uADE0 \uC694\uCCAD \uC218\uC785\uB2C8\uB2E4. \uB3C4\uAD6C\uB97C \uC4F4 \uB0A0\uC5D0 \uC5BC\uB9C8\uB098 \uC790\uC8FC \uC77C\uC744 \uB9E1\uACBC\uB294\uC9C0 \uBCF4\uC5EC \uC90D\uB2C8\uB2E4.",
+      fix: "\uC4F0\uB294 \uB0A0 \uB354 \uB9CE\uC740 \uC77C \uB9E1\uAE30\uAE30",
+      problem: "\uC4F4 \uB0A0 \uD558\uB8E8\uC5D0 \uBCF4\uB0B8 \uC694\uCCAD\uC774 \uD3C9\uADE0 {value}\uC785\uB2C8\uB2E4.",
+      prescription: '"\uC774 \uD568\uC218\uC758 \uC2DC\uD5D8\uC744 \uC368 \uC918", "\uC774 \uAE30\uB85D\uC744 \uC694\uC57D\uD574 \uC918"\uCC98\uB7FC \uB9E1\uAE38 \uC218 \uC788\uB294 \uB2E8\uC704\uB85C \uC77C\uC744 \uB098\uB220 \uBCF4\uC138\uC694.',
+      method: "\uBAA8\uB4E0 \uB3C4\uAD6C\uC758 \uC0AC\uB78C \uC694\uCCAD \uC218\uB97C \uC0AC\uC6A9\uD55C \uB0A0\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4.",
+      evidence: "\uC0AC\uB78C \uC694\uCCAD {humanRequests} \xB7 \uC0AC\uC6A9\uD55C \uB0A0 {activeDays}",
+      unit: "\uAC1C/\uC77C",
+      reasons: { no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC4F4 \uB0A0\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." } }
+    }
+  },
+  I3: {
+    en: {
+      name: "Depth per request",
+      good: "Lets each request run several steps",
+      why: "Tool calls per request show how much one request carries, such as reading, editing, and testing in one go.",
+      fix: "Hand over whole tasks",
+      problem: "Tool calls averaged {value}.",
+      prescription: 'Instead of asking for one small step at a time, describe the whole task and how to check it, such as "fix this bug and run the tests".',
+      method: "Tool calls across all tools, divided by requests from you.",
+      evidence: "Tool calls {toolCalls} \xB7 requests from you {humanRequests}",
+      unit: "{value:call|calls} per request",
+      reasons: {
+        no_data: { text: "There were no requests from you in the scoring window." },
+        too_little: { text: "Fewer than 20 requests from you, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uD55C \uBC88\uC5D0 \uB9E1\uAE30\uB294 \uAE4A\uC774",
+      good: "\uD55C \uBC88\uC5D0 \uC5EC\uB7EC \uB2E8\uACC4\uB97C \uB9E1\uAE40",
+      why: "\uC694\uCCAD \uD558\uB098\uC5D0 \uB3C4\uAD6C \uD638\uCD9C\uC774 \uBA87 \uBC88 \uC788\uC5C8\uB294\uC9C0\uB85C, \uC77D\uACE0 \uACE0\uCE58\uACE0 \uC2DC\uD5D8\uD558\uB294 \uC77C\uC744 \uD55C \uBC88\uC5D0 \uC5BC\uB9C8\uB098 \uB9E1\uAE30\uB294\uC9C0 \uBD05\uB2C8\uB2E4.",
+      fix: "\uC77C\uC744 \uD1B5\uC9F8\uB85C \uB9E1\uAE30\uAE30",
+      problem: "\uC694\uCCAD \uD558\uB098\uC5D0 \uB3C4\uAD6C \uD638\uCD9C\uC774 \uD3C9\uADE0 {value}\uC785\uB2C8\uB2E4.",
+      prescription: '\uC791\uC740 \uB2E8\uACC4\uB97C \uD558\uB098\uC529 \uC2DC\uD0A4\uAE30\uBCF4\uB2E4 "\uC774 \uBC84\uADF8\uB97C \uACE0\uCE58\uACE0 \uC2DC\uD5D8\uC744 \uB3CC\uB824 \uC918"\uCC98\uB7FC \uD560 \uC77C\uACFC \uD655\uC778 \uBC29\uBC95\uC744 \uD55C \uBC88\uC5D0 \uC54C\uB824 \uC8FC\uC138\uC694.',
+      method: "\uBAA8\uB4E0 \uB3C4\uAD6C\uC758 \uB3C4\uAD6C \uD638\uCD9C \uC218\uB97C \uC0AC\uB78C \uC694\uCCAD \uC218\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4.",
+      evidence: "\uB3C4\uAD6C \uD638\uCD9C {toolCalls} \xB7 \uC0AC\uB78C \uC694\uCCAD {humanRequests}",
+      unit: "\uD68C/\uC694\uCCAD",
+      reasons: {
+        no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC0AC\uB78C \uC694\uCCAD\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  I4: {
+    en: {
+      name: "Projects in use",
+      good: "Uses the tools across several projects",
+      why: "This counts the projects that had a main session in the scoring window. Using the tools in more places puts the setup you built to wider use.",
+      fix: "Try the tools in more projects",
+      problem: "Main sessions ran in {value}.",
+      prescription: "Try the tools in another project or folder you work in, too.",
+      method: "Number of projects with a main session in the scoring window, counted across tools. Folders not treated as projects, such as the home folder, are left out.",
+      evidence: "Projects {projects} \xB7 folders left out {excludedFolders} \xB7 sessions not linked to a project {unlinkedSessions}",
+      unit: "{value:project|projects}",
+      reasons: { no_data: { text: "No project had a main session in the scoring window. Folders not treated as projects, such as the home folder, and sessions not linked to a project are not counted." } }
+    },
+    ko: {
+      name: "\uC4F0\uB294 \uD3ED",
+      good: "\uC5EC\uB7EC \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C \uC500",
+      why: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC8FC \uC138\uC158\uC774 \uC788\uC5C8\uB358 \uD504\uB85C\uC81D\uD2B8\uC758 \uC218\uC785\uB2C8\uB2E4. \uC5EC\uB7EC \uACF3\uC5D0\uC11C \uC4F0\uBA74 \uAC16\uCDB0 \uB454 \uC14B\uD305\uC744 \uADF8\uB9CC\uD07C \uB113\uAC8C \uC501\uB2C8\uB2E4.",
+      fix: "\uB2E4\uB978 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C\uB3C4 \uC368 \uBCF4\uAE30",
+      problem: "\uC8FC \uC138\uC158\uC774 \uC788\uC5C8\uB358 \uD504\uB85C\uC81D\uD2B8\uAC00 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "\uC77C\uD558\uB294 \uB2E4\uB978 \uD504\uB85C\uC81D\uD2B8\uB098 \uD3F4\uB354\uC5D0\uC11C\uB3C4 \uC368 \uBCF4\uC138\uC694.",
+      method: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC8FC \uC138\uC158\uC774 \uC788\uC5C8\uB358 \uD504\uB85C\uC81D\uD2B8\uC758 \uC218\uC785\uB2C8\uB2E4. \uB3C4\uAD6C\uB97C \uD569\uCCD0 \uC138\uACE0, \uD648 \uD3F4\uB354\uCC98\uB7FC \uD504\uB85C\uC81D\uD2B8\uB85C \uBCF4\uC9C0 \uC54A\uB294 \uD3F4\uB354\uB294 \uBE8D\uB2C8\uB2E4.",
+      evidence: "\uD504\uB85C\uC81D\uD2B8 {projects} \xB7 \uBE80 \uD3F4\uB354 {excludedFolders} \xB7 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uC787\uC9C0 \uBABB\uD55C \uC138\uC158 {unlinkedSessions}",
+      unit: "\uAC1C",
+      reasons: { no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC8FC \uC138\uC158\uC774 \uC788\uC5C8\uB358 \uD504\uB85C\uC81D\uD2B8\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uD648 \uD3F4\uB354\uCC98\uB7FC \uD504\uB85C\uC81D\uD2B8\uB85C \uBCF4\uC9C0 \uC54A\uB294 \uD3F4\uB354\uC640 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uC787\uC9C0 \uBABB\uD55C \uC138\uC158\uC740 \uC138\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." } }
+    }
+  }
+};
+
+// src/core/copy/rules-setup.ts
+var NO_TOOL = {
+  en: { text: "No tool was used in the last 30 days, so this was not measured." },
+  ko: { text: "\uCD5C\uADFC 30\uC77C \uC548\uC5D0 \uC4F4 \uB3C4\uAD6C\uAC00 \uC5C6\uC5B4 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+};
+var SETUP_COPY = {
+  S1: {
+    en: {
+      name: "Global instructions",
+      good: "Keeps instructions that load everywhere",
+      why: "Global instructions load in every session, in every project. Writing your working style and rules there once means you do not repeat them in each project.",
+      fix: "Write global instructions",
+      problem: "{value} of the tools you use have global instructions.",
+      prescription: "For Claude Code, write at least 200 bytes in CLAUDE.md in its config folder (~/.claude by default). A few lines on how you work and what to avoid are enough.",
+      method: "Share of the tools you use that have global instructions (instruction files totaling 200 bytes or more).",
+      evidence: "Tools with global instructions {withInstructions} \xB7 tools in use {tools}",
+      unit: "%",
+      reasons: { no_data: NO_TOOL.en }
+    },
+    ko: {
+      name: "\uC804\uC5ED \uC9C0\uCE68",
+      good: "\uC5B4\uB514\uC11C\uB098 \uC2E4\uB9AC\uB294 \uC804\uC5ED \uC9C0\uCE68\uC744 \uB460",
+      why: "\uC804\uC5ED \uC9C0\uCE68\uC740 \uC5B4\uB290 \uD504\uB85C\uC81D\uD2B8\uC5D0\uC11C\uB4E0 \uC138\uC158\uB9C8\uB2E4 \uC2E4\uB9BD\uB2C8\uB2E4. \uC77C\uD558\uB294 \uBC29\uC2DD\uACFC \uC9C0\uD0AC \uADDC\uCE59\uC744 \uD55C\uACF3\uC5D0 \uC801\uC5B4 \uB450\uBA74 \uD504\uB85C\uC81D\uD2B8\uB9C8\uB2E4 \uB2E4\uC2DC \uC801\uC9C0 \uC54A\uC544\uB3C4 \uB429\uB2C8\uB2E4.",
+      fix: "\uC804\uC5ED \uC9C0\uCE68 \uC4F0\uAE30",
+      problem: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC804\uC5ED \uC9C0\uCE68\uC774 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4.",
+      prescription: "Claude Code\uB294 \uC124\uC815 \uD3F4\uB354(\uAE30\uBCF8\uC740 ~/.claude)\uC758 CLAUDE.md\uC5D0 200\uBC14\uC774\uD2B8 \uC774\uC0C1 \uC801\uC2B5\uB2C8\uB2E4. \uC77C\uD558\uB294 \uBC29\uC2DD\uACFC \uD53C\uD560 \uAC83\uC744 \uBA87 \uC904 \uC801\uC73C\uBA74 \uB429\uB2C8\uB2E4.",
+      method: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC804\uC5ED \uC9C0\uCE68(\uC9C0\uCE68 \uD30C\uC77C\uC758 \uD06C\uAE30\uB97C \uD569\uCCD0 200\uBC14\uC774\uD2B8 \uC774\uC0C1)\uC774 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4.",
+      evidence: "\uC804\uC5ED \uC9C0\uCE68\uC774 \uC788\uB294 \uB3C4\uAD6C {withInstructions} \xB7 \uC4F0\uB294 \uB3C4\uAD6C {tools}",
+      unit: "%",
+      reasons: { no_data: NO_TOOL.ko }
+    }
+  },
+  S2: {
+    en: {
+      name: "Safeguard",
+      good: "Has permission checks or a hook for shell commands",
+      why: "This looks for permission checks in the default mode, or a confirming hook that can block shell commands. With one of them in place, a command you did not mean to run can be stopped before it runs. What the hook actually filters is not checked.",
+      fix: "Add a check before shell commands",
+      problem: "{value} of the tools you use have a safeguard. A tool runs with permission checks bypassed and no confirming hook covers shell commands.",
+      prescription: "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
+      method: "Share of the tools you use that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands.",
+      evidence: "Tools with a safeguard {guarded} \xB7 tools in use {tools}",
+      unit: "%",
+      reasons: {
+        no_data: NO_TOOL.en,
+        unreadable: { text: "A settings file that decides the safeguard could not be read, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uC548\uC804\uC7A5\uCE58",
+      good: "\uAD8C\uD55C \uD655\uC778\uC774\uB098 \uC178 \uBA85\uB839 \uD655\uC778 \uD6C5\uC744 \uB460",
+      why: "\uAE30\uBCF8 \uBAA8\uB4DC\uC758 \uAD8C\uD55C \uD655\uC778\uC774\uB098, \uC178 \uBA85\uB839\uC758 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC774 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4. \uADF8\uB7F0 \uC790\uB9AC\uAC00 \uC788\uC73C\uBA74 \uB73B\uD558\uC9C0 \uC54A\uC740 \uBA85\uB839\uC744 \uC2E4\uD589 \uC804\uC5D0 \uBA48\uCD9C \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uD6C5\uC774 \uBB34\uC5C7\uC744 \uAC78\uB7EC \uB0B4\uB294\uC9C0\uB294 \uBCF4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      fix: "\uC178 \uBA85\uB839 \uC55E\uC5D0 \uD655\uC778 \uB450\uAE30",
+      problem: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4. \uAD8C\uD55C \uD655\uC778\uC744 \uAC74\uB108\uB6F0\uB294\uB370 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uB294 \uB3C4\uAD6C\uAC00 \uC788\uC2B5\uB2C8\uB2E4.",
+      prescription: "Claude Code\uC5D0\uC11C \uC178 \uBA85\uB839(Bash \uB610\uB294 PowerShell)\uC758 \uC2E4\uD589 \uC804\uC5D0 \uACB0\uACFC\uB97C \uAE30\uB2E4\uB9AC\uBA70 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 PreToolUse \uD6C5\uC744 \uC0AC\uC6A9\uC790 \uC124\uC815\uC5D0 \uB450\uACE0 \uCF1C\uAC70\uB098, \uAE30\uBCF8 \uBAA8\uB4DC\uB97C \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2CC \uAC83\uC73C\uB85C \uBC14\uAFB8\uC138\uC694. \uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uB97C \uACC4\uC18D \uC4F0\uB824\uBA74 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC744 \uB450\uC138\uC694.",
+      method: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4.",
+      evidence: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C {guarded} \xB7 \uC4F0\uB294 \uB3C4\uAD6C {tools}",
+      unit: "%",
+      reasons: {
+        no_data: NO_TOOL.ko,
+        unreadable: { text: "\uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815 \uD30C\uC77C \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC5B4 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  S3: {
+    en: {
+      name: "Broken settings",
+      good: "No broken user-editable settings found",
+      why: "This checks settings-file syntax, skill headers, and link targets in the setup you edit yourself.",
+      fix: "Fix broken settings",
+      problem: "Found {value} in the settings checked.",
+      prescription: "Fix the JSON in settings files that do not parse, add a header with name and description at the top of each SKILL.md, and remove links that point nowhere.",
+      method: "Count of unparsable settings files, skills without a header, and links that point nowhere, in the setup you edit yourself. Files inside plugins and managed policy files are not counted.",
+      evidence: "Unparsable settings files {unparsable} \xB7 skills without a header {noFrontmatter} \xB7 links that point nowhere {danglingLinks} \xB7 total {problems}",
+      unit: "{value:problem|problems}"
+    },
+    ko: {
+      name: "\uAE68\uC9C4 \uC124\uC815",
+      good: "\uC9C1\uC811 \uACE0\uCE58\uB294 \uC124\uC815\uC5D0\uC11C \uBB38\uC81C\uB97C \uCC3E\uC9C0 \uBABB\uD568",
+      why: "\uC9C1\uC811 \uACE0\uCE58\uB294 \uC124\uC815\uC5D0\uC11C \uC124\uC815 \uD30C\uC77C\uC758 \uD615\uC2DD, \uC2A4\uD0AC \uBA38\uB9AC\uB9D0, \uB9C1\uD06C \uB300\uC0C1\uC744 \uD655\uC778\uD569\uB2C8\uB2E4.",
+      fix: "\uAE68\uC9C4 \uC124\uC815 \uACE0\uCE58\uAE30",
+      problem: "\uC810\uAC80\uD55C \uC124\uC815\uC5D0\uC11C \uBB38\uC81C\uB97C {value} \uCC3E\uC558\uC2B5\uB2C8\uB2E4.",
+      prescription: "\uD480\uB9AC\uC9C0 \uC54A\uB294 \uC124\uC815 \uD30C\uC77C\uC740 JSON \uAF34\uC744 \uBC14\uB85C\uC7A1\uACE0, \uC2A4\uD0AC\uC740 SKILL.md \uB9E8 \uC704\uC5D0 name\uACFC description\uC774 \uB4E0 \uBA38\uB9AC\uB9D0\uC744 \uB123\uACE0, \uAC00\uB9AC\uD0A4\uB294 \uACF3\uC774 \uC5C6\uB294 \uB9C1\uD06C\uB294 \uC9C0\uC6B0\uC138\uC694.",
+      method: "\uC0AC\uC6A9\uC790\uAC00 \uC9C1\uC811 \uACE0\uCE58\uB294 \uC14B\uD305\uC5D0\uC11C \uD480\uB9AC\uC9C0 \uC54A\uB294 \uC124\uC815 \uD30C\uC77C, \uBA38\uB9AC\uB9D0\uC774 \uC5C6\uB294 \uC2A4\uD0AC, \uAC00\uB9AC\uD0A4\uB294 \uACF3\uC774 \uC5C6\uB294 \uB9C1\uD06C\uC758 \uC218\uC785\uB2C8\uB2E4. \uD50C\uB7EC\uADF8\uC778 \uC548\uC758 \uAC83\uACFC \uAD00\uB9AC \uC815\uCC45 \uD30C\uC77C\uC740 \uC138\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      evidence: "\uD480\uB9AC\uC9C0 \uC54A\uB294 \uC124\uC815 \uD30C\uC77C {unparsable} \xB7 \uBA38\uB9AC\uB9D0\uC774 \uC5C6\uB294 \uC2A4\uD0AC {noFrontmatter} \xB7 \uAC00\uB9AC\uD0A4\uB294 \uACF3\uC774 \uC5C6\uB294 \uB9C1\uD06C {danglingLinks} \xB7 \uD569\uACC4 {problems}",
+      unit: "\uAC1C"
+    }
+  },
+  S4: {
+    en: {
+      name: "Hook failures",
+      good: "Hooks rarely fail",
+      why: "When a hook fails, the check or automation you gave it may not complete. This rule tracks the share of hook runs that failed.",
+      fix: "Fix failing hooks",
+      problem: "{value} of hook runs failed.",
+      prescription: "Open /hooks to see the registered hooks, run the command of a failing hook in a terminal to find why it fails, and remove hooks you no longer use.",
+      method: "Share of hook runs in the scoring window that failed. Blocks that could be on purpose or a failure are counted as neither a run nor a failure.",
+      evidence: "Failures {failures} \xB7 runs {runs} \xB7 blocks not classified {unclassifiedBlocks}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "There were no hook runs to include in the failure rate. Blocks that may have been on purpose are not included." },
+        too_little: { text: "Fewer than 100 hook runs to include in the failure rate, so this was not measured." }
+      }
+    },
+    ko: {
+      name: "\uD6C5 \uC2E4\uD328",
+      good: "\uD6C5 \uC2E4\uD328\uAC00 \uB4DC\uBB3E",
+      why: "\uD6C5\uC774 \uC2E4\uD328\uD558\uBA74 \uADF8 \uD6C5\uC5D0 \uB9E1\uAE34 \uD655\uC778\uC774\uB098 \uC790\uB3D9 \uC791\uC5C5\uC774 \uC81C\uB300\uB85C \uB418\uC9C0 \uC54A\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC774 \uD56D\uBAA9\uC740 \uD6C5 \uC2E4\uD589 \uAC00\uC6B4\uB370 \uC2E4\uD328\uD55C \uBAAB\uC744 \uBD05\uB2C8\uB2E4.",
+      fix: "\uC2E4\uD328\uD558\uB294 \uD6C5 \uACE0\uCE58\uAE30",
+      problem: "\uD6C5 \uC2E4\uD589 \uAC00\uC6B4\uB370 {value}\uAC00 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.",
+      prescription: "/hooks\uC5D0\uC11C \uB4F1\uB85D\uB41C \uD6C5\uC744 \uBCF4\uACE0, \uC2E4\uD328\uD558\uB294 \uD6C5\uC758 \uBA85\uB839\uC744 \uD130\uBBF8\uB110\uC5D0\uC11C \uC9C1\uC811 \uB3CC\uB824 \uAE4C\uB2ED\uC744 \uCC3E\uC73C\uC138\uC694. \uB354 \uC4F0\uC9C0 \uC54A\uB294 \uD6C5\uC740 \uC9C0\uC6B0\uC138\uC694.",
+      method: "\uC810\uC218 \uAD6C\uAC04\uC758 \uD6C5 \uC2E4\uD589 \uAC00\uC6B4\uB370 \uC2E4\uD328\uD55C \uBAAB\uC785\uB2C8\uB2E4. \uC77C\uBD80\uB7EC \uB9C9\uC740 \uAC83\uC778\uC9C0 \uC2E4\uD328\uD574\uC11C \uB9C9\uD78C \uAC83\uC778\uC9C0 \uAC00\uB9B4 \uC218 \uC5C6\uB294 \uB9C9\uC74C\uC740 \uC2E4\uD589\uC5D0\uB3C4 \uC2E4\uD328\uC5D0\uB3C4 \uB123\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      evidence: "\uC2E4\uD328 {failures} \xB7 \uC2E4\uD589 {runs} \xB7 \uAC00\uB9AC\uC9C0 \uBABB\uD55C \uB9C9\uC74C {unclassifiedBlocks}",
+      unit: "%",
+      reasons: {
+        no_data: { text: "\uC2E4\uD328\uC728\uC5D0 \uB123\uC744 \uD6C5 \uC2E4\uD589\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uC77C\uBD80\uB7EC \uB9C9\uC740 \uAC83\uC778\uC9C0 \uAC00\uB9B4 \uC218 \uC5C6\uB294 \uB9C9\uC74C\uC740 \uB123\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." },
+        too_little: { text: "\uC2E4\uD328\uC728\uC5D0 \uB123\uC744 \uD6C5 \uC2E4\uD589\uC774 100\uBC88\uC5D0 \uBABB \uBBF8\uCCD0 \uC7AC\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  },
+  S5: {
+    en: {
+      name: "MCP connection failures",
+      good: "MCP connection failures are uncommon",
+      why: "When a server connection fails, calls to its tools may fail until a connection succeeds.",
+      fix: "Fix MCP servers that fail to connect",
+      problem: "{value} of sessions had an MCP connection failure.",
+      prescription: "Open /mcp to find the servers that fail to connect, then fix their settings or turn off the ones you do not use.",
+      method: "Share of main sessions with responses in the scoring window that had a connection failure. Servers waiting for sign-in or still connecting are not failures.",
+      evidence: "Sessions with a failure {failedSessions} \xB7 main sessions with responses {mainSessions} \xB7 servers turned on {enabledServers}",
+      unit: "%",
+      reasons: {
+        not_applicable: { text: "No MCP server is turned on." },
+        unreadable: { text: "A settings file that decides which servers are on, or a place where servers are defined, could not be read." },
+        no_data: { text: "No main session had responses in the scoring window." }
+      }
+    },
+    ko: {
+      name: "MCP \uC5F0\uACB0 \uC2E4\uD328",
+      good: "MCP \uC5F0\uACB0 \uC2E4\uD328\uAC00 \uB4DC\uBB3E",
+      why: "\uC11C\uBC84 \uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD558\uBA74 \uB2E4\uC2DC \uC5F0\uACB0\uB420 \uB54C\uAE4C\uC9C0 \uADF8 \uC11C\uBC84\uC758 \uB3C4\uAD6C \uD638\uCD9C\uB3C4 \uC2E4\uD328\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+      fix: "\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD558\uB294 MCP \uC11C\uBC84 \uACE0\uCE58\uAE30",
+      problem: "\uC751\uB2F5\uC774 \uC788\uB294 \uC138\uC158 \uAC00\uC6B4\uB370 {value}\uC5D0\uC11C MCP \uC5F0\uACB0 \uC2E4\uD328\uAC00 \uC788\uC5C8\uC2B5\uB2C8\uB2E4.",
+      prescription: "/mcp\uC5D0\uC11C \uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD558\uB294 \uC11C\uBC84\uB97C \uCC3E\uC544 \uC124\uC815\uC744 \uACE0\uCE58\uAC70\uB098, \uC4F0\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB294 \uAEBC \uB450\uC138\uC694.",
+      method: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158 \uAC00\uC6B4\uB370 \uC5F0\uACB0 \uC2E4\uD328\uAC00 \uC788\uC5C8\uB358 \uC138\uC158\uC758 \uBAAB\uC785\uB2C8\uB2E4. \uC778\uC99D\uC744 \uAE30\uB2E4\uB9AC\uAC70\uB098 \uC5F0\uACB0\uD558\uB294 \uC911\uC778 \uC11C\uBC84\uB294 \uC2E4\uD328\uB85C \uC138\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      evidence: "\uC2E4\uD328\uAC00 \uC788\uC5C8\uB358 \uC138\uC158 {failedSessions} \xB7 \uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158 {mainSessions} \xB7 \uCF1C\uC838 \uC788\uB294 \uC11C\uBC84 {enabledServers}",
+      unit: "%",
+      reasons: {
+        not_applicable: { text: "\uCF1C\uC838 \uC788\uB294 MCP \uC11C\uBC84\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4." },
+        unreadable: { text: "\uC11C\uBC84\uC758 \uCF1C\uC9D0\uC744 \uC815\uD558\uB294 \uC124\uC815 \uD30C\uC77C\uC774\uB098 \uC11C\uBC84\uB97C \uCC3E\uB294 \uACF3 \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uAC83\uC774 \uC788\uC2B5\uB2C8\uB2E4." },
+        no_data: { text: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC751\uB2F5\uC774 \uC788\uB294 \uC8FC \uC138\uC158\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }
+      }
+    }
+  }
+};
+
+// src/core/copy/findings.ts
+var RULE_COPY = { ...SETUP_COPY, ...EFFICIENCY_COPY, ...FIT_COPY, ...INTENSITY_COPY };
+function joinValue(value, unit, lang) {
+  return unit === "%" || lang === "ko" ? `${value}${unit}` : `${value} ${unit}`;
+}
+function fillEvidence(template, evidence, extra = {}) {
+  return fill(template, { ...Object.fromEntries(slots(template).map((slot) => [slot, null])), ...evidence, ...extra });
+}
+function reasonOf(copy, reason, lang) {
+  const own = copy.reasons?.[reason];
+  const common = REASON_COPY[reason][lang];
+  return { word: own?.word ?? common.word, text: own?.text ?? common.text };
+}
+function measured(kind, value, copy) {
+  const shown = formatValue(kind, value);
+  return { value: shown, unit: fill(copy.unit, { value: shown === "1" ? 1 : 0 }) };
+}
+function toolLine(kind, value, copy, lang) {
+  const tool = TOOL_NAMES[value.tool][lang];
+  const evidence = fillEvidence(copy.evidence, value.evidence);
+  if (value.status === "scored") {
+    const shown = measured(kind, value.value, copy);
+    return fill(TOOL_LINE[lang].measured, { tool, value: joinValue(shown.value, shown.unit, lang), evidence });
+  }
+  return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy, value.reason, lang).word, evidence });
+}
+function reasonEvidence(finding) {
+  if (finding.tools.length === 0) return finding.evidence;
+  return finding.tools.find((value) => value.reason === finding.reason)?.evidence ?? {};
+}
+var candidateSources = (finding) => finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0 && (value.reason === "too_little" || value.reason === "watching"));
+function description(finding, copy, lang, shown) {
+  if (finding.category === "strength" || finding.category === "average") return copy.why;
+  if (finding.category === "unmeasured") return fillEvidence(reasonOf(copy, finding.reason, lang).text, reasonEvidence(finding));
+  const sources = candidateSources(finding);
+  if (finding.status === "unmeasured") {
+    const sentences = sources.map((value) => {
+      const sentence = fillEvidence(copy.repairUnmeasured?.[value.reason] ?? reasonOf(copy, value.reason, lang).text, value.evidence, { candidates: value.candidates.length });
+      return sources.length > 1 ? `${TOOL_NAMES[value.tool][lang]}: ${sentence}` : sentence;
+    });
+    return sentences.length > 0 ? sentences.join(" ") : fillEvidence(reasonOf(copy, finding.reason, lang).text, reasonEvidence(finding));
+  }
+  const others = sources.map((value) => fillEvidence(OTHER_TOOL_COPY[value.reason][lang], value.evidence, { tool: TOOL_NAMES[value.tool][lang], candidates: value.candidates.length }));
+  return [fill(copy.problem, { value: joinValue(shown.value, shown.unit, lang) }), ...others].join(" ");
+}
+function safeguardLine(safeguard, lang) {
+  const copy = SAFEGUARD_COPY[lang];
+  const { guardHook, permissionChecks } = safeguard;
+  const condition = guardHook === null || permissionChecks === null ? copy.unknown : guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
+  return fill(copy.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition });
+}
+var WHY_ORDER = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
+function unjudgedNotes(servers, lang) {
+  if (servers.length === 0) return [];
+  const copy = UNJUDGED_COPY[lang];
+  const lines = [copy.intro];
+  for (const tool of [...new Set(servers.map((server) => server.tool))].sort()) {
+    for (const why of WHY_ORDER) {
+      const count = servers.filter((server) => server.tool === tool && server.why === why).length;
+      if (count > 0) lines.push(fill(copy.line, { tool: TOOL_NAMES[tool][lang], why: copy.why[why], count }));
+    }
+  }
+  if (servers.some((server) => server.scope === "claude-ai")) lines.push(copy.deny);
+  return lines;
+}
+function findingText(finding, details, lang) {
+  const copy = RULE_COPY[finding.ruleId][lang];
+  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy) : null;
+  const method = [copy.method];
+  if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy.evidence, finding.evidence));
+  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy, lang));
+  if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
+  return {
+    name: copy.name,
+    title: finding.category === "strength" ? copy.good : finding.category === "repair" ? copy.fix : copy.name,
+    value: shown?.value ?? null,
+    unit: shown?.unit ?? null,
+    reason: finding.status === "unmeasured" ? reasonOf(copy, finding.reason, lang).word : null,
+    description: description(finding, copy, lang, shown),
+    prescription: finding.category === "average" || finding.category === "repair" ? copy.prescription : null,
+    method,
+    notes: finding.ruleId === "E6" ? unjudgedNotes(details.unjudgedServers, lang) : []
+  };
+}
+
+// src/core/copy/grades.ts
+var GRADE_COPY = {
+  5: {
+    en: { name: "Graduation Day", diagnosis: "Your AQ is in the highest grade band. Check each item's result as well." },
+    ko: { name: "\uBA85\uC138\uC11C \uC878\uC5C5\uC2DD", diagnosis: "AQ\uAC00 \uAC00\uC7A5 \uB192\uC740 \uB4F1\uAE09\uC785\uB2C8\uB2E4. \uD56D\uBAA9\uB9C8\uB2E4\uC758 \uACB0\uACFC\uB3C4 \uD568\uAED8 \uBCF4\uC138\uC694." }
+  },
+  4: {
+    en: { name: "Stamp of Approval", diagnosis: "Your AQ is in a high grade band. Check each item's result as well." },
+    ko: { name: "\uD569\uACA9 \uB3C4\uC7A5", diagnosis: "AQ\uAC00 \uB192\uC740 \uB4F1\uAE09\uC785\uB2C8\uB2E4. \uD56D\uBAA9\uB9C8\uB2E4\uC758 \uACB0\uACFC\uB3C4 \uD568\uAED8 \uBCF4\uC138\uC694." }
+  },
+  3: {
+    en: { name: "Sleeves Up", diagnosis: "Let's go through the results item by item. If anything needs work, Chunsik will help fix it." },
+    ko: { name: "\uD314 \uAC77\uACE0 \uC218\uB9AC", diagnosis: "\uC810\uAC80 \uACB0\uACFC\uB97C \uD56D\uBAA9\uB9C8\uB2E4 \uC0B4\uD3B4\uBD05\uC2DC\uB2E4. \uC190\uBCFC \uACF3\uC774 \uC788\uC73C\uBA74 \uCD98\uC2DD\uC774\uAC00 \uD568\uAED8 \uACE0\uCE69\uB2C8\uB2E4." }
+  },
+  2: {
+    en: { name: "Who did this?", diagnosis: "Let's look at the checked items one by one. Chunsik will go through them with you." },
+    ko: { name: "\uB204\uAC00 \uC774\uB7AC\uC5B4?", diagnosis: "\uC810\uAC80\uD55C \uD56D\uBAA9\uC744 \uD558\uB098\uC529 \uC0B4\uD3B4\uBD05\uC2DC\uB2E4. \uCD98\uC2DD\uC774\uAC00 \uD568\uAED8 \uD655\uC778\uD569\uB2C8\uB2E4." }
+  },
+  1: {
+    en: { name: "Lightning Slash", diagnosis: "There is a lot to fix. Chunsik is starting right away." },
+    ko: { name: "\uBC88\uAC1C \uBCA0\uAE30", diagnosis: "\uC190\uBCFC \uACF3\uC774 \uB9CE\uC2B5\uB2C8\uB2E4. \uCD98\uC2DD\uC774\uAC00 \uBC14\uB85C \uC2DC\uC791\uD569\uB2C8\uB2E4." }
+  }
+};
+var WITHHELD_COPY = {
+  en: { records: "There are not enough records for a score yet. Try another checkup after more use has been recorded.", noAxes: "No criterion could be measured, so there is no score." },
+  ko: { records: "\uC810\uC218\uB97C \uB0B4\uB294 \uB370 \uD544\uC694\uD55C \uAE30\uB85D\uC774 \uBD80\uC871\uD569\uB2C8\uB2E4. \uC0AC\uC6A9 \uAE30\uB85D\uC774 \uB354 \uC313\uC778 \uB4A4 \uB2E4\uC2DC \uC810\uAC80\uD574 \uBCF4\uC138\uC694.", noAxes: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uC5C6\uC5B4 \uC810\uC218\uB97C \uB0B4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." }
+};
+var EMPTY_COPY = {
+  en: { strengths: "No clear strength was found yet. Let's start with the fixes, one at a time.", repairs: "Nothing needs fixing right now." },
+  ko: { strengths: "\uC544\uC9C1 \uB69C\uB837\uD55C \uAC15\uC810\uC744 \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uACE0\uCE60 \uAC83\uBD80\uD130 \uD558\uB098\uC529 \uD574 \uBD05\uC2DC\uB2E4.", repairs: "\uC9C0\uAE08\uC740 \uACE0\uCE60 \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4." }
+};
+function resultText(score, categories, lang) {
+  const fewRecords = score.withheld.includes("too_few_requests") || score.withheld.includes("too_few_days");
+  return {
+    grade: score.tier === null ? null : GRADE_COPY[score.tier][lang].name,
+    diagnosis: score.tier !== null ? GRADE_COPY[score.tier][lang].diagnosis : fewRecords ? WITHHELD_COPY[lang].records : WITHHELD_COPY[lang].noAxes,
+    noStrengths: categories.includes("strength") ? null : EMPTY_COPY[lang].strengths,
+    noRepairs: categories.includes("repair") ? null : EMPTY_COPY[lang].repairs
+  };
+}
+
+// src/core/copy/notices.ts
+var WITHHELD_COPY2 = {
+  too_few_requests: { en: "There were fewer than 20 requests from you in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC758 \uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
+  too_few_days: { en: "The tools were used on fewer than 3 days in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC4F4 \uB0A0\uC774 3\uC77C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
+  no_axes: { en: "None of the four criteria could be measured.", ko: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4." }
+};
+var METRIC = {
+  skills: { en: "skill use", ko: "\uC2A4\uD0AC \uC0AC\uC6A9" },
+  mcp: { en: "MCP calls", ko: "MCP \uD638\uCD9C" }
+};
+var OBSERVATION_REASON = {
+  "unreadable-files": { en: "unreadable files", ko: "\uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C" },
+  "too-long-lines": { en: "lines too long", ko: "\uB108\uBB34 \uAE34 \uC904" },
+  "unconfirmed-pieces": { en: "unconfirmed pieces", ko: "\uD655\uC778\uD558\uC9C0 \uBABB\uD55C \uC870\uAC01" }
+};
+var UNREADABLE_SETUP = {
+  claude_json: { en: ".claude.json", ko: ".claude.json" },
+  user_settings: { en: "user settings", ko: "\uC0AC\uC6A9\uC790 \uC124\uC815" },
+  managed_settings: { en: "managed policy", ko: "\uAD00\uB9AC \uC815\uCC45" },
+  project_settings: { en: "project settings", ko: "\uD504\uB85C\uC81D\uD2B8 \uC124\uC815" },
+  local_settings: { en: "local settings", ko: "\uB85C\uCEEC \uC124\uC815" },
+  mcp_json: { en: "project .mcp.json", ko: "\uD504\uB85C\uC81D\uD2B8\uC758 .mcp.json" },
+  plugins_file: { en: "plugin install records", ko: "\uD50C\uB7EC\uADF8\uC778 \uC124\uCE58 \uAE30\uB85D" },
+  skill_dirs: { en: "skill folders", ko: "\uC2A4\uD0AC \uD3F4\uB354" },
+  instructions: { en: "instruction files", ko: "\uC9C0\uCE68 \uD30C\uC77C" },
+  hook_settings: { en: "settings with hooks", ko: "\uD6C5\uC744 \uC801\uC740 \uC124\uC815" },
+  skill_files: { en: "SKILL.md files", ko: "SKILL.md" }
+};
+var UNCOUNTED2 = {
+  composition_unknown: { en: "contents unknown", ko: "\uAD6C\uC131\uC744 \uBAA8\uB984" },
+  not_installed: { en: "not in the install records", ko: "\uC124\uCE58 \uAE30\uB85D\uC5D0 \uC5C6\uC74C" },
+  skills_unreadable: { en: "skill folder could not be read", ko: "\uC2A4\uD0AC \uD3F4\uB354\uB97C \uC77D\uC9C0 \uBABB\uD568" },
+  mcp_unreadable: { en: "MCP definitions could not be read", ko: "MCP \uC815\uC758\uB97C \uC77D\uC9C0 \uBABB\uD568" },
+  hooks_unreadable: { en: "hooks could not be read", ko: "\uD6C5\uC744 \uC77D\uC9C0 \uBABB\uD568" }
+};
+var UNCLASSIFIED = {
+  compaction: { en: "{count} {count:compaction|compactions}", ko: "\uC555\uCD95 {count}\uAC1C" },
+  denial: { en: "{count} {count:denial marker|denial markers}", ko: "\uAC70\uC808 \uD45C\uC2DC {count}\uAC1C" },
+  hook: { en: "{count} {count:hook attachment|hook attachments}", ko: "\uD6C5 \uCCA8\uBD80 {count}\uAC1C" }
+};
+var LINES = {
+  en: {
+    withheld: "No AQ was given. {reasons}",
+    state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
+    observation_incomplete: "{tool}: the records of {metric} could not all be read ({reasons}), so unused ones were not judged.",
+    setup_unreadable: "{tool}: some setup could not be read ({what}). Only what was read is counted.",
+    setupCounted: "{tool}: some setup could not be read ({what}, {count} {count:place|places}). Only what was read is counted.",
+    plugins_uncounted: "{tool}: {count} enabled {count:plugin has|plugins have} information that could not be fully inspected ({why}).",
+    setup_problems_unscored: "{tool}: {count} {count:problem was|problems were} found in places that scores do not count (inside plugins, managed policy, files the tool writes).",
+    projects_gone: "{count} {count:project|projects} whose folder is no longer on this PC {count:was|were} left out of the rules that look at instructions and settings.",
+    version_unverified: "{tool}: the records include {count} {count:version|versions} outside the verified range ({from} to {to}). Only the fields that could be read are counted.",
+    weak_human_requests: "{tool}: {weak} of {total} {total:request|requests} in the scoring window {weak:has|have} weak evidence of coming from a person.",
+    overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
+    unclassified: "{tool}: some records could not be classified ({items}).",
+    orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session."
+  },
+  ko: {
+    withheld: "AQ\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. {reasons}",
+    state_reset: "\uC0C1\uD0DC \uD30C\uC77C\uC774 \uAE68\uC838 \uC0C8\uB85C \uC2DC\uC791\uD588\uC2B5\uB2C8\uB2E4. \uC124\uCE58\uB97C \uC9C0\uCF1C\uBCF8 \uAE30\uB85D\uC774 \uCC98\uC74C\uBD80\uD130 \uB2E4\uC2DC \uC313\uC785\uB2C8\uB2E4.",
+    record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    observation_incomplete: "{tool}\uC758 {metric} \uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD574({reasons}) \uC548 \uC4F0\uB294 \uAC83\uC744 \uD310\uC815\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    setup_unreadable: "{tool}\uC5D0\uC11C \uC77D\uC9C0 \uBABB\uD55C \uC14B\uD305\uC774 \uC788\uC2B5\uB2C8\uB2E4({what}). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    setupCounted: "{tool}\uC5D0\uC11C \uC77D\uC9C0 \uBABB\uD55C \uC14B\uD305\uC774 \uC788\uC2B5\uB2C8\uB2E4({what} {count}\uACF3). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    plugins_uncounted: "{tool}\uC5D0\uC11C \uCF1C\uC838 \uC788\uB294 \uD50C\uB7EC\uADF8\uC778 {count}\uAC1C\uC5D0 \uD655\uC778\uD558\uC9C0 \uBABB\uD55C \uC815\uBCF4\uAC00 \uC788\uC2B5\uB2C8\uB2E4({why}).",
+    setup_problems_unscored: "{tool}\uC5D0\uC11C \uC810\uC218\uC5D0 \uC138\uC9C0 \uC54A\uB294 \uACF3(\uD50C\uB7EC\uADF8\uC778 \uC548, \uAD00\uB9AC \uC815\uCC45, \uB3C4\uAD6C\uAC00 \uC4F0\uB294 \uD30C\uC77C)\uC5D0 \uBB38\uC81C\uAC00 {count}\uAC1C \uC788\uC2B5\uB2C8\uB2E4.",
+    projects_gone: "\uC791\uC5C5 \uD3F4\uB354\uAC00 \uC9C0\uAE08 PC\uC5D0 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8 {count}\uAC1C\uB294 \uC9C0\uCE68\uACFC \uC124\uC815\uC744 \uBCF4\uB294 \uADDC\uCE59\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4.",
+    version_unverified: "{tool} \uAE30\uB85D\uC5D0 \uD655\uC778\uD55C \uBC94\uC704({from}~{to}) \uBC16\uC758 \uBC84\uC804\uC774 {count}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC744 \uC218 \uC788\uB294 \uD544\uB4DC\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    weak_human_requests: "{tool}\uC758 \uC810\uC218 \uAD6C\uAC04 \uC0AC\uB78C \uC694\uCCAD {total}\uAC1C \uAC00\uC6B4\uB370 {weak}\uAC1C\uB294 \uC0AC\uB78C\uC774 \uBCF4\uB0C8\uB2E4\uB294 \uADFC\uAC70\uAC00 \uC57D\uD569\uB2C8\uB2E4.",
+    overlapping_responses: "{tool}\uC5D0\uC11C \uCC98\uC74C \uB098\uC628 \uC751\uB2F5\uC774 \uB2E4\uB978 \uC138\uC158\uACFC \uACB9\uCE58\uB294 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uACB9\uCE5C \uC751\uB2F5\uC744 \uBE7C\uC9C0 \uC54A\uACE0 \uC14C\uC2B5\uB2C8\uB2E4.",
+    unclassified: "{tool}\uC5D0 \uBD84\uB958\uD558\uC9C0 \uBABB\uD55C \uAE30\uB85D\uC774 \uC788\uC2B5\uB2C8\uB2E4({items}).",
+    orphan_subsessions: "{tool}\uC5D0 \uBD80\uBAA8 \uC138\uC158\uC744 \uBAA8\uB974\uB294 \uD558\uC704 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4."
+  }
+};
+var LIST_JOIN = ", ";
+function unclassifiedItems(counts, lang) {
+  const groups = ["compaction", "denial", "hook"].map((group) => ({ group, count: counts.filter((item) => item.what.split(":")[0] === group).reduce((sum2, item) => sum2 + item.count, 0) }));
+  return groups.filter((item) => item.count > 0).map((item) => fill(UNCLASSIFIED[item.group][lang], { count: item.count })).join(LIST_JOIN);
+}
+function noticeText(notice, lang) {
+  const lines = LINES[lang];
+  const tool = "tool" in notice ? TOOL_NAMES[notice.tool][lang] : "";
+  switch (notice.kind) {
+    case "score_withheld":
+      return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY2[reason][lang]).join(" ") });
+    case "state_reset":
+      return lines.state_reset;
+    case "record_unreadable":
+      return fill(lines.record_unreadable, { tool, files: notice.files.length, dirs: notice.dirs.length });
+    case "observation_incomplete":
+      return fill(lines.observation_incomplete, { tool, metric: METRIC[notice.metric][lang], reasons: notice.reasons.map((reason) => OBSERVATION_REASON[reason][lang]).join(LIST_JOIN) });
+    case "setup_unreadable": {
+      const what = UNREADABLE_SETUP[notice.what][lang];
+      return notice.targets.length > 0 ? fill(lines.setupCounted, { tool, what, count: notice.targets.length }) : fill(lines.setup_unreadable, { tool, what });
+    }
+    case "plugins_uncounted":
+      return fill(lines.plugins_uncounted, { tool, count: notice.plugins.length, why: UNCOUNTED2[notice.why][lang] });
+    case "setup_problems_unscored":
+      return fill(lines.setup_problems_unscored, { tool, count: notice.problems.length });
+    case "projects_gone":
+      return fill(lines.projects_gone, { count: notice.projects.length });
+    case "version_unverified":
+      return fill(lines.version_unverified, { tool, count: notice.versions.length, from: notice.verified.from, to: notice.verified.to });
+    case "weak_human_requests":
+      return fill(lines.weak_human_requests, { tool, weak: notice.weak, total: notice.total });
+    case "overlapping_responses":
+      return fill(lines.overlapping_responses, { tool, sessions: notice.sessions });
+    case "unclassified":
+      return fill(lines.unclassified, { tool, items: unclassifiedItems(notice.counts, lang) });
+    case "orphan_subsessions":
+      return fill(lines.orphan_subsessions, { tool, sessions: notice.sessions });
+  }
 }
 
 // src/core/result/coverage.ts
@@ -1315,6 +2411,7 @@ function resultUsage(input, evaluation, collected) {
 // src/core/result/assemble.ts
 var RESULT_SCHEMA = 1;
 var byText10 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var textsOf = (make) => ({ en: make("en"), ko: make("ko") });
 var SCOPE_ORDER3 = ["user", "local", "project", "plugin", "claude-ai"];
 function unjudgedServers(input, evaluation) {
   const windows = makeWindows(input.clock.nowMs, input.clock.timeZone);
@@ -1334,27 +2431,32 @@ function unjudgedServers(input, evaluation) {
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const findings = evaluation.findings.map((finding) => ({
-    ...finding,
-    tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId, coverageByTool.get(value.tool)) }))
-  }));
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation) };
+  const findings = evaluation.findings.map((finding) => {
+    const source2 = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId, coverageByTool.get(value.tool)) })) };
+    return { ...source2, text: textsOf((lang) => findingText(source2, details, lang)) };
+  });
+  const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
+  const categories = findings.map((finding) => finding.category);
   return {
     schema: RESULT_SCHEMA,
     rulesVersion: evaluation.rulesVersion,
     appVersion: source.appVersion,
     evaluatedAt: new Date(input.clock.nowMs).toISOString(),
     timezone: input.clock.timeZone,
+    lang: source.lang,
     window: evaluation.windows,
     tools: resultTools(input, evaluation, collected),
     coverage: resultCoverage(input, collected),
     score: evaluation.score,
+    text: textsOf((lang) => resultText(evaluation.score, categories, lang)),
     axes: evaluation.axes,
     findings,
     candidates: evaluation.candidates,
     usage: resultUsage(input, evaluation, collected),
     deepHints: deepHints(input),
-    notices: sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]),
-    details: { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation) }
+    notices: notices.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
+    details
   };
 }
 
@@ -1389,9 +2491,18 @@ function summaryNotice(notice) {
       return { kind: notice.kind, tool, detail: null, count: notice.counts.reduce((sum2, item) => sum2 + item.count, 0) };
   }
 }
+function fixDetail(fix, lang) {
+  const copy = SUMMARY_COPY[lang];
+  if (fix.gain !== null) return fill(copy.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  if (!fix.measured) return fill(copy.unmeasured, { candidates: fix.candidates });
+  if (fix.unmeasuredTools.length > 0) return fill(copy.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
+  return fill(copy.candidates, { candidates: fix.candidates });
+}
 function checkupSummary(result, reportPath) {
+  const lang = result.lang;
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const fixFirst = result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT).map((finding) => ({
+  const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  const fixFirst = repairs.map((finding) => ({
     ruleId: finding.ruleId,
     axis: finding.axis,
     gain: finding.gain,
@@ -1408,7 +2519,17 @@ function checkupSummary(result, reportPath) {
     best: strength === null ? null : { ruleId: strength.ruleId, axis: strength.axis, kind: strength.kind, value: strength.value },
     fixFirst,
     notices: result.notices.map(summaryNotice),
-    reportPath
+    reportPath,
+    lang,
+    text: {
+      grade: result.text[lang].grade,
+      diagnosis: result.text[lang].diagnosis,
+      best: strength === null ? null : { title: strength.text[lang].title, detail: fill(SUMMARY_COPY[lang].best, { name: strength.text[lang].name, value: joinValue(strength.text[lang].value, strength.text[lang].unit, lang) }) },
+      noBest: result.text[lang].noStrengths,
+      fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index], lang) })),
+      noFixFirst: result.text[lang].noRepairs,
+      notices: result.notices.map((notice) => notice.text[lang])
+    }
   };
 }
 
@@ -4819,6 +5940,53 @@ async function gatherCheckupInput(options) {
   return { input, collected, facts, tools };
 }
 
+// src/commands/run-notices.ts
+var STEP = {
+  result: { en: "the result file", ko: "\uD3C9\uAC00 \uACB0\uACFC \uD30C\uC77C\uC744" },
+  state: { en: "the state file", ko: "\uC0C1\uD0DC \uD30C\uC77C\uC744" },
+  history: { en: "the score history", ko: "\uC810\uC218 \uC774\uB825\uC744" }
+};
+var PRUNED = {
+  reports: { en: "old result files", ko: "\uC624\uB798\uB41C \uACB0\uACFC \uD30C\uC77C\uC744" },
+  cache: { en: "cache entries whose source is gone", ko: "\uC6D0\uBCF8\uC774 \uC5C6\uC5B4\uC9C4 \uCE90\uC2DC \uD56D\uBAA9\uC744" }
+};
+var FOLDER = {
+  state: { en: "state", ko: "\uC0C1\uD0DC" },
+  reports: { en: "results", ko: "\uACB0\uACFC" },
+  cache: { en: "cache", ko: "\uCE90\uC2DC" }
+};
+var LINES2 = {
+  en: {
+    save_failed: "Could not write {step} to the state folder ({code}), so the rest was not saved.",
+    prune_failed: "Could not clean up {what} ({code}). Saving itself finished.",
+    prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
+    not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
+    result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given."
+  },
+  ko: {
+    save_failed: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 {step} \uC4F0\uC9C0 \uBABB\uD574({code}) \uB0A8\uC740 \uC800\uC7A5\uC744 \uBA48\uCDC4\uC2B5\uB2C8\uB2E4.",
+    prune_failed: "{what} \uC815\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4({code}). \uC800\uC7A5\uC740 \uB05D\uB0AC\uC2B5\uB2C8\uB2E4.",
+    prune_skipped: "{link} \uD3F4\uB354\uAC00 \uB9C1\uD06C\uB77C\uC11C {what} \uC815\uB9AC\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uB294 \uC2E4\uD589\uC774\uB77C \uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uC544\uBB34\uAC83\uB3C4 \uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC774 \uC810\uAC80\uC740 \uCE90\uC2DC\uB97C \uC4F0\uC9C0 \uC54A\uC558\uACE0 \uC810\uC218 \uC774\uB825\uC5D0\uB3C4 \uB0A8\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+    result_unwritten: "\uD3C9\uAC00 \uACB0\uACFC \uD30C\uC77C\uC744 \uC6B4\uC601\uCCB4\uC81C \uC784\uC2DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC694\uC57D\uB9CC \uB0C5\uB2C8\uB2E4."
+  }
+};
+function runNoticeText(notice, lang) {
+  const lines = LINES2[lang];
+  switch (notice.kind) {
+    case "save_failed":
+      return fill(lines.save_failed, { step: STEP[notice.step][lang], code: notice.code });
+    case "prune_failed":
+      return fill(lines.prune_failed, { what: PRUNED[notice.what][lang], code: notice.code });
+    case "prune_skipped":
+      return fill(lines.prune_skipped, { link: FOLDER[notice.link][lang], what: PRUNED[notice.what][lang] });
+    case "not_saved":
+      return lines.not_saved;
+    case "result_unwritten":
+      return fill(lines.result_unwritten, { code: notice.code });
+  }
+}
+
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
 import { basename as basename5, dirname as dirname3 } from "node:path";
@@ -4855,7 +6023,7 @@ async function runCheckup(options) {
     ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, run: { stateBroken: opened.broken } });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
   const stamp = resultStamp(options.clock.nowMs);
   const notices = [];
   let saved = false;
@@ -4892,8 +6060,19 @@ async function runCheckup(options) {
       notices.push({ kind: "result_unwritten", code: codeOf(error) });
     }
   }
-  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices };
+  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, null), run: run2, result };
+}
+
+// src/core/copy/lang.ts
+var LANGS = ["en", "ko"];
+function supportedLang(tag) {
+  if (typeof tag !== "string") return null;
+  const primary = tag.trim().toLowerCase().split(/[-_.@]/)[0];
+  return LANGS.find((lang) => lang === primary) ?? null;
+}
+function pickLang(flag, osLocale) {
+  return supportedLang(flag) ?? supportedLang(osLocale) ?? "en";
 }
 
 // src/commands/clean.ts
@@ -5051,6 +6230,24 @@ function nodeMajorOk(version) {
   return Number.isInteger(major) && major >= 22;
 }
 var CHECKUP_FLAGS = /* @__PURE__ */ new Set(["--no-open", "--no-save", "--rescan"]);
+function checkupArgs(rest) {
+  const flags = /* @__PURE__ */ new Set();
+  let lang = null;
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index];
+    if (arg === "--lang") {
+      const value = rest[index + 1];
+      if (value === void 0 || value.startsWith("-")) return null;
+      lang = value;
+      index++;
+    } else if (CHECKUP_FLAGS.has(arg)) {
+      flags.add(arg);
+    } else {
+      return null;
+    }
+  }
+  return { flags, lang };
+}
 var printJson = (value) => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}
 `);
@@ -5076,16 +6273,18 @@ async function run(command, rest, context) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
     return 0;
   }
-  if (command === "checkup" && rest.every((flag) => CHECKUP_FLAGS.has(flag))) {
+  const args = command === "checkup" ? checkupArgs(rest) : null;
+  if (args !== null) {
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
       tmpdir: context.tmpdir ?? tmpdir(),
       platform: context.platform ?? process.platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
       stateDir: stateDir(context.homedir),
-      save: !rest.includes("--no-save"),
-      rescan: rest.includes("--rescan"),
+      save: !args.flags.has("--no-save"),
+      rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
     });

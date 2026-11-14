@@ -1,5 +1,9 @@
-// 평가 결과에서 터미널에 전할 요약을 만든다. 표준 출력으로 AI에게 가므로 스킬·서버·프로젝트의 이름과 경로를 넣지 않는다. 문장은 4부(문구)가 이 재료로 만든다(순수 함수, 설계 11.5, 12.3, 15, 19.1)
+// 평가 결과에서 터미널에 전할 요약을 만든다. 표준 출력으로 AI에게 가므로 스킬·서버·프로젝트의 이름과 경로를 넣지 않는다. 문장은 결과의 언어 하나로 싣는다(순수 함수, 설계 11.5, 12.3, 13.2, 15, 19.1)
 import type { ToolId } from "../../adapters/types.ts";
+import { AXIS_NAMES, SUMMARY_COPY, TOOL_NAMES } from "../copy/common.ts";
+import { joinValue } from "../copy/findings.ts";
+import { fill } from "../copy/format.ts";
+import type { Lang } from "../copy/lang.ts";
 import type { Axis, RuleId, ValueKind } from "../rules.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { Grade } from "../score.ts";
@@ -30,6 +34,24 @@ export interface SummaryNotice {
   count: number | null;
 }
 
+/** 요약의 문장(결과의 언어). 모델은 이 문장을 그대로 옮기고 숫자를 바꾸거나 더하지 않는다(설계 15) */
+export interface SummaryText {
+  /** 등급의 별명. AQ를 내지 않았으면 null이다 */
+  grade: string | null;
+  /** 진단 한 줄 */
+  diagnosis: string;
+  /** 가장 잘하는 것의 제목과 덧붙이는 말(규칙 이름과 잰 값). 없으면 null이다 */
+  best: { title: string; detail: string } | null;
+  /** 가장 잘하는 것이 없을 때의 문장 */
+  noBest: string | null;
+  /** 먼저 고칠 것마다 제목과 덧붙이는 말(fixFirst와 같은 차례) */
+  fixFirst: { title: string; detail: string }[];
+  /** 먼저 고칠 것이 없을 때의 문장 */
+  noFixFirst: string | null;
+  /** 알림의 문장(notices와 같은 차례) */
+  notices: string[];
+}
+
 export interface CheckupSummary {
   aq: number | null;
   grade: Grade | null;
@@ -42,6 +64,8 @@ export interface CheckupSummary {
   notices: SummaryNotice[];
   /** 결과 화면의 경로. 결과 화면을 만들지 않았으면 null */
   reportPath: string | null;
+  lang: Lang;
+  text: SummaryText;
 }
 
 function summaryNotice(notice: Notice): SummaryNotice {
@@ -74,19 +98,26 @@ function summaryNotice(notice: Notice): SummaryNotice {
   }
 }
 
+function fixDetail(fix: SummaryFix, lang: Lang): string {
+  const copy = SUMMARY_COPY[lang];
+  if (fix.gain !== null) return fill(copy.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  if (!fix.measured) return fill(copy.unmeasured, { candidates: fix.candidates });
+  if (fix.unmeasuredTools.length > 0) return fill(copy.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
+  return fill(copy.candidates, { candidates: fix.candidates });
+}
+
 export function checkupSummary(result: CheckupResult, reportPath: string | null): CheckupSummary {
+  const lang = result.lang;
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const fixFirst = result.findings
-    .filter((finding) => finding.category === "repair")
-    .slice(0, FIX_FIRST_LIMIT)
-    .map((finding): SummaryFix => ({
-      ruleId: finding.ruleId,
-      axis: finding.axis,
-      gain: finding.gain,
-      measured: finding.status === "scored",
-      candidates: finding.candidates.length,
-      unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
-    }));
+  const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  const fixFirst = repairs.map((finding): SummaryFix => ({
+    ruleId: finding.ruleId,
+    axis: finding.axis,
+    gain: finding.gain,
+    measured: finding.status === "scored",
+    candidates: finding.candidates.length,
+    unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
+  }));
   return {
     aq: result.score.aq,
     grade: result.score.grade,
@@ -97,5 +128,15 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
     fixFirst,
     notices: result.notices.map(summaryNotice),
     reportPath,
+    lang,
+    text: {
+      grade: result.text[lang].grade,
+      diagnosis: result.text[lang].diagnosis,
+      best: strength === null ? null : { title: strength.text[lang].title, detail: fill(SUMMARY_COPY[lang].best, { name: strength.text[lang].name, value: joinValue(strength.text[lang].value!, strength.text[lang].unit!, lang) }) },
+      noBest: result.text[lang].noStrengths,
+      fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index]!, lang) })),
+      noFixFirst: result.text[lang].noRepairs,
+      notices: result.notices.map((notice) => notice.text[lang]),
+    },
   };
 }

@@ -16,7 +16,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && node scripts/check-bundle.mjs"
+    "check": "npm run typecheck && npm test && node scripts/check-bundle.mjs && node scripts/check-versions.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

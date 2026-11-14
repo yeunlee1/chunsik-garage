@@ -1,9 +1,9 @@
 // 설치 하나를 「썼다, 안 쓴 것이 확인됨, 쓰는지 모름」으로 가른다. 스킬은 위치마다, MCP 서버는 서버마다 본다. 이름이 아니라 지금의 설치를 본다(순수 함수, 설계 11.3 E5·E6)
-import type { Windows } from "../../adapters/common/dates.ts";
+import type { LocalDate, Windows } from "../../adapters/common/dates.ts";
 import type { FileStatus, McpFact, SkillFact } from "../../scan/types.ts";
 import type { InstallRecord } from "../../state/state.ts";
-import { ESTABLISHED_DAYS, RECENT_USE_DAYS, msOlderThan, olderThan, type EvalDay } from "./age.ts";
-import { loadedSince, restartedRecently, type SessionListing } from "./listing.ts";
+import { ESTABLISHED_DAYS, RECENT_USE_DAYS, daysAfter, msOlderThan, olderThan, type EvalDay } from "./age.ts";
+import { loadedSince, restartDates, restartedRecently, type SessionListing } from "./listing.ts";
 import { anyIn, type UsedNames } from "./signals.ts";
 
 /** used는 썼다(불렀다), unused는 안 쓴 것이 확인됨, unknown은 쓰는지 모름이다 */
@@ -60,6 +60,19 @@ export function serverEstablished(server: McpFact, context: VerdictContext): boo
   if (server.installKey === null) return false;
   const state = observed(server.installKey, context);
   return state.seenLong && !(restartedRecently(context.listings, server.recordNames, context.day.today) || state.appearedRecently || state.changed);
+}
+
+/**
+ * 조건 ④(MCP 서버)를 처음 채울 수 있는 날(설계 12.1, 13.1). 입력(관측 기록과 세션 기록)이 그대로이고 평가 시계의 날만 지날 때 serverEstablished가 처음 참이 되는 날이다.
+ * 관측 기록의 첫날(기록이 없거나 정체가 바뀌었으면 오늘. 이 점검을 저장하면 오늘이 첫날이 된다)과 ㉱의 근거가 든 날마다 15일 뒤 가운데 가장 늦은 날이다.
+ * 정체가 없는 서버와 날짜를 모르는 근거가 있는 서버는 null이다.
+ */
+export function serverJudgeableFrom(server: McpFact, context: VerdictContext): LocalDate | null {
+  if (server.installKey === null) return null;
+  const first = context.records?.get(server.installKey)?.firstSeen ?? context.day.today;
+  const restarts = restartDates(context.listings, server.recordNames, context.day.today);
+  if (restarts === null) return null;
+  return [first, ...restarts].map((date) => daysAfter(date, ESTABLISHED_DAYS + 1)).reduce((a, b) => (a > b ? a : b));
 }
 
 /** 조건 ②. 도구의 집계가 없거나 그 마지막 사용이 30일 넘게 전이다. 집계가 든 파일을 읽지 못했거나 그 파일이 없으면 모르는 것이라 채우지 못한다 */

@@ -23,6 +23,11 @@ export function daysBefore(today: LocalDate, date: LocalDate): number {
   return epochDay(today) - epochDay(date);
 }
 
+/** 그 날에서 days일 뒤의 날. days가 음수이면 앞의 날이다 */
+export function daysAfter(date: LocalDate, days: number): LocalDate {
+  return new Date((epochDay(date) + days) * DAY_MS).toISOString().slice(0, 10);
+}
+
 /** "days일 넘게 전"이다. 오늘보다 days+1일 이상 앞선 날이다. 오늘과 그 앞 days일, 오늘보다 뒤의 날은 "days일 안"이다. */
 export function olderThan(today: LocalDate, date: LocalDate, days: number): boolean {
   return daysBefore(today, date) > days;

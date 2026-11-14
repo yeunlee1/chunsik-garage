@@ -98,7 +98,8 @@ function summaryNotice(notice: Notice): SummaryNotice {
   }
 }
 
-function fixDetail(fix: SummaryFix, lang: Lang): string {
+/** 먼저 고칠 것의 덧붙이는 말. 결과 화면의 진단 띠도 같은 말을 쓴다 */
+export function fixDetail(fix: SummaryFix, lang: Lang): string {
   const copy = SUMMARY_COPY[lang];
   if (fix.gain !== null) return fill(copy.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
   if (!fix.measured) return fill(copy.unmeasured, { candidates: fix.candidates });

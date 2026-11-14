@@ -89,6 +89,7 @@ export const REPORT_COPY = {
   download: { en: "Download", ko: "내려받기" },
   close: { en: "Close", ko: "닫기" },
   cardNote: { en: "If the download is blocked, right-click the image, or press and hold it on a phone, to save it.", ko: "내려받기가 막히면 그림을 오른쪽 단추로 누르거나, 휴대폰에서는 길게 눌러 저장하세요." },
+  cardFail: { en: "The card could not be drawn in this browser.", ko: "이 브라우저에서 카드를 그리지 못했습니다." },
   cardAlt: { en: "Share card: AQ {aq}, grade {grade}, {name}, with the four axis scores", ko: "공유 카드. AQ {aq}, {grade}등급 {name}, 네 기준 점수" },
   cardRepo: { en: "github.com/yeunlee1/chunsik-garage", ko: "github.com/yeunlee1/chunsik-garage" },
 } as const satisfies Record<string, Texts<string>>;

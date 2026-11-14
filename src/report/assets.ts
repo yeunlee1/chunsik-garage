@@ -28,9 +28,12 @@ export interface ReportArt {
   fix: string | null;
 }
 
+/** 장면 그림의 이름 */
+export type SceneName = Extract<ArtName, `scene-${string}`>;
+
 /** AQ를 냈으면 등급 단계의 장면, 내지 않았으면 기록을 읽지 못했다는 알림이 있을 때 읽지 못함, 없으면 모자람이다 */
-export function sceneFor(tier: number | null, unreadable: boolean): ArtName {
-  if (tier !== null) return `scene-${tier}` as ArtName;
+export function sceneFor(tier: number | null, unreadable: boolean): SceneName {
+  if (tier !== null) return `scene-${tier}` as SceneName;
   return unreadable ? "scene-unreadable" : "scene-few-records";
 }
 

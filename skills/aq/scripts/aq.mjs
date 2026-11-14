@@ -701,7 +701,6 @@ function countedProblems(tools) {
   const seen = /* @__PURE__ */ new Set();
   for (const tool of tools) {
     for (const problem of tool.setup.problems) {
-      null;
       if (problem.owner !== "user") continue;
       const at = problem.realPath ?? problem.path;
       if (seen.has(at)) continue;

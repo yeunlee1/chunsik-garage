@@ -94,7 +94,6 @@ export function countedProblems(tools: readonly ToolSetup[]): CountedProblem[] {
   const seen = new Set<string>();
   for (const tool of tools) {
     for (const problem of tool.setup.problems) {
-null
       if (problem.owner !== "user") continue;
       const at = problem.realPath ?? problem.path;
       if (seen.has(at)) continue;

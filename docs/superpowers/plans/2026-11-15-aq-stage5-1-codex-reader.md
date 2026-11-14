@@ -30,7 +30,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `F9E0F3AE942B1754E417A6845626A68AE2B07626B3E94FB789F14ED13641B452`, 4,047줄)이다. 설계 끝에 「5단계 1부 계획에서 보완」(열세 가지)과 「5단계 1부 계획 리뷰 1차에서 보완」을 더하고 9.2, 9.6, 9.7, 9.8과 부록 A의 해당 줄을 고쳤다. 압축 기록의 여러 프레임, 옛 형식의 관측(9.6·9.7의 옛 형식 열), MCP 관측의 사용 신호가 될 수 없는 종류(9.8 표는 그대로), 새로 본 종류와 열쇠, 시각 없는 줄의 날짜, 이어받은 것의 방법과 캐시(같은 세션의 앞 기록, 기준을 찾지 못한 기록, 이어받은 것을 확인하지 못한 세션), 되돌려 생긴 기록의 이름과 같은 세션 합치기, 정본을 읽지 못할 때와 압축 기록의 판정, 크기와 수정 시각을 모르는 사본, 너무 긴 줄과 실측 도구, 첫 줄과 버전, 날짜를 넘는 턴의 도구 호출 수, 추론 강도와 모델을 붙이는 창이다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `66BB0873B70C22559907A07CC7A369C4B67383DCE55A146D772AC02EF55AC575`, 4,057줄)이다. 설계 끝에 「5단계 1부 계획에서 보완」(열세 가지)과 「5단계 1부 계획 리뷰 1차에서 보완」, 「…리뷰 2차에서 보완」을 더하고 9.2, 9.6, 9.7, 9.8과 부록 A의 해당 줄을 고쳤다. 압축 기록의 여러 프레임, 옛 형식의 관측(9.6·9.7의 옛 형식 열), MCP 관측의 사용 신호가 될 수 없는 종류(9.8 표는 그대로), 새로 본 종류와 열쇠, 시각 없는 줄의 날짜, 이어받은 것의 방법과 캐시(같은 세션의 앞 기록과 구간 밖의 것, 기준을 찾지 못한 기록, 이어받은 것을 확인하지 못한 세션과 원래 기록을 찾지 못한 세션), 되돌려 생긴 기록의 이름과 같은 세션 합치기, 정본을 읽지 못할 때와 압축 기록의 판정, 크기와 수정 시각을 모르는 사본, 너무 긴 줄과 실측 도구, 첫 줄과 버전, 날짜를 넘는 턴의 도구 호출 수, 추론 강도와 모델을 붙이는 창이다.
 
 ## 파일 구조
 
@@ -868,7 +868,7 @@ git commit -m "feat: 압축된 Codex 기록을 프레임마다 풀어 읽음"
 - 해석기는 1단계의 `ClaudeSessionParser`와 같은 꼴이다(`line`, `tooLong`, 끝 조각을 받는 `finish`). 빈 줄은 세지 않고, 풀리지 않는 줄은 깨진 줄, 쓰는 중인 파일의 풀리지 않는 끝은 끝 조각이다.
 - 세션의 정체(세션 ID, 작업 폴더, 주·하위, 부모)는 빈 줄이 아닌 첫 물리적 줄의 `session_meta` 하나로만 정한다. 세션 ID는 `id`, 작업 폴더는 `cwd`다. `thread_source`가 `subagent`·`guardian_review`·`memory_consolidation`이면 하위 세션이고 부모는 `parent_thread_id`다. `user`는 주 세션이고, 그 밖의 값과 열쇠 없음은 정체 모름이라 주 세션으로 세고 그 값(열쇠가 없으면 `(없음)`)을 따로 적는다(결정 1).
 - 첫 줄이 깨졌거나 너무 길면(`first-line-unreadable`), 풀렸는데 `session_meta`가 아니면(`first-line-not-meta`), 첫 줄의 `session_meta`에 `id`가 없으면(`meta-without-id`. 나머지 정체는 그 줄에서 정한다), 줄이 하나도 없으면(`no-lines`) 기록 파일의 식별자를 세션 ID로 대신 쓰고 그 까닭을 `codex.idFallback`에 남긴다(결정 7. 모으기가 까닭별로 센다). 앞의 둘은 뒤의 `session_meta`로 정체를 정하지 않는다. 계획 초안은 뒤의 `session_meta`로 정체를 정했다(계획 리뷰 1차가 찾았다).
-- 버전은 기록에 적힌 모든 `session_meta`의 `cli_version` 가운데 가장 높은 것이다(설계 9.3). 앞선 버전 꼬리를 뗀 `x.y.z`로 읽는다(`0.140.0-alpha.19`는 `0.140.0`. 1단계의 버전 읽기는 `x.y.z`만 받는다). 낮아지거나 읽지 못하는 버전은 남은 값을 바꾸지 않는다.
+- 버전은 기록에 적힌 모든 `session_meta`의 `cli_version` 가운데 가장 높은 것이다(설계 9.3). 자리마다 숫자로 견준다(`0.100.0`이 `0.99.0`보다 높다). 앞선 버전 꼬리를 뗀 `x.y.z`로 읽는다(`0.140.0-alpha.19`는 `0.140.0`. 1단계의 버전 읽기는 `x.y.z`만 받는다). 낮아지거나 읽지 못하는 버전은 남은 값을 바꾸지 않는다.
 - 토큰은 구간으로 가른다(설계 9.6). `token_usage_record`가 처음 나오기 전은 옛 구간이다. `token_count`의 `info.total_token_usage`가 직전과 다섯 칸 모두 같으면 세지 않고, 한 칸이라도 줄었으면(캐시 읽기만 줄어도) 새로 시작된 것으로 그 값을, 그 밖에는 칸마다의 차분을 응답 하나로 센다. 새 구간은 `token_usage_record`의 `response_id`(글자 그대로 가른다)마다 한 번 `usage`를 센다. 넘어가는 자리는 새 구간 첫 기록의 `thread_token_usage`가 옛 구간에서 마지막으로 본 누적값과 같을 때만 세지 않는다.
 - 토큰 칸은 원래 값 그대로다(입력 `input_tokens`은 캐시를 품고 출력 `output_tokens`는 추론을 품는다. 캐시 읽기 `cached_input_tokens`, 캐시 쓰기 `cache_write_input_tokens`, 추론 `reasoning_output_tokens`). 도구마다 다른 식은 규칙이 쓴다(설계 9.6, 3부).
 - 날짜는 줄의 `timestamp`를 평가 시간대의 날짜로 바꾼 것이다. 시각이 없는 세는 줄은 종류와 상관없이 바로 앞 줄의 날짜를 쓰고, 앞의 줄이 모두 시각이 없을 때만 날짜를 몰라 세지 못한 줄로 센다. 가장 이른 날짜도 종류와 상관없이 모든 줄에서 고른다. 1단계 구현의 규칙이다(「5단계 1부 계획에서 보완」의 5번). 하위 세션이 복사해 온 줄도 하위가 쓴 시각을 달고 있어 하위의 가장 이른 날짜가 부모 쪽으로 당겨지지 않는다(작성자 PC 실측).
@@ -933,6 +933,7 @@ describe("세션의 정체", () => {
 
   it("버전은 기록에 적힌 session_meta 가운데 가장 높은 것이다. 낮아지거나 읽지 못하는 버전은 바꾸지 않고, 정체는 첫 줄의 것 그대로다", () => {
     expect(run([meta({ id: "s", cli_version: "0.160.0" }), meta({ id: "s", cli_version: "0.166.0-alpha.2" })]).version).toBe("0.166.0");
+    expect(run([meta({ id: "s", cli_version: "0.99.0" }), meta({ id: "s", cli_version: "0.100.0" })]).version).toBe("0.100.0");
     expect(run([meta({ id: "s", cli_version: "0.166.0" }), meta({ id: "s", cli_version: "0.150.0" }), meta({ id: "s", cli_version: "nightly" })]).version).toBe("0.166.0");
     expect(run([meta({ id: "s", cwd: "C:/first" }), meta({ id: "other", cwd: "C:/second" })])).toMatchObject({ sessionId: "s", cwd: "C:/first" });
   });
@@ -1406,9 +1407,9 @@ git commit -m "feat: Codex 세션의 정체와 토큰을 해석함"
 설계 9.6, 9.7, 「5단계 1부 계획에서 보완」의 2·4·12·13번이다.
 
 - 도구는 두 층이다. 호출 층은 `response_item`의 `function_call`·`custom_tool_call`·`web_search_call` 셋이고, 실행 층은 `event_msg`의 `item_completed`다. 이름별 호출·결과·오류는 늘 실행 층에서 센다. 셸 명령(CommandExecution)은 `shell`, 파일 고치기(FileChange)는 `file_change`, MCP 호출(McpToolCall)은 `mcp__<server>`, 그림 보기는 `image_view`, 확장 도구는 `extension`, 검색은 `web_search`다. 결과와 오류는 상태를 보는 종류만이다(셸은 종료 코드가 0이 아니면 오류, 파일 고치기와 MCP 호출은 `status`가 `failed`이면 오류).
-- 턴(`task_started`부터 `task_complete`·`turn_aborted`까지. 턴 밖은 한 묶음이고, 턴 시작도 앞 묶음을 닫는다)마다 호출 층이 실행 층보다 많으면 그 차이를 이름 모름(`?`)의 호출로 더한다. 날짜마다 두 층을 따로 세어 차이를 날짜 차례로, 그날 호출 층이 실행 층보다 많은 만큼까지 그날에 나눈다. 날짜를 몰라 세지 못한 호출과 실행은 어느 층에도 넣지 않는다(「5단계 1부 계획에서 보완」의 12번. 계획 초안은 차이를 묶음의 마지막 날짜에 다 넣었고 날짜 없는 호출을 뒤 날짜에 다시 셌다). 그러면 호출 수의 합은 9.6의 "수가 큰 층"이 되고 오류율은 실행 층 그대로다. 호출 층 줄에는 `turn_id`가 없어(작성자 PC 실측) 턴은 줄 차례로 묶는다.
+- 턴(`task_started`부터 `task_complete`·`turn_aborted`까지. 턴 밖은 한 묶음이고, 턴 시작도 앞 묶음을 닫는다)마다 호출 층이 실행 층보다 많으면 그 차이를 이름 모름(`?`)의 호출로 더한다. 날짜마다 두 층을 따로 세어 차이를 이른 날짜부터, 그날 호출 층이 실행 층보다 많은 만큼까지 그날에 나눈다. 나눈 것의 합은 턴 전체의 차이다(호출 층이 많은 날과 실행 층이 많은 날이 따로 있어도 넘지 않는다). 날짜를 몰라 세지 못한 호출과 실행은 어느 층에도 넣지 않는다(「5단계 1부 계획에서 보완」의 12번. 계획 초안은 차이를 묶음의 마지막 날짜에 다 넣었고 날짜 없는 호출을 뒤 날짜에 다시 셌다). 그러면 호출 수의 합은 9.6의 "수가 큰 층"이 되고 오류율은 실행 층 그대로다. 호출 층 줄에는 `turn_id`가 없어(작성자 PC 실측) 턴은 줄 차례로 묶는다.
 - 사람 요청은 `UserMessage`, 도구가 아닌 종류(`AgentMessage`, `Reasoning`, `ContextCompaction`)는 세지 않는다. 그 밖의 종류는 정체 모름이라 도구 수에 넣지 않고 종류별로 센다. 작성자 PC에서 본 새 종류(`SubAgentActivity`, `CollabAgentToolCall`, `Plan`)도 지금은 정체 모름이다. 도구로 볼지는 규칙 표와 함께 3부에서 정한다(「5단계 1부 계획에서 보완」의 4번).
-- 모델과 추론 강도는 창마다 `turn_context`의 `model`·`effort`를 붙인다. 창은 앞 턴이 끝난 뒤(`task_complete`, `turn_aborted`)부터 이 턴이 끝날 때까지이고, 턴 시작은 창을 나누지 않는다. 창에서 문맥보다 앞에 온 응답에도 그 창의 문맥을 붙인다. 창에 문맥이 없으면 앞 턴의 것을 쓰지 않고 모델을 모르고(`models`에 넣지 않는다) 강도를 모르는 것(`unknownEffort`)으로 센다. 문맥에 강도가 없어도 모르는 강도다(「5단계 1부 계획에서 보완」의 13번. 계획 초안은 앞 턴의 강도를 이어 썼다).
+- 모델과 추론 강도는 창마다 `turn_context`의 `model`·`effort`를 붙인다. 창은 앞 턴이 끝난 뒤(`task_complete`, `turn_aborted`)부터 이 턴이 끝날 때까지이고, 턴 시작은 창을 나누지 않는다. 창에서 문맥보다 앞에 온 응답에도 하나하나 그 창의 문맥을 붙인다(같은 날에 여럿이어도 하나하나다). 같은 창의 새 문맥에 모델이나 강도가 없으면 앞 문맥의 것을 이어 쓰지 않는다. 창에 문맥이 없으면 앞 턴의 것을 쓰지 않고 모델을 모르고(`models`에 넣지 않는다) 강도를 모르는 것(`unknownEffort`)으로 센다. 문맥에 강도가 없어도 모르는 강도다(「5단계 1부 계획에서 보완」의 13번. 계획 초안은 앞 턴의 강도를 이어 썼다).
 - 압축은 `compacted`, 끊은 턴은 `turn_aborted`, MCP 호출은 McpToolCall의 `server`, 지침 크기는 첫 `world_state`의 `state.agents_md.text` 글자 수(아스키와 그 밖으로 나눔)다.
 - 시각이 없는 세는 줄(사람 요청, 도구, 호출 층, 끊은 턴, 압축)도 과제 3의 날짜 규칙을 따른다.
 
@@ -1490,6 +1491,22 @@ describe("도구 묶음의 날짜와 경계", () => {
     expect(mixed.days["2026-11-12"]?.tools["?"]).toMatchObject({ calls: 2 });
   });
 
+  it("날짜마다 나눈 이름 모름의 합은 턴 전체에서 호출 층이 실행 층보다 많은 만큼이다. 호출 층이 많은 날과 실행 층이 많은 날이 따로 있어도 넘지 않는다", () => {
+    const summary = run([meta(), started(), call("a", "2026-11-11T14:58:00Z"), call("b", "2026-11-11T14:59:00Z"), item({ type: "CommandExecution", id: "1", exit_code: 0 }, "2026-11-11T15:01:00Z"), completed()]);
+    expect(summary.days["2026-11-11"]?.tools["?"]).toMatchObject({ calls: 1 });
+    expect(summary.days["2026-11-12"]?.tools["?"]).toBeUndefined();
+    expect(summary.days["2026-11-12"]?.tools.shell).toMatchObject({ calls: 1 });
+    const calls = Object.values(summary.days).reduce((sum, cell) => sum + Object.values(cell.tools).reduce((inner, tool) => inner + tool.calls, 0), 0);
+    expect(calls).toBe(2);
+  });
+
+  it("턴이 세 날짜를 넘으면 남은 차이를 이른 날짜부터 나눈다", () => {
+    const summary = run([meta(), started(), call("a", "2026-11-10T01:00:00Z"), call("b", "2026-11-11T01:00:00Z"), item({ type: "CommandExecution", id: "1", exit_code: 0 }, "2026-11-12T01:00:00Z"), completed()]);
+    expect(summary.days["2026-11-10"]?.tools["?"]).toMatchObject({ calls: 1 });
+    expect(summary.days["2026-11-11"]?.tools["?"]).toBeUndefined();
+    expect(summary.days["2026-11-12"]?.tools.shell).toMatchObject({ calls: 1 });
+  });
+
   it("날짜를 몰라 세지 못한 호출은 이름 모름의 호출로 다시 세지 않는다", () => {
     const raw = (type: string, payload: Record<string, unknown>) => JSON.stringify({ type, payload });
     const summary = run([raw("session_meta", { id: "s", thread_source: "user" }), raw("response_item", { type: "custom_tool_call", name: "x", call_id: "u1" }), call("y")]);
@@ -1569,6 +1586,19 @@ describe("그 밖의 지표", () => {
     expect(cell.unknownEffort).toBe(1);
     expect(cell.models).toEqual({ m: 2 });
   });
+  it("창에서 문맥보다 앞에 온 응답이 같은 날에 여럿이면 하나하나 그 창의 문맥을 붙인다", () => {
+    const cell = day([meta(), record("r1", 10), record("r2", 10), line("turn_context", { model: "m", effort: "high" })]);
+    expect(cell.models).toEqual({ m: 2 });
+    expect(cell.efforts).toEqual({ high: 2 });
+    expect(cell.unknownEffort).toBe(0);
+  });
+
+  it("같은 창의 새 문맥에 모델이 없으면 앞 문맥의 모델을 이어 쓰지 않는다", () => {
+    const cell = day([meta(), line("turn_context", { model: "m", effort: "high" }), record("r1", 10), line("turn_context", { effort: "low" }), record("r2", 10)]);
+    expect(cell.models).toEqual({ m: 1 });
+    expect(cell.efforts).toEqual({ high: 1, low: 1 });
+  });
+
   it("compacted는 압축으로, turn_aborted는 끊은 턴으로 센다", () => {
     const cell = day([meta(), line("compacted", {}), line("event_msg", { type: "turn_aborted", turn_id: "t" })]);
     expect(cell).toMatchObject({ autoCompactions: 1, interruptedTurns: 1 });
@@ -1588,7 +1618,7 @@ describe("그 밖의 지표", () => {
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/adapters/codex/parser-tools.test.ts`
-Expected: FAIL. 시험 16개가 모두 실패한다. 과제 3의 해석기는 실행 층과 호출 층, 사람 요청, `turn_context`, `compacted`, `turn_aborted`, `world_state`를 세지 않는다.
+Expected: FAIL. 시험 20개가 모두 실패한다. 과제 3의 해석기는 실행 층과 호출 층, 사람 요청, `turn_context`, `compacted`, `turn_aborted`, `world_state`를 세지 않는다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -1888,7 +1918,7 @@ const CALL_TYPES: ReadonlySet<string> = new Set(["function_call", "custom_tool_c
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex/parser-tools.test.ts test/adapters/codex/parser.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 2개, 시험 33개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 2개, 시험 37개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -1915,7 +1945,7 @@ git commit -m "feat: Codex 기록의 도구와 그 밖의 지표를 셈"
 - 하위 세션은 자기를 띄운 때까지의 부모 대화를 복사해 담고 그 뒤에 자기 일을 이어 쓴다. 작성자 PC의 하위 세션 항목은 대부분이 부모와 같은 `item.id`였고, 복사된 항목도 하위 자신의 `thread_id`와 하위가 쓴 시각을 달고 있어 줄 하나로는 가를 수 없었다. 그래서 자리로 가르지 않고 이어받았을 수 있는 기록의 지문과 견준다.
 - 지문은 항목의 `item.id`, 호출 층의 `call_id`, 옛 구간의 누적값(칸 다섯을 차례로 이은 것), 새 구간의 `response_id`를 64비트 FNV-1a로 해시한 것이다. 원문은 되살릴 수 없다.
 - 문맥으로 뺄 지문(`inherited`)을 받으면, 그 안에 있는 항목과 호출은 세지 않고, 그 안에 있는 누적값은 기준만 옮기고 늘어난 몫을 세지 않으며, 그 안에 있는 응답은 세지 않는다. 뺀 수를 종류별로 센다. 뺄 지문은 하위 세션이면 부모 세션의 기록들의 지문이고, 같은 세션에 기록이 여럿이면 그보다 앞선 기록들의 지문도 든다. 무엇을 넘길지는 모으기(과제 8)가 정한다. 지문을 받지 않으면 다 센다.
-- 이어받아 뺀 도구·사람 요청·호출·누적값·응답의 마지막 줄보다 앞에서 뺄 지문에 없는 누적값을 세면(복사된 앞부분 안에서 기준을 찾지 못한 것이다) `codex.baselineMissing`을 참으로 한다. 숫자는 그대로 두고, 모으기가 이어받은 것을 확인하지 못한 세션으로 센다(결정 7의 "대신 봄"). 작성자 PC의 부모를 가진 하위 기록 가운데 스무 개에 하나꼴이었다.
+- 이어받아 뺀 도구·사람 요청·호출·누적값·응답의 마지막 줄보다 앞에서 뺄 지문에 없는 누적값을 세면(복사된 앞부분 안에서 기준을 찾지 못한 것이다) `codex.baselineMissing`을 참으로 한다. 끝 표지는 이어받은 호출과 응답도 되고, 부모 누적값으로 기준을 옮긴 뒤 처음 센 자기 누적값도 센 것이다. 숫자는 그대로 두고, 모으기가 이어받은 것을 확인하지 못한 세션으로 센다(결정 7의 "대신 봄"). 작성자 PC의 부모를 가진 하위 기록 가운데 스무 개에 하나꼴이었다.
 - 해석기는 자기 기록의 지문을 낸다. 이어받아 뺀 것(응답 ID와 누적값도)도 넣는다(손자 세션이 같은 앞부분을 다시 이어받을 수 있다). 자기 지문은 뺄 지문과 상관없이 기록만으로 정해진다(과제 7의 캐시와 과제 8의 모으기가 기댄다).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -2014,6 +2044,17 @@ describe("이어받은 것을 다시 세지 않는다", () => {
     expect(run([sub(), count(150)], null).codex?.baselineMissing).toBe(false);
   });
 
+  it("이어받아 뺀 호출 층 호출과 응답도 복사된 앞부분의 끝이다. 그보다 앞에서 뺄 지문에 없는 누적값을 세면 기준을 찾지 못한 기록이다", () => {
+    const call = line("response_item", { type: "function_call", name: "x", call_id: "c1" });
+    expect(run([sub(), count(150), call], fingerprintsOf([...MOM, call])).codex?.baselineMissing).toBe(true);
+    expect(run([sub(), count(150), record("r1", 50, 250)], fingerprintsOf(MOM)).codex?.baselineMissing).toBe(true);
+  });
+
+  it("부모 누적값으로 기준을 옮긴 뒤 처음 센 자기 누적값도, 그 뒤에 이어받은 항목이 있으면 기준을 찾지 못한 기록이다", () => {
+    const summary = run([sub(), count(100), count(150), item({ type: "CommandExecution", id: "x1", exit_code: 0 })], fingerprintsOf(MOM));
+    expect(summary.codex?.baselineMissing).toBe(true);
+  });
+
   it("지문을 받지 않으면 다 센다(부모가 없거나 부모 기록을 읽지 못한 세션)", () => {
     const summary = run([sub(), item({ type: "UserMessage", id: "u1" }), count(100), count(200)], null);
     expect(summary.days["2026-11-10"]).toMatchObject({ humanRequests: 1, responses: 2, tokens: { input: 200 } });
@@ -2050,7 +2091,7 @@ describe("지문", () => {
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/adapters/codex/parser-inherit.test.ts`
-Expected: FAIL. 시험 12개가 모두 실패한다. 과제 4의 해석기는 뺄 지문을 받지 않아 다 세고, `codex.inheritedSkipped`, `codex.baselineMissing`, `fingerprints()`가 없다.
+Expected: FAIL. 시험 14개가 모두 실패한다. 과제 4의 해석기는 뺄 지문을 받지 않아 다 세고, `codex.inheritedSkipped`, `codex.baselineMissing`, `fingerprints()`가 없다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -2290,7 +2331,7 @@ const totalPrint = (total: Usage): string => fnv1a64(KEYS.map((key) => total[key
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 5개, 시험 66개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 5개, 시험 72개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2637,7 +2678,7 @@ import { canonicalDay, emptyDay, emptyToolCounts, type DayCell, type SessionKind
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/adapters/claude/observation.test.ts test/collect/claude.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 8개, 시험 106개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 8개, 시험 112개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -3038,7 +3079,7 @@ import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/state test/adapters/types.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 15개, 시험 163개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 15개, 시험 169개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -3064,15 +3105,15 @@ git commit -m "feat: Codex 요약과 지문을 캐시에 넣고 꺼냄"
 
 설계 9.2, 9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번, 「5단계 1부 계획에서 보완」의 6·7·8·11번이다.
 
-- 목록은 거르지 않고 받아 정본마다 수집 구간을 가른다(정본의 수정 시각을 모르면 구간에 넣는다. `--rescan`이면 모두 넣는다). 구간 밖의 기록은 열지 않고 센다. 다만 하위 세션의 부모일 때는 지문을 얻으려고 읽고 요약에는 넣지 않는다. 부모는 기록 파일의 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID(`baseId`)로 찾고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다.
+- 목록은 거르지 않고 받아 정본마다 수집 구간을 가른다(정본의 수정 시각을 모르면 구간에 넣는다. `--rescan`이면 모두 넣는다). 구간 밖의 기록은 열지 않고 센다. 다만 하위 세션의 부모이거나 구간 안 기록과 같은 세션일 때는 지문을 얻으려고 읽고 요약에는 넣지 않는다. 부모는 기록 파일의 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID(`baseId`)로 찾고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다.
 - 기록마다 정본부터 사본 차례로 읽는다. 크기를 보지 못한 사본, 그 Node.js가 풀지 못하는 압축 사본, 열거나 읽지 못한 사본은 다음 사본으로 넘어간다. 어느 사본도 읽지 못하면 정본의 까닭으로 센다(크기를 모름은 읽지 못한 파일, 압축을 풀지 못함은 건너뛴 압축 파일, 그 밖은 읽지 못한 파일). 읽지 않은 사본의 수를 센다(설계 9.2).
-- 크기를 보지 못한 사본은 다른 사본을 읽은 기록의 것이어도 크기를 모르는 파일로 센다(그래서 읽지 못한 비율은 아래 경계다). 수정 시각을 보지 못한 사본이 있던 세션을 센다(그 기록을 읽지 못했으면 기록 파일 하나를 하나로 센다. 결정 3). 목록의 바이트는 기록마다 읽은 사본의 것이다(어느 사본도 읽지 못하면 정본의 것). 계획 초안은 정본의 크기만 보고, 수정 시각을 모르는 사본을 세지 않았다(계획 리뷰 1차가 찾았다).
+- 크기를 보지 못한 사본은 다른 사본을 읽은 기록의 것이어도 크기를 모르는 파일로 센다(그래서 읽지 못한 비율은 아래 경계다). 수정 시각을 보지 못한 사본이 있던 세션을 센다(그 기록을 읽지 못했으면 기록 파일 하나를 하나로 센다. 결정 3). 목록의 바이트는 기록마다 읽은 사본의 파일 크기다(어느 사본도 읽지 못하면 정본의 것. 디코더가 읽은 양이 아니라 건너뛸 수 있는 프레임도 든다). 크기는 알고 수정 시각만 모르는 사본은 크기를 모르는 사본이 아니다. 계획 초안은 정본의 크기만 보고, 수정 시각을 모르는 사본을 세지 않았다(계획 리뷰 1차가 찾았다).
 - 압축 기록에서 아무것도 풀지 못하면(크기 0인 파일처럼 프레임이 없거나 깨진 것) 읽지 못한 것이고, 일부를 풀었는데 프레임이 잘렸거나 깨졌거나 풀다가 오류가 났으면(체크섬이 틀린 것도 든다) 일부만 읽은 파일이다. 빈 내용을 담은 완결된 프레임은 빈 `.jsonl`처럼 빈 기록이다(줄이 없어 세션 ID를 대신 쓴다). 절반 넘게 깨진 기록은 일부만 읽은 것보다 읽지 못한 파일이 앞선다. 절반 넘게 깨진 기록도 풀린 줄의 숫자는 쓴다(설계 9.8, 20.1, 결정 2).
-- 두 번에 나눠 읽는다. 먼저 정본마다 캐시에서 꺼내거나(캐시 열쇠가 맞고 지문 칸이 있을 때) 뺄 지문 없이 해석한다. 자기 지문은 뺄 지문과 상관없이 정해진다. 그다음 기록마다 뺄 지문을 모은다. 하위 세션이면 부모 세션의 기록 파일들의 지문이고, 같은 세션에 기록 파일이 여럿이면 그보다 앞선 기록들의 지문도 넣는다. 같은 세션의 기록 차례는 식별자가 세션 ID와 같은 원래 기록이 먼저이고, 그다음은 파일 이름(`rollout-<시각>-…`이라 만든 차례), 그다음은 정규화한 경로 차례다(목록의 차례와 상관없다). 계획 초안은 같은 세션의 기록끼리 빼지 않았다(계획 리뷰 1차가 찾았다). 뺄 지문과의 `sharedDigest`가 해석 때와 다르면 뺄 지문을 넣어 다시 읽는다. 부모 기록이 없어진 하위 요약도 다시 읽어 다 센다. 그러면 처음 실행에서 겹치는 기록만 두 번 읽고, 그다음부터는 캐시를 쓴다. 부모 값은 있는데 부모 기록을 하나도 읽지 못한 하위 세션의 수를 센다.
-- 이어받은 것을 확인하지 못한 세션의 수를 센다(결정 7의 "대신 봄". 알림은 3부). 기준을 찾지 못한 기록(과제 5)이 있는 세션, 부모 기록을 하나도 읽지 못했거나 일부를 읽지 못한(읽지 못함, 건너뜀, 일부만 읽음, 절반 넘게 깨짐. 구간 밖의 부모 기록을 읽지 못한 것도 든다) 하위 세션, 같은 세션의 다른 기록을 읽지 못했거나 일부만 읽은 세션이다. 읽지 못한 기록이 어느 세션의 것인지는 이름의 식별자와 `baseId`로만 안다. 세션 ID를 대신 쓴 기록(과제 3)의 수를 까닭별로 센다.
+- 두 번에 나눠 읽는다. 먼저 정본마다 캐시에서 꺼내거나(캐시 열쇠가 맞고 지문 칸이 있을 때) 뺄 지문 없이 해석한다. 자기 지문은 뺄 지문과 상관없이 정해진다. 그다음 기록마다 뺄 지문을 모은다. 하위 세션이면 부모 세션의 기록 파일들의 지문이고, 같은 세션에 기록 파일이 여럿이면 그보다 앞선 기록들의 지문도 넣는다. 같은 세션의 기록이 수집 구간 밖에 있어도 지문을 얻으려고 읽어 차례에 넣는다(요약에는 넣지 않고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다. 계획 리뷰 2차가 찾았다). 같은 세션의 기록 차례는 식별자가 세션 ID와 같은 원래 기록이 먼저이고, 그다음은 파일 이름(`rollout-<시각>-…`이라 만든 차례), 그다음은 정규화한 경로 차례다(목록의 차례와 상관없다). 계획 초안은 같은 세션의 기록끼리 빼지 않았다(계획 리뷰 1차가 찾았다). 뺄 지문과의 `sharedDigest`가 해석 때와 다르면 뺄 지문을 넣어 다시 읽는다. 부모 기록이 없어진 하위 요약도 다시 읽어 다 센다. 그러면 처음 실행에서 겹치는 기록만 두 번 읽고, 그다음부터는 캐시를 쓴다. 부모 값은 있는데 부모 기록을 하나도 읽지 못한 하위 세션의 수를 센다.
+- 이어받은 것을 확인하지 못한 세션의 수를 센다(결정 7의 "대신 봄". 알림은 3부). 기준을 찾지 못한 기록(과제 5)이 있는 세션, 부모를 모르는(부모 값이 없거나 글자가 아니거나 자기 자신) 하위 세션, 부모 기록을 하나도 읽지 못했거나 일부를 읽지 못한(읽지 못함, 건너뜀, 일부만 읽음, 절반 넘게 깨짐, 부모 세션의 원래 기록을 찾지 못함. 구간 밖의 부모 기록을 읽지 못한 것도 든다) 하위 세션, 같은 세션의 다른 기록(구간 밖의 것도)을 읽지 못했거나 일부만 읽은 세션, 원래 기록(식별자가 세션 ID와 같은 기록)을 찾지 못한 세션이다(대화를 되돌려 생긴 기록만 남은 세션은 무엇을 이어받았는지 확인할 수 없다). 읽지 못한 기록이 어느 세션의 것인지는 이름의 식별자와 `baseId`로만 안다. 세션 ID를 대신 쓴 기록(과제 3)의 수를 까닭별로 센다.
 - 캐시에는 쓰는 중이 아니고 연 동안 바뀌지 않았고 끝까지 읽은 기록만 넣는다(끊긴 압축과 쓰는 중인 파일은 넣지 않는다). 다시 읽다가 읽지 못한 기록은 읽지 못한 파일로 센다.
 - 같은 세션 ID의 기록 파일은 하나로 합친다(결정 7). 정체(세션 ID, 주·하위, 부모, 작업 폴더, 지침)와 기록 파일 식별자, 세션 ID를 대신 쓴 까닭은 식별자가 세션 ID와 같은 원래 기록에서, 없으면 식별자 차례로 첫 기록에서 가져온다. 날짜 칸(칸 모양 표대로 더하는 `addDayInto`), 빠진 것, 알림의 수, 정체 모를 종류, 이어받아 뺀 수는 더하고, 버전은 가장 높은 것, 가장 이른 날짜는 가장 이른 것이며, 기준을 찾지 못한 기록이 하나라도 있으면 그렇다고 남긴다. 합친 세션의 수를 센다. 작성자 PC에서는 대화를 되돌려 생긴 기록이 원래 기록과 응답·요청·항목 ID가 겹치지 않았다(결정 7의 까닭).
-- 결과는 세션마다 가장 앞선 정본의 정규화한 경로 차례이고, 목록의 차례와 상관없이 같다. 읽은 양은 정본의 수, 목록의 바이트, 읽은 바이트, 캐시에서 꺼낸 수, 쓰는 중이었던 수, 구간 밖의 수, 읽지 못한 파일(과 그 바이트), 크기를 모르는 사본의 수, 읽지 못한 폴더, 건너뛴 압축 파일(과 그 바이트), 일부만 읽은 파일, 읽지 않은 사본, 이름 없는 파일이다. 관측에 넘기는 읽지 못한 것의 수는 읽지 못한 파일과 폴더, 건너뛴 압축 파일, 일부만 읽은 파일을 더한 것이다.
+- 결과는 세션마다 가장 앞선 정본의 정규화한 경로 차례이고, 목록의 차례와 상관없이 같다. 읽은 양은 정본의 수, 목록의 바이트, 읽은 바이트, 캐시에서 꺼낸 수, 쓰는 중이었던 수, 구간 밖의 수, 읽지 못한 파일(과 그 바이트), 크기를 모르는 사본의 수, 읽지 못한 폴더, 건너뛴 압축 파일(과 그 바이트), 일부만 읽은 파일, 읽지 않은 사본, 이름 없는 파일이다. 읽지 못한 파일의 경로와 바이트는 목록의 바이트에 넣은 사본(읽은 사본. 어느 사본도 읽지 못했으면 정본)의 것이라 읽지 못한 비율이 1을 넘지 않는다(계획 리뷰 2차가 찾았다). 관측에 넘기는 읽지 못한 것의 수는 읽지 못한 파일과 폴더, 건너뛴 압축 파일, 일부만 읽은 파일을 더한 것이다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -3185,7 +3226,7 @@ describe("같은 세션의 기록 파일 합치기", () => {
 `test/collect/codex.test.ts`(새 파일):
 
 ```ts
-// Codex 기록 모으기(정본과 다음 사본, 압축 기록과 건너뛴 압축, 끊긴 압축, 읽지 못한 파일, 이어받은 앞부분 빼기, 구간 밖의 부모, 같은 세션의 기록 합치기, 캐시와 그 무효화, 쓰는 중인 파일, 목록의 차례)를 시험한다(설계 9.1~9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번)
+// Codex 기록 모으기(정본과 다음 사본, 압축 기록과 건너뛴 압축, 끊긴 압축, 읽지 못한 파일, 이어받은 앞부분 빼기, 구간 밖의 부모와 같은 세션 기록, 같은 세션의 기록 합치기, 캐시와 그 무효화, 쓰는 중인 파일, 목록의 차례)를 시험한다(설계 9.1~9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번)
 import { appendFile, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -3218,9 +3259,9 @@ const usage = (n: number) => ({ input_tokens: n, cached_input_tokens: 0, cache_w
 const record = (id: string, n: number) => line("token_usage_record", { response_id: id, usage: usage(n), thread_token_usage: usage(n) });
 
 const dir = () => join(root, ".codex", "sessions", "2026", "11", "11");
-async function rollout(n: number, lines: string[], options: { mtimeMs?: number; compressed?: boolean; bytes?: (raw: Buffer) => Buffer } = {}): Promise<string> {
+async function rollout(n: number, lines: string[], options: { mtimeMs?: number; compressed?: boolean; bytes?: (raw: Buffer) => Buffer; nameTime?: string } = {}): Promise<string> {
   await mkdir(dir(), { recursive: true });
-  const path = join(dir(), `rollout-2026-11-11T12-00-00-${ID(n)}.jsonl${options.compressed ? ".zst" : ""}`);
+  const path = join(dir(), `rollout-2026-11-11T${options.nameTime ?? "12-00-00"}-${ID(n)}.jsonl${options.compressed ? ".zst" : ""}`);
   const raw = Buffer.from(`${lines.join("\n")}\n`);
   const content = options.compressed ? compress(raw) : raw;
   await writeFile(path, options.bytes ? options.bytes(content) : content);
@@ -3229,14 +3270,15 @@ async function rollout(n: number, lines: string[], options: { mtimeMs?: number; 
   return path;
 }
 /** 대화를 되돌려 생긴 기록. 이름은 rollout-<시각>-<원래 세션>_<새 기록>이다 */
-async function reverted(base: number, n: number, lines: string[], options: { mtimeMs?: number } = {}): Promise<string> {
+async function reverted(base: number, n: number, lines: string[], options: { mtimeMs?: number; nameTime?: string } = {}): Promise<string> {
   await mkdir(dir(), { recursive: true });
-  const path = join(dir(), `rollout-2026-11-11T13-00-00-${ID(base)}_${ID(n)}.jsonl`);
+  const path = join(dir(), `rollout-2026-11-11T${options.nameTime ?? "13-00-00"}-${ID(base)}_${ID(n)}.jsonl`);
   await writeFile(path, `${lines.join("\n")}\n`);
   const mtime = options.mtimeMs ?? FILE_TIME;
   await utimes(path, mtime / 1000, mtime / 1000);
   return path;
 }
+const HISTORY = { history_mode: "paginated", history_base: { thread_id: ID(1) } };
 const options = (overrides: Partial<CodexCollectOptions> = {}): CodexCollectOptions => ({ env: {}, homedir: root, clock: { nowMs: NOW, timeZone: "Asia/Seoul" }, cacheDir: join(root, "state", "cache"), rescan: false, ...overrides });
 const responses = (summary: { days: Record<string, { responses: number }> }) => Object.values(summary.days).reduce((sum, day) => sum + day.responses, 0);
 const bySession = (result: Awaited<ReturnType<typeof collectCodex>>, id: string) => result.summaries.find((summary) => summary.sessionId === id)!;
@@ -3290,9 +3332,22 @@ describe("기록 폴더와 읽은 양", () => {
   it("세션 ID를 기록 파일의 식별자로 대신 쓴 기록을 까닭별로 센다. 깨진 첫 줄 뒤의 session_meta로 정체를 정하지 않는다", async () => {
     await rollout(1, ["{broken", meta(ID(9)), record("r1", 10), record("r2", 10), record("r3", 10)]);
     await rollout(2, [record("r9", 5)]);
+    await rollout(3, [record("r8", 5)]);
     const result = await collectCodex(options({ cacheDir: null }));
-    expect(result.idFallbacks).toEqual({ "first-line-not-meta": 1, "first-line-unreadable": 1 });
-    expect(result.summaries.map((summary) => summary.sessionId).sort()).toEqual([ID(1), ID(2)]);
+    expect(result.idFallbacks).toEqual({ "first-line-not-meta": 2, "first-line-unreadable": 1 });
+    expect(result.summaries.map((summary) => summary.sessionId).sort()).toEqual([ID(1), ID(2), ID(3)]);
+  });
+
+  it("크기를 모르는 사본은 하나하나 세고, 수정 시각을 모르는 사본은 논리 세션마다 한 번 센다. 크기는 알고 수정 시각만 모르는 사본은 크기를 모르는 사본이 아니다", async () => {
+    const original = await rollout(1, [meta(ID(1)), record("r1", 10)]);
+    const later = await reverted(1, 3, [meta(ID(1), HISTORY), record("r3", 30)]);
+    const listed = await listCodexFiles(join(root, ".codex"), null);
+    const ghost = (path: string, recordId: string, baseId: string | null, size: number | null) => ({ path, normPath: path.toLowerCase(), size, mtimeMs: null, recordId, baseId, compressed: true });
+    const list = { ...listed, files: [...listed.files, ghost(`${original}.zst`, ID(1), null, null), ghost(`${original}.old.zst`, ID(1), null, null), ghost(`${later}.zst`, ID(3), ID(1), 100)] };
+    const result = await collectCodexFromList(join(root, ".codex"), list, options({ cacheDir: null }));
+    expect(responses(result.summaries[0]!)).toBe(2);
+    expect(result.read.unknownSizeFiles).toBe(2);
+    expect(result.unknownMtimeSessions).toBe(1);
   });
 
   it("정본을 열지 못하고 다른 사본도 없으면 읽지 못한 파일이고, 크기를 모르면 크기를 모르는 파일로도 센다", async () => {
@@ -3336,6 +3391,17 @@ describe.skipIf(!zstdAvailable())("사본과 압축 기록", () => {
     expect(result.read.listedBytes).toBe((await readFile(zst)).length);
   });
 
+  it("다음 사본을 읽은 기록이 절반 넘게 깨졌으면 읽지 못한 파일과 그 바이트는 읽은 사본의 것이다(읽지 못한 비율이 1을 넘지 않는다)", async () => {
+    const zst = await rollout(1, [meta(ID(1)), record("r1", 10), "{x", "{y", "{z"], { compressed: true });
+    const listed = await listCodexFiles(join(root, ".codex"), null);
+    const missing = join(dir(), `rollout-2026-11-11T12-00-00-${ID(1)}.jsonl`);
+    const list = { ...listed, files: [{ path: missing, normPath: missing.toLowerCase(), size: 100_000, mtimeMs: FILE_TIME, recordId: ID(1), baseId: null, compressed: false }, ...listed.files] };
+    const result = await collectCodexFromList(join(root, ".codex"), list, options());
+    const size = (await readFile(zst)).length;
+    expect(responses(result.summaries[0]!)).toBe(1);
+    expect(result.read).toMatchObject({ unreadableFiles: [zst], listedBytes: size, unreadableFileBytes: size });
+  });
+
   it("압축 기록만 있으면 풀어 읽는다. 풀 수 없는 Node.js에서는 건너뛴 압축 파일로 세고 그 바이트를 센다", async () => {
     const path = await rollout(1, [meta(ID(1)), record("r1", 10)], { compressed: true });
     expect(responses((await collectCodex(options())).summaries[0]!)).toBe(1);
@@ -3343,6 +3409,16 @@ describe.skipIf(!zstdAvailable())("사본과 압축 기록", () => {
     expect(skipped.summaries).toEqual([]);
     expect(skipped.read).toMatchObject({ files: 1, skippedFiles: [path], skippedFileBytes: (await readFile(path)).length, unreadableFiles: [] });
     expect(codexUnreadableCount(skipped.read)).toBe(1);
+  });
+
+  it("목록 바이트는 디코더가 읽은 양이 아니라 읽은 사본 파일의 크기다(앞의 건너뛸 수 있는 프레임도 든다)", async () => {
+    const skippable = Buffer.alloc(24);
+    skippable.writeUInt32LE(0x184d2a50, 0);
+    skippable.writeUInt32LE(16, 4);
+    const path = await rollout(1, [meta(ID(1)), record("r1", 10)], { compressed: true, bytes: (content) => Buffer.concat([skippable, content]) });
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(responses(result.summaries[0]!)).toBe(1);
+    expect(result.read.listedBytes).toBe((await readFile(path)).length);
   });
 
   it("끝 프레임이 잘린 압축 기록은 일부만 읽은 파일로 세고 풀린 줄의 숫자를 쓰며 캐시에 넣지 않는다", async () => {
@@ -3397,6 +3473,16 @@ describe("이어받은 앞부분", () => {
     expect(result).toMatchObject({ parentRecordMissing: 1, unverifiedInheritance: 1 });
   });
 
+  it("부모를 모르는 하위 세션(부모 값이 없거나 글자가 아님)은 다 세고 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(2, [meta(ID(2), { thread_source: "subagent" }), record("r1", 10)]);
+    await rollout(3, [meta(ID(3), { thread_source: "subagent", parent_thread_id: 7 }), record("r2", 20)]);
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(bySession(result, ID(2))).toMatchObject({ kind: "sub", parentSessionId: null });
+    expect(bySession(result, ID(3))).toMatchObject({ kind: "sub", parentSessionId: null });
+    expect(responses(bySession(result, ID(2)))).toBe(1);
+    expect(result).toMatchObject({ parentRecordMissing: 0, unverifiedInheritance: 2 });
+  });
+
   it("부모 기록을 일부 읽지 못했으면(절반 넘게 깨진 부모) 그 지문으로 빼되 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
     await rollout(1, [...MOM(), "{x", "{y", "{z", "{w"]);
     await rollout(2, CHILD());
@@ -3439,6 +3525,86 @@ describe("이어받은 앞부분", () => {
     expect(result).toMatchObject({ unverifiedInheritance: 1, read: { unreadableFiles: [missing] } });
   });
 
+  it("같은 세션의 앞 기록이 수집 구간보다 오래됐어도 지문을 얻으려고 읽어 뒤 기록에서 빼고, 그 기록은 요약에 넣지 않는다", async () => {
+    await rollout(1, [meta(ID(1)), item({ type: "UserMessage", id: "u1" }), record("r1", 10)], { mtimeMs: OLD_TIME });
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), item({ type: "UserMessage", id: "u1" }), record("r1", 10), item({ type: "UserMessage", id: "u3" }), record("r3", 30)]);
+    const result = await collectCodex(options());
+    expect(result.summaries.map((summary) => summary.codex?.recordId)).toEqual([ID(3)]);
+    expect(Object.values(result.summaries[0]!.days)[0]).toMatchObject({ responses: 1, humanRequests: 1, tokens: { input: 30 } });
+    expect(result.summaries[0]!.codex?.inheritedSkipped).toMatchObject({ items: 1, responses: 1 });
+    expect(result).toMatchObject({ unverifiedInheritance: 0, mergedSessions: 0, read: { olderThanWindow: 1, files: 1 } });
+  });
+
+  it("원래 기록이 있어도 같은 세션의 다른 기록을 읽지 못했으면 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(1, [meta(ID(1)), record("r1", 10)]);
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), record("r3", 30)]);
+    const home = join(root, ".codex");
+    const listed = await listCodexFiles(home, null);
+    const missing = join(dir(), `rollout-2026-11-11T13-30-00-${ID(1)}_${ID(4)}.jsonl`);
+    const list = { ...listed, files: [...listed.files, { path: missing, normPath: missing.toLowerCase(), size: 10, mtimeMs: FILE_TIME, recordId: ID(4), baseId: ID(1), compressed: false }] };
+    const result = await collectCodexFromList(home, list, options({ cacheDir: null }));
+    expect(result.summaries.map((summary) => summary.sessionId)).toEqual([ID(1)]);
+    expect(responses(result.summaries[0]!)).toBe(2);
+    expect(result).toMatchObject({ unverifiedInheritance: 1, read: { unreadableFiles: [missing] } });
+  });
+
+  it("같은 세션의 구간 밖 기록을 읽지 못했으면 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), record("r3", 30)]);
+    const home = join(root, ".codex");
+    const listed = await listCodexFiles(home, null);
+    const missing = join(dir(), `rollout-2026-11-11T12-00-00-${ID(1)}.jsonl`);
+    const list = { ...listed, files: [{ path: missing, normPath: missing.toLowerCase(), size: 10, mtimeMs: OLD_TIME, recordId: ID(1), baseId: null, compressed: false }, ...listed.files] };
+    const result = await collectCodexFromList(home, list, options({ cacheDir: null }));
+    expect(result.summaries.map((summary) => summary.sessionId)).toEqual([ID(1)]);
+    expect(result).toMatchObject({ unverifiedInheritance: 1, read: { unreadableFiles: [], olderThanWindow: 1, files: 1 } });
+  });
+
+  it("원래 기록이 있어도 같은 세션의 구간 밖 다른 기록을 읽지 못했으면 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(1, [meta(ID(1)), record("r1", 10)]);
+    await reverted(1, 4, [meta(ID(1), HISTORY), record("r4", 40)], { nameTime: "14-00-00" });
+    const home = join(root, ".codex");
+    const listed = await listCodexFiles(home, null);
+    const missing = join(dir(), `rollout-2026-11-11T13-00-00-${ID(1)}_${ID(3)}.jsonl`);
+    const list = { ...listed, files: [...listed.files, { path: missing, normPath: missing.toLowerCase(), size: 10, mtimeMs: OLD_TIME, recordId: ID(3), baseId: ID(1), compressed: false }] };
+    const result = await collectCodexFromList(home, list, options({ cacheDir: null }));
+    expect(responses(result.summaries[0]!)).toBe(2);
+    expect(result).toMatchObject({ unverifiedInheritance: 1, read: { unreadableFiles: [], olderThanWindow: 1, files: 2 } });
+  });
+
+  it("같은 세션의 구간 밖 기록이 절반 넘게 깨졌으면 그 지문으로 빼되 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(1, [meta(ID(1)), item({ type: "UserMessage", id: "u1" }), record("r1", 10), "{x", "{y", "{z", "{w"], { mtimeMs: OLD_TIME });
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), item({ type: "UserMessage", id: "u1" }), record("r1", 10), record("r3", 30)]);
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(responses(result.summaries[0]!)).toBe(1);
+    expect(result).toMatchObject({ unverifiedInheritance: 1, read: { unreadableFiles: [], olderThanWindow: 1 } });
+  });
+
+  it("같은 세션으로 이름이 붙은 구간 밖 기록은 읽어서 세션 ID가 맞을 때만 뺄 지문에 넣는다", async () => {
+    await rollout(1, [meta(ID(1)), item({ type: "UserMessage", id: "u1" }), record("r1", 10)]);
+    await reverted(1, 2, [meta(ID(7)), item({ type: "UserMessage", id: "u5" }), record("r5", 50)], { mtimeMs: OLD_TIME });
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), item({ type: "UserMessage", id: "u5" }), record("r5", 50)]);
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(result.summaries.map((summary) => summary.sessionId)).toEqual([ID(1)]);
+    expect(Object.values(result.summaries[0]!.days)[0]).toMatchObject({ responses: 2, humanRequests: 2, tokens: { input: 60 } });
+    expect(result).toMatchObject({ unverifiedInheritance: 0, mergedSessions: 1, read: { olderThanWindow: 1 } });
+  });
+
+  it("대화를 되돌려 생긴 기록만 있고 원래 기록을 찾지 못한 세션은 다 세고 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await reverted(1, 3, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), record("r3", 30)]);
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(result.summaries.map((summary) => summary.sessionId)).toEqual([ID(1)]);
+    expect(responses(result.summaries[0]!)).toBe(1);
+    expect(result.unverifiedInheritance).toBe(1);
+  });
+
+  it("부모 세션의 원래 기록을 찾지 못했으면(되돌려 생긴 기록만 있음) 그 지문으로 빼되 하위 세션도 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await reverted(1, 9, [meta(ID(1), { history_mode: "paginated", history_base: { thread_id: ID(1) } }), ...MOM().slice(1)]);
+    await rollout(2, CHILD());
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(responses(bySession(result, ID(2)))).toBe(1);
+    expect(result).toMatchObject({ parentRecordMissing: 0, unverifiedInheritance: 2 });
+  });
+
   it("부모 기록이 수집 구간보다 오래됐어도 지문을 얻으려고 읽고, 그 부모는 요약에 넣지 않는다", async () => {
     await rollout(1, MOM(), { mtimeMs: OLD_TIME });
     await rollout(2, CHILD());
@@ -3458,6 +3624,49 @@ describe("이어받은 앞부분", () => {
     expect(Object.values(child.days)[0]).toMatchObject({ responses: 1, humanRequests: 1, tokens: { input: 20 } });
     expect(child.codex?.inheritedSkipped).toEqual({ items: 2, totals: 0, responses: 2 });
     expect(result).toMatchObject({ parentRecordMissing: 0, read: { olderThanWindow: 3, files: 1 } });
+  });
+
+  it("구간 밖 부모 기록이 절반 넘게 깨졌으면 그 지문으로 빼되 하위 세션을 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(1, [...MOM(), "{x", "{y", "{z", "{w"], { mtimeMs: OLD_TIME });
+    await rollout(2, CHILD());
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(responses(bySession(result, ID(2)))).toBe(1);
+    expect(result).toMatchObject({ parentRecordMissing: 0, unverifiedInheritance: 1, read: { olderThanWindow: 1 } });
+  });
+
+  it("부모 세션의 다른 기록을 읽지 못했으면 부모 세션과 하위 세션을 모두 이어받은 것을 확인하지 못한 세션으로 센다", async () => {
+    await rollout(1, MOM());
+    await rollout(2, CHILD());
+    const home = join(root, ".codex");
+    const listed = await listCodexFiles(home, null);
+    const missing = join(dir(), `rollout-2026-11-11T13-30-00-${ID(1)}_${ID(9)}.jsonl`);
+    const list = { ...listed, files: [...listed.files, { path: missing, normPath: missing.toLowerCase(), size: 10, mtimeMs: FILE_TIME, recordId: ID(9), baseId: ID(1), compressed: false }] };
+    const result = await collectCodexFromList(home, list, options({ cacheDir: null }));
+    expect(responses(bySession(result, ID(2)))).toBe(1);
+    expect(result).toMatchObject({ parentRecordMissing: 0, unverifiedInheritance: 2 });
+  });
+
+  it("같은 세션의 기록 차례는 원래 기록이 먼저다. 파일 이름이 원래 기록보다 앞선 되돌려 생긴 기록도 원래 기록 뒤에 센다", async () => {
+    await rollout(1, [meta(ID(1)), record("shared", 10)], { nameTime: "23-00-00" });
+    await reverted(1, 3, [meta(ID(1), HISTORY), record("shared", 99)], { nameTime: "01-00-00" });
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(Object.values(result.summaries[0]!.days)[0]).toMatchObject({ responses: 1, tokens: { input: 10 } });
+  });
+
+  it("원래 기록 다음은 기록 파일 식별자가 아니라 파일 이름(만든 차례) 차례다", async () => {
+    await rollout(1, [meta(ID(1))]);
+    await reverted(1, 9, [meta(ID(1), HISTORY), record("shared", 10)], { nameTime: "13-00-00" });
+    await reverted(1, 2, [meta(ID(1), HISTORY), record("shared", 99)], { nameTime: "14-00-00" });
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(Object.values(result.summaries[0]!.days)[0]).toMatchObject({ responses: 1, tokens: { input: 10 } });
+  });
+
+  it("같은 세션의 뒤 기록은 바로 앞 기록만이 아니라 앞선 기록 모두의 지문을 뺀다", async () => {
+    await rollout(1, [meta(ID(1)), record("r1", 10)]);
+    await reverted(1, 3, [meta(ID(1), HISTORY), record("r2", 20)], { nameTime: "13-00-00" });
+    await reverted(1, 4, [meta(ID(1), HISTORY), record("r1", 10), record("r3", 30)], { nameTime: "14-00-00" });
+    const result = await collectCodex(options({ cacheDir: null }));
+    expect(Object.values(result.summaries[0]!.days)[0]).toMatchObject({ responses: 3, tokens: { input: 60 } });
   });
 
   it("같은 세션의 기록 파일 여럿(대화를 되돌려 생긴 기록)은 하나로 합친다", async () => {
@@ -3735,11 +3944,11 @@ export interface CodexReadStats {
   bytes: number;
   fromCache: number;
   inProgress: number;
-  /** 정본의 수정 시각이 수집 구간보다 앞서 열지 않은 기록 파일. 하위 세션의 부모라서 지문만 읽은 것도 든다 */
+  /** 정본의 수정 시각이 수집 구간보다 앞서 열지 않은 기록 파일. 하위 세션의 부모이거나 같은 세션의 다른 기록이라서 지문만 읽은 것도 든다 */
   olderThanWindow: number;
-  /** 크기를 보지 못했거나, 어느 사본도 열거나 읽지 못했거나, 절반 넘게 깨진 기록 파일. 경로 차례다 */
+  /** 크기를 보지 못했거나, 어느 사본도 열거나 읽지 못했거나, 절반 넘게 깨진 기록 파일. 읽은 사본이 있으면 그 사본의 경로이고 없으면 정본의 경로다. 경로 차례다 */
   unreadableFiles: string[];
-  /** unreadableFiles 가운데 크기를 아는 정본의 바이트 */
+  /** unreadableFiles 가운데 크기를 아는 것의 바이트. listedBytes와 같은 사본의 것이라 읽지 못한 비율이 1을 넘지 않는다 */
   unreadableFileBytes: number;
   /** 크기를 보지 못한 사본의 수. 다른 사본을 읽은 기록의 것도 센다(「5단계 계획 전 결정」 3번). 하나라도 있으면 읽지 못한 비율은 아래 경계다 */
   unknownSizeFiles: number;
@@ -3769,8 +3978,8 @@ export interface CodexCollectResult {
   /** 수정 시각을 보지 못한 사본이 있던 세션의 수. 그 기록을 읽지 못했으면 기록 파일 하나를 하나로 센다(「5단계 계획 전 결정」 3번) */
   unknownMtimeSessions: number;
   /**
-   * 이어받은 앞부분을 확인하지 못한 세션의 수. 부모 기록을 하나도 읽지 못했거나 일부를 읽지 못한 하위 세션, 같은 세션의 다른 기록을 읽지 못했거나 일부만 읽은 세션,
-   * 복사된 앞부분 안에서 기준을 찾지 못한 기록이 있는 세션이다. 이 세션들의 숫자는 대신 본 것이다(「5단계 계획 전 결정」 7번)
+   * 이어받은 앞부분을 확인하지 못한 세션의 수. 부모를 모르거나 부모 기록을 하나도 읽지 못했거나 일부를 읽지 못한(부모의 원래 기록을 찾지 못한 것도) 하위 세션,
+   * 같은 세션의 다른 기록(수집 구간 밖의 것도)을 읽지 못했거나 일부만 읽은 세션, 원래 기록(식별자가 세션 ID와 같은 기록)을 찾지 못한 세션, 복사된 앞부분 안에서 기준을 찾지 못한 기록이 있는 세션이다. 이 세션들의 숫자는 대신 본 것이다(「5단계 계획 전 결정」 7번)
    */
   unverifiedInheritance: number;
   /** 세션 ID를 기록 파일의 식별자로 대신 쓴 기록의 까닭별 수(「5단계 계획 전 결정」 7번) */
@@ -3894,7 +4103,7 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     .map((group) => ({ ...group, copies: [...group.copies] }))
     .sort((a, b) => byPath(a.copies[0]!, b.copies[0]!));
   const inWindow = groups.filter((group) => lowerBound === null || group.copies[0]!.mtimeMs === null || group.copies[0]!.mtimeMs >= lowerBound);
-  // 구간 밖의 기록은 하위 세션의 부모일 때만 지문을 얻으려고 읽는다. 기록 파일 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID로 찾는다
+  // 구간 밖의 기록은 하위 세션의 부모이거나 구간 안 기록과 같은 세션일 때만 지문을 얻으려고 읽는다. 기록 파일 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID로 찾는다
   const inside = new Set(inWindow);
   const outside = new Map<string, CodexCopyGroup[]>();
   for (const group of groups) {
@@ -3955,28 +4164,31 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     unknownMtime.add(record === undefined ? `record:${group.recordId}` : `session:${record.summary.sessionId}`);
   }
 
-  // 2. 이어받은 앞부분을 뺀다(「5단계 계획 전 결정」 7번). 기록마다 뺄 지문은 하위 세션이면 부모 세션의 기록들과, 같은 세션에 기록이 여럿이면 그보다 앞선 기록들의 것이다.
+  // 2. 이어받은 앞부분을 뺀다(「5단계 계획 전 결정」 7번). 기록마다 뺄 지문은 하위 세션이면 부모 세션의 기록들과, 같은 세션에 기록이 여럿이면 그보다 앞선 기록들(수집 구간 밖의 것도)의 것이다.
   //    그 지문 가운데 자기 기록에도 있는 것이 해석 때와 다르면 그 지문을 넣어 다시 읽는다
-  // 이어받은 것을 확인할 수 없게 하는 것: 읽지 못했거나 건너뛴 기록(어느 세션의 것인지는 이름으로만 안다)과, 일부만 읽었거나 절반 넘게 깨진 기록의 세션
+  // 이어받은 것을 확인할 수 없게 하는 것: 읽지 못했거나 건너뛴 기록(어느 세션의 것인지는 이름으로만 안다), 일부만 읽었거나 절반 넘게 깨진 기록의 세션, 원래 기록을 찾지 못한 세션, 부모를 모르는 하위 세션
   const failedKeys = new Set(failedGroups.flatMap(keysOf));
   const damaged = new Set(reads.filter((record) => record.partial || mostlyBroken(record.summary)).map((record) => record.summary.sessionId));
   const extra = new Map<CodexCopyGroup, RecordRead | Failure>();
   const parentPrints = new Map<string, CodexFingerprints | null>();
+  /** 부모 세션의 원래 기록(식별자가 세션 ID와 같은 기록)을 찾았는지 */
+  const parentOriginal = new Map<string, boolean>();
   const printsOf = async (parentId: string): Promise<CodexFingerprints | null> => {
     if (parentPrints.has(parentId)) return parentPrints.get(parentId)!;
-    const found = reads.filter((record) => record.summary.sessionId === parentId).map((record) => record.prints);
+    const found = reads.filter((record) => record.summary.sessionId === parentId);
     for (const old of outside.get(parentId) ?? []) {
       if (!extra.has(old)) extra.set(old, await readGroup(old, options, zstd, cacheDir));
       const result = extra.get(old)!;
       // 이름으로 찾은 기록이라 읽어서 세션 ID가 맞을 때만 쓴다. 읽지 못했으면 부모 기록이 모자란 것이다
       if (typeof result === "string") failedKeys.add(parentId);
       else if (result.summary.sessionId === parentId) {
-        found.push(result.prints);
+        found.push(result);
         if (result.partial || mostlyBroken(result.summary)) damaged.add(parentId);
       }
     }
-    const prints = found.length === 0 ? null : unionOf(found);
+    const prints = found.length === 0 ? null : unionOf(found.map((record) => record.prints));
     parentPrints.set(parentId, prints);
+    parentOriginal.set(parentId, found.some((record) => record.canonical.recordId === parentId));
     return prints;
   };
   const siblings = new Map<string, RecordRead[]>();
@@ -3984,6 +4196,18 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     const list = siblings.get(record.summary.sessionId);
     if (list === undefined) siblings.set(record.summary.sessionId, [record]);
     else list.push(record);
+  }
+  // 같은 세션의 기록이 수집 구간 밖에도 있으면 지문을 얻으려고 읽고 차례에 넣는다. 요약에는 넣지 않는다. 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다
+  for (const [sessionId, list] of siblings) {
+    for (const old of outside.get(sessionId) ?? []) {
+      if (!extra.has(old)) extra.set(old, await readGroup(old, options, zstd, cacheDir));
+      const result = extra.get(old)!;
+      if (typeof result === "string") failedKeys.add(sessionId);
+      else if (result.summary.sessionId === sessionId) {
+        list.push(result);
+        if (result.partial || mostlyBroken(result.summary)) damaged.add(sessionId);
+      }
+    }
   }
   for (const list of siblings.values()) list.sort(siblingOrder);
   const orphans = new Set<string>();
@@ -3993,9 +4217,12 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     const parentId = record.summary.kind === "sub" && record.summary.parentSessionId !== null && record.summary.parentSessionId !== sessionId ? record.summary.parentSessionId : null;
     const parent = parentId === null ? null : await printsOf(parentId);
     if (parentId !== null && parent === null) orphans.add(sessionId);
-    if (parentId !== null && (parent === null || failedKeys.has(parentId) || damaged.has(parentId))) unverified.add(sessionId);
+    // 하위 세션인데 부모를 모르면(부모 값이 없거나 자기 자신) 뺄 부모 지문을 찾을 수 없다
+    if (record.summary.kind === "sub" && parentId === null) unverified.add(sessionId);
+    if (parentId !== null && (parent === null || parentOriginal.get(parentId) !== true || failedKeys.has(parentId) || damaged.has(parentId))) unverified.add(sessionId);
     const list = siblings.get(sessionId)!;
-    if (failedKeys.has(sessionId) || (list.length > 1 && damaged.has(sessionId))) unverified.add(sessionId);
+    // 원래 기록(식별자가 세션 ID와 같은 기록)을 찾지 못했으면 대화를 되돌려 생긴 기록이 무엇을 이어받았는지 확인할 수 없다
+    if (failedKeys.has(sessionId) || (list.length > 1 && damaged.has(sessionId)) || !list.some((sibling) => sibling.canonical.recordId === sessionId)) unverified.add(sessionId);
     const sources = [...(parent === null ? [] : [parent]), ...list.slice(0, list.indexOf(record)).map((sibling) => sibling.prints)];
     const inherited = sources.length === 0 ? null : unionOf(sources);
     const digest = sharedDigest(record.prints, inherited);
@@ -4013,10 +4240,14 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
   // 3. 읽은 양을 세고 캐시에 넣는다
   const kept: RecordRead[] = [];
   const idFallbacks = nameRecord<number>();
+  // 읽지 못한 기록은 읽은 사본(목록의 바이트에 넣은 것)의 경로와 바이트로 센다
+  const unreadable = (record: RecordRead): void => {
+    read.unreadableFiles.push(record.file.path);
+    read.unreadableFileBytes += record.file.size ?? 0;
+  };
   for (const record of reads) {
     if (record.failed) {
-      read.unreadableFiles.push(record.canonical.path);
-      read.unreadableFileBytes += record.canonical.size ?? 0;
+      unreadable(record);
       continue;
     }
     kept.push(record);
@@ -4025,10 +4256,8 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     read.bytes += record.bytesRead;
     if (record.fromCache) read.fromCache++;
     if (record.inProgress) read.inProgress++;
-    if (mostlyBroken(record.summary)) {
-      read.unreadableFiles.push(record.file.path);
-      read.unreadableFileBytes += record.canonical.size ?? 0;
-    } else if (record.partial) read.partialFiles.push(record.file.path);
+    if (mostlyBroken(record.summary)) unreadable(record);
+    else if (record.partial) read.partialFiles.push(record.file.path);
   }
   if (cacheDir !== null) {
     for (const record of [...kept, ...[...extra.values()].filter((result): result is RecordRead => typeof result !== "string")]) {
@@ -4072,7 +4301,7 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/collect`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 10개, 시험 142개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 10개, 시험 165개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -4342,7 +4571,7 @@ git commit -m "feat: aq doctor에 Codex 기록 폴더를 더함"
 - [ ] **Step 1: 전체 검사를 돌린다**
 
 Run: `npm run check`
-Expected: 타입 검사 통과, 시험 파일 97개·시험 1,417개 통과(4단계까지의 88개·1,290개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다. 그 Node.js에 zstd가 없으면 압축 기록을 만드는 시험 묶음 둘을 건너뛴다.
+Expected: 타입 검사 통과, 시험 파일 97개·시험 1,440개 통과(4단계까지의 88개·1,290개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다. 그 Node.js에 zstd가 없으면 압축 기록을 만드는 시험 묶음 둘을 건너뛴다.
 
 - [ ] **Step 2: 묶음을 다시 만들어도 그대로인지 확인한다**
 
@@ -4368,7 +4597,7 @@ Codex 기록 폴더는 읽기만 한다. 측정 도구는 저장소 밖에 두�
 | 원본에서 따로 센 값 | 압축하지 않은 기록만 있는 세션 가운데 새 형식(첫 토큰 줄이 `token_usage_record`)인 것은 응답 수(`response_id` 종류), 주 세션의 사람 요청(`UserMessage`), 셸 실행(CommandExecution)이, 하위 세션은 부모 기록에도 있는 ID를 뺀 수가 모으기의 결과와 모두 같다. 순수 옛 형식(`token_usage_record`가 없는) 주 세션은 응답 수(누적값이 직전과 다른 줄)와 입력 토큰 합이 같다. 원본은 줄바꿈(`\n`)에서만 잘라 읽는다. Node.js의 `readline`은 U+2028과 U+2029에서도 줄을 잘라 그런 글자가 든 줄을 깨진 줄로 만든다(「5단계 1부 계획에서 보완」의 10번) |
 | `aq doctor` | 홈을 빈 임시 폴더로 주고(`USERPROFILE`과 `HOME`) `CODEX_HOME`만 실제 Codex 기록 폴더로 주어 묶은 실행 파일로 돌리면, 열쇠가 `node`, `zstd`, `claudeCode`, `codex`, `state` 차례이고 `codex.sessionsFound`가 참, 기록 파일이 있으며 읽지 못한 것이 0이다. 상태 폴더는 임시 홈 아래다. 끝나면 임시 홈을 지운다 |
 
-작성자 PC에서 계획 전과 계획 리뷰 1차 뒤에 돌린 결과는 위와 같았다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴), 부모 기록이 모자란 하위 세션, 같은 세션의 다른 기록을 읽지 못한 세션, 세션 ID를 대신 쓴 기록, 수정 시각을 모르는 사본은 없었다. 수집 구간에 16MB를 넘는 도구 결과 줄이 있어 Codex MCP 관측이 「너무 긴 줄」로 빠짐없지 않았다. 이것은 1부의 결함이 아니라 설계 9.8 그대로이고, 3부의 일로 넘긴다(「5단계 1부 계획에서 보완」의 10번).
+작성자 PC에서 계획 전과 계획 리뷰 1차·2차 뒤에 돌린 결과는 위와 같았다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴), 부모 기록이 모자란 하위 세션, 같은 세션의 다른 기록을 읽지 못한 세션, 세션 ID를 대신 쓴 기록, 수정 시각을 모르는 사본은 없었다. 수집 구간에 16MB를 넘는 도구 결과 줄이 있어 Codex MCP 관측이 「너무 긴 줄」로 빠짐없지 않았다. 이것은 1부의 결함이 아니라 설계 9.8 그대로이고, 3부의 일로 넘긴다(「5단계 1부 계획에서 보완」의 10번).
 
 - [ ] **Step 5: 원장을 고치고 커밋한다**
 
@@ -4390,7 +4619,7 @@ gh pr create --base develop --head 5단계-1부-Codex-기록-읽기 --title "fea
 
 - [ ] **Step 7: 짝 검증을 받는다(병합 앞의 관문)**
 
-새 짝 Codex를 만들어(5단계 1부 구현 전용, 정독과 실행이 다 무거우므로 둘) 다음을 나눠 맡긴다. 한 짝은 정독이다. 설계 9.1~9.4, 9.6~9.8, 20.1, 「5단계 계획 전 결정」과 「5단계 1부 계획에서 보완」을 이 계획의 코드와 대조하고, 시험이 놓치는 그럴듯한 틀린 구현(첫 물리적 줄과 세션 ID를 대신 쓴 까닭, 버전, 넘어가는 자리의 견줌, 누적값이 줄 때, 턴의 층 고르기와 날짜를 넘는 턴, 문맥의 창, 이어받은 것의 기준 옮기기와 기준을 찾지 못한 기록, 같은 세션의 앞 기록 빼기, 이어받은 것을 확인하지 못한 세션, 다음 사본, 크기와 수정 시각을 모르는 사본, 압축의 판정, 캐시의 겹침 지문, 합치기의 정체)을 반례로 찾는다. 다른 짝은 실행이다. `npm run check`와 Node.js 22를 다시 돌리고, 임시 폴더에 만든 합성 기록과 이 PC의 Codex 기록(읽기만)으로 Step 4를 자기 방법으로 재현한다. 두 짝에게 서로의 결론을 미리 알려 주지 않는다. 필수 지적은 같은 브랜치에서 새 커밋으로 고치고, 지적한 짝이 다시 본다. 고친 뒤에는 그 부분만이 아니라 기능 전체를 다시 본다. 짝과 주 세션 모두 필수 지적이 0건이 될 때까지 돈다. 검증 결과를 병합 요청 본문의 「짝 검증」 절에 더한다(`gh pr edit 5단계-1부-Codex-기록-읽기 --body-file "$TEMP/aq-pr-stage5-1.md"`).
+새 짝 Codex를 만들어(5단계 1부 구현 전용, 정독과 실행이 다 무거우므로 둘) 다음을 나눠 맡긴다. 한 짝은 정독이다. 설계 9.1~9.4, 9.6~9.8, 20.1, 「5단계 계획 전 결정」과 「5단계 1부 계획에서 보완」을 이 계획의 코드와 대조하고, 시험이 놓치는 그럴듯한 틀린 구현(첫 물리적 줄과 세션 ID를 대신 쓴 까닭, 버전, 넘어가는 자리의 견줌, 누적값이 줄 때, 턴의 층 고르기와 날짜를 넘는 턴, 문맥의 창, 이어받은 것의 기준 옮기기와 기준을 찾지 못한 기록, 같은 세션의 앞 기록 빼기(구간 밖의 것과 기록 차례), 이어받은 것을 확인하지 못한 세션(부모를 모름, 원래 기록을 찾지 못함), 다음 사본과 읽지 못한 바이트, 크기와 수정 시각을 모르는 사본, 압축의 판정, 캐시의 겹침 지문, 합치기의 정체)을 반례로 찾는다. 다른 짝은 실행이다. `npm run check`와 Node.js 22를 다시 돌리고, 임시 폴더에 만든 합성 기록과 이 PC의 Codex 기록(읽기만)으로 Step 4를 자기 방법으로 재현한다. 두 짝에게 서로의 결론을 미리 알려 주지 않는다. 필수 지적은 같은 브랜치에서 새 커밋으로 고치고, 지적한 짝이 다시 본다. 고친 뒤에는 그 부분만이 아니라 기능 전체를 다시 본다. 짝과 주 세션 모두 필수 지적이 0건이 될 때까지 돈다. 검증 결과를 병합 요청 본문의 「짝 검증」 절에 더한다(`gh pr edit 5단계-1부-Codex-기록-읽기 --body-file "$TEMP/aq-pr-stage5-1.md"`).
 
 - [ ] **Step 8: 병합한다**
 
@@ -4461,21 +4690,21 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`2d0de19`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~9는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 9의 묶은 실행 파일 다시 만들기도 통과했다. 과제 9 뒤의 `npm run check`는 시험 파일 97개·시험 1,417개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 246개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`2d0de19`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~9는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 9의 묶은 실행 파일 다시 만들기도 통과했다. 과제 9 뒤의 `npm run check`는 시험 파일 97개·시험 1,440개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 246개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 99개를 하나씩 넣어 모두 시험이 잡았다. 계획 초안 때 넣은 60개(처음에는 57개를 잡아 시험 셋을 더했다)에, 계획 리뷰 1차에서 바뀐 동작의 것과 짝이 찾은 것을 더했다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 126개를 하나씩 넣어 모두 시험이 잡았다. 계획 초안 때 넣은 60개(처음에는 57개를 잡아 시험 셋을 더했다)에, 계획 리뷰 1차·2차에서 바뀐 동작의 것과 짝이 찾은 것을 더했다.
 
 - 목록 여섯. 두 UUID 이름에서 앞 UUID를 식별자로, 끝 UUID 앞의 밑줄을 받지 않음, 크기를 보지 못한 파일을 버림, 압축본을 정본으로 앞세움, 수정 시각을 모르는 사본을 앞세움, 날짜 폴더 자리의 파일을 세지 않음.
 - 압축 여섯. 프레임을 나누지 않고 한 번에 풂, 블록 머리 앞에서 잘린 끝 프레임을 완결로, 건너뛸 수 있는 프레임을 깨짐으로, 체크섬을 세지 않음, RLE 블록의 길이를 압축 길이로, 프레임 사이에서 줄 나누기를 새로 시작.
-- 해석 서른아홉. 정체와 토큰 열셋(넘어가는 자리를 견주지 않음, 누적값이 줄면 차분으로, 같아도 셈, 누적값 견주기에서 캐시 칸을 뺌, 응답 ID를 소문자로 견줌, 하위 세션 값 하나를 빠뜨림, 정체 모름을 하위로, 앞선 버전 꼬리를 떼지 않음, 버전을 첫 `session_meta`에서만, 뒤의 `session_meta`로도 정체를 정함, 깨진 첫 줄을 첫 줄로 보지 않음, 첫 줄이 `session_meta`가 아닌 것과 줄이 없는 것을 적지 않음), 도구와 지표 열여섯(셸 종료 코드 0을 오류로, 상태를 보지 않는 종류도 결과로, 이름 모름의 호출을 더하지 않음, 이름 모름을 첫 날짜에 모두 넣음, 호출 층에서 `function_call`이나 `web_search_call`을 뺌, 턴 시작에서 묶음을 닫지 않음, 도구가 아닌 종류를 정체 모름으로, 정체 모를 종류를 세지 않음, 시각 없는 줄이 앞 줄의 날짜를 쓰지 않음, 강도 없음을 세지 않음, 턴 시작에서 문맥을 닫음, 턴이 끝나도 문맥을 닫지 않음, 문맥보다 앞에 온 응답에 붙이지 않음, 지침 크기를 마지막 것으로, 깨진 줄의 종류를 읽지 않음), 이어받은 것 열(이어받은 항목·누적값·응답·호출 층 호출을 셈, 직전 값도 부모 것일 때만 누적값을 뺌, 누적값 지문에서 캐시 쓰기 칸을 뺌, 뺀 항목과 뺀 응답을 자기 지문에 넣지 않음, 기준을 찾지 못한 기록을 늘 아니라고 함, 약한 항목도 복사된 앞부분의 끝으로 봄).
+- 해석 마흔일곱. 정체와 토큰 열넷(넘어가는 자리를 견주지 않음, 누적값이 줄면 차분으로, 같아도 셈, 누적값 견주기에서 캐시 칸을 뺌, 응답 ID를 소문자로 견줌, 하위 세션 값 하나를 빠뜨림, 정체 모름을 하위로, 앞선 버전 꼬리를 떼지 않음, 버전을 첫 `session_meta`에서만, 버전을 글자 차례로 견줌, 뒤의 `session_meta`로도 정체를 정함, 깨진 첫 줄을 첫 줄로 보지 않음, 첫 줄이 `session_meta`가 아닌 것과 줄이 없는 것을 적지 않음), 도구와 지표 스물(셸 종료 코드 0을 오류로, 상태를 보지 않는 종류도 결과로, 이름 모름의 호출을 더하지 않음, 이름 모름을 첫 날짜에 모두 넣음, 날짜마다 차이를 턴 전체 차이로 자르지 않음, 늦은 날짜부터 나눔, 호출 층에서 `function_call`이나 `web_search_call`을 뺌, 턴 시작에서 묶음을 닫지 않음, 도구가 아닌 종류를 정체 모름으로, 정체 모를 종류를 세지 않음, 시각 없는 줄이 앞 줄의 날짜를 쓰지 않음, 강도 없음을 세지 않음, 턴 시작에서 문맥을 닫음, 턴이 끝나도 문맥을 닫지 않음, 문맥보다 앞에 온 응답에 붙이지 않음, 그런 응답을 같은 날 하나로 합침, 모델이 없는 새 문맥에 앞 모델을 이어 씀, 지침 크기를 마지막 것으로, 깨진 줄의 종류를 읽지 않음), 이어받은 것 열셋(이어받은 항목·누적값·응답·호출 층 호출을 셈, 직전 값도 부모 것일 때만 누적값을 뺌, 누적값 지문에서 캐시 쓰기 칸을 뺌, 뺀 항목과 뺀 응답을 자기 지문에 넣지 않음, 기준을 찾지 못한 기록을 늘 아니라고 함, 약한 항목도 복사된 앞부분의 끝으로 봄, 이어받은 호출이나 응답을 끝으로 보지 않음, 직전 누적값이 있으면 처음 센 자기 누적값을 적지 않음).
 - 관측 다섯. 사용 신호의 종류를 상관없는 것으로(`event_msg`, `response_item`), 종류를 읽지 못한 조각을 상관없는 것으로, 너무 긴 줄을 까닭으로 보지 않음, 덮는 범위의 칸 하나를 바꿈.
 - 캐시와 되살리기 여덟. 겹침 지문을 뺄 지문 전부로, 겹침 지문에서 호출 종류를 뺌, 지문 꼴을 보지 않음, 지문 칸이 없어도 꺼냄, Claude Code 요약의 `codex` 칸을 받음, 되살린 요약에서 `codex` 칸을 뺌, 대신 쓴 까닭을 보지 않고 되살림, 정체 모를 종류를 들어온 차례로 냄.
 - 합치기 일곱. 같은 날의 수를 덮어씀, 원래 기록 대신 식별자 차례 첫 기록의 정체, 버전과 가장 이른 날짜를 원래 기록의 것으로, 날짜 없는 줄의 수와 캐시 쓰기 토큰과 기준을 찾지 못함을 버림.
-- 모으기 스물다섯. 다시 읽어야 할 때 다시 읽지 않음, 다시 읽기에서도 캐시를 씀, 다음 사본을 읽지 않음, 같은 세션을 합치지 않음, 같은 세션의 앞 기록 지문을 빼지 않음, 끊긴 압축과 쓰는 중인 파일을 캐시에 넣음, 체크섬 오류를 일부 읽기로 보지 않음, 구간 밖의 부모를 읽지 않음, 이름으로 찾은 부모의 세션 ID를 견주지 않음, 건너뛴 압축과 일부만 읽은 파일을 읽지 못한 파일로, 절반 넘게 깨진 기록과 그 바이트를 세지 않음, 읽지 않은 사본을 세지 않음, 부모 기록이 없어도 캐시의 하위 요약을 씀, 관측에 건너뛴 압축과 일부만 읽은 파일을 넣지 않음, 크기 모르는 사본을 정본만 셈, 수정 시각 모르는 사본의 세션을 세지 않음, 목록 바이트를 정본의 것으로, 부모 기록이 모자란 하위 세션과 같은 세션의 다른 기록을 읽지 못한 세션과 기준을 찾지 못한 기록의 세션을 세지 않음, 대신 쓴 세션 ID를 세지 않음.
+- 모으기 마흔넷. 다시 읽어야 할 때 다시 읽지 않음, 다시 읽기에서도 캐시를 씀, 다음 사본을 읽지 않음, 같은 세션을 합치지 않음, 같은 세션의 앞 기록 지문을 빼지 않음, 바로 앞 기록의 지문만 뺌, 기록 차례에서 원래 기록을 앞세우지 않음, 뒤 기록을 파일 이름 대신 식별자 차례로, 끊긴 압축과 쓰는 중인 파일을 캐시에 넣음, 체크섬 오류를 일부 읽기로 보지 않음, 구간 밖의 부모를 읽지 않음, 이름으로 찾은 부모의 세션 ID를 견주지 않음, 구간 밖 부모가 깨져도 세지 않음, 구간 밖의 같은 세션 기록을 읽지 않음·읽지 못해도 세지 않음·세션 ID를 견주지 않음·깨져도 세지 않음, 건너뛴 압축과 일부만 읽은 파일을 읽지 못한 파일로, 절반 넘게 깨진 기록과 그 바이트를 세지 않음, 읽지 못한 바이트를 정본의 크기로, 읽지 않은 사본을 세지 않음, 부모 기록이 없어도 캐시의 하위 요약을 씀, 관측에 건너뛴 압축과 일부만 읽은 파일을 넣지 않음, 크기 모르는 사본을 정본만이나 기록마다 하나까지만 셈, 수정 시각만 모르는 사본도 크기 모름으로, 수정 시각 모르는 사본의 세션을 세지 않거나 기록마다 셈, 목록 바이트를 정본의 것이나 디코더가 읽은 양으로, 부모를 모르는 하위 세션·부모 기록이 모자란 하위 세션·부모의 원래 기록을 찾지 못한 하위 세션·같은 세션의 다른 기록을 읽지 못했거나 깨진 세션·원래 기록을 찾지 못한 세션·기준을 찾지 못한 기록의 세션을 세지 않음, 부모 기록 실패를 자식 세션 ID로 찾음, 대신 쓴 세션 ID를 세지 않거나 같은 까닭을 하나만 셈.
 - doctor 셋. 기록 파일을 사본까지 셈, 사본 하나라도 압축이면 압축본만으로, 크기 모르는 파일을 세지 않음.
 
-이 PC의 Codex 기록(읽기만, 캐시는 임시 폴더)으로 Task 10 Step 4를 미리 돌렸다(계획 리뷰 1차 뒤의 코드로 다시 돌렸다). 수집 구간과 모든 기록(`--rescan`) 모두 오류 없이 끝났고 음수 칸이 없었다. 큰 압축 기록도 끝까지 흘려 읽었고 최대 메모리는 Node.js 기본 한도 안이었다. 캐시가 있을 때와 없을 때 세션마다의 요약이 모두 같았고(측정 중에 바뀐 기록은 없었다), 둘째 실행은 모두 캐시에서 꺼냈다. 하위 세션마다 부모 기록을 찾았고 이어받아 뺀 항목과 누적값이 있었다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴), 세션 ID를 대신 쓴 기록과 수정 시각을 모르는 사본은 없었다. 대화를 되돌려 생긴 기록이 원래 세션과 합쳐졌고 이름 없는 파일이 없었다. 원본에서 따로 센 값(압축하지 않은 새 형식 세션의 응답, 주 세션의 사람 요청, 셸 실행과, 순수 옛 형식 주 세션의 응답과 입력 토큰)이 모두 같았다. 묶은 실행 파일의 `aq doctor`도 임시 홈에서 Expected대로였고 상태 폴더는 임시 홈 아래에만 생겼다.
+이 PC의 Codex 기록(읽기만, 캐시는 임시 폴더)으로 Task 10 Step 4를 미리 돌렸다(계획 리뷰 2차 뒤의 코드로 다시 돌렸다). 수집 구간과 모든 기록(`--rescan`) 모두 오류 없이 끝났고 음수 칸이 없었다. 큰 압축 기록도 끝까지 흘려 읽었고 최대 메모리는 Node.js 기본 한도 안이었다. 캐시가 있을 때와 없을 때 세션마다의 요약이 모두 같았고(측정 중에 바뀐 기록은 없었다), 둘째 실행은 모두 캐시에서 꺼냈다. 하위 세션마다 부모 기록을 찾았고 이어받아 뺀 항목과 누적값이 있었다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴. 짝 2가 리뷰 2차에서 그 가운데 다섯을 원본에서 직접 열어 맞는 판정임을 확인했다), 리뷰 2차에서 새로 센 까닭(부모를 모름, 원래 기록을 찾지 못함, 부모의 원래 기록을 찾지 못함)으로 늘어난 세션은 없었다. 세션 ID를 대신 쓴 기록과 수정 시각을 모르는 사본은 없었다. 대화를 되돌려 생긴 기록이 원래 세션과 합쳐졌고 이름 없는 파일이 없었다. 원본에서 따로 센 값(압축하지 않은 새 형식 세션의 응답, 주 세션의 사람 요청, 셸 실행과, 순수 옛 형식 주 세션의 응답과 입력 토큰)이 모두 같았다. 묶은 실행 파일의 `aq doctor`도 임시 홈에서 Expected대로였고 상태 폴더는 임시 홈 아래에만 생겼다.
 
-미리 돌리며 찾아 고친 것은 둘이다. 되돌려 생긴 기록의 이름(`rollout-<시각>-<UUID1>_<UUID2>`)을 처음 이름 꼴이 받지 않아 그 기록이 이름 없는 파일로 빠졌다(「5단계 1부 계획에서 보완」 7번. 과제 1과 8을 고쳤다). 원본에서 따로 센 값과 셸 실행이 어긋나 보인 것은 대조 도구가 Node.js의 `readline`으로 읽어 U+2028·U+2029에서 줄이 잘린 탓이었다(10번. 제품의 줄 나누기는 맞았고, 대조 도구를 줄바꿈에서만 자르게 고쳤다). 계획 리뷰 1차가 찾아 고친 것은 설계의 「5단계 1부 계획 리뷰 1차에서 보완」에 적었다.
+미리 돌리며 찾아 고친 것은 둘이다. 되돌려 생긴 기록의 이름(`rollout-<시각>-<UUID1>_<UUID2>`)을 처음 이름 꼴이 받지 않아 그 기록이 이름 없는 파일로 빠졌다(「5단계 1부 계획에서 보완」 7번. 과제 1과 8을 고쳤다). 원본에서 따로 센 값과 셸 실행이 어긋나 보인 것은 대조 도구가 Node.js의 `readline`으로 읽어 U+2028·U+2029에서 줄이 잘린 탓이었다(10번. 제품의 줄 나누기는 맞았고, 대조 도구를 줄바꿈에서만 자르게 고쳤다). 계획 리뷰 1차·2차가 찾아 고친 것은 설계의 「5단계 1부 계획 리뷰 1차에서 보완」과 「…리뷰 2차에서 보완」에 적었다.
 
-확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 10 Step 3에서 한다. zstd가 없는 Node.js의 실제 실행은 시험용 선택(`zstd: false`)으로만 봤다. macOS와 Linux의 Codex 기록 폴더, 작성자 PC에 없던 Codex 버전(0.148~0.153, 0.166보다 새 것)과 형식, 작성자 PC에 하나뿐이던 되돌려 생긴 기록 밖의 꼴은 보지 않았다. 원본에서 따로 센 값은 압축하지 않은 기록만 있는 세션이었다(압축본만 있는 세션은 대조 도구가 풀지 않았다). 호출 층에만 남고 McpToolCall이 남지 않는 MCP 호출이 있는지는 가리지 못했다(「5단계 1부 계획에서 보완」 3번). 작성자 PC에는 부모 기록이 모자란 하위 세션, 같은 세션의 다른 기록을 읽지 못한 세션, 세션 ID를 대신 쓴 기록이 없어 그 셈은 시험으로만 봤다.
+확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 10 Step 3에서 한다. zstd가 없는 Node.js의 실제 실행은 시험용 선택(`zstd: false`)으로만 봤다. macOS와 Linux의 Codex 기록 폴더, 작성자 PC에 없던 Codex 버전(0.148~0.153, 0.166보다 새 것)과 형식, 작성자 PC에 하나뿐이던 되돌려 생긴 기록 밖의 꼴은 보지 않았다. 원본에서 따로 센 값은 압축하지 않은 기록만 있는 세션이었다(압축본만 있는 세션은 대조 도구가 풀지 않았다). 호출 층에만 남고 McpToolCall이 남지 않는 MCP 호출이 있는지는 가리지 못했다(「5단계 1부 계획에서 보완」 3번). 작성자 PC에는 부모를 모르거나 부모 기록이 모자란 하위 세션, 같은 세션의 다른 기록을 읽지 못한 세션, 원래 기록을 찾지 못한 세션, 세션 ID를 대신 쓴 기록이 없어 그 셈은 시험으로만 봤다. 수집 구간 밖의 같은 세션 기록을 읽는 길도 작성자 PC의 수집 구간에 그런 세션이 없어 시험으로만 봤다.

@@ -7110,6 +7110,7 @@ var LINES2 = {
     report_unopened: "\uACB0\uACFC \uD654\uBA74\uC744 \uBE0C\uB77C\uC6B0\uC800\uB85C \uC5F4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC758 \uACBD\uB85C\uC5D0 \uC788\uB294 \uD30C\uC77C\uC744 \uC5EC\uC138\uC694."
   }
 };
+var RUN_NOTICE_KINDS = Object.keys(LINES2.en);
 function runNoticeText(notice, lang) {
   const lines = LINES2[lang];
   switch (notice.kind) {

@@ -46,6 +46,9 @@ const LINES: Texts<Record<RunNotice["kind"], string>> = {
   },
 };
 
+/** 실행 알림의 종류(문장 표의 차례). 스킬 본문이 종류마다 어떻게 전할지 적었는지 시험이 본다 */
+export const RUN_NOTICE_KINDS = Object.keys(LINES.en) as RunNotice["kind"][];
+
 export function runNoticeText(notice: RunNotice, lang: Lang): string {
   const lines = LINES[lang];
   switch (notice.kind) {

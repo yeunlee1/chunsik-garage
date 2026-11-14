@@ -35,7 +35,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `7F660215D30C02C0596A0245B9CA19D3BD9F00A31F325FC6C266E281B2936135`, 3,807줄)이다. 이 계획을 쓰며 정한 것은 「2단계 4부 계획에서 보완(2026-11-14, 주 세션)」의 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `D5EEE763E8092A60347058424DC5D7BBDE244553B91A30759FBB3016A09708B6`, 3,814줄)이다. 이 계획을 쓰며 정한 것은 「2단계 4부 계획에서 보완(2026-11-14, 주 세션)」의 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었다.
 
 ## 파일 구조
 
@@ -1929,6 +1929,7 @@ git commit -m "feat: 규칙 문장 만들기 추가"
 - 문장은 그 알림을 만드는 처리와 뜻이 맞아야 한다. 읽지 못한 기록과 셋팅은 읽은 것만으로 계산했다고, 관측이 빠짐없지 않으면 안 쓰는 것을 판정하지 않았다고, 처음 나온 응답이 겹치는 세션은 겹친 응답을 빼지 않고 셌다고(설계 9.5 「다른 파일에 복사된 응답」) 쓴다.
 - 분류하지 못한 기록은 압축, 거절 표시, 훅 첨부로 묶어 수를 센다(알림의 `what`은 `compaction`, `denial:<종류>`, `hook:<종류>`). 기록에 적힌 종류 이름은 넣지 않는다.
 - 켜져 있는데 세지 않은 플러그인의 알림은 까닭이 MCP 정의나 훅을 읽지 못한 것일 때 구성은 알고 일부만 못 읽었으므로, "세지 않았다"가 아니라 "확인하지 못한 정보가 있다"고 쓴다(계획 리뷰 1차).
+- 사람 요청 알림은 근거가 약한 몫이 10%를 넘으면 요청이 한 건이어도 나온다. 영어는 명사를 요청 수로, 동사를 근거가 약한 수로 고른다(구현 검증 1차에서 짝 Codex 1이 찾았다).
 - 시험은 열세 종류 모두가 두 언어에서 문장으로 끝나고, 두 언어가 같은 숫자를 싣고, 경로와 이름이 없는지 본다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -1989,6 +1990,11 @@ describe("알림의 문장", () => {
   it("영어는 수가 1이면 단수다", () => {
     expect(noticeText({ kind: "orphan_subsessions", tool: "claude-code", sessions: 1 }, "en")).toBe("Claude Code: 1 subsession has no known parent session.");
     expect(noticeText({ kind: "orphan_subsessions", tool: "claude-code", sessions: 3 }, "en")).toBe("Claude Code: 3 subsessions have no known parent session.");
+    // 사람 요청 알림은 요청이 한 건이어도 나온다(근거가 약한 몫이 10%를 넘으면). 요청 수로 명사를, 근거가 약한 수로 동사를 고른다
+    const weak = (weakCount: number, total: number) => noticeText({ kind: "weak_human_requests", tool: "claude-code", weak: weakCount, total }, "en");
+    expect(weak(1, 1)).toBe("Claude Code: 1 of 1 request in the scoring window has weak evidence of coming from a person.");
+    expect(weak(1, 2)).toBe("Claude Code: 1 of 2 requests in the scoring window has weak evidence of coming from a person.");
+    expect(weak(2, 2)).toBe("Claude Code: 2 of 2 requests in the scoring window have weak evidence of coming from a person.");
   });
 });
 ```
@@ -2071,7 +2077,7 @@ const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & {
     setup_problems_unscored: "{tool}: {count} {count:problem was|problems were} found in places that scores do not count (inside plugins, managed policy, files the tool writes).",
     projects_gone: "{count} {count:project|projects} whose folder is no longer on this PC {count:was|were} left out of the rules that look at instructions and settings.",
     version_unverified: "{tool}: the records include {count} {count:version|versions} outside the verified range ({from} to {to}). Only the fields that could be read are counted.",
-    weak_human_requests: "{tool}: {weak} of {total} requests in the scoring window have weak evidence of coming from a person.",
+    weak_human_requests: "{tool}: {weak} of {total} {total:request|requests} in the scoring window {weak:has|have} weak evidence of coming from a person.",
     overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
     unclassified: "{tool}: some records could not be classified ({items}).",
     orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session.",
@@ -3117,7 +3123,7 @@ git commit -m "feat: 터미널 요약의 문장 추가"
 
 - `--lang`은 값 하나를 받는다. 값이 없거나 값 자리에 `-`로 시작하는 것(`--no-save`, `-h`)이 오면 모르는 옵션처럼 64를 돌려주고 아무것도 쓰지 않는다. `-h`를 언어 값으로 삼켜 저장하는 점검을 돌리지 않게 하려는 것이다(계획 리뷰 1차에서 짝 Codex 1이 찾았다). `--lang=ko` 꼴은 받지 않는다. 여럿이면 마지막 것이고, 마지막 값을 지원하지 않으면 앞의 값이 아니라 OS의 언어로 넘어간다. 값은 과제 1의 차례로 읽는다.
 - OS의 언어는 실행 환경의 로캘(`Intl.DateTimeFormat().resolvedOptions().locale`)이다. 환경 변수 `LANG`을 먼저 보지 않는다. 작성자 PC는 한국어 Windows인데 셸의 `LANG`이 `en_US.UTF-8`이었다. 시험은 `CliContext.locale`로 고정한다.
-- 실행 알림 다섯(저장 실패, 정리 실패, 링크라서 하지 않은 정리, 저장하지 않는 실행, 결과 파일을 쓰지 못함)에도 문장을 붙여 실행 기록의 `text.notices`에 요약의 언어로 싣는다. 오류 코드와 정해진 낱말만 넣고 경로는 넣지 않는다. 문장은 그 알림이 나오는 때와 맞아야 한다. 저장 실패는 남은 저장을 멈춘 것이고, 정리 실패와 링크라서 하지 않은 정리는 저장이 끝난 뒤의 일이다. 결과 파일을 쓰지 못함은 저장하지 않는 실행에서 상태 폴더를 거치지 않고도 나오므로 "임시 폴더에도"라고 하지 않는다(계획 리뷰 1차).
+- 실행 알림 다섯(저장 실패, 정리 실패, 링크라서 하지 않은 정리, 저장하지 않는 실행, 결과 파일을 쓰지 못함)에도 문장을 붙여 실행 기록의 `text.notices`에 요약의 언어로 싣는다. 오류 코드와 정해진 낱말만 넣고 경로는 넣지 않는다. 문장은 그 알림이 나오는 때와 맞아야 한다. 저장 실패는 남은 저장을 멈춘 것이고, 정리 실패와 링크라서 하지 않은 정리는 저장이 끝난 뒤의 일이다. 결과 파일을 쓰지 못함은 저장하지 않는 실행에서 상태 폴더를 거치지 않고도 나오므로 "임시 폴더에도"라고 하지 않는다(계획 리뷰 1차). 저장하지 않는 실행의 알림은 캐시를 쓰지 않았고 점수 이력에도 남지 않는다는 것을 함께 알린다(설계 20.2. 구현 검증 1차에서 짝 Codex 1이 찾았다).
 - 3부의 시험 가운데 `--lang ko`를 모르는 옵션으로 거절하던 것을 값이 없는 `--lang`, 값 자리의 옵션, `--lang=ko`를 거절하는 것으로 바꾼다. 실행 기록을 통째로 견주는 시험 둘에 문장 칸을 더한다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -3157,7 +3163,7 @@ import { readdir, readFile } from "node:fs/promises";
 `test/commands/checkup-cli.test.ts`(바꾼 뒤 3/5):
 
 ```ts
-    expect(output.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder."] } });
+    expect(output.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history."] } });
 ```
 
 `test/commands/checkup-cli.test.ts`(찾을 곳 4/5):
@@ -3174,7 +3180,7 @@ import { readdir, readFile } from "node:fs/promises";
     const output = JSON.parse(printed);
     expect(output.summary.lang).toBe("ko");
     expect(output.summary.text.diagnosis).toMatch(/[가-힣]/);
-    expect(output.run.text.notices).toEqual(["저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다."]);
+    expect(output.run.text.notices).toEqual(["저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다."]);
     expect(JSON.parse(await readFile(output.run.resultPath, "utf8")).lang).toBe("ko");
   });
 
@@ -3240,7 +3246,7 @@ import { readdir, readFile } from "node:fs/promises";
 `test/commands/checkup.test.ts`(바꾼 뒤 2/2):
 
 ```ts
-    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: null, resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder."] } });
+    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: null, resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history."] } });
 ```
 
 `test/commands/run-notices.test.ts`(새 파일):
@@ -3275,7 +3281,7 @@ describe("실행 알림의 문장", () => {
     expect(runNoticeText(ALL[1]!, "ko")).toBe("원본이 없어진 캐시 항목을 정리하지 못했습니다(EPERM). 저장은 끝났습니다.");
     expect(runNoticeText(ALL[2]!, "ko")).toBe("상태 폴더가 링크라서 오래된 결과 파일을 정리하지 않았습니다.");
     expect(runNoticeText({ kind: "prune_skipped", what: "cache", link: "cache" }, "en")).toBe("The cache folder is a link, so cache entries whose source is gone were not cleaned up.");
-    expect(runNoticeText(ALL[3]!, "ko")).toBe("저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다.");
+    expect(runNoticeText(ALL[3]!, "ko")).toBe("저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다.");
     expect(runNoticeText(ALL[4]!, "ko")).toBe("평가 결과 파일을 운영체제 임시 폴더에 쓰지 못해(ENOENT) 요약만 냅니다.");
   });
 });
@@ -3455,14 +3461,14 @@ const LINES: Texts<Record<RunNotice["kind"], string>> = {
     save_failed: "Could not write {step} to the state folder ({code}), so the rest was not saved.",
     prune_failed: "Could not clean up {what} ({code}). Saving itself finished.",
     prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
-    not_saved: "This run does not save, so nothing was written to the state folder.",
+    not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
     result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given.",
   },
   ko: {
     save_failed: "상태 폴더에 {step} 쓰지 못해({code}) 남은 저장을 멈췄습니다.",
     prune_failed: "{what} 정리하지 못했습니다({code}). 저장은 끝났습니다.",
     prune_skipped: "{link} 폴더가 링크라서 {what} 정리하지 않았습니다.",
-    not_saved: "저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다.",
+    not_saved: "저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다.",
     result_unwritten: "평가 결과 파일을 운영체제 임시 폴더에 쓰지 못해({code}) 요약만 냅니다.",
   },
 };

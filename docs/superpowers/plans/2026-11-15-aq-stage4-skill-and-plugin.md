@@ -33,7 +33,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `656A7004459D5107AC88EE4B8FBB7CF5975AC5981F56245D75666BC19FCAA679`, 3,956줄)이다. 설계 끝에 「4단계 계획에서 보완」(여덟 가지)을 더했다. 매니페스트의 열쇠와 값, 스킬의 실행과 허락 규칙, 스킬 본문의 틀과 얼굴, 플러그인 산출물, 버전을 읽는 곳, 말투 표의 자리, 이 PC에서 확인하지 못한 것, 3단계 2부가 넘긴 것의 반영이다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `4C2971386A53FC9D59E7C92A2C1CC88404296D6455827683B9342AA534C8E68E`, 3,965줄)이다. 설계 끝에 「4단계 계획에서 보완」(여덟 가지)을 더했다. 매니페스트의 열쇠와 값, 스킬의 실행과 허락 규칙, 스킬 본문의 틀과 얼굴, 플러그인 산출물, 버전을 읽는 곳, 말투 표의 자리, 이 PC에서 확인하지 못한 것, 3단계 2부가 넘긴 것의 반영이다.
 
 ## 파일 구조
 
@@ -468,8 +468,10 @@ git commit -m "feat: 버전이 쓰이는 곳이 모두 같은지 보는 검사�
 - 결과 화면의 줄과 알림(3단계 2부가 넘긴 것)은 본문 4절의 표 둘로 적는다. 결과 화면 줄의 표는 맞는 첫 행을 쓴다. 결과 화면이 없으면 `report_unwritten`의 문장, 열지 못했으면 `report_unopened`의 문장과 경로, `--no-open`이면 경로, 그 밖에는 열었다는 말이다. 알림 줄의 표는 실행 알림 여덟을 한 행씩 두고 차례가 우선순위다. 알림에 든 첫 종류의 행대로 하고 다른 알림은 쓰지 않는다. `report_failed`, `save_failed`, `result_unwritten`, `not_saved`(사용자가 저장하지 말라고 하지 않았을 때)는 그 종류의 문장을 쓰고, 결과 화면 줄이 이미 말하는 `report_unwritten`과 `report_unopened`, 정리의 `prune_failed`와 `prune_skipped`는 쓰지 않는다. 표로 적은 것은 계획 리뷰 1차에서 짝 Codex 1이 조건과 그때 쓸 문장의 짝을 바꿔도 시험이 놓친다고 찾아서다. AQ를 내지 않았으면 먼저 고칠 것의 줄이 비므로 쓰지 않고, 결과 줄에 `score_withheld` 알림의 문장을 쓴다.
 - 실패는 셋이다. `node`가 없거나 Node.js 22보다 낮으면(종료 코드 2) Node.js 22 이상이 필요하다고 알리고 멈춘다. 오류로 멈추면(종료 코드 1, `{"error": {...}}`) 춘식이의 `(;_;)` 한 줄로 `error.code`를 알리고 까닭을 짐작하지 않는다.
 - `${CLAUDE_SKILL_DIR}`를 바꾸지 않는 도구(Codex)에서는 이 SKILL.md가 있는 폴더의 `scripts/aq.mjs`를 쓰라고 적는다. Codex에서 실제로 도는지는 5단계가 본다.
-- 시험은 본문과 프로그램이 맞물리는지 본다. 머리말 셋, 명령과 허락 규칙의 꼴, `checkup`이 받는 인자와 옵션과 넘긴 언어(`checkupArgs`를 내보내 쓴다), 본문이 읽으라는 `summary`와 `run`의 칸이 끝까지 바른 꼴이고 실제 출력에 있는지(AQ가 없는 빈 홈의 출력과, AQ와 먼저 고칠 것이 있는 요약), 두 언어 틀에서 AQ·등급·별명과 제목·덧붙이는 말의 자리 짝, 본문이 말하는 알림 종류가 실제 종류인지, 결과 화면 줄의 표에서 조건과 문장의 종류가 같은지, 알림 줄의 표가 실행 알림 여덟을 우선순위대로 한 번씩 두고 행마다 그 종류의 문장을 쓰거나 쓰지 않는지(`RUN_NOTICE_KINDS`를 내보내 쓴다), 상황 표의 일곱 행과 틀의 줄마다의 말하는 쪽과 얼굴, 실패할 때의 안내다.
+- 시험은 본문과 프로그램이 맞물리는지 본다. 머리말 셋, 명령과 허락 규칙의 꼴, `checkup`이 받는 인자와 옵션과 넘긴 언어(`checkupArgs`를 내보내 쓴다), 본문이 읽으라는 `summary`와 `run`의 칸이 끝까지 바른 꼴이고 실제 출력에 있는지(AQ가 없는 빈 홈의 출력과, AQ와 먼저 고칠 것이 있는 요약), 두 언어 틀에서 AQ·등급·별명과 제목·덧붙이는 말의 자리 짝, 터미널에 쓰는 틀(3절의 줄 목록)과 4절의 두 표가 글자 그대로인지, 본문이 말하는 알림 종류가 실제 종류인지, 결과 화면 줄의 표에서 조건과 문장의 종류가 같은지, 알림 줄의 표가 실행 알림 여덟을 우선순위대로 한 번씩 두고 행마다 그 종류의 문장을 쓰거나 쓰지 않는지(`RUN_NOTICE_KINDS`를 내보내 쓴다), 상황 표의 일곱 행과 틀의 줄마다의 말하는 쪽과 얼굴, 실패할 때의 안내다.
 - 칸의 경로는 처음 이름(`summary`, `run`) 뒤에 칸 이름(숫자와 밑줄을 품을 수 있다)과 배열 자리가 끝까지 이어진 꼴만 받는다. 계획 리뷰 1차에서 짝 Codex 2가 경로의 앞부분만 읽어 없는 칸(`detail2`)과 잘못된 배열 자리(`[0x]`)를 통과시킨다고 찾았다. 시험은 이 두 반례를 확인 함수가 받지 않는 것도 본다.
+- 본문에서 경로 후보를 뽑을 때는 처음 이름 뒤가 점이나 대괄호인 것을 구분자(빈칸, 백틱, 꺾쇠, 괄호, 따옴표, 쉼표) 앞까지 통째로 잡고 문장 끝의 마침표만 뗀다. 계획 리뷰 2차에서 두 짝이 닫는 대괄호나 여는 대괄호가 빠진 경로(`run.notices[0.kind`, `run.notices]0].kind`, `summary.text.noBest[0x`)는 뽑는 단계가 앞부분만 넘겨 통과한다고 찾았다. 시험은 실제 본문에 이런 경로를 넣었을 때 뽑힌 후보가 깨진 꼴 그대로이고 받아들여지지 않는 것도 본다.
+- 3절의 줄 목록과 4절의 두 표는 스킬과 프로그램이 맞춘 약속이라 시험이 글자 그대로 견준다. 계획 리뷰 2차에서 짝 Codex 1이 정상으로 연 행의 문장을 반대로 바꾸거나, 잘하는 것이 없을 때 읽는 칸을 고칠 것이 없다는 문장의 칸으로 바꿔도 시험이 놓친다고 찾았다. 틀을 바꾸려면 시험도 함께 고친다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -588,6 +590,15 @@ function pathSteps(path: string): string[] | null {
   const match = PATH.exec(path);
   return match === null ? null : [match[1]!, ...match[2]!.match(/\.[A-Za-z][A-Za-z0-9_]*|\[\d*\]/g)!];
 }
+/**
+ * 글에서 칸의 경로 후보를 모두 뽑는다. 처음 이름(summary, run) 바로 뒤가 점이나 대괄호인 것만 후보다(running 같은 낱말은 아니다).
+ * 후보는 구분자(빈칸, 백틱, 꺾쇠, 괄호, 따옴표, 쉼표) 앞까지 통째로 잡는다. 대괄호가 깨졌거나 칸 이름 끝에 글자가 붙어도 앞부분만 잘라 내지 않고, 문장 끝의 마침표만 뗀다.
+ * 마침표를 떼고 처음 이름만 남은 것(문장 끝의 낱말 summary.)은 경로가 아니라 뺀다
+ */
+function extractPaths(text: string): string[] {
+  const candidates = [...text.matchAll(/(?<![\w.])((?:summary|run)(?=[.[\]])[^\s`<>()"',]*)/g)].map((match) => match[1]!.replace(/\.+$/, ""));
+  return [...new Set(candidates)].filter((path) => path !== "summary" && path !== "run");
+}
 /** 경로를 따라가 끝까지 닿는 값이 하나라도 있는지 본다. 값이 null이어도 칸이 있으면 닿은 것이다. 바른 꼴이 아니면 닿지 않는다 */
 function reaches(output: Record<string, unknown>, path: string): boolean {
   const steps = pathSteps(path);
@@ -623,8 +634,7 @@ describe("본문이 읽으라는 칸", () => {
   afterAll(async () => removeTemp(root));
 
   it("본문에 적힌 summary와 run의 칸은 모두 끝까지 바른 꼴이고, 프로그램이 내는 칸이다(AQ가 없는 빈 홈의 출력이나, AQ와 먼저 고칠 것이 있는 요약 가운데 하나에 있다)", () => {
-    // 처음 이름 바로 뒤가 점이나 대괄호인 것만 경로다(running 같은 낱말은 아니다). 칸 이름에 붙은 숫자·밑줄과 대괄호 안의 글까지 한 덩어리로 잡고, 문장 끝의 마침표만 뗀다
-    const paths = [...new Set([...body.matchAll(/(?<![\w.])((?:summary|run)(?=[.[])(?:[\w.]|\[[^\]\s]*\])*)/g)].map((match) => match[1]!.replace(/\.+$/, "")))].filter((path) => path !== "summary" && path !== "run");
+    const paths = extractPaths(body);
     expect(paths.length).toBeGreaterThan(10);
     const scored = { summary: scoredSummary(), run: unscored.run };
     for (const path of paths) expect([path, pathSteps(path) !== null && (reaches(unscored, path) || reaches(scored, path))]).toEqual([path, true]);
@@ -639,6 +649,66 @@ describe("본문이 읽으라는 칸", () => {
     expect(reaches(scored, "summary.text.fixFirst[0x].title")).toBe(false);
     expect(reaches(scored, "summary.text.fixFirst[5].title")).toBe(false);
     expect(pathSteps("summary.text..best")).toBeNull();
+  });
+
+  it("본문의 경로를 깨뜨리면(닫는 대괄호나 여는 대괄호가 빠짐, 칸 이름 끝에 글자) 뽑은 후보가 깨진 꼴 그대로라 바른 꼴로 받지 않는다", () => {
+    const broken = [
+      ["`run.notices[].kind`", "`run.notices[0.kind`", "run.notices[0.kind"],
+      ["`run.notices[].kind`", "`run.notices]0].kind`", "run.notices]0].kind"],
+      ["`summary.text.noBest` instead", "`summary.text.noBest[0x` instead", "summary.text.noBest[0x"],
+      ["(<summary.text.best.detail>)` or `Best at", "(<summary.text.best.detail2>)` or `Best at", "summary.text.best.detail2"],
+    ] as const;
+    for (const [find, replace, path] of broken) {
+      expect([find, body.split(find).length - 1]).toEqual([find, 1]);
+      const paths = extractPaths(body.replace(find, replace));
+      expect([path, paths.includes(path)]).toEqual([path, true]);
+      expect([path, pathSteps(path) !== null && reaches({ summary: scoredSummary(), run: unscored.run }, path)]).toEqual([path, false]);
+    }
+  });
+});
+
+describe("틀 그대로", () => {
+  // 터미널에 쓰는 틀(3절의 줄 목록)과 결과 화면 줄·알림 줄의 표(4절)는 스킬과 프로그램이 맞춘 약속이라 글자 그대로 견준다. 바꾸려면 이 시험도 함께 고친다
+  const LINES = [
+    "1. Start, before running: `📋 춘삼이 (o_o)  기록을 읽고 있습니다. 많으면 1~2분 걸립니다.` or `📋 Chunsam (o_o)  Reading your records. This can take a minute or two.`",
+    "2. Result.",
+    '   - With an AQ: `📋 춘삼이 <face>  점검 끝! AQ <summary.aq> · <summary.grade>등급 「<summary.text.grade>」` or `📋 Chunsam <face>  Checkup done! AQ <summary.aq> · Grade <summary.grade> "<summary.text.grade>"`.',
+    "   - Without an AQ: `📋 춘삼이 (o_o)  점검 끝! <the summary.text.notices sentence whose summary.notices kind is score_withheld>` or the same with `Chunsam` and `Checkup done!`. Then, indented, `summary.text.diagnosis`.",
+    "3. Best, indented: `가장 잘하는 것  <summary.text.best.title> (<summary.text.best.detail>)` or `Best at  <summary.text.best.title> (<summary.text.best.detail>)`. If `summary.text.best` is null, write `summary.text.noBest` instead, or nothing if that is null too.",
+    "4. Fix first: only the first item of `summary.text.fixFirst`, as `🔧 춘식이 (-_-)9 먼저 고칠 것  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)` or `🔧 Chunsik (-_-)9 Fix first  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)`. If `summary.text.fixFirst` is empty and `summary.text.noFixFirst` is not null, write `📋 춘삼이 (^_^)b <summary.text.noFixFirst>` or `📋 Chunsam (^_^)b <summary.text.noFixFirst>`. If both are empty, skip this line.",
+    "5. Report line, indented, from section 4.",
+    "6. Notice line, indented, from section 4. At most one.",
+  ].join("\n");
+  const TABLES = [
+    "Report line. Use the first row that applies.",
+    "",
+    "| When | Write |",
+    "|---|---|",
+    "| `summary.reportPath` is null | the sentence of `report_unwritten`. There is no report page this time |",
+    "| `report_unopened` is in the notices | the sentence of `report_unopened`, then `summary.reportPath` |",
+    "| You ran with `--no-open` | `결과 화면: <summary.reportPath>` or `Report page: <summary.reportPath>` |",
+    "| Otherwise | `결과 화면을 열었습니다.` or `Opened the report page.` |",
+    "",
+    "Notice line. Find the first kind in this table that is in the notices and do what its row says. Write no other notice.",
+    "",
+    "| Kind | Notice line |",
+    "|---|---|",
+    "| `report_failed` | the sentence of `report_failed` |",
+    "| `save_failed` | the sentence of `save_failed` |",
+    "| `result_unwritten` | the sentence of `result_unwritten` |",
+    "| `not_saved` | the sentence of `not_saved`, unless the user asked not to save |",
+    "| `report_unwritten` | none (the report line already says it) |",
+    "| `report_unopened` | none (the report line already says it) |",
+    "| `prune_failed` | none |",
+    "| `prune_skipped` | none |",
+  ].join("\n");
+
+  it("3절의 줄 목록이 한 번, 글자 그대로 있다", () => {
+    expect(body.split(LINES).length - 1).toBe(1);
+  });
+
+  it("4절의 두 표가 한 번, 글자 그대로 있다", () => {
+    expect(body.split(TABLES).length - 1).toBe(1);
   });
 });
 
@@ -788,7 +858,7 @@ Speakers: 📋 Chunsam (춘삼이) checks and reports. 🔧 Chunsik (춘식이) 
 | Fix first | Chunsik | `(-_-)9` |
 | Error | Chunsik | `(;_;)` |
 
-Lines, in this order. Copy every `summary.*` and `run.*` value exactly. Indent a line that continues the same speaker.
+Lines, in this order. Copy every value you take from the summary and the run record exactly. Indent a line that continues the same speaker.
 
 1. Start, before running: `📋 춘삼이 (o_o)  기록을 읽고 있습니다. 많으면 1~2분 걸립니다.` or `📋 Chunsam (o_o)  Reading your records. This can take a minute or two.`
 2. Result.
@@ -860,7 +930,7 @@ export function runNoticeText(notice: RunNotice, lang: Lang): string {
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/plugin/skill.test.ts test/commands/run-notices.test.ts test/cli.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 26개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 29개.
 
 - [ ] **Step 5: 묶은 실행 파일을 다시 만든다**
 
@@ -1086,7 +1156,7 @@ git commit -m "feat: 배포할 플러그인 산출물을 모으는 스크립트�
 - [ ] **Step 1: 전체 검사를 돌린다**
 
 Run: `npm run check`
-Expected: 타입 검사 통과, 시험 파일 88개·시험 1,284개 통과(3단계까지의 84개·1,251개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다.
+Expected: 타입 검사 통과, 시험 파일 88개·시험 1,287개 통과(3단계까지의 84개·1,251개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다.
 
 - [ ] **Step 2: 묶음을 다시 만들어도 그대로인지 확인한다**
 
@@ -1123,7 +1193,7 @@ Expected: 마켓 추가와 설치가 성공하고, 세부에 `Chunsik's Garage (
 Run: `claude -p "AQ 점검해 줘. 저장하지 말고 브라우저도 열지 마." --plugin-dir "<산출물>" --permission-mode default --allowedTools "Skill(chunsik-garage:aq)" --max-turns 6 --output-format stream-json --verbose < /dev/null`
 Expected: 도구 호출은 스킬(`chunsik-garage:aq`) 하나와 묶은 실행 파일 명령 하나(`node "<산출물의 스킬 폴더>/scripts/aq.mjs" checkup --lang <대화의 언어> --no-save --no-open`)이고 권한 거부가 없다. 시작 줄이 명령 앞에 있다. 결과 글은 여섯 줄 안이고 코드 블록이 아니며, 결과 줄의 AQ·등급·별명, 가장 잘하는 것, 먼저 고칠 것(춘식이의 `(-_-)9`)이 묶은 실행 파일이 낸 요약과 글자 그대로 같고, 결과 줄의 얼굴이 등급 단계에 맞으며, 결과 화면의 경로가 있다. 도구 결과의 요약은 기록의 `tool_use_result.stdout`에서 읽는다(대화에 보이는 도구 결과는 길면 잘린다).
 
-이 PC의 기록은 그때의 등급 하나의 길만 지난다. 나머지 경우는 산출물을 복사한 사본에서 `skills/aq/scripts/aq.mjs`를 정한 출력을 그대로 내고 정한 종료 코드로 끝나는 작은 스크립트로 바꿔 돌려 본다. 가짜의 문장은 프로그램의 문구 함수(`resultText`, `runNoticeText`, `fixDetail`)로 만들어 실제 출력과 같은 꼴이 되게 한다. 요청은 위와 같고, 열지 못함만 "AQ 점검해 줘. 저장하지 말고."로 브라우저 열기를 막지 않는다(가짜는 브라우저를 열지 않는다).
+이 PC의 기록은 그때의 등급 하나의 길만 지난다. 나머지 경우는 산출물을 복사한 사본에서 `skills/aq/scripts/aq.mjs`를 정한 출력을 그대로 내고 정한 종료 코드로 끝나는 작은 스크립트로 바꿔 돌려 본다. 가짜의 문장은 프로그램의 문구 함수(`resultText`, `runNoticeText`, `fixDetail`)로 만들어 실제 출력과 같은 꼴이 되게 한다. 요청은 위와 같고, 열지 못함과 고칠 것 없음만 "AQ 점검해 줘. 저장하지 말고."로 브라우저 열기를 막지 않는다(가짜는 브라우저를 열지 않는다). 그래서 고칠 것 없음은 결과 화면을 정상으로 연 경우(결과 화면 줄 표의 마지막 행)를 지난다.
 
 | 사본 | 가짜가 내는 것 | Expected |
 |---|---|---|
@@ -1131,8 +1201,8 @@ Expected: 도구 호출은 스킬(`chunsik-garage:aq`) 하나와 묶은 실행 �
 | 결과 화면 없음 | 위 출력에서 결과 화면과 결과 파일의 경로를 `null`로, 실행 알림을 `save_failed`, `result_unwritten`, `report_unwritten`과 그 문장으로 바꾼 것 | 결과 화면의 줄이 `report_unwritten`의 문장이고 알림 줄이 하나(우선순위가 앞인 `save_failed`의 문장)다 |
 | 오류 | `{"error": {"code": "EACCES", "message": "permission denied"}}`를 내고 1로 끝남 | 춘식이의 `(;_;)` 줄이 `EACCES`를 알리고, 프로그램이 내지 않은 까닭을 짐작하지 않는다 |
 | 열지 못함 | AQ 없음의 출력에서 실행 알림을 `not_saved`와 `report_unopened`, 그 문장으로 바꾼 것 | 결과 화면의 줄이 `report_unopened`의 문장과 결과 화면의 경로다. `not_saved`의 문장은 쓰지 않는다(저장하지 말라고 했다) |
-| 고칠 것 없음 | AQ 72, B등급(단계 3), 먼저 고칠 것이 비고 고칠 것이 없다는 문장이 있는 요약 | 결과 줄의 얼굴이 `(^o^)`이고, 춘삼이의 `(^_^)b` 줄이 고칠 것이 없다는 문장 그대로다. 춘식이의 줄이 없다 |
-| C등급 | AQ 55, C등급(단계 2), 먼저 고칠 것이 하나 있는 요약 | 결과 줄의 얼굴이 `(O_O)!`이고, 먼저 고칠 것이 춘식이의 `(-_-)9` 줄로 제목과 덧붙이는 말 그대로다 |
+| 고칠 것 없음 | AQ 72, B등급(단계 3), 먼저 고칠 것이 비고 고칠 것이 없다는 문장이 있는 요약. 실행 알림은 `not_saved` 하나이고 결과 화면 경로가 있다 | 결과 줄의 얼굴이 `(^o^)`이고, 춘삼이의 `(^_^)b` 줄이 고칠 것이 없다는 문장 그대로다. 춘식이의 줄이 없다. 명령에 `--no-open`이 없고, 결과 화면의 줄이 `결과 화면을 열었습니다.`다. `not_saved`의 문장은 쓰지 않는다 |
+| C등급 | AQ 55, C등급(단계 2), 잘하는 것이 없어 `summary.text.best`가 `null`이고 `summary.text.noBest`에 잘하는 것이 없다는 문장이 있으며, 먼저 고칠 것이 하나 있는 요약 | 결과 줄의 얼굴이 `(O_O)!`이고, 가장 잘하는 것의 자리에 잘하는 것이 없다는 문장이 그대로 있다. 먼저 고칠 것이 춘식이의 `(-_-)9` 줄로 제목과 덧붙이는 말 그대로다 |
 
 이 PC의 숫자와 결과 글, 실행 기록은 저장소 밖 작업 기록에만 둔다. 이 단계의 실행이 OS 임시 폴더에 만든 결과 파일과 결과 화면 파일, 산출물과 사본을 지운다.
 
@@ -1218,8 +1288,8 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`a683597`. 코드는 `a721023`과 같다)에서 과제 1부터 4까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~4는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 3의 묶은 실행 파일 다시 만들기도 통과했다. 과제 4 뒤의 `npm run check`는 시험 파일 88개·시험 1,284개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드, 시험, 그림 파일 230개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`f3642dd`. 코드는 `a721023`과 같다)에서 과제 1부터 4까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~4는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 3의 묶은 실행 파일 다시 만들기도 통과했다. 과제 4 뒤의 `npm run check`는 시험 파일 88개·시험 1,287개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드, 시험, 그림 파일 230개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 42개를 하나씩 넣어 모두 시험이 잡았다. 처음 29개(허락 규칙과 본문 명령의 따옴표 뺌, 하위 명령과 옵션의 오타, 본문이 읽으라는 칸의 오타와 잘못된 자리, 알림 종류의 오타, 실행 알림 하나를 다루지 않음, AQ를 내지 않은 까닭의 알림을 쓰지 않음, 화자와 얼굴의 어긋남 둘, 설명에서 한국어로 부르는 말을 뺌, 설명의 꺾쇠, 머리말의 쓰지 않는 열쇠, Node.js 22 안내와 오류 코드 안내를 뺌, 플러그인 이름 오타, 플러그인 정보의 메일, 마켓의 `source`를 점 하나로, 마켓 설명을 뺌, 버전 하나만 올림, 프로그램 안의 버전을 주석에서도 읽음, 버전이 달라도 알리지 않음, 버전 검사가 실패해도 0으로 끝남, 산출물에서 라이선스를 뺌, 산출물에 `package.json`을 넣음, 담을 곳이 비어 있지 않아도 담음, 담을 것이 없는데 먼저 씀)에, 계획 리뷰 1차에서 두 짝이 든 것과 그 권장에서 지은 13개(칸 끝에 숫자, 잘못된 배열 자리, 버전 비교에서 첫 파일을 빠뜨림, 마켓 중복 항목의 첫 것을 읽음, 열지 못함 행에 다른 알림의 문장, 칭찬 얼굴을 바꿈 둘, 덧붙이는 말 자리에 제목 둘, 명령에서 언어를 뺌, 찾기 낱말을 배열이 아닌 것으로, 알림 줄 표에서 다른 알림의 문장, 건너뛸 알림을 씀)를 더했다. 실패 안내의 시험은 처음에 같은 낱말이 조건을 설명하는 앞부분에도 있어 Node.js 22 안내를 뺀 변이를 놓쳤고, 조건과 같은 줄의 "tell the user" 뒤를 보게 고쳤다. 플러그인 산출물(17개)을 공백과 한글이 든 경로에 만들어 `claude plugin validate`가 통과했다(README와 아이콘의 경고만 남았다). 빈 임시 설정 폴더에 마켓을 더하고 설치하니 스킬 `aq` 하나가 잡혔고 설치 폴더는 1MB 안쪽에 `node_modules`가 없었다. 같은 확인을 저장소 뿌리로 하면 설치 폴더에 개발 의존성 86MB가 깔렸다(산출물을 만든 까닭이다). 그 실행에만 산출물을 불러오는 `claude -p`(기본 권한 모드, 스킬을 부르는 것만 허락)로 "AQ 점검해 줘. 저장하지 말고 브라우저도 열지 마."를 이 PC의 기록으로 돌리니, 스킬 하나와 묶은 실행 파일 명령 하나(`checkup --lang ko --no-save --no-open`)가 권한 거부 없이 돌았고, 결과 글은 네 줄로 결과 줄의 AQ·등급·별명, 가장 잘하는 것, 먼저 고칠 것이 요약과 글자 그대로 같았으며, 얼굴이 등급 단계에 맞았고, 결과 화면의 경로가 있었다. 묶은 실행 파일 자리에 정한 출력을 내는 가짜를 둔 사본 여섯(AQ 없음, 결과 화면 없음, 오류, 열지 못함, 고칠 것 없음의 B등급, C등급)도 모두 Step 6의 Expected대로였다. 처음 실행에서 결과를 코드 블록으로 감싸는 것과 오류의 까닭을 짐작하는 것을 보고 스킬 본문에 막는 말을 더했고, 고친 본문으로 일곱을 다시 돌렸다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 49개를 하나씩 넣어 모두 시험이 잡았다. 처음 29개(허락 규칙과 본문 명령의 따옴표 뺌, 하위 명령과 옵션의 오타, 본문이 읽으라는 칸의 오타와 잘못된 자리, 알림 종류의 오타, 실행 알림 하나를 다루지 않음, AQ를 내지 않은 까닭의 알림을 쓰지 않음, 화자와 얼굴의 어긋남 둘, 설명에서 한국어로 부르는 말을 뺌, 설명의 꺾쇠, 머리말의 쓰지 않는 열쇠, Node.js 22 안내와 오류 코드 안내를 뺌, 플러그인 이름 오타, 플러그인 정보의 메일, 마켓의 `source`를 점 하나로, 마켓 설명을 뺌, 버전 하나만 올림, 프로그램 안의 버전을 주석에서도 읽음, 버전이 달라도 알리지 않음, 버전 검사가 실패해도 0으로 끝남, 산출물에서 라이선스를 뺌, 산출물에 `package.json`을 넣음, 담을 곳이 비어 있지 않아도 담음, 담을 것이 없는데 먼저 씀)에, 계획 리뷰 1차에서 두 짝이 든 것과 그 권장에서 지은 13개(칸 끝에 숫자, 잘못된 배열 자리, 버전 비교에서 첫 파일을 빠뜨림, 마켓 중복 항목의 첫 것을 읽음, 열지 못함 행에 다른 알림의 문장, 칭찬 얼굴을 바꿈 둘, 덧붙이는 말 자리에 제목 둘, 명령에서 언어를 뺌, 찾기 낱말을 배열이 아닌 것으로, 알림 줄 표에서 다른 알림의 문장, 건너뛸 알림을 씀)를 더했고, 계획 리뷰 2차에서 두 짝이 든 다섯과 짝 Codex 1이 필수로 세지 않은 둘(대체 칸의 배열 자리를 닫지 않음, 알림 칸의 닫는 대괄호가 빠짐과 여는 대괄호가 빠짐, 정상으로 연 행의 문장을 반대로, 잘하는 것이 없을 때 고칠 것이 없다는 문장의 칸을 읽음, 저장하지 말라고 한 때의 예외를 뺌, 열기를 막은 행에 열었다는 문장)을 더했다. 실패 안내의 시험은 처음에 같은 낱말이 조건을 설명하는 앞부분에도 있어 Node.js 22 안내를 뺀 변이를 놓쳤고, 조건과 같은 줄의 "tell the user" 뒤를 보게 고쳤다. 경로 시험은 뽑는 단계가 깨진 대괄호 앞에서 멈춰 앞부분만 확인하던 것을 고쳤고, 대괄호가 깨진 셋은 경로 시험 하나만 돌려도 깨진 꼴 그대로 잡혔다. 플러그인 산출물(17개)을 공백과 한글이 든 경로에 만들어 `claude plugin validate`가 통과했다(README와 아이콘의 경고만 남았다). 빈 임시 설정 폴더에 마켓을 더하고 설치하니 스킬 `aq` 하나가 잡혔고 설치 폴더는 1MB 안쪽에 `node_modules`가 없었다. 같은 확인을 저장소 뿌리로 하면 설치 폴더에 개발 의존성 86MB가 깔렸다(산출물을 만든 까닭이다). 그 실행에만 산출물을 불러오는 `claude -p`(기본 권한 모드, 스킬을 부르는 것만 허락)로 "AQ 점검해 줘. 저장하지 말고 브라우저도 열지 마."를 이 PC의 기록으로 돌리니, 스킬 하나와 묶은 실행 파일 명령 하나(`checkup --lang ko --no-save --no-open`)가 권한 거부 없이 돌았고, 결과 글은 네 줄로 결과 줄의 AQ·등급·별명, 가장 잘하는 것, 먼저 고칠 것이 요약과 글자 그대로 같았으며, 얼굴이 등급 단계에 맞았고, 결과 화면의 경로가 있었다. 묶은 실행 파일 자리에 정한 출력을 내는 가짜를 둔 사본 여섯(AQ 없음, 결과 화면 없음, 오류, 열지 못함, 고칠 것 없음의 B등급, C등급)도 모두 Step 6의 Expected대로였다. 처음 실행에서 결과를 코드 블록으로 감싸는 것과 오류의 까닭을 짐작하는 것을 보고 스킬 본문에 막는 말을 더했고, 고친 본문으로 일곱을 다시 돌렸다. 계획 리뷰 2차 뒤에는 고칠 것 없음(브라우저 열기를 막지 않아 정상으로 연 경우)과 C등급(잘하는 것이 없는 요약)의 사본을 바꿔 두 번을 다시 돌렸고 둘 다 Expected대로였다. 다른 다섯 경우는 3절의 한 문장(값을 그대로 옮기라는 문장의 별표 표기)만 다른 앞 본문으로 돌린 결과다.
 
 확인하지 못한 것은 이렇다. 작성자 PC의 사용자 지침이 모든 글을 한국어로 쓰고 보고의 꼴을 정해, 영어로 요청해도 모델이 한국어로 답했다. 그래서 영어의 틀은 그 지침이 없는 사용자의 화면을 모델 실행으로 볼 수 없었다. 오류는 처음 실행에서 앞뒤에 결론과 설명이 붙었고 고친 본문의 실행에서는 한 줄이었다. 모델의 출력은 실행마다 달라질 수 있어 모든 실행을 보증하지 않는다. Codex에서 스킬이 도는 것(5단계), macOS와 Linux, GitHub의 저장소를 마켓으로 더해 설치하는 것과 사용자가 받을 브랜치(8단계)는 보지 않았다.

@@ -51,5 +51,10 @@ describe("알림의 문장", () => {
   it("영어는 수가 1이면 단수다", () => {
     expect(noticeText({ kind: "orphan_subsessions", tool: "claude-code", sessions: 1 }, "en")).toBe("Claude Code: 1 subsession has no known parent session.");
     expect(noticeText({ kind: "orphan_subsessions", tool: "claude-code", sessions: 3 }, "en")).toBe("Claude Code: 3 subsessions have no known parent session.");
+    // 사람 요청 알림은 요청이 한 건이어도 나온다(근거가 약한 몫이 10%를 넘으면). 요청 수로 명사를, 근거가 약한 수로 동사를 고른다
+    const weak = (weakCount: number, total: number) => noticeText({ kind: "weak_human_requests", tool: "claude-code", weak: weakCount, total }, "en");
+    expect(weak(1, 1)).toBe("Claude Code: 1 of 1 request in the scoring window has weak evidence of coming from a person.");
+    expect(weak(1, 2)).toBe("Claude Code: 1 of 2 requests in the scoring window has weak evidence of coming from a person.");
+    expect(weak(2, 2)).toBe("Claude Code: 2 of 2 requests in the scoring window have weak evidence of coming from a person.");
   });
 });

@@ -28,14 +28,14 @@ const LINES: Texts<Record<RunNotice["kind"], string>> = {
     save_failed: "Could not write {step} to the state folder ({code}), so the rest was not saved.",
     prune_failed: "Could not clean up {what} ({code}). Saving itself finished.",
     prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
-    not_saved: "This run does not save, so nothing was written to the state folder.",
+    not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
     result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given.",
   },
   ko: {
     save_failed: "상태 폴더에 {step} 쓰지 못해({code}) 남은 저장을 멈췄습니다.",
     prune_failed: "{what} 정리하지 못했습니다({code}). 저장은 끝났습니다.",
     prune_skipped: "{link} 폴더가 링크라서 {what} 정리하지 않았습니다.",
-    not_saved: "저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다.",
+    not_saved: "저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다.",
     result_unwritten: "평가 결과 파일을 운영체제 임시 폴더에 쓰지 못해({code}) 요약만 냅니다.",
   },
 };

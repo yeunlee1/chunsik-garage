@@ -2061,7 +2061,7 @@ var LINES = {
     setup_problems_unscored: "{tool}: {count} {count:problem was|problems were} found in places that scores do not count (inside plugins, managed policy, files the tool writes).",
     projects_gone: "{count} {count:project|projects} whose folder is no longer on this PC {count:was|were} left out of the rules that look at instructions and settings.",
     version_unverified: "{tool}: the records include {count} {count:version|versions} outside the verified range ({from} to {to}). Only the fields that could be read are counted.",
-    weak_human_requests: "{tool}: {weak} of {total} requests in the scoring window have weak evidence of coming from a person.",
+    weak_human_requests: "{tool}: {weak} of {total} {total:request|requests} in the scoring window {weak:has|have} weak evidence of coming from a person.",
     overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
     unclassified: "{tool}: some records could not be classified ({items}).",
     orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session."
@@ -5960,14 +5960,14 @@ var LINES2 = {
     save_failed: "Could not write {step} to the state folder ({code}), so the rest was not saved.",
     prune_failed: "Could not clean up {what} ({code}). Saving itself finished.",
     prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
-    not_saved: "This run does not save, so nothing was written to the state folder.",
+    not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
     result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given."
   },
   ko: {
     save_failed: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 {step} \uC4F0\uC9C0 \uBABB\uD574({code}) \uB0A8\uC740 \uC800\uC7A5\uC744 \uBA48\uCDC4\uC2B5\uB2C8\uB2E4.",
     prune_failed: "{what} \uC815\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4({code}). \uC800\uC7A5\uC740 \uB05D\uB0AC\uC2B5\uB2C8\uB2E4.",
     prune_skipped: "{link} \uD3F4\uB354\uAC00 \uB9C1\uD06C\uB77C\uC11C {what} \uC815\uB9AC\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
-    not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uB294 \uC2E4\uD589\uC774\uB77C \uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uC544\uBB34\uAC83\uB3C4 \uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+    not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uB294 \uC2E4\uD589\uC774\uB77C \uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uC544\uBB34\uAC83\uB3C4 \uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC774 \uC810\uAC80\uC740 \uCE90\uC2DC\uB97C \uC4F0\uC9C0 \uC54A\uC558\uACE0 \uC810\uC218 \uC774\uB825\uC5D0\uB3C4 \uB0A8\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
     result_unwritten: "\uD3C9\uAC00 \uACB0\uACFC \uD30C\uC77C\uC744 \uC6B4\uC601\uCCB4\uC81C \uC784\uC2DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC694\uC57D\uB9CC \uB0C5\uB2C8\uB2E4."
   }
 };

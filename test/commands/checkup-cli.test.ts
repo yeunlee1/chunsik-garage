@@ -36,7 +36,7 @@ describe("aq checkup", () => {
   it("--no-save는 상태 폴더에 쓰지 않고 OS 임시 폴더에 결과를 쓴다. --rescan도 받는다", async () => {
     expect(await main(["checkup", "--no-save", "--rescan", "--no-open"], context)).toBe(0);
     const output = JSON.parse(printed);
-    expect(output.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder."] } });
+    expect(output.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history."] } });
     expect(output.run.resultPath.startsWith(join(root, "tmp"))).toBe(true);
     await expect(readdir(join(root, "home", ".chunsik-garage"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -46,7 +46,7 @@ describe("aq checkup", () => {
     const output = JSON.parse(printed);
     expect(output.summary.lang).toBe("ko");
     expect(output.summary.text.diagnosis).toMatch(/[가-힣]/);
-    expect(output.run.text.notices).toEqual(["저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다."]);
+    expect(output.run.text.notices).toEqual(["저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다."]);
     expect(JSON.parse(await readFile(output.run.resultPath, "utf8")).lang).toBe("ko");
   });
 

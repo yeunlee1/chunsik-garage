@@ -66,7 +66,7 @@ const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & {
     setup_problems_unscored: "{tool}: {count} {count:problem was|problems were} found in places that scores do not count (inside plugins, managed policy, files the tool writes).",
     projects_gone: "{count} {count:project|projects} whose folder is no longer on this PC {count:was|were} left out of the rules that look at instructions and settings.",
     version_unverified: "{tool}: the records include {count} {count:version|versions} outside the verified range ({from} to {to}). Only the fields that could be read are counted.",
-    weak_human_requests: "{tool}: {weak} of {total} requests in the scoring window have weak evidence of coming from a person.",
+    weak_human_requests: "{tool}: {weak} of {total} {total:request|requests} in the scoring window {weak:has|have} weak evidence of coming from a person.",
     overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
     unclassified: "{tool}: some records could not be classified ({items}).",
     orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session.",

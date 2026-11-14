@@ -27,7 +27,7 @@ describe("실행 알림의 문장", () => {
     expect(runNoticeText(ALL[1]!, "ko")).toBe("원본이 없어진 캐시 항목을 정리하지 못했습니다(EPERM). 저장은 끝났습니다.");
     expect(runNoticeText(ALL[2]!, "ko")).toBe("상태 폴더가 링크라서 오래된 결과 파일을 정리하지 않았습니다.");
     expect(runNoticeText({ kind: "prune_skipped", what: "cache", link: "cache" }, "en")).toBe("The cache folder is a link, so cache entries whose source is gone were not cleaned up.");
-    expect(runNoticeText(ALL[3]!, "ko")).toBe("저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다.");
+    expect(runNoticeText(ALL[3]!, "ko")).toBe("저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다.");
     expect(runNoticeText(ALL[4]!, "ko")).toBe("평가 결과 파일을 운영체제 임시 폴더에 쓰지 못해(ENOENT) 요약만 냅니다.");
   });
 });

@@ -1,12 +1,29 @@
-// 규칙 문장에 함께 쓰는 문구. 도구 이름, 못 잰 이유의 낱말과 설명, 도구별 값의 줄, 다른 도구로 쟀을 때의 덧붙임, 안전장치의 조건, E6 항목의 정보다(설계 11.4, 11.5, 12.2, 13.1)
+// 규칙 문장과 요약에 함께 쓰는 문구. 도구와 기준의 이름, 못 잰 이유의 낱말과 설명, 도구별 값의 줄, 다른 도구로 쟀을 때의 덧붙임, 안전장치의 조건, E6 항목의 정보, 요약의 덧붙이는 말이다(설계 11.4, 11.5, 12.2, 13.1, 15)
 import type { ToolId } from "../../adapters/types.ts";
 import type { Reason } from "../reasons.ts";
+import type { Axis } from "../rules.ts";
 import type { UnjudgedServer } from "../result/assemble.ts";
 import type { Texts } from "./lang.ts";
 import type { ReasonCopy } from "./types.ts";
 
 export const TOOL_NAMES: Record<ToolId, Texts<string>> = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
+};
+
+export const AXIS_NAMES: Record<Axis, Texts<string>> = {
+  setup: { en: "Setup", ko: "셋팅" },
+  efficiency: { en: "Efficiency", ko: "효율" },
+  fit: { en: "Fit", ko: "상황 적합" },
+  intensity: { en: "Intensity", ko: "강도" },
+};
+
+/**
+ * 터미널 요약의 덧붙이는 말. 가장 잘하는 것은 규칙 이름에 잰 값을 붙이고, 먼저 고칠 것은 예상 효과가 있으면 그것을,
+ * 없으면 후보의 수를 적는다. 예상 효과의 자리에 0을 넣지 않는다(설계 11.5 「터미널의 요약에 실릴 때」, 15)
+ */
+export const SUMMARY_COPY: Texts<{ best: string; gain: string; unmeasured: string; otherTools: string; candidates: string }> = {
+  en: { best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up · share not measured", otherTools: "{candidates} to clean up · share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { best: "{name} {value}", gain: "{axis} 최대 +{gain}", unmeasured: "정리할 것 {candidates}개 · 비율은 잴 수 없음", otherTools: "정리할 것 {candidates}개 · {tools}의 비율은 잴 수 없음", candidates: "정리할 것 {candidates}개" },
 };
 
 /** 못 잰 이유의 낱말과 설명. 규칙이 따로 쓴 것이 없을 때 쓴다(설계 11.4) */

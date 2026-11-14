@@ -32,7 +32,7 @@ describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
     const result = baseResult();
     const summary = checkupSummary(result, null);
-    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "notices", "reportPath"]);
+    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "notices", "reportPath", "lang", "text"]);
     expect(summary).toMatchObject({ aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: result.score.withheld, reportPath: null });
     expect(summary.axes).toEqual(result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })));
   });
@@ -108,5 +108,49 @@ describe("요약", () => {
     const text = JSON.stringify(summary);
     expect(text).not.toContain("secret");
     expect(summary.reportPath).toBe("/report.html");
+  });
+});
+
+describe("요약의 문장", () => {
+  const e5Value = { tool: "claude-code" as const, status: "unmeasured" as const, reason: "too_little" as const, value: null, score: null, evidence: { enabled: 4, judgeable: 2, judged: 2, structural: 2, unused: 1, used: 1 }, candidates: ["A1:claude-code:x"], observed: "measured" as const };
+
+  it("결과의 언어로 만든다. 별명, 진단, 알림은 결과의 문장 그대로다", () => {
+    const korean = baseResult();
+    const summary = checkupSummary({ ...korean, lang: "ko" }, null);
+    expect(summary.lang).toBe("ko");
+    expect(summary.text).toMatchObject({ grade: korean.text.ko.grade, diagnosis: korean.text.ko.diagnosis, notices: korean.notices.map((notice) => notice.text.ko) });
+    expect(checkupSummary(korean, null).text.diagnosis).toBe(korean.text.en.diagnosis);
+  });
+
+  it("가장 잘하는 것은 잘하는 것의 제목과 규칙 이름에 붙인 잰 값이다", () => {
+    const result = { ...baseResult(), lang: "ko" as const, findings: [finding("E1", { category: "strength", value: 0.96, score: 1 })] };
+    expect(checkupSummary(result, null).text).toMatchObject({ best: { title: "같은 내용을 다시 계산시키지 않음", detail: "캐시 적중 96%" }, noBest: null });
+    expect(checkupSummary({ ...result, lang: "en" }, null).text.best).toEqual({ title: "Reuses cached context instead of recomputing it", detail: "Cache hits 96%" });
+  });
+
+  it("먼저 고칠 것은 할 일의 제목과 덧붙이는 말이다. 예상 효과가 없으면 후보의 수를 적고 0을 넣지 않는다(설계 11.5)", () => {
+    const measured = { ...e5Value, status: "scored" as const, reason: null, value: 0.1, score: 1, candidates: [] };
+    const result = {
+      ...baseResult(),
+      lang: "ko" as const,
+      findings: [
+        finding("E3", { category: "repair", gain: 5, severity: "critical", kind: "rate", value: 2 }),
+        finding("E5", { category: "repair", status: "unmeasured", reason: "too_little", value: null, score: null, severity: "info", candidates: ["A1:claude-code:x"], tools: [e5Value] }),
+        finding("E6", { category: "repair", value: 0.1, score: 1, severity: "info", candidates: ["A3:claude-code:a", "A3:claude-code:b"], tools: [measured, { ...e5Value, candidates: ["A3:claude-code:a", "A3:claude-code:b"] }] }),
+      ],
+    };
+    expect(checkupSummary(result, null).text.fixFirst).toEqual([
+      { title: "긴 세션 나누기", detail: "효율 최대 +5" },
+      { title: "안 쓰는 스킬 끄기", detail: "정리할 것 1개 · 비율은 잴 수 없음" },
+      { title: "안 쓰는 MCP 서버 끄기", detail: "정리할 것 2개 · Claude Code의 비율은 잴 수 없음" },
+    ]);
+    expect(checkupSummary({ ...result, lang: "en" }, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["Efficiency up to +5", "1 to clean up · share not measured", "2 to clean up · share for Claude Code not measured"]);
+    expect(checkupSummary(result, null).text.noFixFirst).toBeNull();
+  });
+
+  it("가장 잘하는 것이나 먼저 고칠 것이 없으면 빈 목록의 문장을 싣는다", () => {
+    const result = { ...baseResult(), lang: "ko" as const, findings: [finding("E1", { category: "average" })] };
+    const text = { ...result.text, ko: { ...result.text.ko, noStrengths: "아직 뚜렷한 강점을 찾지 못했습니다. 고칠 것부터 하나씩 해 봅시다.", noRepairs: "지금은 고칠 것이 없습니다." } };
+    expect(checkupSummary({ ...result, text }, null).text).toMatchObject({ best: null, noBest: "아직 뚜렷한 강점을 찾지 못했습니다. 고칠 것부터 하나씩 해 봅시다.", fixFirst: [], noFixFirst: "지금은 고칠 것이 없습니다." });
   });
 });

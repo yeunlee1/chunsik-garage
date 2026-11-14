@@ -4,6 +4,7 @@ import { slots } from "../../src/core/copy/format.ts";
 import { LANGS, type Texts } from "../../src/core/copy/lang.ts";
 import { EFFICIENCY_COPY } from "../../src/core/copy/rules-efficiency.ts";
 import { FIT_COPY } from "../../src/core/copy/rules-fit.ts";
+import { INTENSITY_COPY } from "../../src/core/copy/rules-intensity.ts";
 import { SETUP_COPY } from "../../src/core/copy/rules-setup.ts";
 import type { RuleCopy } from "../../src/core/copy/types.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
@@ -41,6 +42,7 @@ const AXES: [Axis, Partial<Record<RuleId, Texts<RuleCopy>>>][] = [
   ["setup", SETUP_COPY],
   ["efficiency", EFFICIENCY_COPY],
   ["fit", FIT_COPY],
+  ["intensity", INTENSITY_COPY],
 ];
 
 const TITLES = ["name", "good", "fix"] as const;

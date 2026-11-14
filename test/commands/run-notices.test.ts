@@ -1,4 +1,4 @@
-// 실행 기록의 알림 다섯 종류의 문장을 본다. 두 언어로 만들고 오류 코드와 정해진 낱말만 넣는다(설계 12.3, 20.2)
+// 실행 기록의 알림 여덟 종류의 문장을 본다. 두 언어로 만들고 오류 코드와 정해진 낱말만 넣는다(설계 12.3, 20.2)
 import { describe, expect, it } from "vitest";
 import type { RunNotice } from "../../src/commands/checkup.ts";
 import { runNoticeText } from "../../src/commands/run-notices.ts";
@@ -10,6 +10,9 @@ const ALL: RunNotice[] = [
   { kind: "prune_skipped", what: "reports", link: "state" },
   { kind: "not_saved" },
   { kind: "result_unwritten", code: "ENOENT" },
+  { kind: "report_failed", code: "EPERM" },
+  { kind: "report_unwritten", code: "ENOENT" },
+  { kind: "report_unopened" },
 ];
 
 describe("실행 알림의 문장", () => {

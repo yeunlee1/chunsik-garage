@@ -1,4 +1,4 @@
-// 평가 결과 파일을 결과 폴더(reports/)나 OS 임시 폴더에 쓰고, 결과 폴더에서 최근 20번의 점검만 남긴다. 이름의 시각은 평가 시계를 UTC로 적어 글자 차례가 시각 차례다(설계 12.3, 13.2, 19.2)
+// 평가 결과 파일과 결과 화면을 결과 폴더(reports/)나 OS 임시 폴더에 쓰고, 결과 폴더에서 최근 20번의 점검만 남긴다. 이름의 시각은 평가 시계를 UTC로 적어 글자 차례가 시각 차례다(설계 12.3, 13.2, 19.2)
 import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
@@ -8,6 +8,8 @@ export const REPORTS_DIR = "reports";
 /** 결과 폴더에 남기는 점검의 수. 한 점검의 결과 화면과 평가 결과 파일을 한 번으로 센다 */
 export const KEEP_REPORTS = 20;
 const TEMP_PREFIX = "chunsik-garage-result-";
+/** 저장 없는 실행의 결과 화면 이름 앞머리(설계 19.2의 보관 표) */
+const TEMP_REPORT_PREFIX = "chunsik-garage-report-";
 /** 이 도구가 결과 폴더에 쓰는 이름. 시각 뒤에 결과 화면(.html)이나 평가 결과 파일(.json)이 붙는다 */
 const STAMPED = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.(json|html)$/;
 
@@ -17,15 +19,19 @@ export function resultStamp(nowMs: number): string {
 }
 
 /** 임시 파일에 쓰고 이름을 바꾼다. 실패하면 임시 파일을 남기지 않는다 */
-async function writeJson(path: string, value: unknown): Promise<void> {
+async function writeText(path: string, text: string): Promise<void> {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+    await writeFile(temporary, text);
     await rename(temporary, path);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** 결과 폴더에 <시각>.json으로 쓰고 경로를 돌려준다. 같은 이름이 있으면 덮어쓴다 */
@@ -41,6 +47,22 @@ export async function writeResult(stateDir: string, stamp: string, result: unkno
 export async function writeTempResult(tmpdir: string, stamp: string, result: unknown): Promise<string> {
   const path = join(tmpdir, `${TEMP_PREFIX}${stamp}.json`);
   await writeJson(path, result);
+  return path;
+}
+
+/** 결과 화면을 결과 폴더에 <시각>.html로 쓰고 경로를 돌려준다. 같은 시각의 평가 결과 파일과 한 점검으로 센다(설계 13.2) */
+export async function writeReport(stateDir: string, stamp: string, html: string): Promise<string> {
+  const reports = join(stateDir, REPORTS_DIR);
+  await mkdir(reports, { recursive: true });
+  const path = join(reports, `${stamp}.html`);
+  await writeText(path, html);
+  return path;
+}
+
+/** 저장 없는 실행이나 결과 폴더에 쓰지 못한 점검의 결과 화면. OS 임시 폴더에 쓰고 경로를 돌려준다(설계 20.2) */
+export async function writeTempReport(tmpdir: string, stamp: string, html: string): Promise<string> {
+  const path = join(tmpdir, `${TEMP_REPORT_PREFIX}${stamp}.html`);
+  await writeText(path, html);
   return path;
 }
 

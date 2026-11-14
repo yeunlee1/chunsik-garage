@@ -4,7 +4,7 @@
 import { homedir, tmpdir } from "node:os";
 
 // src/commands/checkup.ts
-import { join as join16 } from "node:path";
+import { join as join17 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -268,10 +268,10 @@ function mcpPlacesUnread(facts) {
 // src/core/installs/gate.ts
 var BLANK_INSTALL_EVIDENCE = { enabled: null, judgeable: null, judged: null, structural: null, unused: null, used: null };
 function measureInstalls(enabled, complete, minimum) {
-  const structural = enabled.filter((item) => item.structural).length;
+  const structural = enabled.filter((item2) => item2.structural).length;
   const judgeable = enabled.length - structural;
-  const used = enabled.filter((item) => !item.structural && item.verdict === "used").length;
-  const unused = enabled.filter((item) => !item.structural && item.verdict === "unused").length;
+  const used = enabled.filter((item2) => !item2.structural && item2.verdict === "used").length;
+  const unused = enabled.filter((item2) => !item2.structural && item2.verdict === "unused").length;
   const judged = used + unused;
   const evidence = { enabled: enabled.length, judgeable, judged, structural, unused, used };
   if (enabled.length === 0) return unmeasured("not_applicable", evidence);
@@ -286,14 +286,14 @@ function measureInstalls(enabled, complete, minimum) {
 function sameInstall(items, keyOf) {
   const byKey = /* @__PURE__ */ new Map();
   const groups = [];
-  for (const item of items) {
-    const key = keyOf(item);
+  for (const item2 of items) {
+    const key = keyOf(item2);
     const group = key === null ? void 0 : byKey.get(key);
     if (group !== void 0) {
-      group.push(item);
+      group.push(item2);
       continue;
     }
-    const fresh = [item];
+    const fresh = [item2];
     groups.push(fresh);
     if (key !== null) byKey.set(key, fresh);
   }
@@ -434,14 +434,14 @@ function mainTools(use) {
   const most = Math.max(...Object.values(use.sessions));
   return Object.keys(use.sessions).filter((tool) => use.sessions[tool] >= FREQUENT_SESSIONS || use.sessions[tool] === most);
 }
-function f3(tools, usage) {
-  const byId = new Map(tools.map((tool) => [tool.tool, tool]));
+function f3(tools2, usage2) {
+  const byId = new Map(tools2.map((tool) => [tool.tool, tool]));
   const missing = [];
   let targets = 0;
-  for (const use of usage.projects) {
+  for (const use of usage2.projects) {
     const { project } = use;
     if (use.total < FREQUENT_SESSIONS || !scanned(project)) continue;
-    if (project.kind !== "git" && !treatedAsProject(project) && !tools.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
+    if (project.kind !== "git" && !treatedAsProject(project) && !tools2.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
     targets++;
     const without = mainTools(use).filter((tool) => !hasInstructions(projectIn(byId.get(tool), project.normRoot)));
     if (without.length > 0) missing.push({ normRoot: project.normRoot, name: project.name, tools: without });
@@ -451,12 +451,12 @@ function f3(tools, usage) {
   return { measurement: targets === 0 ? unmeasured("not_applicable", evidence) : scored(withInstructions / targets, evidence), missing };
 }
 var instructionsUnread = (set) => set.unreadable.length > 0 || set.unreadableDirs.length > 0;
-function f4(tools) {
+function f4(tools2) {
   let unreadable = false;
   let globalLines = 0;
   let comparedProjects = 0;
   let worst = null;
-  for (const tool of [...tools].sort((a, b) => byText4(a.tool, b.tool))) {
+  for (const tool of [...tools2].sort((a, b) => byText4(a.tool, b.tool))) {
     const global = tool.setup.globalInstructions;
     const projects = scannedProjects(tool);
     if (instructionsUnread(global) || projects.some((project) => instructionsUnread(project.instructions))) unreadable = true;
@@ -498,11 +498,11 @@ function f5(tool) {
   if (hashesByName.size === 0) return unmeasured("not_applicable", evidence);
   return scored((identicalCopies + 2 * differingCopies) / hashesByName.size, evidence);
 }
-function f6(tools) {
+function f6(tools2) {
   let unreadable = false;
   let conflicts = 0;
   let projectsWithSettings = 0;
-  for (const tool of tools) {
+  for (const tool of tools2) {
     if (unread(tool.setup.settings.user) || projectSettingsUnread(tool.setup)) unreadable = true;
     for (const project of scannedProjects(tool)) {
       if (!project.hasSettings && !project.hasLocalSettings) continue;
@@ -514,10 +514,10 @@ function f6(tools) {
   const evidence = { conflicts, projectsWithSettings };
   return projectsWithSettings === 0 ? unmeasured("not_applicable", evidence) : scored(conflicts, evidence);
 }
-function mergedFitRules(tools, usage) {
-  const guides = f3(tools, usage);
-  const overlap = f4(tools);
-  return { F3: guides.measurement, F4: overlap.measurement, F6: f6(tools), missingInstructions: guides.missing, worstOverlap: overlap.worst };
+function mergedFitRules(tools2, usage2) {
+  const guides = f3(tools2, usage2);
+  const overlap = f4(tools2);
+  return { F3: guides.measurement, F4: overlap.measurement, F6: f6(tools2), missingInstructions: guides.missing, worstOverlap: overlap.worst };
 }
 function fitToolRules(tool) {
   return { F5: f5(tool) };
@@ -602,36 +602,36 @@ function usageRules(totals, coverage) {
 }
 
 // src/core/metrics/intensity.ts
-var seeing = (tools, ...keys) => tools.filter((tool) => keys.every((key) => tool.coverage[key] !== "unsupported"));
+var seeing = (tools2, ...keys) => tools2.filter((tool) => keys.every((key) => tool.coverage[key] !== "unsupported"));
 var anySees = (all, seen) => seen.length > 0 || all.length === 0;
-var activeDays = (tools) => new Set(tools.flatMap((tool) => tool.totals.activeDates)).size;
-var sum = (tools, pick) => tools.reduce((total, tool) => total + pick(tool), 0);
-function i1(tools) {
-  const days = activeDays(tools);
+var activeDays = (tools2) => new Set(tools2.flatMap((tool) => tool.totals.activeDates)).size;
+var sum = (tools2, pick) => tools2.reduce((total, tool) => total + pick(tool), 0);
+function i1(tools2) {
+  const days = activeDays(tools2);
   return scored(days, { activeDays: days });
 }
-function i2(tools) {
-  const seen = seeing(tools, "humanRequests");
+function i2(tools2) {
+  const seen = seeing(tools2, "humanRequests");
   const days = activeDays(seen);
   const humanRequests = sum(seen, (tool) => tool.totals.humanRequests);
   const evidence = { activeDays: days, humanRequests };
-  return countGate(anySees(tools, seen), days, 1, evidence) ?? scored(humanRequests / days, evidence);
+  return countGate(anySees(tools2, seen), days, 1, evidence) ?? scored(humanRequests / days, evidence);
 }
-function i3(tools) {
-  const seen = seeing(tools, "humanRequests", "toolCalls");
+function i3(tools2) {
+  const seen = seeing(tools2, "humanRequests", "toolCalls");
   const humanRequests = sum(seen, (tool) => tool.totals.humanRequests);
   const toolCalls = sum(seen, (tool) => tool.totals.toolCalls);
   const evidence = { humanRequests, toolCalls };
-  return countGate(anySees(tools, seen), humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(toolCalls / humanRequests, evidence);
+  return countGate(anySees(tools2, seen), humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(toolCalls / humanRequests, evidence);
 }
-function i4(usage) {
-  const excludedFolders = usage.projects.filter((use) => use.project.excluded).length;
-  const projects = usage.projects.length - excludedFolders;
-  const evidence = { excludedFolders, projects, unlinkedSessions: usage.unlinkedSessions };
+function i4(usage2) {
+  const excludedFolders = usage2.projects.filter((use) => use.project.excluded).length;
+  const projects = usage2.projects.length - excludedFolders;
+  const evidence = { excludedFolders, projects, unlinkedSessions: usage2.unlinkedSessions };
   return countGate(true, projects, 1, evidence) ?? scored(projects, evidence);
 }
-function intensityRules(tools, usage) {
-  return { I1: i1(tools), I2: i2(tools), I3: i3(tools), I4: i4(usage) };
+function intensityRules(tools2, usage2) {
+  return { I1: i1(tools2), I2: i2(tools2), I3: i3(tools2), I4: i4(usage2) };
 }
 
 // src/adapters/common/version.ts
@@ -684,22 +684,22 @@ function safeguardOf(tool) {
   const bypass = mode === "bypass" || old && setup.projects.some((project) => project.bypassInProject || project.bypassInLocal);
   return { tool: tool.tool, guardHook, permissionChecks: !bypass };
 }
-function s1(tools) {
-  const withInstructions = tools.filter((tool) => tool.setup.globalInstructions.bytes >= MIN_GLOBAL_INSTRUCTION_BYTES).length;
-  const evidence = { tools: tools.length, withInstructions };
-  return countGate(true, tools.length, 1, evidence) ?? scored(withInstructions / tools.length, evidence);
+function s1(tools2) {
+  const withInstructions = tools2.filter((tool) => tool.setup.globalInstructions.bytes >= MIN_GLOBAL_INSTRUCTION_BYTES).length;
+  const evidence = { tools: tools2.length, withInstructions };
+  return countGate(true, tools2.length, 1, evidence) ?? scored(withInstructions / tools2.length, evidence);
 }
-function s2(tools, safeguards) {
-  if (safeguards.some((safeguard) => safeguard.guardHook === null)) return unmeasured("unreadable", { guarded: null, tools: tools.length });
+function s2(tools2, safeguards) {
+  if (safeguards.some((safeguard) => safeguard.guardHook === null)) return unmeasured("unreadable", { guarded: null, tools: tools2.length });
   const guarded = safeguards.filter((safeguard) => safeguard.guardHook === true || safeguard.permissionChecks === true).length;
-  const evidence = { guarded, tools: tools.length };
-  return countGate(true, tools.length, 1, evidence) ?? scored(guarded / tools.length, evidence);
+  const evidence = { guarded, tools: tools2.length };
+  return countGate(true, tools2.length, 1, evidence) ?? scored(guarded / tools2.length, evidence);
 }
 var PROBLEM_COUNTERS = { danglingLink: "danglingLinks", noFrontmatter: "noFrontmatter", unparsable: "unparsable" };
-function countedProblems(tools) {
+function countedProblems(tools2) {
   const counted = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const tool of tools) {
+  for (const tool of tools2) {
     for (const problem of tool.setup.problems) {
       if (problem.owner !== "user") continue;
       const at = problem.realPath ?? problem.path;
@@ -725,10 +725,10 @@ function s5(tool) {
   if (enabledServers === 0) return mcpPlacesUnread(setup) ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
   return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
 }
-function mergedSetupRules(tools) {
-  const safeguards = tools.map(safeguardOf);
-  const setupProblems = countedProblems(tools);
-  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
+function mergedSetupRules(tools2) {
+  const safeguards = tools2.map(safeguardOf);
+  const setupProblems = countedProblems(tools2);
+  return { S1: s1(tools2), S2: s2(tools2, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
 }
 function setupToolRules(tool) {
   return { S5: s5(tool) };
@@ -746,10 +746,10 @@ function projectLookup(projects, normalizedCwds) {
   return (cwd) => cwd === null ? null : byRawCwd.get(cwd) ?? null;
 }
 var byText5 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-function projectUsage(tools, lookup) {
+function projectUsage(tools2, lookup) {
   const counts = /* @__PURE__ */ new Map();
   let unlinkedSessions = 0;
-  for (const { tool, totals } of tools) {
+  for (const { tool, totals } of tools2) {
     for (const session of totals.mainSessions) {
       const project = lookup(session.cwd);
       if (project === null) {
@@ -849,9 +849,9 @@ function rateMerged(spec, measurement) {
   if (measurement.status === "unmeasured") return { status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, tools: [] };
   return { status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, tools: [] };
 }
-function rateTools(spec, id, tools) {
-  const responses = new Map(tools.map((tool) => [tool.tool, tool.responses]));
-  const values = tools.map((tool) => {
+function rateTools(spec, id, tools2) {
+  const responses = new Map(tools2.map((tool) => [tool.tool, tool.responses]));
+  const values = tools2.map((tool) => {
     const measurement = tool.rules[id];
     const candidates = tool.candidates.filter((candidate) => candidate.rule === id).map((candidate) => candidate.id);
     if (measurement.status === "unmeasured") return { tool: tool.tool, status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, candidates };
@@ -896,8 +896,8 @@ function compareFindings(a, b, order) {
   return byTable;
 }
 function scoreboard(measured2) {
-  const tools = [...measured2.tools].sort((a, b) => byText6(a.tool, b.tool));
-  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured2.merged[spec.id]) : rateTools(spec, spec.id, tools)]));
+  const tools2 = [...measured2.tools].sort((a, b) => byText6(a.tool, b.tool));
+  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured2.merged[spec.id]) : rateTools(spec, spec.id, tools2)]));
   const scores = new Map(AXES.map((axis) => [axis, axisScore(RULES.filter((spec) => spec.axis === axis).map((spec) => ({ weight: spec.weight, score: rated.get(spec.id).score })))]));
   const findings = RULES.map((spec) => {
     const rule2 = rated.get(spec.id);
@@ -1019,7 +1019,7 @@ function evaluate(input) {
   const all = [...input.tools].sort((a, b) => byText7(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
   const setups = scored2.map((tool) => ({ tool: tool.input.tool, totals: tool.totals, coverage: tool.input.coverage, setup: tool.input.setup, highestVersion: highestMainVersion(tool.input.summaries) }));
-  const usage = projectUsage(setups, lookup);
+  const usage2 = projectUsage(setups, lookup);
   const judged = scored2.map((tool, index) => {
     const setup = setups[index];
     const { summaries } = tool.input;
@@ -1036,8 +1036,8 @@ function evaluate(input) {
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured: measured2 };
   });
   const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
-  const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage);
-  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage) }, tools: judged.map((tool) => tool.measured) });
+  const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage2);
+  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage2) }, tools: judged.map((tool) => tool.measured) });
   const humanRequests = scored2.reduce((sum2, tool) => sum2 + tool.totals.humanRequests, 0);
   const activeDays2 = new Set(scored2.flatMap((tool) => tool.totals.activeDates)).size;
   const judgedByTool = new Map(judged.map((tool) => [tool.tool, tool]));
@@ -1056,7 +1056,7 @@ function evaluate(input) {
     missingInstructions,
     worstOverlap,
     setupProblems,
-    projects: usage
+    projects: usage2
   };
 }
 
@@ -1924,78 +1924,78 @@ function joinValue(value, unit, lang) {
 function fillEvidence(template, evidence, extra = {}) {
   return fill(template, { ...Object.fromEntries(slots(template).map((slot) => [slot, null])), ...evidence, ...extra });
 }
-function reasonOf(copy, reason, lang) {
-  const own = copy.reasons?.[reason];
+function reasonOf(copy2, reason, lang) {
+  const own = copy2.reasons?.[reason];
   const common = REASON_COPY[reason][lang];
   return { word: own?.word ?? common.word, text: own?.text ?? common.text };
 }
-function measured(kind, value, copy) {
+function measured(kind, value, copy2) {
   const shown = formatValue(kind, value);
-  return { value: shown, unit: fill(copy.unit, { value: shown === "1" ? 1 : 0 }) };
+  return { value: shown, unit: fill(copy2.unit, { value: shown === "1" ? 1 : 0 }) };
 }
-function toolLine(kind, value, copy, lang) {
+function toolLine(kind, value, copy2, lang) {
   const tool = TOOL_NAMES[value.tool][lang];
-  const evidence = fillEvidence(copy.evidence, value.evidence);
+  const evidence = fillEvidence(copy2.evidence, value.evidence);
   if (value.status === "scored") {
-    const shown = measured(kind, value.value, copy);
+    const shown = measured(kind, value.value, copy2);
     return fill(TOOL_LINE[lang].measured, { tool, value: joinValue(shown.value, shown.unit, lang), evidence });
   }
-  return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy, value.reason, lang).word, evidence });
+  return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy2, value.reason, lang).word, evidence });
 }
 function reasonEvidence(finding) {
   if (finding.tools.length === 0) return finding.evidence;
   return finding.tools.find((value) => value.reason === finding.reason)?.evidence ?? {};
 }
 var candidateSources = (finding) => finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0 && (value.reason === "too_little" || value.reason === "watching"));
-function description(finding, copy, lang, shown) {
-  if (finding.category === "strength" || finding.category === "average") return copy.why;
-  if (finding.category === "unmeasured") return fillEvidence(reasonOf(copy, finding.reason, lang).text, reasonEvidence(finding));
+function description(finding, copy2, lang, shown) {
+  if (finding.category === "strength" || finding.category === "average") return copy2.why;
+  if (finding.category === "unmeasured") return fillEvidence(reasonOf(copy2, finding.reason, lang).text, reasonEvidence(finding));
   const sources = candidateSources(finding);
   if (finding.status === "unmeasured") {
     const sentences = sources.map((value) => {
-      const sentence = fillEvidence(copy.repairUnmeasured?.[value.reason] ?? reasonOf(copy, value.reason, lang).text, value.evidence, { candidates: value.candidates.length });
+      const sentence = fillEvidence(copy2.repairUnmeasured?.[value.reason] ?? reasonOf(copy2, value.reason, lang).text, value.evidence, { candidates: value.candidates.length });
       return sources.length > 1 ? `${TOOL_NAMES[value.tool][lang]}: ${sentence}` : sentence;
     });
-    return sentences.length > 0 ? sentences.join(" ") : fillEvidence(reasonOf(copy, finding.reason, lang).text, reasonEvidence(finding));
+    return sentences.length > 0 ? sentences.join(" ") : fillEvidence(reasonOf(copy2, finding.reason, lang).text, reasonEvidence(finding));
   }
   const others = sources.map((value) => fillEvidence(OTHER_TOOL_COPY[value.reason][lang], value.evidence, { tool: TOOL_NAMES[value.tool][lang], candidates: value.candidates.length }));
-  return [fill(copy.problem, { value: joinValue(shown.value, shown.unit, lang) }), ...others].join(" ");
+  return [fill(copy2.problem, { value: joinValue(shown.value, shown.unit, lang) }), ...others].join(" ");
 }
 function safeguardLine(safeguard, lang) {
-  const copy = SAFEGUARD_COPY[lang];
+  const copy2 = SAFEGUARD_COPY[lang];
   const { guardHook, permissionChecks } = safeguard;
-  const condition = guardHook === null || permissionChecks === null ? copy.unknown : guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
-  return fill(copy.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition });
+  const condition = guardHook === null || permissionChecks === null ? copy2.unknown : guardHook && permissionChecks ? copy2.both : guardHook ? copy2.hook : permissionChecks ? copy2.permissions : copy2.none;
+  return fill(copy2.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition });
 }
 var WHY_ORDER = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
 function unjudgedNotes(servers, lang) {
   if (servers.length === 0) return [];
-  const copy = UNJUDGED_COPY[lang];
-  const lines = [copy.intro];
+  const copy2 = UNJUDGED_COPY[lang];
+  const lines = [copy2.intro];
   for (const tool of [...new Set(servers.map((server) => server.tool))].sort()) {
     for (const why of WHY_ORDER) {
       const count = servers.filter((server) => server.tool === tool && server.why === why).length;
-      if (count > 0) lines.push(fill(copy.line, { tool: TOOL_NAMES[tool][lang], why: copy.why[why], count }));
+      if (count > 0) lines.push(fill(copy2.line, { tool: TOOL_NAMES[tool][lang], why: copy2.why[why], count }));
     }
   }
-  if (servers.some((server) => server.scope === "claude-ai")) lines.push(copy.deny);
+  if (servers.some((server) => server.scope === "claude-ai")) lines.push(copy2.deny);
   return lines;
 }
 function findingText(finding, details, lang) {
-  const copy = RULE_COPY[finding.ruleId][lang];
-  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy) : null;
-  const method = [copy.method];
-  if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy.evidence, finding.evidence));
-  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy, lang));
+  const copy2 = RULE_COPY[finding.ruleId][lang];
+  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2) : null;
+  const method = [copy2.method];
+  if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy2.evidence, finding.evidence));
+  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy2, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
   return {
-    name: copy.name,
-    title: finding.category === "strength" ? copy.good : finding.category === "repair" ? copy.fix : copy.name,
+    name: copy2.name,
+    title: finding.category === "strength" ? copy2.good : finding.category === "repair" ? copy2.fix : copy2.name,
     value: shown?.value ?? null,
     unit: shown?.unit ?? null,
-    reason: finding.status === "unmeasured" ? reasonOf(copy, finding.reason, lang).word : null,
-    description: description(finding, copy, lang, shown),
-    prescription: finding.category === "average" || finding.category === "repair" ? copy.prescription : null,
+    reason: finding.status === "unmeasured" ? reasonOf(copy2, finding.reason, lang).word : null,
+    description: description(finding, copy2, lang, shown),
+    prescription: finding.category === "average" || finding.category === "repair" ? copy2.prescription : null,
     method,
     notes: finding.ruleId === "E6" ? unjudgedNotes(details.unjudgedServers, lang) : []
   };
@@ -2118,8 +2118,8 @@ var LINES = {
 };
 var LIST_JOIN = ", ";
 function unclassifiedItems(counts, lang) {
-  const groups = ["compaction", "denial", "hook"].map((group) => ({ group, count: counts.filter((item) => item.what.split(":")[0] === group).reduce((sum2, item) => sum2 + item.count, 0) }));
-  return groups.filter((item) => item.count > 0).map((item) => fill(UNCLASSIFIED[item.group][lang], { count: item.count })).join(LIST_JOIN);
+  const groups = ["compaction", "denial", "hook"].map((group) => ({ group, count: counts.filter((item2) => item2.what.split(":")[0] === group).reduce((sum2, item2) => sum2 + item2.count, 0) }));
+  return groups.filter((item2) => item2.count > 0).map((item2) => fill(UNCLASSIFIED[item2.group][lang], { count: item2.count })).join(LIST_JOIN);
 }
 function noticeText(notice, lang) {
   const lines = LINES[lang];
@@ -2159,9 +2159,9 @@ function noticeText(notice, lang) {
 // src/core/result/coverage.ts
 var PARTIAL_READ_SHARE = 0.2;
 function resultCoverage(input, collected) {
-  const tools = [...input.tools].sort((a, b) => a.tool < b.tool ? -1 : a.tool > b.tool ? 1 : 0);
-  return tools.map((tool) => {
-    const found = collected.find((item) => item.tool === tool.tool);
+  const tools2 = [...input.tools].sort((a, b) => a.tool < b.tool ? -1 : a.tool > b.tool ? 1 : 0);
+  return tools2.map((tool) => {
+    const found = collected.find((item2) => item2.tool === tool.tool);
     if (found === void 0) throw new Error(`no collected result for ${tool.tool}`);
     const { read } = found;
     const sum2 = (pick) => tool.summaries.reduce((total, summary) => total + pick(summary.missing), 0);
@@ -2205,7 +2205,7 @@ function deepHints(input) {
     if (mentioned.length > 0) hints.push({ kind: "global_mentions_project", tool: tool.tool, projects: mentioned });
     const global = new Set(setup.globalInstructions.lineHashes);
     const seen = /* @__PURE__ */ new Map();
-    for (const project of setup.projects.filter((item) => item.exists && !item.excluded)) {
+    for (const project of setup.projects.filter((item2) => item2.exists && !item2.excluded)) {
       for (const hash of new Set(project.instructions.lineHashes)) {
         if (global.has(hash)) continue;
         seen.set(hash, [...seen.get(hash) ?? [], project.root]);
@@ -2241,15 +2241,15 @@ var NOTICE_KINDS = [
 var byText9 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var inRange = (date, range) => date >= range.from && date <= range.to;
 var toolOf = (notice) => "tool" in notice ? notice.tool : "";
-function sortNotices(notices) {
-  return notices.map((notice, index) => ({ notice, index })).sort((a, b) => NOTICE_KINDS.indexOf(a.notice.kind) - NOTICE_KINDS.indexOf(b.notice.kind) || byText9(toolOf(a.notice), toolOf(b.notice)) || a.index - b.index).map((item) => item.notice);
+function sortNotices(notices2) {
+  return notices2.map((notice, index) => ({ notice, index })).sort((a, b) => NOTICE_KINDS.indexOf(a.notice.kind) - NOTICE_KINDS.indexOf(b.notice.kind) || byText9(toolOf(a.notice), toolOf(b.notice)) || a.index - b.index).map((item2) => item2.notice);
 }
 var unread2 = (status) => status === "unparsable" || status === "unreadable";
 var sortedUnique = (values) => [...new Set(values)].sort(byText9);
 function setupNotices(input, evaluation, run2) {
-  const notices = [];
-  if (evaluation.score.withheld.length > 0) notices.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
-  if (run2.stateBroken) notices.push({ kind: "state_reset" });
+  const notices2 = [];
+  if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
+  if (run2.stateBroken) notices2.push({ kind: "state_reset" });
   for (const tool of input.tools) {
     const id = tool.tool;
     const setup = tool.setup;
@@ -2267,7 +2267,7 @@ function setupNotices(input, evaluation, run2) {
       ["skill_files", false, setup.skills.filter((skill) => !skill.readable).map((skill) => skill.path)]
     ];
     for (const [what, whole, targets] of unreadable) {
-      if (whole || targets.length > 0) notices.push({ kind: "setup_unreadable", tool: id, what, targets: sortedUnique(targets) });
+      if (whole || targets.length > 0) notices2.push({ kind: "setup_unreadable", tool: id, what, targets: sortedUnique(targets) });
     }
     const enabled = setup.plugins.filter((plugin) => plugin.enabled);
     const enabledIds = new Set(enabled.map((plugin) => plugin.id));
@@ -2280,28 +2280,28 @@ function setupNotices(input, evaluation, run2) {
       ["hooks_unreadable", enabled.filter((plugin) => plugin.compositionKnown && plugin.hooksUnreadable).map((plugin) => plugin.id)]
     ];
     for (const [why, plugins] of uncounted) {
-      if (plugins.length > 0) notices.push({ kind: "plugins_uncounted", tool: id, why, plugins: sortedUnique(plugins) });
+      if (plugins.length > 0) notices2.push({ kind: "plugins_uncounted", tool: id, why, plugins: sortedUnique(plugins) });
     }
     const problems = setup.problems.filter((problem) => problem.owner === "plugin" || problem.owner === "managed").map((problem) => ({ kind: problem.kind, path: problem.path }));
-    if (problems.length > 0) notices.push({ kind: "setup_problems_unscored", tool: id, problems: problems.sort((a, b) => byText9(a.path, b.path) || byText9(a.kind, b.kind)) });
+    if (problems.length > 0) notices2.push({ kind: "setup_problems_unscored", tool: id, problems: problems.sort((a, b) => byText9(a.path, b.path) || byText9(a.kind, b.kind)) });
   }
   const gone = input.projects.filter((project) => !project.exists).map((project) => project.root);
-  if (gone.length > 0) notices.push({ kind: "projects_gone", projects: sortedUnique(gone) });
-  return sortNotices(notices);
+  if (gone.length > 0) notices2.push({ kind: "projects_gone", projects: sortedUnique(gone) });
+  return sortNotices(notices2);
 }
 function recordNotices(input, evaluation, collected) {
-  const notices = [];
+  const notices2 = [];
   for (const tool of input.tools) {
     const id = tool.tool;
-    const found = collected.find((item) => item.tool === id);
+    const found = collected.find((item2) => item2.tool === id);
     if (found !== void 0) {
       const { unreadableFiles, unreadableDirs } = found.read;
-      if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText9), dirs: [...unreadableDirs].sort(byText9) });
+      if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices2.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText9), dirs: [...unreadableDirs].sort(byText9) });
       for (const metric of ["skills", "mcp"]) {
         const observation = found.observation[metric];
-        if (!observation.complete) notices.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
+        if (!observation.complete) notices2.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
       }
-      if (found.overlappingSessions > 0) notices.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
+      if (found.overlappingSessions > 0) notices2.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
     }
     const verified = VERIFIED_VERSIONS[id];
     const [from, to] = [parseVersion(verified.from), parseVersion(verified.to)];
@@ -2310,7 +2310,7 @@ function recordNotices(input, evaluation, collected) {
       const version = parseVersion(summary.version);
       if (version !== null && (compareVersions(version, from) < 0 || compareVersions(version, to) > 0)) outside2.set(summary.version, version);
     }
-    if (outside2.size > 0) notices.push({ kind: "version_unverified", tool: id, versions: [...outside2].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
+    if (outside2.size > 0) notices2.push({ kind: "version_unverified", tool: id, versions: [...outside2].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
     let total = 0;
     let weak = 0;
     for (const summary of tool.summaries) {
@@ -2321,7 +2321,7 @@ function recordNotices(input, evaluation, collected) {
         weak += day.weakHumanRequests;
       }
     }
-    if (total > 0 && weak / total > WEAK_REQUEST_SHARE) notices.push({ kind: "weak_human_requests", tool: id, weak, total });
+    if (total > 0 && weak / total > WEAK_REQUEST_SHARE) notices2.push({ kind: "weak_human_requests", tool: id, weak, total });
     const counts = /* @__PURE__ */ new Map();
     const add = (what, count) => {
       if (count > 0) counts.set(what, (counts.get(what) ?? 0) + count);
@@ -2333,11 +2333,11 @@ function recordNotices(input, evaluation, collected) {
         add("compaction", day.unknownCompactions);
       }
     }
-    if (counts.size > 0) notices.push({ kind: "unclassified", tool: id, counts: [...counts].sort((a, b) => byText9(a[0], b[0])).map(([what, count]) => ({ what, count })) });
+    if (counts.size > 0) notices2.push({ kind: "unclassified", tool: id, counts: [...counts].sort((a, b) => byText9(a[0], b[0])).map(([what, count]) => ({ what, count })) });
     const orphans = tool.summaries.filter((summary) => summary.kind === "sub" && summary.parentSessionId === null).length;
-    if (orphans > 0) notices.push({ kind: "orphan_subsessions", tool: id, sessions: orphans });
+    if (orphans > 0) notices2.push({ kind: "orphan_subsessions", tool: id, sessions: orphans });
   }
-  return sortNotices(notices);
+  return sortNotices(notices2);
 }
 
 // src/core/result/observed.ts
@@ -2365,8 +2365,8 @@ var FORMATS = { "claude-code": ["claude-code-jsonl"] };
 var inRange2 = (date, range) => date >= range.from && date <= range.to;
 function resultTools(input, evaluation, collected) {
   return evaluation.tools.map((tool) => {
-    const found = collected.find((item) => item.tool === tool.tool) ?? null;
-    const summaries = input.tools.find((item) => item.tool === tool.tool)?.summaries ?? [];
+    const found = collected.find((item2) => item2.tool === tool.tool) ?? null;
+    const summaries = input.tools.find((item2) => item2.tool === tool.tool)?.summaries ?? [];
     const subSessions = summaries.filter((summary) => summary.kind === "sub" && Object.entries(summary.days).some(([date, day]) => inRange2(date, evaluation.windows.score) && day.responses > 0)).length;
     const visibleFrom2 = found?.visibleFrom ?? null;
     return {
@@ -2425,7 +2425,7 @@ function resultUsage(input, evaluation, collected) {
     }
   }
   const visibleFroms = collected.map((tool) => tool.visibleFrom).filter((date) => date !== null);
-  const calendar = makeWindows(input.clock.nowMs, input.clock.timeZone).collectDates.map((date) => {
+  const calendar2 = makeWindows(input.clock.nowMs, input.clock.timeZone).collectDates.map((date) => {
     const responses = responsesByDate.get(date) ?? 0;
     const state = responses > 0 ? "used" : visibleFroms.some((from) => from <= date) ? "unused" : "unseen";
     return { date, responses, state };
@@ -2436,7 +2436,7 @@ function resultUsage(input, evaluation, collected) {
     outputTokens: byTool.reduce((sum2, tool) => sum2 + tool.outputTokens, 0),
     cacheHit: e12?.value ?? null,
     shellNonZero: shells.length === 0 ? null : share({ results: shells.reduce((sum2, counts) => sum2 + counts.results, 0), errors: shells.reduce((sum2, counts) => sum2 + counts.errors, 0) }),
-    calendar,
+    calendar: calendar2,
     byTool
   };
 }
@@ -2451,7 +2451,7 @@ function unjudgedServers(input, evaluation) {
   const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   const servers = [];
   for (const tool of evaluation.tools) {
-    const source = input.tools.find((item) => item.tool === tool.tool);
+    const source = input.tools.find((item2) => item2.tool === tool.tool);
     const called = calledMcpNames(source.summaries, windows);
     for (const judged of tool.servers) {
       const { server } = judged;
@@ -2471,7 +2471,7 @@ function checkupResult(source) {
     const source2 = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId, coverageByTool.get(value.tool)) })) };
     return { ...source2, text: textsOf((lang) => findingText(source2, details, lang)) };
   });
-  const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
+  const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
   return {
     schema: RESULT_SCHEMA,
@@ -2490,7 +2490,7 @@ function checkupResult(source) {
     candidates: evaluation.candidates,
     usage: resultUsage(input, evaluation, collected),
     deepHints: deepHints(input),
-    notices: notices.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
+    notices: notices2.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details
   };
 }
@@ -2523,15 +2523,15 @@ function summaryNotice(notice) {
     case "orphan_subsessions":
       return { kind: notice.kind, tool, detail: null, count: notice.sessions };
     case "unclassified":
-      return { kind: notice.kind, tool, detail: null, count: notice.counts.reduce((sum2, item) => sum2 + item.count, 0) };
+      return { kind: notice.kind, tool, detail: null, count: notice.counts.reduce((sum2, item2) => sum2 + item2.count, 0) };
   }
 }
 function fixDetail(fix, lang) {
-  const copy = SUMMARY_COPY[lang];
-  if (fix.gain !== null) return fill(copy.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
-  if (!fix.measured) return fill(copy.unmeasured, { candidates: fix.candidates });
-  if (fix.unmeasuredTools.length > 0) return fill(copy.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
-  return fill(copy.candidates, { candidates: fix.candidates });
+  const copy2 = SUMMARY_COPY[lang];
+  if (fix.gain !== null) return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  if (!fix.measured) return fill(copy2.unmeasured, { candidates: fix.candidates });
+  if (fix.unmeasuredTools.length > 0) return fill(copy2.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
+  return fill(copy2.candidates, { candidates: fix.candidates });
 }
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
@@ -2568,17 +2568,1060 @@ function checkupSummary(result, reportPath) {
   };
 }
 
-// src/state/cache.ts
+// src/report/assets.ts
+import { readFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+var ART_FILES = {
+  "scene-1": "scene-1.webp",
+  "scene-2": "scene-2.webp",
+  "scene-3": "scene-3.webp",
+  "scene-4": "scene-4.webp",
+  "scene-5": "scene-5.webp",
+  "scene-few-records": "scene-few-records.webp",
+  "scene-unreadable": "scene-unreadable.webp",
+  face: "face.webp",
+  "sticker-good": "sticker-good.webp",
+  "sticker-fix": "sticker-fix.webp",
+  "sticker-done": "sticker-done.webp"
+};
+function sceneFor(tier, unreadable) {
+  if (tier !== null) return `scene-${tier}`;
+  return unreadable ? "scene-unreadable" : "scene-few-records";
+}
+function stickerFor(repairs) {
+  return repairs > 0 ? "sticker-fix" : "sticker-done";
+}
+function assetsDirOf(entryFile) {
+  if (basename(entryFile) !== "aq.mjs" || basename(dirname(entryFile)) !== "scripts") return null;
+  return join(dirname(dirname(entryFile)), "assets");
+}
+async function dataUri(dir, name) {
+  if (dir === null) return null;
+  try {
+    return `data:image/webp;base64,${(await readFile(join(dir, ART_FILES[name]))).toString("base64")}`;
+  } catch {
+    return null;
+  }
+}
+async function loadArt(dir, pick) {
+  const [scene, face, good, fix] = await Promise.all([
+    dataUri(dir, sceneFor(pick.tier, pick.unreadable)),
+    dataUri(dir, "face"),
+    dataUri(dir, "sticker-good"),
+    dataUri(dir, stickerFor(pick.repairs))
+  ]);
+  return { scene, face, good, fix };
+}
+
+// src/report/html.ts
 import { createHash } from "node:crypto";
-import { lstat as lstat2, mkdir, open, readdir as readdir3, readFile, realpath as realpath2, rename, writeFile } from "node:fs/promises";
-import { join as join3 } from "node:path";
+
+// src/core/copy/lang.ts
+var LANGS = ["en", "ko"];
+function supportedLang(tag) {
+  if (typeof tag !== "string") return null;
+  const primary = tag.trim().toLowerCase().split(/[-_.@]/)[0];
+  return LANGS.find((lang) => lang === primary) ?? null;
+}
+function pickLang(flag, osLocale) {
+  return supportedLang(flag) ?? supportedLang(osLocale) ?? "en";
+}
+
+// src/report/copy.ts
+var REPORT_COPY = {
+  brand: { en: "Chunsik's Garage", ko: "\uCD98\uC2DD\uC774 \uC815\uBE44\uC18C" },
+  title: { en: "AQ Inspection Sheet", ko: "AQ \uC810\uAC80 \uBA85\uC138\uC11C" },
+  pageTitle: { en: "AQ Inspection Sheet \xB7 {date}", ko: "AQ \uC810\uAC80 \uBA85\uC138\uC11C \xB7 {date}" },
+  langGroup: { en: "Language", ko: "\uD654\uBA74 \uC5B8\uC5B4" },
+  date: { en: "Date", ko: "\uC810\uAC80\uC77C" },
+  tools: { en: "Tools", ko: "\uB300\uC0C1" },
+  period: { en: "Score window", ko: "\uC810\uC218 \uAD6C\uAC04" },
+  round: { en: "Check-up", ko: "\uD68C\uCC28" },
+  roundValue: { en: "#{n}", ko: "{n}\uD68C" },
+  notSaved: { en: "Not saved", ko: "\uC800\uC7A5 \uC548 \uD568" },
+  noTools: { en: "None found", ko: "\uCC3E\uC9C0 \uBABB\uD568" },
+  scoreAria: { en: "Overall score", ko: "\uC885\uD569 \uC810\uC218" },
+  aqLabel: { en: "AQ SCORE", ko: "AQ \uC9C0\uC218" },
+  grade: { en: "GRADE", ko: "\uB4F1\uAE09" },
+  gradeAria: { en: "Grade {g}", ko: "\uB4F1\uAE09 {g}" },
+  noScore: { en: "No score", ko: "\uC810\uC218 \uC5C6\uC74C" },
+  axisCounts: { en: "Good {g} \xB7 Fix {f}", ko: "\uC798\uD568 {g} \xB7 \uC815\uBE44 {f}" },
+  axisAria: { en: "{axis} {v} out of 100", ko: "{axis} {v}\uC810, 100\uC810 \uB9CC\uC810" },
+  axisNone: { en: "{axis} not measured", ko: "{axis} \uC7B4 \uC218 \uC5C6\uC74C" },
+  axesTable: { en: "Scores on the four axes", ko: "\uB124 \uAE30\uC900\uC758 \uC810\uC218" },
+  thAxis: { en: "Axis", ko: "\uAE30\uC900" },
+  thScore: { en: "Score", ko: "\uC810\uC218" },
+  thGood: { en: "Good", ko: "\uC798\uD568" },
+  thFix: { en: "Fix", ko: "\uC815\uBE44" },
+  unmeasured: { en: "Not measured", ko: "\uC7B4 \uC218 \uC5C6\uC74C" },
+  verdict: { en: "Verdict", ko: "\uC9C4\uB2E8" },
+  best: { en: "Best at", ko: "\uAC00\uC7A5 \uC798\uD558\uB294 \uAC83" },
+  fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
+  colGood: { en: "What you do well", ko: "\uC798\uD558\uACE0 \uC788\uB294 \uAC83" },
+  colFix: { en: "What to tune up", ko: "\uC815\uBE44\uD560 \uAC83" },
+  how: { en: "How it was measured", ko: "\uC5B4\uB5BB\uAC8C \uC7C0\uB098" },
+  clean: { en: "Clean up", ko: "\uC815\uB9AC\uD558\uAE30" },
+  copied: { en: "Copied. Paste it into Claude Code or Codex.", ko: "\uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4. Claude Code\uB098 Codex\uC5D0 \uBD99\uC5EC \uB123\uC73C\uC138\uC694." },
+  copyFail: { en: "Copying was blocked. Copy the text below and paste it into Claude Code or Codex.", ko: "\uBCF5\uC0AC\uAC00 \uB9C9\uD614\uC2B5\uB2C8\uB2E4. \uC544\uB798 \uAE00\uC744 \uC9C1\uC811 \uBCF5\uC0AC\uD574 Claude Code\uB098 Codex\uC5D0 \uBD99\uC5EC \uB123\uC73C\uC138\uC694." },
+  copyLabel: { en: "Text to paste", ko: "\uBD99\uC5EC \uB123\uC744 \uB9D0" },
+  phrase: { en: "Chunsik's Garage tune-up: {name}", ko: "\uCD98\uC2DD\uC774 \uC815\uBE44\uC18C \uC815\uBE44: {name}" },
+  targets: { en: "To clean up", ko: "\uC815\uB9AC\uD560 \uAC83" },
+  places: { en: "Where", ko: "\uACE0\uCE60 \uACF3" },
+  missingProjects: { en: "Projects without instructions", ko: "\uC9C0\uCE68\uC774 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8" },
+  overlapProject: { en: "Project with the most overlap", ko: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8" },
+  serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 {n}\uAC1C" },
+  judgeFrom: { en: "If nothing else changes, it can be judged from the check-up {n} {n:day|days} from now.", ko: "\uB2E4\uB978 \uC870\uAC74\uC774 \uAC19\uC73C\uBA74 {n}\uC77C \uB4A4\uC758 \uC810\uAC80\uBD80\uD130 \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." },
+  judgeUnknown: { en: "The day judging can start could not be worked out.", ko: "\uD310\uC815\uC744 \uC2DC\uC791\uD560 \uB0A0\uC744 \uC815\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." },
+  judgeChange: { en: "The day moves if the server is called or its definition changes in the meantime.", ko: "\uADF8 \uC0AC\uC774\uC5D0 \uBD80\uB974\uAC70\uB098 \uC815\uC758\uAC00 \uBC14\uB00C\uBA74 \uB0A0\uC774 \uB2EC\uB77C\uC9D1\uB2C8\uB2E4." },
+  judgeNotSaved: { en: "This check-up was not saved, so for servers seen for the first time the day may move later.", ko: "\uC774\uBC88 \uC810\uAC80\uC740 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC544, \uC774\uBC88\uC5D0 \uCC98\uC74C \uBCF8 \uC11C\uBC84\uB294 \uB0A0\uC774 \uB4A4\uB85C \uBC00\uB9B4 \uC218 \uC788\uC2B5\uB2C8\uB2E4." },
+  blockWith: { en: "Setting to block it", ko: "\uB9C9\uC744 \uB54C \uC4F8 \uC124\uC815" },
+  blockNote: { en: 'This is the display name set by claude.ai. It can change, and a name that clashes gets " (N)" added.', ko: '\uC774 \uC774\uB984\uC740 claude.ai\uAC00 \uC815\uD558\uB294 \uD45C\uC2DC \uC774\uB984\uC774\uB77C \uBC14\uB014 \uC218 \uC788\uACE0, \uC774\uB984\uC774 \uACB9\uCE58\uBA74 \uB4A4\uC5D0 " (N)"\uC774 \uBD99\uC2B5\uB2C8\uB2E4.' },
+  avgList: { en: "Doing okay", ko: "\uBCF4\uD1B5" },
+  unmList: { en: "Not measured", ko: "\uC7B4 \uC218 \uC5C6\uC74C" },
+  none: { en: "None", ko: "\uC5C6\uC74C" },
+  use: { en: "Mileage", ko: "\uC0AC\uC6A9 \uAE30\uB85D" },
+  kMain: { en: "Main sessions", ko: "\uC8FC \uC138\uC158" },
+  kDays: { en: "Active days", ko: "\uC0AC\uC6A9\uD55C \uB0A0" },
+  kOut: { en: "Output tokens", ko: "\uCD9C\uB825 \uD1A0\uD070" },
+  kCache: { en: "Cache hits", ko: "\uCE90\uC2DC \uC801\uC911" },
+  cal: { en: "Replies per day", ko: "\uB0A0\uC9DC\uBCC4 \uC751\uB2F5 \uC218" },
+  calAria: { en: "Replies per day from {from} to {to}. {u} {u:day|days} used, {n} not used, {x} with no records kept. Busiest day: {max} {max:reply|replies}.", ko: "{from}\uBD80\uD130 {to}\uAE4C\uC9C0 \uB0A0\uC9DC\uBCC4 \uC751\uB2F5 \uC218. \uC4F4 \uB0A0 {u}\uC77C, \uC548 \uC4F4 \uB0A0 {n}\uC77C, \uAE30\uB85D\uC774 \uB0A8\uC544 \uC788\uC9C0 \uC54A\uC740 \uB0A0 {x}\uC77C, \uAC00\uC7A5 \uB9CE\uC740 \uB0A0 {max}\uAC1C" },
+  toolsTable: { en: "Main sessions and output tokens by tool", ko: "\uB3C4\uAD6C\uBCC4 \uC8FC \uC138\uC158\uACFC \uCD9C\uB825 \uD1A0\uD070" },
+  thTool: { en: "Tool", ko: "\uB3C4\uAD6C" },
+  less: { en: "Less", ko: "\uC801\uC74C" },
+  more: { en: "More", ko: "\uB9CE\uC74C" },
+  lgUnused: { en: "Not used", ko: "\uC548 \uC4F4 \uB0A0" },
+  lgUnseen: { en: "No records kept", ko: "\uAE30\uB85D\uC774 \uB0A8\uC544 \uC788\uC9C0 \uC54A\uC740 \uB0A0" },
+  asTable: { en: "Show tables", ko: "\uD45C\uB85C \uBCF4\uAE30" },
+  asChart: { en: "Show charts", ko: "\uADF8\uB9BC\uC73C\uB85C \uBCF4\uAE30" },
+  thDate: { en: "Date", ko: "\uB0A0\uC9DC" },
+  thReplies: { en: "Replies", ko: "\uC751\uB2F5 \uC218" },
+  thState: { en: "State", ko: "\uC0C1\uD0DC" },
+  stUsed: { en: "Used", ko: "\uC4F4 \uB0A0" },
+  byTool: { en: "By tool", ko: "\uB3C4\uAD6C\uBCC4" },
+  shell: { en: "Shell commands that ended with a non-zero code: {v} \xB7 not scored", ko: "\uC178 \uBA85\uB839\uC774 0\uC774 \uC544\uB2CC \uAC12\uC73C\uB85C \uB05D\uB09C \uBAAB {v} \xB7 \uC810\uC218\uC5D0 \uB123\uC9C0 \uC54A\uC74C" },
+  notices: { en: "Notices", ko: "\uC54C\uB9BC" },
+  partialRead: { en: "Only part of the {tool} records could be read. {share} of them could not be read.", ko: "{tool} \uAE30\uB85D\uC744 \uC77C\uBD80\uB9CC \uC77D\uC5C8\uC2B5\uB2C8\uB2E4. \uC77D\uC9C0 \uBABB\uD55C \uBE44\uC728\uC740 {share}\uC785\uB2C8\uB2E4." },
+  partialReadAtLeast: { en: "Only part of the {tool} records could be read. At least {share} of them could not be read.", ko: "{tool} \uAE30\uB85D\uC744 \uC77C\uBD80\uB9CC \uC77D\uC5C8\uC2B5\uB2C8\uB2E4. \uC77D\uC9C0 \uBABB\uD55C \uBE44\uC728\uC740 \uC801\uC5B4\uB3C4 {share}\uC785\uB2C8\uB2E4." },
+  partialReadUnknown: { en: "Only part of the {tool} records could be read. How much could not be read is unknown.", ko: "{tool} \uAE30\uB85D\uC744 \uC77C\uBD80\uB9CC \uC77D\uC5C8\uC2B5\uB2C8\uB2E4. \uC5BC\uB9C8\uB098 \uC77D\uC9C0 \uBABB\uD588\uB294\uC9C0\uB294 \uC54C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." },
+  footCalc: { en: "Computed on this PC.", ko: "\uC774 PC\uC5D0\uC11C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4." },
+  footPromise: {
+    en: "The program and this page send nothing anywhere. The AI receives your scores, totals and the names of things to tune up. Your conversations and the text of your instructions are not sent. If you ask for a deep check, the AI reads the instruction files you pick.",
+    ko: "\uD504\uB85C\uADF8\uB7A8\uACFC \uACB0\uACFC \uD654\uBA74\uC740 \uBC14\uAE65\uC73C\uB85C \uC544\uBB34\uAC83\uB3C4 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. AI\uC5D0\uAC8C\uB294 \uC810\uC218\uC640 \uC9D1\uACC4, \uC815\uBE44\uD560 \uAC83\uC758 \uC774\uB984\uC774 \uC804\uD574\uC9D1\uB2C8\uB2E4. \uB300\uD654 \uB0B4\uC6A9\uACFC \uC9C0\uCE68\uC758 \uAE00\uC740 \uC804\uD574\uC9C0\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC815\uBC00 \uC810\uAC80\uC744 \uC2DC\uD0A4\uBA74 \uACE0\uB978 \uC9C0\uCE68 \uD30C\uC77C\uC744 AI\uAC00 \uC77D\uC2B5\uB2C8\uB2E4."
+  },
+  footNames: { en: "This file contains the names of your skills and project folders. Anyone you send the file to can see them. To share your result, use the card.", ko: "\uC774 \uD30C\uC77C\uC5D0\uB294 \uC2A4\uD0AC\uACFC \uD504\uB85C\uC81D\uD2B8 \uD3F4\uB354\uC758 \uC774\uB984\uC774 \uB4E4\uC5B4 \uC788\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC9F8 \uBCF4\uB0B4\uBA74 \uADF8 \uC774\uB984\uB3C4 \uBCF4\uC785\uB2C8\uB2E4. \uACB0\uACFC\uB97C \uB098\uB20C \uB54C\uB294 \uCE74\uB4DC\uB97C \uC4F0\uC138\uC694." },
+  cardBtn: { en: "Save as card", ko: "\uCE74\uB4DC\uB85C \uC800\uC7A5" },
+  cardTitle: { en: "Share card", ko: "\uACF5\uC720 \uCE74\uB4DC" },
+  download: { en: "Download", ko: "\uB0B4\uB824\uBC1B\uAE30" },
+  close: { en: "Close", ko: "\uB2EB\uAE30" },
+  cardNote: { en: "If the download is blocked, right-click the image, or press and hold it on a phone, to save it.", ko: "\uB0B4\uB824\uBC1B\uAE30\uAC00 \uB9C9\uD788\uBA74 \uADF8\uB9BC\uC744 \uC624\uB978\uCABD \uB2E8\uCD94\uB85C \uB204\uB974\uAC70\uB098, \uD734\uB300\uD3F0\uC5D0\uC11C\uB294 \uAE38\uAC8C \uB20C\uB7EC \uC800\uC7A5\uD558\uC138\uC694." },
+  cardFail: { en: "The card could not be drawn in this browser.", ko: "\uC774 \uBE0C\uB77C\uC6B0\uC800\uC5D0\uC11C \uCE74\uB4DC\uB97C \uADF8\uB9AC\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." },
+  cardAlt: { en: "Share card: AQ {aq}, grade {grade}, {name}, with the four axis scores", ko: "\uACF5\uC720 \uCE74\uB4DC. AQ {aq}, {grade}\uB4F1\uAE09 {name}, \uB124 \uAE30\uC900 \uC810\uC218" },
+  cardRepo: { en: "github.com/yeunlee1/chunsik-garage", ko: "github.com/yeunlee1/chunsik-garage" }
+};
+var WEEKDAYS = { en: ["M", "T", "W", "T", "F", "S", "S"], ko: ["\uC6D4", "\uD654", "\uC218", "\uBAA9", "\uAE08", "\uD1A0", "\uC77C"] };
+var STATUS_COPY = {
+  critical: { en: "Serious", ko: "\uC2EC\uAC01" },
+  caution: { en: "Caution", ko: "\uC8FC\uC758" },
+  info: { en: "Note", ko: "\uCC38\uACE0" },
+  good: { en: "Good", ko: "\uC591\uD638" },
+  average: { en: "Okay", ko: "\uBCF4\uD1B5" },
+  unmeasured: { en: "Not measured", ko: "\uC7B4 \uC218 \uC5C6\uC74C" }
+};
+var PROBLEM_KIND_COPY = {
+  unparsable: { en: "unparsable settings file", ko: "\uD480\uB9AC\uC9C0 \uC54A\uB294 \uC124\uC815 \uD30C\uC77C" },
+  noFrontmatter: { en: "skill without a header", ko: "\uBA38\uB9AC\uB9D0\uC774 \uC5C6\uB294 \uC2A4\uD0AC" },
+  danglingLink: { en: "link that points nowhere", ko: "\uAC00\uB9AC\uD0A4\uB294 \uACF3\uC774 \uC5C6\uB294 \uB9C1\uD06C" }
+};
+var SCENE_ALT = {
+  "scene-1": { en: "An angry Chunsik slashes a messy sheet with a pipe wrench like lightning while Chunsam looks on, startled", ko: "\uD654\uB09C \uCD98\uC2DD\uC774\uAC00 \uD30C\uC774\uD504\uB80C\uCE58\uB85C \uC5C9\uB9DD\uC778 \uBA85\uC138\uC11C\uB97C \uBC88\uAC1C\uCC98\uB7FC \uBCA0\uACE0, \uCD98\uC0BC\uC774\uAC00 \uB4A4\uC5D0\uC11C \uB180\uB77C\uB294 \uADF8\uB9BC" },
+  "scene-2": { en: "Chunsik glares at a crumpled sheet while Chunsam waits with a toolbox", ko: "\uCD98\uC2DD\uC774\uAC00 \uAD6C\uACA8\uC9C4 \uBA85\uC138\uC11C\uB97C \uB178\uB824\uBCF4\uACE0, \uCD98\uC0BC\uC774\uAC00 \uACF5\uAD6C\uD568\uC744 \uB4E4\uACE0 \uAE30\uB2E4\uB9AC\uB294 \uADF8\uB9BC" },
+  "scene-3": { en: "Chunsik fixes a car while Chunsam hands over a screwdriver", ko: "\uCD98\uC2DD\uC774\uAC00 \uC190\uB2D8 \uCC28\uB97C \uACE0\uCE58\uACE0, \uCD98\uC0BC\uC774\uAC00 \uB4DC\uB77C\uC774\uBC84\uB97C \uAC74\uB124\uB294 \uADF8\uB9BC" },
+  "scene-4": { en: "Chunsik stamps a clean sheet while Chunsam gives a thumbs-up", ko: "\uCD98\uC2DD\uC774\uAC00 \uAE68\uB057\uD55C \uBA85\uC138\uC11C\uC5D0 \uD569\uACA9 \uB3C4\uC7A5\uC744 \uCC0D\uACE0, \uCD98\uC0BC\uC774\uAC00 \uC5C4\uC9C0\uB97C \uB4E0 \uADF8\uB9BC" },
+  "scene-5": { en: "Chunsik and Chunsam jump and toss sheets into the air", ko: "\uCD98\uC2DD\uC774\uC640 \uCD98\uC0BC\uC774\uAC00 \uB6F0\uC5B4\uC624\uB974\uBA70 \uBA85\uC138\uC11C\uB97C \uD558\uB298\uB85C \uB358\uC9C0\uB294 \uADF8\uB9BC" },
+  "scene-few-records": { en: "Chunsam holds a checklist with only a couple of lines while Chunsik sits on a toolbox watching an hourglass", ko: "\uCD98\uC0BC\uC774\uAC00 \uC904\uC774 \uB450\uC5B4 \uAC1C\uBFD0\uC778 \uC810\uAC80\uD45C\uB97C \uB4E4\uACE0, \uCD98\uC2DD\uC774\uAC00 \uACF5\uAD6C\uD568\uC5D0 \uC549\uC544 \uBAA8\uB798\uC2DC\uACC4\uB97C \uBCF4\uB294 \uADF8\uB9BC" },
+  "scene-unreadable": { en: "Chunsik cannot open a folder with a lock on it while Chunsam peers at it through a magnifying glass", ko: "\uCD98\uC2DD\uC774\uAC00 \uC790\uBB3C\uC1E0\uAC00 \uADF8\uB824\uC9C4 \uC11C\uB958\uCCA0\uC744 \uC5F4\uC9C0 \uBABB\uD574 \uBA38\uC4F1\uD558\uACE0, \uCD98\uC0BC\uC774\uAC00 \uB3CB\uBCF4\uAE30\uB85C \uB4E4\uC5EC\uB2E4\uBCF4\uB294 \uADF8\uB9BC" }
+};
+
+// src/report/format.ts
+function percent(share2) {
+  return `${oneDecimal(share2 * 100)}%`;
+}
+function shortTokens(value, lang) {
+  if (lang === "ko") {
+    if (value < 1e4) return groupDigits(value);
+    const man = roundHalfUp(value / 1e4);
+    if (man < 1e4) return `${groupDigits(man)}\uB9CC`;
+    const eok = Math.floor(man / 1e4);
+    const rest = man % 1e4;
+    return `${groupDigits(eok)}\uC5B5${rest ? ` ${groupDigits(rest)}\uB9CC` : ""}`;
+  }
+  if (value < 1e3) return groupDigits(value);
+  const units = [
+    [1e3, "K"],
+    [1e6, "M"],
+    [1e9, "B"]
+  ];
+  let index = value >= 1e9 ? 2 : value >= 1e6 ? 1 : 0;
+  let tenths = roundHalfUp(value / units[index][0] * 10);
+  if (tenths >= 1e4 && index < units.length - 1) {
+    index += 1;
+    tenths = roundHalfUp(value / units[index][0] * 10);
+  }
+  return `${groupDigits(Math.floor(tenths / 10))}${tenths % 10 ? `.${tenths % 10}` : ""}${units[index][1]}`;
+}
+
+// src/report/script.ts
+var SCRIPT_IDS = {
+  /** 스크립트에 넘기는 자료(JSON) */
+  data: "aq-data",
+  /** 눈에 보이는 알림(화면 읽기 프로그램에는 숨긴다) */
+  toast: "toast",
+  /** 화면 읽기 프로그램에 알리는 자리 */
+  live: "live",
+  /** 공유 카드 창과 그 안의 그림, 내려받기, 그리지 못했다는 글, 닫기 */
+  dialog: "card-dlg",
+  cardImage: "card-img",
+  cardLink: "card-dl",
+  cardFail: "card-fail",
+  cardClose: "card-close",
+  /** 카드에 다시 그리는 화면의 장면과 얼굴 그림 */
+  scene: "art-scene",
+  face: "art-face"
+};
+var SWAP_TARGETS = ["text", "value", "aria-label", "alt", "title"];
+var ID = SCRIPT_IDS;
+var REPORT_SCRIPT = String.raw`(() => {
+"use strict";
+const root = document.documentElement;
+const dataNode = document.getElementById("${ID.data}");
+const data = dataNode ? JSON.parse(dataNode.textContent || "{}") : {};
+const ui = data.ui || {};
+const card = data.card || null;
+const SWAP = ${JSON.stringify(SWAP_TARGETS)};
+const FONT = 'system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif';
+const MONO = 'ui-monospace,"Cascadia Mono",Consolas,monospace';
+const lang = () => (root.getAttribute("data-ui") === "en" ? "en" : "ko");
+const pick = (texts) => (texts ? texts[lang()] || "" : "");
+
+/* 알림. 눈에 보이는 알림과 화면 읽기 프로그램용 자리를 따로 둔다 */
+const toast = document.getElementById("${ID.toast}");
+const live = document.getElementById("${ID.live}");
+let toastTimer = 0;
+let liveTimer = 0;
+const hideToast = () => {
+  clearTimeout(toastTimer);
+  if (toast) toast.style.display = "none";
+};
+const announce = (message) => {
+  if (live) {
+    clearTimeout(liveTimer);
+    live.textContent = "";
+    liveTimer = setTimeout(() => { live.textContent = message; }, 60);
+  }
+  if (toast) {
+    clearTimeout(toastTimer);
+    toast.textContent = message;
+    toast.style.display = "block";
+    toastTimer = setTimeout(hideToast, 2600);
+  }
+};
+
+/* 언어 바꾸기. 다시 그리지 않으므로 펼친 항목과 초점이 그대로다. 떠 있는 알림과 말풍선은 지난 언어의 글이라 닫는다 */
+const setLang = (next) => {
+  if (next !== "en" && next !== "ko") return;
+  hideToast();
+  clearTimeout(liveTimer);
+  if (live) live.textContent = "";
+  document.querySelectorAll(".tip").forEach((tip) => { tip.style.display = "none"; });
+  root.setAttribute("data-ui", next);
+  root.setAttribute("lang", next);
+  document.querySelectorAll("[data-set-lang]").forEach((button) => button.setAttribute("aria-pressed", String(button.getAttribute("data-set-lang") === next)));
+  const prefix = "data-" + next + "-";
+  document.querySelectorAll("[data-tr]").forEach((el) => {
+    Array.from(el.attributes).forEach((attr) => {
+      if (!attr.name.startsWith(prefix)) return;
+      const target = attr.name.slice(prefix.length);
+      if (!SWAP.includes(target)) return;
+      if (target === "text") el.textContent = attr.value;
+      else if (target === "value") el.value = attr.value;
+      else el.setAttribute(target, attr.value);
+    });
+  });
+};
+
+/* 두 언어의 글을 담은 요소 */
+const both = (texts, tag) => {
+  const holder = document.createElement(tag);
+  ["en", "ko"].forEach((code) => {
+    const span = document.createElement("span");
+    span.setAttribute("lang", code);
+    span.setAttribute("data-l", code);
+    span.textContent = texts ? texts[code] || "" : "";
+    holder.appendChild(span);
+  });
+  return holder;
+};
+
+/* 붙여 넣을 말 복사. 막히면 글상자에 골라 놓고 보인다(설계 13.2). 단추 하나에 글상자는 하나다 */
+let boxCount = 0;
+const removeCopyBox = (button) => {
+  const old = button.nextElementSibling;
+  if (old && old.classList.contains("copybox")) old.remove();
+};
+const showCopyBox = (button, phrases) => {
+  hideToast();
+  /* 앞선 복사 요청이 늦게 거절돼도 글상자가 겹치지 않게 넣기 직전에 다시 지운다 */
+  removeCopyBox(button);
+  const box = document.createElement("div");
+  box.className = "copybox";
+  const note = both(ui.copyFail, "p");
+  boxCount += 1;
+  note.id = "copy-note-" + boxCount;
+  const area = document.createElement("textarea");
+  area.readOnly = true;
+  area.rows = 2;
+  area.setAttribute("data-tr", "");
+  ["en", "ko"].forEach((code) => {
+    area.setAttribute("data-" + code + "-value", phrases[code]);
+    area.setAttribute("data-" + code + "-aria-label", ui.copyLabel ? ui.copyLabel[code] || "" : "");
+  });
+  area.value = phrases[lang()];
+  area.setAttribute("aria-label", pick(ui.copyLabel));
+  area.setAttribute("aria-describedby", note.id);
+  box.appendChild(note);
+  box.appendChild(area);
+  button.insertAdjacentElement("afterend", box);
+  area.focus();
+  area.select();
+};
+const copy = (button) => {
+  const phrases = { en: button.getAttribute("data-phrase-en") || "", ko: button.getAttribute("data-phrase-ko") || "" };
+  removeCopyBox(button);
+  const clip = navigator.clipboard;
+  if (!clip || !window.isSecureContext) {
+    showCopyBox(button, phrases);
+    return;
+  }
+  clip.writeText(phrases[lang()]).then(() => announce(pick(ui.copied)), () => showCopyBox(button, phrases));
+};
+
+/* 표로 보기와 그림으로 보기 */
+const toggleTable = (button) => {
+  const section = button.closest(".use");
+  if (section) section.classList.toggle("as-table");
+};
+
+/* 달력의 말풍선(마우스). 키보드와 화면 읽기 프로그램은 표로 보기를 쓴다 */
+const isCell = (node) => node instanceof Element && node.closest("[data-tip-en]") !== null;
+document.addEventListener("mouseover", (event) => {
+  if (!isCell(event.target)) return;
+  const cell = event.target.closest("[data-tip-en]");
+  const wrap = cell.closest(".heatwrap");
+  const tip = wrap ? wrap.querySelector(".tip") : null;
+  if (!tip) return;
+  const box = cell.getBoundingClientRect();
+  const frame = wrap.getBoundingClientRect();
+  tip.textContent = cell.getAttribute("data-tip-" + lang()) || "";
+  tip.style.left = box.left - frame.left + box.width / 2 + "px";
+  tip.style.top = box.top - frame.top + "px";
+  tip.style.display = "block";
+});
+document.addEventListener("mouseout", (event) => {
+  if (!isCell(event.target) || isCell(event.relatedTarget)) return;
+  const wrap = event.target.closest(".heatwrap");
+  const tip = wrap ? wrap.querySelector(".tip") : null;
+  if (tip) tip.style.display = "none";
+});
+
+/* 공유 카드 1(명세서 꼴). 브라우저 안에서 1200x630 PNG를 그린다(설계 14) */
+const dialog = document.getElementById("${ID.dialog}");
+let opener = null;
+const imageFrom = (id) => new Promise((resolve) => {
+  const source = document.getElementById(id);
+  const src = source ? source.getAttribute("src") : null;
+  if (!src) {
+    resolve(null);
+    return;
+  }
+  const image = new Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => resolve(null);
+  image.src = src;
+});
+const roundRect = (g, x, y, w, h, r) => {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+};
+const drawCard = async () => {
+  const [scene, face] = await Promise.all([imageFrom("${ID.scene}"), imageFrom("${ID.face}")]);
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 630;
+  const g = canvas.getContext("2d");
+  if (!g) throw new Error("canvas");
+  const ink = "#0b0b0b";
+  const ink2 = "#52514e";
+  const navy = "#2e3566";
+  g.fillStyle = "#fcfcfb";
+  g.fillRect(0, 0, 1200, 630);
+  g.fillStyle = "#3ab4aa";
+  g.fillRect(0, 0, 1200, 12);
+  g.save();
+  g.beginPath();
+  g.arc(82, 62, 22, 0, Math.PI * 2);
+  g.clip();
+  if (face) g.drawImage(face, 60, 40, 44, 44);
+  else {
+    g.fillStyle = "#f3f2ee";
+    g.fillRect(60, 40, 44, 44);
+  }
+  g.restore();
+  g.textAlign = "left";
+  g.fillStyle = ink2;
+  g.font = "800 20px " + FONT;
+  g.fillText(pick(card.brand), 118, 62, 560);
+  g.fillStyle = ink;
+  g.font = "800 26px " + FONT;
+  g.fillText(pick(card.title), 118, 90, 560);
+  g.save();
+  roundRect(g, 60, 130, 400, 400, 28);
+  g.clip();
+  if (scene) g.drawImage(scene, 60, 130, 400, 400);
+  else {
+    g.fillStyle = "#f3f2ee";
+    g.fillRect(60, 130, 400, 400);
+  }
+  g.restore();
+  g.fillStyle = ink;
+  g.font = "800 210px " + FONT;
+  g.fillText(String(card.aq), 500, 330, 400);
+  g.fillStyle = ink2;
+  g.font = "700 20px " + FONT;
+  g.fillText(pick(card.aqLabel), 508, 366, 400);
+  g.save();
+  g.translate(1010, 220);
+  g.rotate((-13 * Math.PI) / 180);
+  g.strokeStyle = navy;
+  g.fillStyle = "rgba(252,252,251,.8)";
+  g.lineWidth = 4;
+  g.beginPath();
+  g.arc(0, 0, 78, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(0, 0, 70, 0, Math.PI * 2);
+  g.stroke();
+  g.fillStyle = navy;
+  g.textAlign = "center";
+  g.font = "800 70px " + FONT;
+  g.fillText(card.grade, 0, 22, 120);
+  g.font = "800 12px " + FONT;
+  g.fillText(pick(card.gradeLabel), 0, 48, 110);
+  g.restore();
+  g.textAlign = "left";
+  g.fillStyle = ink;
+  g.font = "800 34px " + FONT;
+  g.fillText(pick(card.nick), 508, 412, 632);
+  card.axes.forEach((axis, index) => {
+    const y = 456 + index * 34;
+    g.textAlign = "left";
+    g.fillStyle = ink;
+    g.font = "700 22px " + FONT;
+    g.fillText(pick(axis.name), 508, y + 9, 140);
+    g.fillStyle = "#cde2fb";
+    roundRect(g, 658, y - 4, 340, 14, 7);
+    g.fill();
+    if (axis.score !== null && axis.score > 0) {
+      g.fillStyle = "#2a78d6";
+      roundRect(g, 658, y - 4, Math.max(14, (340 * axis.score) / 100), 14, 7);
+      g.fill();
+    }
+    g.textAlign = "right";
+    g.fillStyle = ink;
+    g.font = "700 24px " + MONO;
+    g.fillText(axis.score === null ? "—" : String(axis.score), 1058, y + 10);
+  });
+  g.fillStyle = ink2;
+  g.font = "700 20px " + MONO;
+  g.textAlign = "left";
+  g.fillText(card.today, 60, 600);
+  g.textAlign = "right";
+  g.fillText(pick(card.repo), 1140, 600);
+  return canvas;
+};
+const openCard = (button) => {
+  if (!card || !dialog) return;
+  const image = document.getElementById("${ID.cardImage}");
+  const link = document.getElementById("${ID.cardLink}");
+  const fail = document.getElementById("${ID.cardFail}");
+  if (!image || !link || !fail) return;
+  opener = button;
+  image.hidden = true;
+  link.hidden = true;
+  fail.hidden = true;
+  dialog.showModal();
+  drawCard()
+    .then((canvas) => {
+      const url = canvas.toDataURL("image/png");
+      image.src = url;
+      image.alt = pick(card.alt);
+      image.hidden = false;
+      link.href = url;
+      link.download = card.file;
+      link.hidden = false;
+    })
+    .catch(() => {
+      fail.hidden = false;
+    });
+};
+if (dialog) {
+  const close = document.getElementById("${ID.cardClose}");
+  if (close) close.addEventListener("click", () => dialog.close());
+  dialog.addEventListener("close", () => {
+    if (opener) opener.focus();
+  });
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const langButton = target.closest("[data-set-lang]");
+  if (langButton) {
+    setLang(langButton.getAttribute("data-set-lang"));
+    return;
+  }
+  const action = target.closest("[data-act]");
+  if (!action) return;
+  const kind = action.getAttribute("data-act");
+  if (kind === "copy") copy(action);
+  else if (kind === "table") toggleTable(action);
+  else if (kind === "card") openCard(action);
+});
+})();`;
+
+// src/report/style.ts
+var REPORT_CSS = `
+:root{--font:system-ui,-apple-system,"Segoe UI","Malgun Gothic",sans-serif;--mono:ui-monospace,"Cascadia Mono",Consolas,monospace;--paper:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--mute:#898781;--hair:#e1e0d9;--wash:#f3f2ee;--track:#cde2fb;--fill:#2a78d6;--stamp:#2e3566;--up:#006300;--teal:#3ab4aa;--navy:#2e3566}
+*{box-sizing:border-box}
+html[data-ui="en"] [data-l="ko"],html[data-ui="ko"] [data-l="en"]{display:none!important}
+[hidden]{display:none!important}
+html{scroll-padding-top:12px}
+body{margin:0;font-family:var(--font);font-size:16px;line-height:1.5;background:#dedcd5;color:var(--ink);word-break:keep-all;overflow-wrap:anywhere}
+button{font:inherit;cursor:pointer;color:inherit}
+a{color:inherit}
+button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visible,textarea:focus-visible{outline:3px solid #2a78d6;outline-offset:2px;border-radius:4px}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);max-width:min(560px,calc(100% - 32px));padding:10px 16px;border-radius:8px;background:#0b0b0b;color:#fff;font-size:14px;display:none;z-index:40}
+.sheet{max-width:1240px;margin:32px auto 80px;background:var(--paper);padding:40px 52px 30px;position:relative;box-shadow:0 1px 0 rgba(11,11,11,.05),0 18px 44px rgba(11,11,11,.12)}
+.sheet::before{content:"";position:absolute;inset:0 0 auto 0;height:10px;background:var(--teal)}
+.sheet::after{content:"";position:absolute;left:0;right:0;bottom:-11px;height:12px;background:radial-gradient(circle at 12px -1px,var(--paper) 11px,transparent 12px) repeat-x;background-size:24px 12px}
+.hd{display:grid;grid-template-columns:1fr auto;gap:16px 24px;align-items:end;padding-bottom:18px;border-bottom:2px solid var(--ink)}
+.brandrow{display:flex;align-items:center;gap:10px}
+.brandrow img,.brandrow .noart{width:32px;height:32px;border-radius:50%;display:block;flex:none}
+.brandrow .noart{background:var(--wash);border:1px solid var(--hair)}
+.brand{font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase;color:var(--ink2)}
+.title{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:2px 0 0;line-height:1.15}
+.hdr{display:grid;gap:10px;justify-items:end}
+.langsw{display:inline-flex;border:1px solid var(--ink);border-radius:8px}
+.langsw button{min-height:44px;min-width:44px;padding:0 14px;border:0;border-radius:0;background:var(--paper);font-size:14px;color:var(--ink2)}
+.langsw button:first-child{border-radius:7px 0 0 7px}
+.langsw button:last-child{border-radius:0 7px 7px 0}
+.langsw button+button{border-left:1px solid var(--ink)}
+.langsw button[aria-pressed="true"]{background:var(--ink);color:#fff;font-weight:700}
+.langsw button:focus-visible{position:relative;z-index:1}
+.info{display:grid;grid-auto-flow:column;gap:0;margin:0;border:1px solid var(--ink);border-radius:2px}
+.info div{padding:7px 16px;border-left:1px solid var(--ink)}
+.info div:first-child{border-left:0}
+.info dt{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
+.info dd{margin:0;font-family:var(--mono);font-size:13px;font-weight:700;white-space:nowrap}
+.info dd.tx{font-family:var(--font)}
+.hero{display:grid;grid-template-columns:264px 330px 1fr;gap:26px 40px;align-items:center;padding:28px 0 26px}
+.scene{margin:0}
+.scene .pic{width:264px;height:264px;border-radius:20px;overflow:hidden}
+.scene img{width:100%;height:100%;object-fit:cover;display:block}
+.scene .ph{width:100%;height:100%;display:grid;place-items:center;text-align:center;padding:20px;border:2px dashed var(--mute);border-radius:20px;background:repeating-linear-gradient(135deg,#f3f2ee 0 10px,#ecebe5 10px 20px);color:var(--ink2);font-size:14px;font-weight:700}
+.scene figcaption{margin-top:8px;font-size:13px;font-weight:700;color:var(--ink2);text-align:center;line-height:1.4}
+.scene figcaption.why{text-align:left;font-weight:400;width:0;min-width:100%}
+.score{position:relative;height:170px}
+.score .n{font-size:176px;line-height:.86;font-weight:800;letter-spacing:-.06em}
+.score .n.none{color:var(--ink2);font-size:52px;letter-spacing:-.02em;line-height:1.1;padding-top:44px}
+.score .lb{position:absolute;left:4px;bottom:-6px;font-size:12px;font-weight:700;letter-spacing:.14em;color:var(--ink2)}
+.stamp{position:absolute;right:0;top:-2px;width:124px;height:124px;border-radius:50%;border:3px solid var(--stamp);color:var(--stamp);display:grid;place-items:center;text-align:center;transform:rotate(-13deg);font-weight:800;background:rgba(252,252,251,.72)}
+.stamp::before{content:"";position:absolute;inset:6px;border:1px solid var(--stamp);border-radius:50%}
+.stamp b{display:block;font-size:58px;line-height:1}
+.stamp em{font-style:normal;font-size:10px;letter-spacing:.2em}
+.axes{display:grid;gap:12px}
+.ax{display:grid;grid-template-columns:112px 1fr 64px;gap:16px;align-items:center}
+.ax .nm{font-size:15px;font-weight:700;line-height:1.25}
+.ax .tr{height:12px;border-radius:6px;background:var(--track);position:relative;overflow:hidden}
+.ax .tr.none{background:repeating-linear-gradient(135deg,#ecebe5 0 6px,#f6f5f1 6px 12px)}
+.ax .tr i{position:absolute;inset:0 auto 0 0;border-radius:0 4px 4px 0;background:var(--fill)}
+.ax .v{font-family:var(--mono);font-size:20px;font-weight:700;text-align:right}
+.ax .v.none{font-size:12px;font-family:var(--font);color:var(--ink2);line-height:1.2;overflow-wrap:normal}
+.ax .ct{display:block;font-size:12px;font-weight:400;color:var(--ink2);white-space:nowrap}
+.ax .ct b{color:var(--ink)}
+.verdict{grid-column:1/-1;display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:32px;align-items:start;border-top:1px dashed var(--mute);padding-top:20px}
+.verdict h2{margin:0 0 4px;font-size:12px;letter-spacing:.14em;color:var(--ink2);font-weight:700}
+.verdict p{margin:0;font-size:17px;line-height:1.5;font-weight:700;letter-spacing:-.01em}
+.verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
+.verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
+.verdict .pt svg{margin-top:2px}
+h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
+h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
+h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
+.cols{display:grid;grid-template-columns:1fr 1fr;border-top:1px dashed var(--mute)}
+.col{padding:22px 0 8px;min-width:0}
+.col:first-child{padding-right:36px;border-right:1px dashed var(--mute)}
+.col:last-child{padding-left:36px}
+.col>h2{display:flex;align-items:center;padding-bottom:6px;min-height:62px}
+.stk{width:56px;height:56px;border-radius:50%;flex:none;margin-left:auto;display:block;object-fit:cover}
+.it{display:grid;grid-template-columns:108px minmax(0,1fr);gap:18px;padding:16px 0;border-top:1px solid var(--hair);scroll-margin-top:16px}
+.col>.it:first-of-type,.lists .it:first-of-type{border-top:0}
+.fig{font-family:var(--mono);font-weight:700;font-size:30px;line-height:1.1;letter-spacing:-.03em;overflow-wrap:normal}
+.good .fig{color:var(--up)}
+.fig small{display:block;font-family:var(--font);font-size:12px;font-weight:700;letter-spacing:.01em;color:var(--ink2);margin-top:3px;line-height:1.3}
+.fig .u{display:block;font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:0;color:var(--ink);margin-top:2px}
+.fig.lg{font-size:26px}
+.fig.nv{font-family:var(--font);font-size:16px;letter-spacing:0;line-height:1.3;color:var(--ink)}
+.sev{display:inline-flex;align-items:flex-start;gap:6px;font-size:12px;font-weight:700;line-height:18px;margin-top:8px}
+.sev svg{flex:none}
+.it h3{margin:0;font-size:17px;line-height:1.35;letter-spacing:-.01em}
+.it .top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;align-items:baseline}
+.it .top h3{flex:1 1 12em;min-width:0}
+.it .top .tags{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;justify-content:flex-end}
+.it p{margin:4px 0 0;font-size:14px;color:var(--ink2)}
+.it p.fix{color:var(--ink)}
+.tag{font-size:12px;font-weight:700;white-space:nowrap;color:var(--ink2)}
+.tag.up{font-family:var(--mono);color:var(--up)}
+.chips{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
+.chips li{font-family:var(--mono);padding:2px 8px;border:1px solid var(--hair);border-radius:12px;background:#fff}
+.chips li.k{font-family:var(--font);font-weight:700;color:var(--ink2);border:0;background:none;padding:2px 0}
+.chips li small{font-family:var(--font);color:var(--ink2);margin-left:4px}
+details{margin-top:2px}
+summary{font-size:13px;color:var(--ink2);cursor:pointer;width:max-content;max-width:100%;min-height:44px;padding:12px 0;line-height:20px}
+.how p{font-size:13px;background:var(--wash);border-radius:4px;padding:8px 10px;margin-top:4px;color:var(--ink)}
+.how p.ln{font-size:12.5px;font-variant-numeric:tabular-nums}
+.act{margin-top:10px;min-height:44px;padding:0 14px;border-radius:6px;border:1px solid var(--ink);background:var(--paper);font-size:14px;font-weight:700}
+.copybox{margin-top:8px;display:grid;gap:4px;font-size:13px;color:var(--ink)}
+.copybox textarea{font-family:var(--mono);font-size:13px;padding:8px;border:1px solid var(--ink);border-radius:4px;resize:vertical;min-height:44px;width:100%}
+.names{margin:4px 0 0;padding:0;list-style:none;display:grid;gap:6px}
+.names li{font-size:12px;color:var(--ink)}
+.names li>b{display:block;font-weight:700;color:var(--ink2);margin-bottom:2px}
+.names code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:1px 7px;margin:0 4px 2px 0;display:inline-block}
+.names small{font-size:12px;color:var(--ink2);margin:0 8px 2px -2px}
+.names .when{display:block;margin:2px 0 4px;color:var(--ink2)}
+.names pre{margin:4px 0;padding:6px 8px;background:#fff;border:1px solid var(--hair);border-radius:4px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.lists{border-top:1px dashed var(--mute);padding:6px 0 10px;display:grid;grid-template-columns:1fr 1fr;gap:0 36px}
+.lists>details{margin:0;padding:12px 0;min-width:0}
+.lists>details>summary{font-size:14px;font-weight:800;color:var(--ink);letter-spacing:.04em}
+.lists>details>summary .cnt{font-family:var(--mono);color:var(--ink2)}
+.empty{font-size:14px;color:var(--ink2);margin:6px 0 0}
+.use{border-top:1px dashed var(--mute);padding:22px 0 20px}
+.usehd{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.use.as-table .chart,.use:not(.as-table) .table,.use.as-table .when-chart,.use:not(.as-table) .when-table{display:none}
+.grid2{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:48px;margin-top:22px;align-items:start}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px;border:1px solid var(--hair);border-radius:4px}
+.kpi{padding:14px 18px;border-left:1px solid var(--hair)}
+.kpi:first-child{border-left:0}
+.kpi b{display:block;font-size:30px;letter-spacing:-.03em;line-height:1.15;white-space:nowrap}
+.kpi>span{font-size:12px;color:var(--ink2)}
+.sub{font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 8px}
+.mini-btn{min-height:44px;padding:0 10px;border:1px solid var(--hair);border-radius:6px;background:#fff;font-size:12px;font-weight:700;color:var(--ink)}
+.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.heat>span{aspect-ratio:1;border-radius:3px}
+.heat .wd{aspect-ratio:auto;font-size:11px;color:var(--ink2);text-align:center}
+.heat .pad{visibility:hidden}
+.heat .unused,.legend .unused{background:#fff;box-shadow:inset 0 0 0 1px var(--hair)}
+.heat .unseen,.legend .unseen{background:repeating-linear-gradient(135deg,#d9d7cf 0 2px,#fff 2px 5px)}
+.heatwrap{position:relative}
+.tip{position:absolute;z-index:5;pointer-events:none;padding:4px 8px;border-radius:6px;font-size:12px;white-space:nowrap;background:#0b0b0b;color:#fff;transform:translate(-50%,-130%);display:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;margin-top:8px;color:var(--ink2)}
+.legend .ramp{display:inline-flex;gap:3px;align-items:center}
+.legend i{width:11px;height:11px;border-radius:3px;display:inline-block}
+.legend .k{display:inline-flex;gap:5px;align-items:center}
+table.tv{border-collapse:collapse;font-size:12px;width:100%}
+table.tv th,table.tv td{border-bottom:1px solid var(--hair);padding:4px 6px;text-align:left}
+table.tv td.n{font-family:var(--mono);text-align:right}
+.tvwrap{max-height:280px;overflow:auto;border:1px solid var(--hair);border-radius:4px}
+.tools{display:grid;gap:14px}
+.tools .t{display:grid;grid-template-columns:1fr auto;font-size:14px;gap:4px 12px}
+.tools .t>b{font-family:var(--mono)}
+.splitbar{grid-column:1/-1;display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;background:var(--track)}
+.splitbar i{display:block;height:100%}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.tools small{font-size:12px;color:var(--ink2)}
+.shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}
+.partial{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;margin:18px 0 0;padding:10px 14px;border:1px solid #fab219;border-radius:6px;background:#fff7e0}
+.partial svg{margin-top:2px}
+.partial p{margin:0;font-size:14px;color:var(--ink)}
+.partial p+p{margin-top:4px}
+.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
+.notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+.notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
+.ft{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 24px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--ink2)}
+.ft .lock{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
+.ft .lock svg{margin-top:2px}
+.ft .names-note{grid-column:1/-1;margin:0;font-size:13px;color:var(--ink)}
+.share{min-height:44px;padding:0 20px;border-radius:6px;border:0;background:var(--ink);color:#fff;font-size:14px;font-weight:700}
+dialog.card{width:min(1040px,calc(100% - 24px));max-height:calc(100% - 24px);border:0;border-radius:10px;padding:20px;background:var(--paper)}
+dialog.card::backdrop{background:rgba(11,11,11,.55)}
+dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12px}
+.cardimg{display:block;width:100%;height:auto;border:1px solid var(--hair);border-radius:6px;background:#fff}
+.cardft{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:12px;font-size:13px;color:var(--ink2)}
+.cardft .btns{display:flex;gap:8px}
+.cardft a,.cardft button{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:6px;font-size:14px;font-weight:700;text-decoration:none}
+.cardft a{background:var(--ink);color:#fff}
+.cardft button{border:1px solid var(--ink);background:var(--paper)}
+@media (max-width:1100px){
+.sheet{padding:32px 28px 24px}
+.hero{grid-template-columns:208px 300px 1fr;gap:22px 28px}
+.scene .pic{width:208px;height:208px}
+.score{height:146px}.score .n{font-size:150px}
+.stamp{width:104px;height:104px}.stamp b{font-size:48px}
+.verdict{gap:22px}
+.grid2{gap:32px}
+}
+@media (max-width:920px){
+.hero{grid-template-columns:208px 1fr}.axes{grid-column:1/-1}.score{max-width:300px}
+.kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(odd){border-left:0}.kpi:nth-child(n+3){border-top:1px solid var(--hair)}
+.grid2{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+.scene{justify-self:center}.verdict{grid-template-columns:1fr;gap:14px}
+.sheet{margin:0 0 40px;padding:28px 18px 22px}
+.hd{grid-template-columns:1fr}.hdr{justify-items:start}
+.info{grid-auto-flow:row;grid-template-columns:1fr 1fr}.info div:nth-child(odd){border-left:0}.info div:nth-child(n+3){border-top:1px solid var(--ink)}
+.title{font-size:26px}
+.hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
+.ax{grid-template-columns:100px 1fr 60px;gap:12px}
+.kpi b{font-size:24px}
+.cols,.lists{grid-template-columns:1fr}.col:first-child{padding-right:0;border-right:0;border-bottom:1px dashed var(--mute)}.col:last-child{padding-left:0}
+.it{grid-template-columns:84px minmax(0,1fr);gap:12px}.fig{font-size:24px}.fig.lg{font-size:21px}
+.it .top{flex-direction:column;gap:2px}.it .top h3{flex:none}.it .top .tags{justify-content:flex-start}
+.ft{grid-template-columns:1fr}.share{width:100%}
+}
+@media (prefers-reduced-motion:no-preference){.ax .tr i{transition:width .5s ease-out}}
+`;
+
+// src/report/html.ts
+var RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"];
+var TOOL_COLORS = { "claude-code": "#2a78d6" };
+var REPO = "chunsik-garage";
+function esc(value) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+}
+var textsOf2 = (make) => ({ en: make("en"), ko: make("ko") });
+var copy = (key, values) => textsOf2((lang) => values === void 0 ? REPORT_COPY[key][lang] : fill(REPORT_COPY[key][lang], values));
+var pairHtml = (html) => LANGS.map((lang) => `<span lang="${lang}" data-l="${lang}">${html[lang]}</span>`).join("");
+var both = (texts) => pairHtml(textsOf2((lang) => esc(texts[lang])));
+var perLang = (make) => LANGS.map((lang) => make(lang).replace(/^<([a-z0-9]+)/, `<$1 lang="${lang}" data-l="${lang}"`)).join("");
+var swap = (lang, attrs) => ` data-tr${Object.entries(attrs).map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`).join("")}`;
+var fillHtml = (template, values) => fill(esc(template), values);
+var dayNumber = (date) => {
+  const [year, month, day] = date.split("-").map(Number);
+  return Date.UTC(year, month - 1, day) / 864e5;
+};
+var ICONS = {
+  critical: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5 17 16H1z" fill="#ec835a"/><rect x="8.1" y="6.2" width="1.8" height="5" fill="#0b0b0b"/><rect x="8.1" y="12.4" width="1.8" height="1.8" fill="#0b0b0b"/></svg>',
+  caution: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 1.5 17 16H1z" fill="#fab219"/><rect x="8.1" y="6.2" width="1.8" height="5" fill="#0b0b0b"/><rect x="8.1" y="12.4" width="1.8" height="1.8" fill="#0b0b0b"/></svg>',
+  info: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="#898781"/><rect x="8.1" y="7.6" width="1.8" height="5.4" fill="#fff"/><rect x="8.1" y="4.6" width="1.8" height="1.8" fill="#fff"/></svg>',
+  good: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="#0ca30c"/><path d="M5 9.2 8 12l5-6" stroke="#fff" stroke-width="2" fill="none"/></svg>',
+  average: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="#898781" stroke-width="2"/><rect x="5" y="8.1" width="8" height="1.8" fill="#898781"/></svg>',
+  unmeasured: '<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="8" fill="none" stroke="#898781" stroke-width="2" stroke-dasharray="3 2.2"/><rect x="8.1" y="12.2" width="1.8" height="1.8" fill="#52514e"/><path d="M6.6 6.8a2.4 2.4 0 1 1 3.4 2.2c-.7.3-1 .8-1 1.6" stroke="#52514e" stroke-width="1.8" fill="none"/></svg>'
+};
+var LOCK = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="7" width="11" height="7.5" rx="1.5" fill="#52514e"/><path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="#52514e" stroke-width="1.8" fill="none"/></svg>';
+function statusOf(finding) {
+  if (finding.category === "strength") return "good";
+  if (finding.category === "average") return "average";
+  if (finding.category === "unmeasured") return "unmeasured";
+  return finding.severity === "critical" ? "critical" : finding.severity === "caution" ? "caution" : "info";
+}
+function chips(lang, label, items) {
+  if (items.length === 0) return "";
+  return `<ul class="chips"${swap(lang, { "aria-label": label })}><li class="k" aria-hidden="true">${both(label)}</li>${items.join("")}</ul>`;
+}
+function figure(finding) {
+  return perLang((lang) => {
+    const text = finding.text[lang];
+    if (text.value === null) return `<div class="fig nv">${esc(REPORT_COPY.unmeasured[lang])}<small>${esc(text.reason ?? "")}</small></div>`;
+    const unit = text.unit === null ? "" : text.unit === "%" ? "%" : `<span class="u">${esc(text.unit)}</span>`;
+    const long = `${text.value}${text.unit === "%" ? "%" : ""}`.length >= 6 ? " lg" : "";
+    return `<div class="fig${long}">${esc(text.value)}${unit}<small>${esc(text.name)}</small></div>`;
+  });
+}
+function serverLine(server) {
+  const project = server.projectName === null ? "" : `<small>${esc(server.projectName)}</small>`;
+  if (server.why !== "not_established") return `<code>${esc(server.name)}</code>${project}`;
+  const day = server.daysUntil !== null && server.daysUntil >= 1 ? copy("judgeFrom", { n: server.daysUntil }) : copy("judgeUnknown");
+  return `<span class="srv"><code>${esc(server.name)}</code>${project}<span class="when">${both(day)}</span></span>`;
+}
+function serversBlock(finding, view) {
+  if (finding.ruleId !== "E6" || view.servers.length === 0) return "";
+  const notes = perLang((lang) => `<div>${finding.text[lang].notes.map((line) => `<p>${esc(line)}</p>`).join("")}</div>`);
+  const order = Object.keys(UNJUDGED_COPY.en.why);
+  const groups = order.map((why) => ({ why, servers: view.servers.filter((server) => server.why === why) })).filter((group) => group.servers.length > 0);
+  const items = groups.map((group) => {
+    const watch = group.why === "not_established" ? `<span class="when">${both(copy("judgeChange"))}</span>${view.saved ? "" : `<span class="when">${both(copy("judgeNotSaved"))}</span>`}` : "";
+    return `<li><b>${both(textsOf2((lang) => UNJUDGED_COPY[lang].why[group.why]))}</b>${group.servers.map(serverLine).join("")}${watch}</li>`;
+  }).join("");
+  const connectors = view.servers.filter((server) => server.scope === "claude-ai");
+  const deny = connectors.length === 0 ? "" : `<li><b>${both(copy("blockWith"))}</b><pre>${esc(`[
+${connectors.map((server) => `  { "serverName": ${JSON.stringify(server.name)} }`).join(",\n")}
+]`)}</pre><span class="when">${both(copy("blockNote"))}</span></li>`;
+  return `<details class="how"><summary>${both(copy("serversOut", { n: view.servers.length }))}</summary>${notes}<ul class="names">${items}${deny}</ul></details>`;
+}
+function item(finding, view, lang) {
+  const status = statusOf(finding);
+  const repair = finding.category === "repair";
+  const gain = repair && view.score.aq !== null && finding.gain !== null ? finding.gain : null;
+  const tag = gain === null ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>` : `<span class="tag up">${both(textsOf2((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
+  const description2 = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf2((l) => finding.text[l].description))}</p>` : "";
+  const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
+  const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  const phrase = textsOf2((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
+  const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
+  const how = finding.text.en.method.length + finding.text.ko.method.length === 0 ? "" : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${targets}${places}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+}
+function header(view, art, lang) {
+  const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
+  const tools2 = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : `<dd>${both(textsOf2((l) => view.tools.map((tool) => TOOL_NAMES[tool][l]).join(" \xB7 ")))}</dd>`;
+  const round = !view.saved ? `<dd class="tx">${both(REPORT_COPY.notSaved)}</dd>` : `<dd>${view.round === null ? "\u2014" : both(copy("roundValue", { n: view.round }))}</dd>`;
+  const langButton = (code, label) => `<button type="button" data-set-lang="${code}" aria-pressed="${code === lang}" lang="${code}">${label}</button>`;
+  return `<header class="hd"><div><div class="brandrow">${face}<div class="brand">${both(REPORT_COPY.brand)}</div></div><h1 class="title" id="h-title">${both(REPORT_COPY.title)}</h1></div><div class="hdr"><div class="langsw" role="group"${swap(lang, { "aria-label": REPORT_COPY.langGroup })}>${langButton("en", "English")}${langButton("ko", "\uD55C\uAD6D\uC5B4")}</div><dl class="info"><div><dt>${both(REPORT_COPY.date)}</dt><dd>${esc(view.today)}</dd></div><div><dt>${both(REPORT_COPY.tools)}</dt>${tools2}</div><div><dt>${both(REPORT_COPY.period)}</dt><dd>${esc(view.window.from.slice(5))} ~ ${esc(view.window.to.slice(5))}</dd></div><div><dt>${both(REPORT_COPY.round)}</dt>${round}</div></dl></div></header>`;
+}
+function hero(view, art, lang) {
+  const scored2 = view.score.aq !== null;
+  const alt = SCENE_ALT[sceneFor(view.score.tier, view.unreadable)];
+  const picture = art.scene === null ? `<div class="ph" role="img"${swap(lang, { "aria-label": alt })}>${both(alt)}</div>` : `<img id="${SCRIPT_IDS.scene}" src="${esc(art.scene)}" width="264" height="264"${swap(lang, { alt })}>`;
+  const caption = scored2 ? `<figcaption>${both(textsOf2((l) => view.text[l].grade ?? ""))}</figcaption>` : view.withheldText === null ? "" : `<figcaption class="why">${both(view.withheldText)}</figcaption>`;
+  const score = scored2 ? `<div class="score"><div class="n">${view.score.aq}</div><div class="lb">${both(REPORT_COPY.aqLabel)}</div><div class="stamp" role="img"${swap(lang, { "aria-label": copy("gradeAria", { g: view.score.grade }) })}><div><b>${esc(view.score.grade ?? "")}</b><em>${both(REPORT_COPY.grade)}</em></div></div></div>` : `<div class="score"><div class="n none">${both(REPORT_COPY.noScore)}</div><div class="lb">${both(REPORT_COPY.aqLabel)}</div></div>`;
+  const axes = view.axes.map((axis) => {
+    const name = AXIS_NAMES[axis.axis];
+    const counts = pairHtml(textsOf2((l) => fillHtml(REPORT_COPY.axisCounts[l], { g: `<b>${groupDigits(axis.strengths)}</b>`, f: `<b>${groupDigits(axis.repairs)}</b>` })));
+    if (axis.score === null) return `<div class="ax"><span class="nm">${both(name)}<span class="ct">${counts}</span></span><span class="tr none" role="img"${swap(lang, { "aria-label": textsOf2((l) => fill(REPORT_COPY.axisNone[l], { axis: name[l] })) })}></span><span class="v none">${both(REPORT_COPY.unmeasured)}</span></div>`;
+    return `<div class="ax"><span class="nm">${both(name)}<span class="ct">${counts}</span></span><span class="tr" role="img"${swap(lang, { "aria-label": textsOf2((l) => fill(REPORT_COPY.axisAria[l], { axis: name[l], v: axis.score })) })}><i style="width:${axis.score}%"></i></span><span class="v">${axis.score}</span></div>`;
+  }).join("");
+  const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
+  const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  const best = view.findings.find((finding) => finding.category === "strength") ?? null;
+  const first = scored2 ? view.findings.find((finding) => finding.category === "repair") ?? null : null;
+  const bestLine = best === null ? "<div></div>" : `<div class="pt">${ICONS.good}<span><b>${both(REPORT_COPY.best)}</b>${both(
+    textsOf2((l) => {
+      const text = best.text[l];
+      const value = text.value === null ? REPORT_COPY.unmeasured[l] : text.unit === null ? text.value : joinValue(text.value, text.unit, l);
+      return `${text.title} \xB7 ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
+    })
+  )}</span></div>`;
+  const fixLine = first === null ? "" : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
+    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
+  )}</span></div>`;
+  return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
+}
+function columns(view, art, lang) {
+  const strengths = view.findings.filter((finding) => finding.category === "strength");
+  const repairs = view.findings.filter((finding) => finding.category === "repair");
+  const sticker = (src) => src === null ? "" : `<img class="stk" src="${esc(src)}" alt="" width="56" height="56">`;
+  const good = strengths.length > 0 ? strengths.map((finding) => item(finding, view, lang)).join("") : `<p class="empty">${both(textsOf2((l) => view.text[l].noStrengths ?? ""))}</p>`;
+  const fix = repairs.length > 0 ? repairs.map((finding) => item(finding, view, lang)).join("") : `<p class="empty">${both(textsOf2((l) => view.text[l].noRepairs ?? ""))}</p>`;
+  return `<div class="cols"><section class="col good" aria-labelledby="h-good"><h2 id="h-good"><span class="no">01</span>${both(REPORT_COPY.colGood)}<span class="cnt">${strengths.length}</span>${sticker(art.good)}</h2>${good}</section><section class="col" aria-labelledby="h-fix"><h2 id="h-fix"><span class="no">02</span>${both(REPORT_COPY.colFix)}<span class="cnt">${repairs.length}</span>${sticker(art.fix)}</h2>${fix}</section></div>`;
+}
+function lists(view, lang) {
+  const block = (key, category) => {
+    const found = view.findings.filter((finding) => finding.category === category);
+    const body = found.length > 0 ? found.map((finding) => item(finding, view, lang)).join("") : `<p class="empty">${both(REPORT_COPY.none)}</p>`;
+    return `<details><summary>${both(REPORT_COPY[key])} <span class="cnt">${found.length}</span></summary>${body}</details>`;
+  };
+  return `<div class="lists">${block("avgList", "average")}${block("unmList", "unmeasured")}</div>`;
+}
+var stateWord = (state) => state === "used" ? REPORT_COPY.stUsed : state === "unused" ? REPORT_COPY.lgUnused : REPORT_COPY.lgUnseen;
+var tip = (date, texts) => ` data-tip-en="${esc(`${date} \xB7 ${texts.en}`)}" data-tip-ko="${esc(`${date} \xB7 ${texts.ko}`)}"`;
+function calendar(view, lang) {
+  const cells = view.usage.calendar;
+  if (cells.length === 0) return { chart: `<p class="empty">${both(REPORT_COPY.none)}</p>`, table: `<p class="empty">${both(REPORT_COPY.none)}</p>` };
+  const used = cells.filter((cell) => cell.state === "used");
+  const busiest = used.length > 0 ? Math.max(...used.map((cell) => cell.responses)) : 0;
+  const scale = Math.max(1, busiest);
+  const aria = copy("calAria", { from: cells[0].date, to: cells.at(-1).date, u: used.length, n: cells.filter((cell) => cell.state === "unused").length, x: cells.filter((cell) => cell.state === "unseen").length, max: busiest });
+  const pad = (new Date(dayNumber(cells[0].date) * 864e5).getUTCDay() + 6) % 7;
+  const heads = WEEKDAYS.en.map((_, index) => `<span class="wd" aria-hidden="true">${both({ en: WEEKDAYS.en[index], ko: WEEKDAYS.ko[index] })}</span>`).join("");
+  const days = cells.map((cell) => {
+    if (cell.state === "unseen") return `<span class="unseen"${tip(cell.date, REPORT_COPY.lgUnseen)}></span>`;
+    if (cell.state === "unused" || cell.responses === 0) return `<span class="unused"${tip(cell.date, REPORT_COPY.lgUnused)}></span>`;
+    const level = Math.max(0, Math.min(3, Math.floor(cell.responses / scale * 4 - 1e-9)));
+    const count = groupDigits(cell.responses);
+    return `<span style="background:${RAMP[level]}"${tip(cell.date, { en: count, ko: count })}></span>`;
+  }).join("");
+  const legend = `<div class="legend"><span class="k">${both(REPORT_COPY.less)}<span class="ramp">${RAMP.map((color) => `<i style="background:${color}"></i>`).join("")}</span>${both(REPORT_COPY.more)}</span><span class="k"><i class="unused"></i>${both(REPORT_COPY.lgUnused)}</span><span class="k"><i class="unseen"></i>${both(REPORT_COPY.lgUnseen)}</span></div>`;
+  const chart = `<div class="heatwrap"><div class="heat" role="img"${swap(lang, { "aria-label": aria })}>${heads}${'<span class="pad" aria-hidden="true"></span>'.repeat(pad)}${days}</div><div class="tip" aria-hidden="true"></div></div>${legend}`;
+  const rows = cells.map((cell) => `<tr><td>${cell.date}</td><td class="n">${cell.state === "unseen" ? "\u2014" : groupDigits(cell.responses)}</td><td>${both(stateWord(cell.state))}</td></tr>`).join("");
+  const table = `<table class="tv"><caption class="sr">${both(aria)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thDate)}</th><th scope="col">${both(REPORT_COPY.thReplies)}</th><th scope="col">${both(REPORT_COPY.thState)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return { chart, table };
+}
+function tools(view) {
+  const list = view.usage.byTool;
+  if (list.length === 0) return { chart: `<p class="empty">${both(REPORT_COPY.noTools)}</p>`, table: `<p class="empty">${both(REPORT_COPY.noTools)}</p>` };
+  const width = (part, total) => Math.round(part / (total || 1) * 1e4) / 100;
+  const row = (label, value, format) => {
+    const total = list.reduce((sum2, tool) => sum2 + value(tool), 0);
+    return perLang(
+      (lang) => `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div>${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div>`
+    );
+  };
+  const chart = `<div class="tools">${row(REPORT_COPY.kMain, (tool) => tool.mainSessions, (count) => groupDigits(count))}${row(REPORT_COPY.kOut, (tool) => tool.outputTokens, shortTokens)}</div>`;
+  const rows = list.map((tool) => `<tr><th scope="row">${both(TOOL_NAMES[tool.tool])}</th><td class="n">${groupDigits(tool.mainSessions)}</td><td class="n">${groupDigits(tool.outputTokens)}</td></tr>`).join("");
+  const table = `<table class="tv"><caption class="sr">${both(REPORT_COPY.toolsTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thTool)}</th><th scope="col">${both(REPORT_COPY.kMain)}</th><th scope="col">${both(REPORT_COPY.kOut)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return { chart, table };
+}
+function usage(view, lang) {
+  const days = dayNumber(view.window.to) - dayNumber(view.window.from) + 1;
+  const kpi = (value, label) => `<div class="kpi"><b>${value}</b><span>${both(label)}</span></div>`;
+  const kpis = [
+    kpi(groupDigits(view.usage.mainSessions), REPORT_COPY.kMain),
+    kpi(`${view.usage.activeDays}/${days}`, REPORT_COPY.kDays),
+    kpi(both(textsOf2((l) => shortTokens(view.usage.outputTokens, l))), REPORT_COPY.kOut),
+    kpi(view.usage.cacheHit === null ? "\u2014" : percent(view.usage.cacheHit), REPORT_COPY.kCache)
+  ].join("");
+  const cal = calendar(view, lang);
+  const byTool = tools(view);
+  const shell = view.usage.shellNonZero === null ? "" : `<p class="shell">${both(copy("shell", { v: percent(view.usage.shellNonZero) }))}</p>`;
+  return `<section class="use" aria-labelledby="h-use"><div class="usehd"><h2 id="h-use"><span class="no">03</span>${both(REPORT_COPY.use)}</h2><button type="button" class="mini-btn" data-act="table"><span class="when-chart">${both(REPORT_COPY.asTable)}</span><span class="when-table">${both(REPORT_COPY.asChart)}</span></button></div><div class="kpis">${kpis}</div><div class="grid2"><div><p class="sub">${both(REPORT_COPY.cal)}</p><div class="chart">${cal.chart}</div><div class="table tvwrap">${cal.table}</div></div><div><p class="sub">${both(REPORT_COPY.byTool)}</p><div class="chart">${byTool.chart}</div><div class="table tvwrap">${byTool.table}</div></div></div>${shell}</section>`;
+}
+function partialBand(view) {
+  if (view.partialReads.length === 0) return "";
+  const lines = view.partialReads.map((read) => {
+    const key = read.share === null ? "partialReadUnknown" : read.lowerBound ? "partialReadAtLeast" : "partialRead";
+    return `<p>${both(textsOf2((l) => fill(REPORT_COPY[key][l], { tool: TOOL_NAMES[read.tool][l], share: read.share === null ? null : percent(read.share) })))}</p>`;
+  });
+  return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
+}
+function notices(view) {
+  if (view.notices.length === 0) return "";
+  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
+}
+function footer(hasCard) {
+  const share2 = hasCard ? `<button type="button" class="share" data-act="card" aria-haspopup="dialog">${both(REPORT_COPY.cardBtn)}</button>` : "<span></span>";
+  return `<footer class="ft"><span class="lock">${LOCK}<span>${both(textsOf2((l) => `${REPORT_COPY.footCalc[l]} ${REPORT_COPY.footPromise[l]}`))}</span></span>${share2}<p class="names-note">${both(REPORT_COPY.footNames)}</p></footer>`;
+}
+function cardDialog(hasCard) {
+  if (!hasCard) return "";
+  return `<dialog class="card" id="${SCRIPT_IDS.dialog}" aria-labelledby="card-title"><h2 id="card-title">${both(REPORT_COPY.cardTitle)}</h2><img class="cardimg" id="${SCRIPT_IDS.cardImage}" alt="" width="1200" height="630" hidden><p class="empty" id="${SCRIPT_IDS.cardFail}" hidden>${both(REPORT_COPY.cardFail)}</p><div class="cardft"><span>${both(REPORT_COPY.cardNote)}</span><div class="btns"><a id="${SCRIPT_IDS.cardLink}" href="#" hidden>${both(REPORT_COPY.download)}</a><button type="button" id="${SCRIPT_IDS.cardClose}">${both(REPORT_COPY.close)}</button></div></div></dialog>`;
+}
+function clientData(view) {
+  const aq = view.score.aq;
+  const grade = view.score.grade;
+  return {
+    ui: { copied: REPORT_COPY.copied, copyFail: REPORT_COPY.copyFail, copyLabel: REPORT_COPY.copyLabel },
+    card: aq === null || grade === null ? null : {
+      aq,
+      grade,
+      today: view.today,
+      file: `${REPO}-aq-${view.today}.png`,
+      brand: textsOf2((l) => REPORT_COPY.brand[l].toUpperCase()),
+      title: REPORT_COPY.title,
+      aqLabel: REPORT_COPY.aqLabel,
+      gradeLabel: REPORT_COPY.grade,
+      nick: textsOf2((l) => view.text[l].grade ?? ""),
+      repo: REPORT_COPY.cardRepo,
+      alt: textsOf2((l) => fill(REPORT_COPY.cardAlt[l], { aq, grade, name: view.text[l].grade ?? "" })),
+      axes: view.axes.map((axis) => ({ name: AXIS_NAMES[axis.axis], score: axis.score }))
+    }
+  };
+}
+function reportHtml(view, art) {
+  const lang = view.lang;
+  const hash = createHash("sha256").update(REPORT_SCRIPT, "utf8").digest("base64");
+  const csp = `default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'none'`;
+  const title = copy("pageTitle", { date: view.today });
+  const client = clientData(view);
+  const data = JSON.stringify(client).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html lang="${lang}" data-ui="${lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<title data-tr data-en-text="${esc(title.en)}" data-ko-text="${esc(title.ko)}">${esc(title[lang])}</title>
+<style>${REPORT_CSS}</style>
+</head>
+<body>
+<div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+${cardDialog(client.card !== null)}
+<div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
+<script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>
+<script>${REPORT_SCRIPT}</script>
+</body>
+</html>
+`;
+}
+
+// src/report/view.ts
+function reportView(result, run2) {
+  const targetsOf = (finding) => finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
+  const withheld = result.score.aq === null ? result.notices.find((notice) => notice.kind === "score_withheld")?.text ?? null : null;
+  return {
+    lang: result.lang,
+    today: result.window.today,
+    window: { from: result.window.score.from, to: result.window.score.to },
+    tools: result.tools.filter((tool) => tool.detected).map((tool) => tool.tool),
+    saved: run2.saved,
+    round: run2.saved ? run2.round : null,
+    score: { aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: [...result.score.withheld] },
+    withheldText: withheld,
+    unreadable: result.notices.some((notice) => notice.kind === "record_unreadable"),
+    text: result.text,
+    axes: result.axes,
+    findings: result.findings.map((finding) => ({
+      ruleId: finding.ruleId,
+      axis: finding.axis,
+      category: finding.category,
+      severity: finding.severity,
+      measured: finding.status === "scored",
+      gain: finding.gain,
+      targets: targetsOf(finding),
+      unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
+      text: finding.text
+    })),
+    usage: result.usage,
+    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, text: notice.text })),
+    servers: result.details.unjudgedServers.map((server) => ({
+      tool: server.tool,
+      name: server.name,
+      scope: server.scope,
+      projectName: server.projectName,
+      why: server.why,
+      daysUntil: server.judgeFrom === null ? null : daysBefore(server.judgeFrom, result.window.today)
+    })),
+    setupProblems: result.details.setupProblems,
+    missingInstructions: result.details.missingInstructions.map((project) => project.name),
+    worstOverlap: result.details.worstOverlap?.name ?? null,
+    partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
+  };
+}
+
+// src/state/cache.ts
+import { createHash as createHash2 } from "node:crypto";
+import { lstat as lstat2, mkdir, open, readdir as readdir3, readFile as readFile2, realpath as realpath2, rename, writeFile } from "node:fs/promises";
+import { join as join4 } from "node:path";
 
 // src/adapters/claude/locate.ts
 import { readdir, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join as join2, resolve } from "node:path";
 function claudeHome(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? resolve(fromEnv) : join(homedir2, ".claude");
+  return fromEnv ? resolve(fromEnv) : join2(homedir2, ".claude");
 }
 function normalizePath(path, platform = process.platform) {
   const absolute = resolve(path).replace(/\\/g, "/");
@@ -2586,7 +3629,7 @@ function normalizePath(path, platform = process.platform) {
 }
 var isMissing = (error) => error?.code === "ENOENT";
 async function listClaudeFiles(home, minMtimeMs) {
-  const projects = join(home, "projects");
+  const projects = join2(home, "projects");
   const files = [];
   const unreadableDirs = [];
   const unreadableFiles = [];
@@ -2612,7 +3655,7 @@ async function listClaudeFiles(home, minMtimeMs) {
   };
   for (const project of projectEntries) {
     if (!project.isDirectory()) continue;
-    const projectDir = join(projects, project.name);
+    const projectDir = join2(projects, project.name);
     let entries;
     try {
       entries = await readdir(projectDir, { withFileTypes: true });
@@ -2622,11 +3665,11 @@ async function listClaudeFiles(home, minMtimeMs) {
     }
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-        await consider(join(projectDir, entry.name), entry.name.slice(0, -".jsonl".length), "main", null);
+        await consider(join2(projectDir, entry.name), entry.name.slice(0, -".jsonl".length), "main", null);
         continue;
       }
       if (!entry.isDirectory()) continue;
-      const subDir = join(projectDir, entry.name, "subagents");
+      const subDir = join2(projectDir, entry.name, "subagents");
       let subs;
       try {
         subs = await readdir(subDir, { withFileTypes: true });
@@ -2636,7 +3679,7 @@ async function listClaudeFiles(home, minMtimeMs) {
       }
       for (const sub of subs) {
         if (sub.isFile() && sub.name.endsWith(".jsonl")) {
-          await consider(join(subDir, sub.name), sub.name.slice(0, -".jsonl".length), "sub", entry.name);
+          await consider(join2(subDir, sub.name), sub.name.slice(0, -".jsonl".length), "sub", entry.name);
         }
       }
     }
@@ -2850,10 +3893,10 @@ function reviveSummary(value) {
 
 // src/state/folder.ts
 import { lstat, readdir as readdir2, realpath, rmdir, unlink } from "node:fs/promises";
-import { basename, dirname, join as join2, relative } from "node:path";
+import { basename as basename2, dirname as dirname2, join as join3, relative } from "node:path";
 var STATE_DIR_NAME = ".chunsik-garage";
 function stateDir(homedir2) {
-  return join2(homedir2, STATE_DIR_NAME);
+  return join3(homedir2, STATE_DIR_NAME);
 }
 var STATE_ENTRIES = [
   { name: "cache", kind: "dir", removedBy: "clean" },
@@ -2879,7 +3922,7 @@ async function treeSize(path) {
       return;
     }
     if (info.isDirectory()) {
-      for (const name of (await readdir2(current)).sort()) await walk(join2(current, name));
+      for (const name of (await readdir2(current)).sort()) await walk(join3(current, name));
       return;
     }
     total.files++;
@@ -2901,7 +3944,7 @@ async function removeLink(path) {
   }
 }
 async function expectedRealDir(dir) {
-  return normalizePath(join2(await realpath(dirname(dir)), basename(dir)));
+  return normalizePath(join3(await realpath(dirname2(dir)), basename2(dir)));
 }
 var outside = (path) => Object.assign(new Error(`outside of the state folder: ${path}`), { code: "EOUTSIDE" });
 async function assertInside(path, boundary, allowEqual) {
@@ -2920,9 +3963,9 @@ async function removeFiles(paths, root, boundary) {
       throw error;
     }
     if (!info.isFile()) continue;
-    const parent = dirname(path);
+    const parent = dirname2(path);
     await assertInside(parent, boundary, true);
-    if (normalizePath(await realpath(parent)) !== normalizePath(join2(boundary, relative(root, parent)))) {
+    if (normalizePath(await realpath(parent)) !== normalizePath(join3(boundary, relative(root, parent)))) {
       report.linked++;
       continue;
     }
@@ -2942,19 +3985,19 @@ async function removeTree(path, boundary) {
       throw error;
     }
     if (info.isSymbolicLink()) {
-      await assertInside(dirname(current), boundary, true);
+      await assertInside(dirname2(current), boundary, true);
       await removeLink(current);
       removed.links++;
       return;
     }
     if (info.isDirectory()) {
       await assertInside(current, boundary, false);
-      for (const name of await readdir2(current)) await walk(join2(current, name));
+      for (const name of await readdir2(current)) await walk(join3(current, name));
       await assertInside(current, boundary, false);
       await rmdir(current);
       return;
     }
-    await assertInside(dirname(current), boundary, true);
+    await assertInside(dirname2(current), boundary, true);
     await unlink(current);
     removed.files++;
     removed.bytes += info.size;
@@ -2966,7 +4009,7 @@ async function removeTree(path, boundary) {
 // src/state/cache.ts
 var CACHE_FORMAT_VERSION = 1;
 var EDGE_BYTES = 4096;
-var sha256 = (data) => createHash("sha256").update(data).digest("hex");
+var sha256 = (data) => createHash2("sha256").update(data).digest("hex");
 async function cacheKeyFor(file, parser, timeZone) {
   const handle = await open(file.path, "r");
   try {
@@ -2995,11 +4038,11 @@ function sameKey(a, b) {
   return a.normPath === b.normPath && a.size === b.size && a.mtimeMs === b.mtimeMs && a.head === b.head && a.tail === b.tail && a.cacheFormat === b.cacheFormat && a.parser === b.parser && a.timeZone === b.timeZone;
 }
 function entryPath(dir, normPath) {
-  return join3(dir, `${sha256(normPath).slice(0, 32)}.json`);
+  return join4(dir, `${sha256(normPath).slice(0, 32)}.json`);
 }
 async function loadCached(dir, key) {
   try {
-    const entry = JSON.parse(await readFile(entryPath(dir, key.normPath), "utf8"));
+    const entry = JSON.parse(await readFile2(entryPath(dir, key.normPath), "utf8"));
     if (entry.key === void 0 || typeof entry.bytesRead !== "number" || !sameKey(entry.key, key)) return null;
     const summary = reviveSummary(entry.summary);
     return summary === null ? null : { key: entry.key, summary, bytesRead: entry.bytesRead };
@@ -3018,7 +4061,7 @@ var ENTRY_NAME = /^[0-9a-f]{32}\.json$/;
 async function readCacheEntry(path) {
   let text;
   try {
-    text = await readFile(path, "utf8");
+    text = await readFile2(path, "utf8");
   } catch {
     return { status: "unreadable" };
   }
@@ -3051,7 +4094,7 @@ async function staleCacheEntries(stateDir2) {
   }
   const boundary = await expectedRealDir(stateDir2);
   if (dirInfo.isSymbolicLink() || normalizePath(await realpath2(stateDir2)) !== boundary) return { skipped: "state", boundary: null, paths: [] };
-  const cacheDir = join3(stateDir2, "cache");
+  const cacheDir = join4(stateDir2, "cache");
   let info;
   try {
     info = await lstat2(cacheDir);
@@ -3063,11 +4106,11 @@ async function staleCacheEntries(stateDir2) {
   if (!info.isDirectory()) return { skipped: null, boundary, paths: [] };
   const paths = [];
   for (const tool of (await readdir3(cacheDir)).sort()) {
-    const toolDir = join3(cacheDir, tool);
+    const toolDir = join4(cacheDir, tool);
     if (!(await lstat2(toolDir)).isDirectory()) continue;
     for (const name of (await readdir3(toolDir)).sort()) {
       if (!ENTRY_NAME.test(name)) continue;
-      const path = join3(toolDir, name);
+      const path = join4(toolDir, name);
       if (!(await lstat2(path)).isFile()) continue;
       if (await isStaleCacheEntry(path)) paths.push(path);
     }
@@ -3082,8 +4125,8 @@ async function pruneCache(stateDir2) {
 }
 
 // src/state/history.ts
-import { appendFile, mkdir as mkdir2, open as open2 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { appendFile, mkdir as mkdir2, open as open2, readFile as readFile3 } from "node:fs/promises";
+import { join as join5 } from "node:path";
 var HISTORY_FILE = "history.jsonl";
 function historyEntry(evaluation, nowMs) {
   const byAxis = new Map(evaluation.axes.map((axis) => [axis.axis, axis.score]));
@@ -3110,14 +4153,24 @@ async function endsMidLine(path) {
 }
 async function appendHistory(stateDir2, entry) {
   await mkdir2(stateDir2, { recursive: true });
-  const path = join4(stateDir2, HISTORY_FILE);
+  const path = join5(stateDir2, HISTORY_FILE);
   const prefix = await endsMidLine(path) ? "\n" : "";
   await appendFile(path, `${prefix}${JSON.stringify(entry)}
 `);
 }
+async function historyCount(stateDir2) {
+  let text;
+  try {
+    text = await readFile3(join5(stateDir2, HISTORY_FILE), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return 0;
+    throw error;
+  }
+  return text.split("\n").filter((line) => line.trim() !== "").length;
+}
 
 // src/scan/identity.ts
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // src/state/observations.ts
 function installKey(parts) {
@@ -3159,7 +4212,7 @@ function unseenInUnreadablePlace(facts) {
     return plugin.installRealPath === null || plugin.installRealPath === shown ? [] : [{ shown, real: plugin.installRealPath }];
   });
   const unreadablePluginDirs = unreadableDirs.flatMap((dir) => [dir, ...linkedRoots.filter((root) => inside(dir, root.shown)).map((root) => `${root.real}${dir.slice(root.shown.length)}`)]);
-  const userSkillsDir = normalizePath(join5(facts.home, "skills"));
+  const userSkillsDir = normalizePath(join6(facts.home, "skills"));
   const scanned2 = new Map(facts.projects.filter((project) => project.exists && !project.excluded).map((project) => [project.normRoot, project]));
   const claudeJsonUnread = unread3(facts.claudeJson);
   const pluginsFileUnread = unread3(facts.pluginsFile);
@@ -3180,7 +4233,7 @@ function unseenInUnreadablePlace(facts) {
       if (scope === "user") return unreadableDirs.includes(userSkillsDir);
       if (scope === "project") {
         const project = scanned2.get(projectRoot);
-        return project !== void 0 && unreadableDirs.includes(normalizePath(join5(project.root, ".claude", "skills")));
+        return project !== void 0 && unreadableDirs.includes(normalizePath(join6(project.root, ".claude", "skills")));
       }
       if (scope === "plugin") return pluginsFileUnread || unknownPluginRoots.some((root) => inside(realPath, root)) || unreadablePluginDirs.some((dir) => inside(realPath, dir));
       return false;
@@ -3198,8 +4251,8 @@ function unseenInUnreadablePlace(facts) {
 
 // src/state/state.ts
 import { randomBytes } from "node:crypto";
-import { mkdir as mkdir3, readFile as readFile2, rename as rename2, rm, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join6 } from "node:path";
+import { mkdir as mkdir3, readFile as readFile4, rename as rename2, rm, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join7 } from "node:path";
 var STATE_SCHEMA = 1;
 var STATE_FILE = "state.json";
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -3222,8 +4275,8 @@ function reviveState(value) {
   if (v.installs !== null) {
     if (!Array.isArray(v.installs)) return null;
     installs = [];
-    for (const item of v.installs) {
-      const record = reviveRecord(item);
+    for (const item2 of v.installs) {
+      const record = reviveRecord(item2);
       if (record === null) return null;
       installs.push(record);
     }
@@ -3234,7 +4287,7 @@ function reviveState(value) {
 async function loadState(dir) {
   let text;
   try {
-    text = await readFile2(join6(dir, STATE_FILE), "utf8");
+    text = await readFile4(join7(dir, STATE_FILE), "utf8");
   } catch (error) {
     const code = error.code;
     if (code === "ENOENT" || code === "ENOTDIR") return { status: "missing" };
@@ -3249,7 +4302,7 @@ async function loadState(dir) {
 }
 async function saveState(dir, state) {
   await mkdir3(dir, { recursive: true });
-  const target = join6(dir, STATE_FILE);
+  const target = join7(dir, STATE_FILE);
   const temporary = `${target}.${process.pid}.tmp`;
   try {
     await writeFile2(temporary, `${JSON.stringify(state, null, 2)}
@@ -3273,35 +4326,51 @@ function nextState(state, facts, today, startedAt) {
 
 // src/state/reports.ts
 import { lstat as lstat3, mkdir as mkdir4, readdir as readdir4, realpath as realpath3, rename as rename3, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 var REPORTS_DIR = "reports";
 var KEEP_REPORTS = 20;
 var TEMP_PREFIX = "chunsik-garage-result-";
+var TEMP_REPORT_PREFIX = "chunsik-garage-report-";
 var STAMPED = /^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.(json|html)$/;
 function resultStamp(nowMs) {
   return new Date(nowMs).toISOString().replace(/[:.]/g, "-");
 }
-async function writeJson(path, value) {
+async function writeText(path, text) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    await writeFile3(temporary, `${JSON.stringify(value, null, 2)}
-`);
+    await writeFile3(temporary, text);
     await rename3(temporary, path);
   } catch (error) {
     await rm2(temporary, { force: true }).catch(() => void 0);
     throw error;
   }
 }
+async function writeJson(path, value) {
+  await writeText(path, `${JSON.stringify(value, null, 2)}
+`);
+}
 async function writeResult(stateDir2, stamp, result) {
-  const reports = join7(stateDir2, REPORTS_DIR);
+  const reports = join8(stateDir2, REPORTS_DIR);
   await mkdir4(reports, { recursive: true });
-  const path = join7(reports, `${stamp}.json`);
+  const path = join8(reports, `${stamp}.json`);
   await writeJson(path, result);
   return path;
 }
 async function writeTempResult(tmpdir2, stamp, result) {
-  const path = join7(tmpdir2, `${TEMP_PREFIX}${stamp}.json`);
+  const path = join8(tmpdir2, `${TEMP_PREFIX}${stamp}.json`);
   await writeJson(path, result);
+  return path;
+}
+async function writeReport(stateDir2, stamp, html) {
+  const reports = join8(stateDir2, REPORTS_DIR);
+  await mkdir4(reports, { recursive: true });
+  const path = join8(reports, `${stamp}.html`);
+  await writeText(path, html);
+  return path;
+}
+async function writeTempReport(tmpdir2, stamp, html) {
+  const path = join8(tmpdir2, `${TEMP_REPORT_PREFIX}${stamp}.html`);
+  await writeText(path, html);
   return path;
 }
 async function staleReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
@@ -3314,7 +4383,7 @@ async function staleReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   }
   const boundary = await expectedRealDir(stateDir2);
   if (dirInfo.isSymbolicLink() || normalizePath(await realpath3(stateDir2)) !== boundary) return { skipped: "state", boundary: null, paths: [] };
-  const reports = join7(stateDir2, REPORTS_DIR);
+  const reports = join8(stateDir2, REPORTS_DIR);
   let info;
   try {
     info = await lstat3(reports);
@@ -3328,12 +4397,12 @@ async function staleReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   for (const name of await readdir4(reports)) {
     const match = STAMPED.exec(name);
     if (match === null) continue;
-    if ((await lstat3(join7(reports, name))).isFile()) files.push({ name, stamp: match[1] });
+    if ((await lstat3(join8(reports, name))).isFile()) files.push({ name, stamp: match[1] });
   }
   const stamps = new Set(files.map((file) => file.stamp));
   const others = [...stamps].filter((stamp) => stamp !== keepStamp).sort().reverse();
   const kept = new Set(keepStamp !== null && stamps.has(keepStamp) ? [keepStamp, ...others.slice(0, Math.max(keep - 1, 0))] : others.slice(0, keep));
-  const paths = files.filter((file) => !kept.has(file.stamp)).map((file) => join7(reports, file.name)).sort();
+  const paths = files.filter((file) => !kept.has(file.stamp)).map((file) => join8(reports, file.name)).sort();
   return { skipped: null, boundary, paths };
 }
 async function pruneReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
@@ -3617,9 +4686,9 @@ var ResponseTable = class {
     const flags = new Uint8Array(capacity);
     flags.set(this.flagCells);
     this.flagCells = flags;
-    const usage = new Float64Array(USAGE_WIDTH * capacity);
-    usage.set(this.usageCells);
-    this.usageCells = usage;
+    const usage2 = new Float64Array(USAGE_WIDTH * capacity);
+    usage2.set(this.usageCells);
+    this.usageCells = usage2;
     this.capacity = capacity;
   }
   isSynthetic(row) {
@@ -3634,13 +4703,13 @@ var ResponseTable = class {
   setLast(row, column, value) {
     if (value !== null) this.nameCells[row * NAME_WIDTH + (column === "skill" ? SKILL : SERVER)] = this.nameId(value);
   }
-  setUsage(row, usage) {
+  setUsage(row, usage2) {
     const base = row * USAGE_WIDTH;
-    this.usageCells[base] = usage.input;
-    this.usageCells[base + 1] = usage.cacheRead;
-    this.usageCells[base + 2] = usage.cacheWrite;
-    this.usageCells[base + 3] = usage.output;
-    this.usageCells[base + 4] = usage.thinking;
+    this.usageCells[base] = usage2.input;
+    this.usageCells[base + 1] = usage2.cacheRead;
+    this.usageCells[base + 2] = usage2.cacheWrite;
+    this.usageCells[base + 3] = usage2.output;
+    this.usageCells[base + 4] = usage2.thinking;
     this.flagCells[row] = this.flagCells[row] | HAS_USAGE;
   }
   /** 마지막으로 적힌 끊긴 까닭이 길이 제한인지 적는다. */
@@ -3652,7 +4721,7 @@ var ResponseTable = class {
   *fold() {
     for (let row = 0; row < this.rows.size; row++) {
       const names2 = row * NAME_WIDTH;
-      const usage = row * USAGE_WIDTH;
+      const usage2 = row * USAGE_WIDTH;
       const flags = this.flagCells[row];
       yield {
         date: this.name(this.nameCells[names2 + DATE2]),
@@ -3661,11 +4730,11 @@ var ResponseTable = class {
         effort: this.name(this.nameCells[names2 + EFFORT]),
         lengthStop: (flags & LENGTH_STOP) !== 0,
         usage: (flags & HAS_USAGE) === 0 ? null : {
-          input: this.usageCells[usage],
-          cacheRead: this.usageCells[usage + 1],
-          cacheWrite: this.usageCells[usage + 2],
-          output: this.usageCells[usage + 3],
-          thinking: this.usageCells[usage + 4]
+          input: this.usageCells[usage2],
+          cacheRead: this.usageCells[usage2 + 1],
+          cacheWrite: this.usageCells[usage2 + 2],
+          output: this.usageCells[usage2 + 3],
+          thinking: this.usageCells[usage2 + 4]
         },
         skill: this.name(this.nameCells[names2 + SKILL]),
         mcpServer: this.name(this.nameCells[names2 + SERVER])
@@ -3910,14 +4979,14 @@ var ClaudeSessionParser = class {
       }
       this.responses.fillFirst(row, "model", str(message.model));
       this.responses.fillFirst(row, "effort", str(line.effort));
-      const usage = obj(message.usage);
-      if (usage !== null) {
+      const usage2 = obj(message.usage);
+      if (usage2 !== null) {
         this.responses.setUsage(row, {
-          input: num(usage.input_tokens),
-          cacheRead: num(usage.cache_read_input_tokens),
-          cacheWrite: num(usage.cache_creation_input_tokens),
-          output: num(usage.output_tokens),
-          thinking: num(obj(usage.output_tokens_details)?.thinking_tokens)
+          input: num(usage2.input_tokens),
+          cacheRead: num(usage2.cache_read_input_tokens),
+          cacheWrite: num(usage2.cache_creation_input_tokens),
+          output: num(usage2.output_tokens),
+          thinking: num(obj(usage2.output_tokens_details)?.thinking_tokens)
         });
       }
       const stop = str(message.stop_reason);
@@ -4145,7 +5214,7 @@ var ClaudeSessionParser = class {
 };
 
 // src/collect/claude.ts
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/adapters/common/lines.ts
 import { open as open3, stat as stat2 } from "node:fs/promises";
@@ -4231,7 +5300,7 @@ async function collectClaude(options) {
 }
 async function collectFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const cacheDir = options.cacheDir === null ? null : join8(options.cacheDir, "claude-code");
+  const cacheDir = options.cacheDir === null ? null : join9(options.cacheDir, "claude-code");
   const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
   const summaries = [];
   const unreadableFiles = [...list.unreadableFiles];
@@ -4338,13 +5407,13 @@ function overlappingSessions(summaries) {
 }
 
 // src/scan/claude.ts
-import { basename as basename5, join as join15, relative as relative3 } from "node:path";
+import { basename as basename6, join as join16, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join10, resolve as resolve3 } from "node:path";
+import { join as join11, resolve as resolve3 } from "node:path";
 
 // src/scan/fs.ts
-import { lstat as lstat4, readdir as readdir5, readFile as readFile3, realpath as realpath4, stat as stat3 } from "node:fs/promises";
+import { lstat as lstat4, readdir as readdir5, readFile as readFile5, realpath as realpath4, stat as stat3 } from "node:fs/promises";
 var isMissing3 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -4352,7 +5421,7 @@ var isMissing3 = (error) => {
 var stripBom = (text) => text.charCodeAt(0) === 65279 ? text.slice(1) : text;
 async function readText(path) {
   try {
-    return { status: "ok", text: stripBom(await readFile3(path, "utf8")) };
+    return { status: "ok", text: stripBom(await readFile5(path, "utf8")) };
   } catch (error) {
     return isMissing3(error) ? { status: "missing" } : { status: "unreadable" };
   }
@@ -4413,7 +5482,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename2, join as join9, resolve as resolve2 } from "node:path";
+import { basename as basename3, join as join10, resolve as resolve2 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -4507,8 +5576,8 @@ function canonicalJson(value, depth = 0) {
   if (depth > MAX_JSON_DEPTH) return null;
   if (Array.isArray(value)) {
     const parts = [];
-    for (const item of value) {
-      const part = canonicalJson(item, depth + 1);
+    for (const item2 of value) {
+      const part = canonicalJson(item2, depth + 1);
       if (part === null) return null;
       parts.push(part);
     }
@@ -4563,12 +5632,12 @@ var wellFormedPath = (path) => path.startsWith("./") && !path.split(/[\\/]/).inc
 function declarationsOf(value) {
   if (value === void 0) return [];
   const items = Array.isArray(value) ? value : [value];
-  return items.map((item) => typeof item === "string" ? item : isObject4(item) ? item : null);
+  return items.map((item2) => typeof item2 === "string" ? item2 : isObject4(item2) ? item2 : null);
 }
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join9(root, name));
+  const info = await entryInfo(join10(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -4590,7 +5659,7 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known = await readJson(join9(claudeHome2, "plugins", "known_marketplaces.json"));
+  const known = await readJson(join10(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known.status === "missing") return { file: "missing", markets };
   if (known.status !== "ok" || !isObject4(known.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known.value)) {
@@ -4599,7 +5668,7 @@ async function readMarketplaceEntries(claudeHome2) {
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join9(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join10(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -4668,7 +5737,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join9(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join10(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject4(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -4763,7 +5832,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join9(installPath, "hooks", "hooks.json");
+  const defaultHooks = join10(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -4795,7 +5864,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join9(installPath, ".mcp.json"), false);
+  await addMcpFile(join10(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -4821,7 +5890,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join9(installPath, "skills");
+  const defaultSkills = join10(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -4832,16 +5901,16 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join9(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join10(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject4(read.value) ? read.value.name : void 0;
-    const name = typeof declared === "string" && declared !== "" ? declared : basename2(ref.path);
+    const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
     out.push(await readPluginInstall(group, { file: "ok", markets: /* @__PURE__ */ new Map() }));
   }
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join9(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join10(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject4(read.value) || !isObject4(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -4870,7 +5939,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join10(resolve3(fromEnv), ".claude.json") : join10(homedir2, ".claude.json");
+  return fromEnv ? join11(resolve3(fromEnv), ".claude.json") : join11(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -4926,16 +5995,16 @@ async function readClaudeJson(path) {
 }
 
 // src/scan/instructions.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename3, join as join11 } from "node:path";
+import { basename as basename4, join as join12 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
 function lineHash(line) {
-  return createHash2("sha256").update(line).digest("hex").slice(0, 32);
+  return createHash3("sha256").update(line).digest("hex").slice(0, 32);
 }
 function countChars(text) {
   let ascii = 0;
@@ -4962,7 +6031,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join11(current, name);
+      const path = join12(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -4986,7 +6055,7 @@ function countMentions(text, targets) {
   for (const target of targets) {
     const path = target.normRoot.toLowerCase();
     let count = unified.split(path).length - 1;
-    const name = basename3(target.root).toLowerCase();
+    const name = basename4(target.root).toLowerCase();
     if ([...name].length >= 3) {
       const word = new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(name)}(?![\\p{L}\\p{N}_])`, "gu");
       const withoutPaths = path.length > 0 ? unified.split(path).join(" ") : unified;
@@ -5022,15 +6091,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join11(claudeHome2, "rules"));
-  return { paths: [join11(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join12(claudeHome2, "rules"));
+  return { paths: [join12(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join11(root, "CLAUDE.md"), join11(root, ".claude", "CLAUDE.md"), join11(root, "CLAUDE.local.md")];
+  const claudeFiles = [join12(root, "CLAUDE.md"), join12(root, ".claude", "CLAUDE.md"), join12(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join11(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join11(root, "AGENTS.md"), join11(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join12(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join12(root, "AGENTS.md"), join12(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets) {
@@ -5112,26 +6181,26 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname2, isAbsolute, join as join12, parse, resolve as resolve4 } from "node:path";
+import { dirname as dirname3, isAbsolute, join as join13, parse, resolve as resolve4 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
   const gitDir = isAbsolute(match[1]) ? match[1] : resolve4(dir, match[1]);
-  const common = await readText(join12(gitDir, "commondir"));
+  const common = await readText(join13(gitDir, "commondir"));
   if (common.status !== "ok") return null;
   const commonDir = resolve4(gitDir, common.text.trim());
-  return parse(commonDir).base.toLowerCase() === ".git" ? dirname2(commonDir) : null;
+  return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join12(dir, ".git");
+    const dotGit = join13(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
-    const parent = dirname2(dir);
+    const parent = dirname3(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -5139,7 +6208,7 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join12(context.homedir, "Desktop"), join12(context.homedir, "Documents"), join12(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join13(context.homedir, "Desktop"), join13(context.homedir, "Documents"), join13(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
@@ -5180,7 +6249,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join13 } from "node:path";
+import { join as join14 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -5200,15 +6269,15 @@ async function readLayer(path) {
 function unionList(before, next) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
-  for (const item of [...before, ...next]) {
-    const key = canonicalJson(item);
+  for (const item2 of [...before, ...next]) {
+    const key = canonicalJson(item2);
     if (key === null) {
-      out.push(item);
+      out.push(item2);
       continue;
     }
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(item);
+    out.push(item2);
   }
   return out;
 }
@@ -5282,12 +6351,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join13(dir, "managed-settings.json"));
-  const dropIns = await listDir(join13(dir, "managed-settings.d"));
+  await take(join14(dir, "managed-settings.json"));
+  const dropIns = await listDir(join14(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join13(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join14(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join13(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join14(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -5295,12 +6364,12 @@ var strings3 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string") 
 function matchers(v) {
   if (!Array.isArray(v)) return [];
   const out = [];
-  for (const item of v) {
-    if (!isObject4(item)) continue;
+  for (const item2 of v) {
+    if (!isObject4(item2)) continue;
     const m = {};
-    if (typeof item.serverName === "string") m.serverName = item.serverName;
-    if (typeof item.serverUrl === "string") m.serverUrl = item.serverUrl;
-    if (Array.isArray(item.serverCommand) && item.serverCommand.every((x) => typeof x === "string")) m.serverCommand = [...item.serverCommand];
+    if (typeof item2.serverName === "string") m.serverName = item2.serverName;
+    if (typeof item2.serverUrl === "string") m.serverUrl = item2.serverUrl;
+    if (Array.isArray(item2.serverCommand) && item2.serverCommand.every((x) => typeof x === "string")) m.serverCommand = [...item2.serverCommand];
     if (Object.keys(m).length > 0) out.push(m);
   }
   return out;
@@ -5337,9 +6406,9 @@ function viewOf(value) {
 }
 
 // src/scan/skills.ts
-import { createHash as createHash3 } from "node:crypto";
-import { lstat as lstat6, readdir as readdir6, readFile as readFile4, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename4, join as join14, relative as relative2 } from "node:path";
+import { createHash as createHash4 } from "node:crypto";
+import { lstat as lstat6, readdir as readdir6, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
+import { basename as basename5, join as join15, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -5482,7 +6551,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       return false;
     }
     for (const name of names2) {
-      const path = join14(current, name);
+      const path = join15(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -5499,22 +6568,22 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       if (total > maxBytes) return false;
       let data;
       try {
-        data = await readFile4(path);
+        data = await readFile6(path);
       } catch {
         return false;
       }
       const rel = relative2(base, path).replace(/\\/g, "/");
-      entries.push(`${rel}\0${createHash3("sha256").update(data).digest("hex")}`);
+      entries.push(`${rel}\0${createHash4("sha256").update(data).digest("hex")}`);
     }
     return true;
   };
   if (!await walk(base)) return null;
-  return createHash3("sha256").update(entries.sort().join("\n")).digest("hex");
+  return createHash4("sha256").update(entries.sort().join("\n")).digest("hex");
 }
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join14(path, "SKILL.md"));
+  const skillMd = await readText(join15(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -5541,13 +6610,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join14(dir, name);
+    const path = join15(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join14(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join15(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -5557,8 +6626,8 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join14(path, "SKILL.md"))).isFile) {
-    const single = await readSkillFolder(path, basename4(path));
+  if ((await entryInfo(join15(path, "SKILL.md"))).isFile) {
+    const single = await readSkillFolder(path, basename5(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
   return scanSkillRoot(path);
@@ -5612,7 +6681,7 @@ function usageOf(times) {
 var USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
 function projectNamesOf(refs) {
   const sorted = [...refs].sort((x, y) => x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0);
-  const original = (ref) => basename5(ref.root) || ref.root;
+  const original = (ref) => basename6(ref.root) || ref.root;
   const reading = (ref) => ref.exists && !ref.excluded;
   const reserved = new Set(sorted.filter(reading).map((ref) => original(ref).toLowerCase()));
   const taken = new Set(USER_PLACE_HEADS.map((head) => head.toLowerCase()));
@@ -5635,7 +6704,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join15(home, "settings.json"));
+  const userLayer = await readLayer(join16(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -5658,8 +6727,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join15(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join15(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join16(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join16(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -5674,9 +6743,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active);
-  const userSkillScan = await scanSkillRoot(join15(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join16(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join15(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join16(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -5748,7 +6817,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join15(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join16(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -5853,7 +6922,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join15(ref.root, ".mcp.json");
+    const file = join16(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -6000,8 +7069,8 @@ async function gatherCheckupInput(options) {
     self: options.self
   };
   const { fromCache: _fromCache, ...read } = collected.read;
-  const tools = [{ tool: "claude-code", detected: collected.detected, visibleFrom: collected.visibleFrom, overlappingSessions: collected.overlappingSessions, read, observation }];
-  return { input, collected, facts, tools };
+  const tools2 = [{ tool: "claude-code", detected: collected.detected, visibleFrom: collected.visibleFrom, overlappingSessions: collected.overlappingSessions, read, observation }];
+  return { input, collected, facts, tools: tools2 };
 }
 
 // src/commands/run-notices.ts
@@ -6025,14 +7094,20 @@ var LINES2 = {
     prune_failed: "Could not clean up {what} ({code}). Saving itself finished.",
     prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
     not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
-    result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given."
+    result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given.",
+    report_failed: "Could not write the report page to the state folder ({code}).",
+    report_unwritten: "Could not write the report page to the OS temp folder ({code}), so there is no report page this time.",
+    report_unopened: "Could not open the report page in a browser. Open the file at the report path."
   },
   ko: {
     save_failed: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 {step} \uC4F0\uC9C0 \uBABB\uD574({code}) \uB0A8\uC740 \uC800\uC7A5\uC744 \uBA48\uCDC4\uC2B5\uB2C8\uB2E4.",
     prune_failed: "{what} \uC815\uB9AC\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4({code}). \uC800\uC7A5\uC740 \uB05D\uB0AC\uC2B5\uB2C8\uB2E4.",
     prune_skipped: "{link} \uD3F4\uB354\uAC00 \uB9C1\uD06C\uB77C\uC11C {what} \uC815\uB9AC\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uB294 \uC2E4\uD589\uC774\uB77C \uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uC544\uBB34\uAC83\uB3C4 \uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC774 \uC810\uAC80\uC740 \uCE90\uC2DC\uB97C \uC4F0\uC9C0 \uC54A\uC558\uACE0 \uC810\uC218 \uC774\uB825\uC5D0\uB3C4 \uB0A8\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
-    result_unwritten: "\uD3C9\uAC00 \uACB0\uACFC \uD30C\uC77C\uC744 \uC6B4\uC601\uCCB4\uC81C \uC784\uC2DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC694\uC57D\uB9CC \uB0C5\uB2C8\uB2E4."
+    result_unwritten: "\uD3C9\uAC00 \uACB0\uACFC \uD30C\uC77C\uC744 \uC6B4\uC601\uCCB4\uC81C \uC784\uC2DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC694\uC57D\uB9CC \uB0C5\uB2C8\uB2E4.",
+    report_failed: "\uACB0\uACFC \uD654\uBA74\uC744 \uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4({code}).",
+    report_unwritten: "\uACB0\uACFC \uD654\uBA74\uC744 \uC6B4\uC601\uCCB4\uC81C \uC784\uC2DC \uD3F4\uB354\uC5D0 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC774\uBC88\uC5D0\uB294 \uACB0\uACFC \uD654\uBA74\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+    report_unopened: "\uACB0\uACFC \uD654\uBA74\uC744 \uBE0C\uB77C\uC6B0\uC800\uB85C \uC5F4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC758 \uACBD\uB85C\uC5D0 \uC788\uB294 \uD30C\uC77C\uC744 \uC5EC\uC138\uC694."
   }
 };
 function runNoticeText(notice, lang) {
@@ -6048,20 +7123,26 @@ function runNoticeText(notice, lang) {
       return lines.not_saved;
     case "result_unwritten":
       return fill(lines.result_unwritten, { code: notice.code });
+    case "report_failed":
+      return fill(lines.report_failed, { code: notice.code });
+    case "report_unwritten":
+      return fill(lines.report_unwritten, { code: notice.code });
+    case "report_unopened":
+      return lines.report_unopened;
   }
 }
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename6, dirname as dirname3 } from "node:path";
+import { basename as basename7, dirname as dirname4 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename6(entryFile) === BUNDLE_FILE && basename6(dirname3(entryFile)) === "scripts") {
+  if (basename7(entryFile) === BUNDLE_FILE && basename7(dirname4(entryFile)) === "scripts") {
     try {
-      skillRealPaths.push(normalizePath(await realpath6(dirname3(dirname3(entryFile)))));
+      skillRealPaths.push(normalizePath(await realpath6(dirname4(dirname4(entryFile)))));
     } catch {
     }
   }
@@ -6080,7 +7161,7 @@ async function runCheckup(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join16(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join17(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -6089,7 +7170,7 @@ async function runCheckup(options) {
   const evaluation = evaluate(gathered.input);
   const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
   const stamp = resultStamp(options.clock.nowMs);
-  const notices = [];
+  const notices2 = [];
   let saved = false;
   let resultPath = null;
   if (options.save) {
@@ -6102,46 +7183,80 @@ async function runCheckup(options) {
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;
     } catch (error) {
-      notices.push({ kind: "save_failed", step, code: codeOf(error) });
+      notices2.push({ kind: "save_failed", step, code: codeOf(error) });
     }
     if (saved) {
       for (const [what, prune] of [["reports", () => pruneReports(options.stateDir, KEEP_REPORTS, stamp)], ["cache", () => pruneCache(options.stateDir)]]) {
         try {
           const report = await prune();
-          if (report.skipped !== null) notices.push({ kind: "prune_skipped", what, link: report.skipped });
+          if (report.skipped !== null) notices2.push({ kind: "prune_skipped", what, link: report.skipped });
         } catch (error) {
-          notices.push({ kind: "prune_failed", what, code: codeOf(error) });
+          notices2.push({ kind: "prune_failed", what, code: codeOf(error) });
         }
       }
     }
   } else {
-    notices.push({ kind: "not_saved" });
+    notices2.push({ kind: "not_saved" });
   }
   if (resultPath === null) {
     try {
       resultPath = await writeTempResult(options.tmpdir, stamp, result);
     } catch (error) {
-      notices.push({ kind: "result_unwritten", code: codeOf(error) });
+      notices2.push({ kind: "result_unwritten", code: codeOf(error) });
     }
   }
-  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
-  return { summary: checkupSummary(result, null), run: run2, result };
+  const round = saved ? await historyCount(options.stateDir).catch(() => null) : null;
+  const view = reportView(result, { saved, round });
+  const repairs = view.findings.filter((finding) => finding.category === "repair").length;
+  const html = reportHtml(view, await loadArt(assetsDirOf(options.entryFile), { tier: result.score.tier, unreadable: view.unreadable, repairs }));
+  let reportPath = null;
+  if (saved) {
+    try {
+      reportPath = await writeReport(options.stateDir, stamp, html);
+    } catch (error) {
+      notices2.push({ kind: "report_failed", code: codeOf(error) });
+    }
+  }
+  if (reportPath === null) {
+    try {
+      reportPath = await writeTempReport(options.tmpdir, stamp, html);
+    } catch (error) {
+      notices2.push({ kind: "report_unwritten", code: codeOf(error) });
+    }
+  }
+  if (reportPath !== null && options.open !== void 0 && !await options.open(reportPath)) notices2.push({ kind: "report_unopened" });
+  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
+  return { summary: checkupSummary(result, reportPath), run: run2, result };
 }
 
-// src/core/copy/lang.ts
-var LANGS = ["en", "ko"];
-function supportedLang(tag) {
-  if (typeof tag !== "string") return null;
-  const primary = tag.trim().toLowerCase().split(/[-_.@]/)[0];
-  return LANGS.find((lang) => lang === primary) ?? null;
+// src/commands/open.ts
+import { spawn } from "node:child_process";
+function openerFor(platform, path) {
+  if (platform === "win32") return { command: "explorer.exe", args: [path] };
+  if (platform === "darwin") return { command: "open", args: [path] };
+  if (platform === "linux" || platform === "freebsd" || platform === "openbsd") return { command: "xdg-open", args: [path] };
+  return null;
 }
-function pickLang(flag, osLocale) {
-  return supportedLang(flag) ?? supportedLang(osLocale) ?? "en";
+function openInBrowser(path, platform = process.platform, start = spawn) {
+  const opener = openerFor(platform, path);
+  if (opener === null) return Promise.resolve(false);
+  return new Promise((resolve5) => {
+    try {
+      const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
+      child.once("error", () => resolve5(false));
+      child.once("spawn", () => {
+        child.unref();
+        resolve5(true);
+      });
+    } catch {
+      resolve5(false);
+    }
+  });
 }
 
 // src/commands/clean.ts
 import { lstat as lstat7, readdir as readdir7, realpath as realpath7 } from "node:fs/promises";
-import { join as join17 } from "node:path";
+import { join as join18 } from "node:path";
 var isMissing4 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
@@ -6156,13 +7271,13 @@ async function cleanReports(path, boundary) {
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat7(join17(path, name));
+    const info = await lstat7(join18(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join17(path, name);
+    const full = join18(path, name);
     const info = await lstat7(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
@@ -6176,7 +7291,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join17(dir, spec.name);
+  const path = join18(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -6219,13 +7334,13 @@ async function clean(dir, level) {
 
 // src/commands/doctor.ts
 import { mkdir as mkdir5, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join18 } from "node:path";
+import { join as join19 } from "node:path";
 import * as zlib from "node:zlib";
 function hasZstd() {
   return typeof zlib.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join18(dir, `.write-probe-${process.pid}`);
+  const probe = join19(dir, `.write-probe-${process.pid}`);
   try {
     await mkdir5(dir, { recursive: true });
     await writeFile4(probe, "ok");
@@ -6248,7 +7363,7 @@ async function doctor(input) {
 
 // src/commands/where.ts
 import { lstat as lstat8, readdir as readdir8 } from "node:fs/promises";
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 var isMissing5 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
@@ -6265,11 +7380,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat8(join19(dir, spec.name));
+        const info = await lstat8(join20(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join19(dir, spec.name));
+          const size = await treeSize(join20(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -6339,18 +7454,21 @@ async function run(command, rest, context) {
   }
   const args = command === "checkup" ? checkupArgs(rest) : null;
   if (args !== null) {
+    const platform = context.platform ?? process.platform;
+    const open4 = context.open ?? ((path) => openInBrowser(path, platform));
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
       tmpdir: context.tmpdir ?? tmpdir(),
-      platform: context.platform ?? process.platform,
+      platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
       stateDir: stateDir(context.homedir),
       save: !args.flags.has("--no-save"),
       rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
-      ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
+      ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir },
+      ...args.flags.has("--no-open") ? {} : { open: open4 }
     });
     printJson({ summary: outcome.summary, run: outcome.run });
     return 0;

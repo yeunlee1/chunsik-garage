@@ -1,4 +1,4 @@
-// 명령 입구의 aq checkup을 시험한다. 받는 옵션, 처음 보일 언어의 차례, 표준 출력에는 요약과 실행 기록만 내는 것, 모르는 옵션을 거절하는 것이다(설계 7.4, 12.3, 13.2, 20.1)
+// 명령 입구의 aq checkup을 시험한다. 받는 옵션, 결과 화면을 여는지, 처음 보일 언어의 차례, 표준 출력에는 요약과 실행 기록만 내는 것, 모르는 옵션을 거절하는 것이다(설계 7.4, 12.3, 13.2, 20.1)
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +12,7 @@ beforeEach(async () => {
   root = await makeTemp();
   await put(join(root, "home", ".claude", "CLAUDE.md"), "시험을 먼저 돌린다.\n");
   await put(join(root, "tmp", ".keep"), "");
-  context = { env: {}, homedir: join(root, "home"), tmpdir: join(root, "tmp"), platform: process.platform, clock: { nowMs: Date.parse("2026-11-12T03:00:00Z"), timeZone: "Asia/Seoul" }, entryFile: join(root, "src", "entry.ts"), managedDir: join(root, "managed"), locale: "en-US" };
+  context = { env: {}, homedir: join(root, "home"), tmpdir: join(root, "tmp"), platform: process.platform, clock: { nowMs: Date.parse("2026-11-12T03:00:00Z"), timeZone: "Asia/Seoul" }, entryFile: join(root, "src", "entry.ts"), managedDir: join(root, "managed"), locale: "en-US", open: async () => true };
   printed = "";
   vi.spyOn(process.stdout, "write").mockImplementation((chunk: string | Uint8Array) => {
     printed += String(chunk);
@@ -25,12 +25,23 @@ afterEach(async () => {
 });
 
 describe("aq checkup", () => {
-  it("요약과 실행 기록만 JSON으로 내고 0을 돌려준다. 평가 결과는 결과 폴더에 쓴다", async () => {
+  it("--no-open이 없으면 쓴 결과 화면을 열고, 있으면 열지 않는다", async () => {
+    const open = vi.fn(async () => true);
+    expect(await main(["checkup", "--no-save"], { ...context, open })).toBe(0);
+    expect(open).toHaveBeenCalledWith(JSON.parse(printed).run.reportPath);
+    printed = "";
+    open.mockClear();
+    expect(await main(["checkup", "--no-save", "--no-open"], { ...context, open })).toBe(0);
+    expect(open).not.toHaveBeenCalled();
+    expect(JSON.parse(printed).run.reportPath).toMatch(/[.]html$/);
+  });
+
+  it("요약과 실행 기록만 JSON으로 내고 0을 돌려준다. 평가 결과와 결과 화면은 결과 폴더에 쓴다", async () => {
     expect(await main(["checkup", "--no-open"], context)).toBe(0);
     const output = JSON.parse(printed);
     expect(Object.keys(output)).toEqual(["summary", "run"]);
-    expect(output.run).toMatchObject({ saved: true, reportPath: null, notices: [] });
-    expect(await readdir(join(root, "home", ".chunsik-garage", "reports"))).toEqual([output.run.resultPath.split(/[\\/]/).pop()]);
+    expect(output.run).toMatchObject({ saved: true, reportPath: join(root, "home", ".chunsik-garage", "reports", "2026-11-12T03-00-00-000Z.html"), notices: [] });
+    expect((await readdir(join(root, "home", ".chunsik-garage", "reports"))).sort()).toEqual([output.run.reportPath, output.run.resultPath].map((path: string) => path.split(/[\\/]/).pop()));
   });
 
   it("--no-save는 상태 폴더에 쓰지 않고 OS 임시 폴더에 결과를 쓴다. --rescan도 받는다", async () => {

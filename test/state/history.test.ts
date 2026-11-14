@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AxisScore, Overall } from "../../src/core/scoreboard.ts";
-import { appendHistory, HISTORY_FILE, historyEntry } from "../../src/state/history.ts";
+import { appendHistory, HISTORY_FILE, historyCount, historyEntry } from "../../src/state/history.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 
 let root: string;
@@ -61,5 +61,17 @@ describe("이력에 덧붙이기", () => {
     const entry = historyEntry({ rulesVersion: "1.0.0", score: scored, axes: axes(88, 74, 69, 97) }, Date.UTC(2026, 10, 13));
     await appendHistory(dir, entry);
     expect(await readFile(join(dir, HISTORY_FILE), "utf8")).toBe(`${JSON.stringify(entry)}\n`);
+  });
+});
+
+describe("이력의 줄 수(결과 화면의 회차)", () => {
+  it("파일이 없으면 0이고, 덧붙인 줄을 센다. 빈 줄은 세지 않는다", async () => {
+    expect(await historyCount(dir)).toBe(0);
+    const entry = historyEntry({ rulesVersion: "1.0.0", score: scored, axes: axes(88, 74, 69, 97) }, Date.UTC(2026, 10, 13));
+    await appendHistory(dir, entry);
+    await appendHistory(dir, entry);
+    expect(await historyCount(dir)).toBe(2);
+    await writeFile(join(dir, HISTORY_FILE), `${JSON.stringify(entry)}\n\n${JSON.stringify(entry)}\n  \n`);
+    expect(await historyCount(dir)).toBe(2);
   });
 });

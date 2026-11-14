@@ -148,6 +148,32 @@ describe("요약의 문장", () => {
     expect(checkupSummary(result, null).text.noFixFirst).toBeNull();
   });
 
+  it("AQ를 내지 않았으면 먼저 고칠 것의 칸은 두고 숫자 자료와 문장을 비운다. 정비할 것이 있으므로 빈 목록의 문장도 없다(설계 12.3)", () => {
+    const input = evaluationInput([claudeTool({ sessions: [{ days: { "2026-11-12": { responses: 1, humanRequests: 1 } } }] })]);
+    const result = checkupResult({ input, evaluation: evaluate(input), collected: [collected], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    expect(result.score.aq).toBeNull();
+    expect(result.findings.some((finding) => finding.category === "repair")).toBe(true);
+    const summary = checkupSummary(result, null);
+    expect(Object.keys(summary)).toContain("fixFirst");
+    expect(summary.fixFirst).toEqual([]);
+    expect(summary.text.fixFirst).toEqual([]);
+    expect(summary.text.noFixFirst).toBeNull();
+    // 같은 결과에서 AQ만 냈다고 바꾸면 먼저 고칠 것이 나온다. AQ 0점도 낸 점수라서 비우지 않는다(0과 null을 가른다)
+    const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, 3).map((finding) => finding.ruleId);
+    for (const [aq, grade, tier] of [[70, "B", 3], [0, "D", 1]] as const) {
+      const scored = checkupSummary({ ...result, score: { ...result.score, aq, grade, tier, withheld: [] } as CheckupResult["score"] }, null);
+      expect(scored.fixFirst.map((fix) => fix.ruleId), `AQ ${aq}`).toEqual(repairs);
+      expect(scored.text.fixFirst, `AQ ${aq}`).toHaveLength(repairs.length);
+    }
+  });
+
+  it("AQ를 내지 않았고 정비할 것도 없으면 빈 목록의 문장을 그대로 싣는다", () => {
+    const base = baseResult();
+    const result = { ...base, lang: "ko" as const, score: { ...base.score, aq: null, grade: null, tier: null, withheld: ["too_few_days"] } as CheckupResult["score"], findings: [finding("E1", { category: "average" })] };
+    const text = { ...result.text, ko: { ...result.text.ko, noRepairs: "지금은 고칠 것이 없습니다." } };
+    expect(checkupSummary({ ...result, text }, null).text).toMatchObject({ fixFirst: [], noFixFirst: "지금은 고칠 것이 없습니다." });
+  });
+
   it("가장 잘하는 것이나 먼저 고칠 것이 없으면 빈 목록의 문장을 싣는다", () => {
     const result = { ...baseResult(), lang: "ko" as const, findings: [finding("E1", { category: "average" })] };
     const text = { ...result.text, ko: { ...result.text.ko, noStrengths: "아직 뚜렷한 강점을 찾지 못했습니다. 고칠 것부터 하나씩 해 봅시다.", noRepairs: "지금은 고칠 것이 없습니다." } };

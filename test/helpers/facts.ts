@@ -19,6 +19,7 @@ export function instructions(input: Partial<InstructionSet> = {}): InstructionSe
 export function project(root: string, input: Partial<ProjectFact> = {}): ProjectFact {
   return {
     root,
+    name: root.split(/[\/]/).filter(Boolean).pop() ?? root,
     normRoot: root,
     kind: "git",
     exists: true,

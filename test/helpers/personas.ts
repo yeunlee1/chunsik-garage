@@ -93,7 +93,7 @@ export function personaInput(p: Persona): EvaluationInput {
   });
 
   const globalLines = Array.from({ length: 20 }, (_, i) => `global${pad(i + 1)}`);
-  const problems: SetupProblem[] = Array.from({ length: p.problems }, (_, i) => ({ kind: "noFrontmatter", owner: "user", path: `/home/u/.claude/skills/broken${i + 1}`, realPath: `/home/u/.claude/skills/broken${i + 1}` }));
+  const problems: SetupProblem[] = Array.from({ length: p.problems }, (_, i) => ({ kind: "noFrontmatter", owner: "user", path: `/home/u/.claude/skills/broken${i + 1}`, realPath: `/home/u/.claude/skills/broken${i + 1}`, place: `~/.claude/skills/broken${i + 1}` }));
   const copies = skills.slice(0, p.copiedSkills).map((fact) => skill(fact.name, { scope: "project", projectRoot: roots[0]!, path: `${roots[0]}/.claude/skills/${fact.name}`, enabled: false }));
   const setup = {
     globalInstructions: p.globalInstructions ? instructions({ files: [instructionFile("/home/u/.claude/CLAUDE.md", { bytes: 2000 })], lineHashes: globalLines }) : instructions(),

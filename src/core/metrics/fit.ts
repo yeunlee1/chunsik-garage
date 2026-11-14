@@ -20,6 +20,8 @@ const projectIn = (tool: ToolSetup | undefined, normRoot: string): ProjectFact |
 /** 지침이 없다고 센 프로젝트와, 주로 쓴 도구 가운데 그 도구가 읽는 지침이 없는 도구(도구 식별자 차례) */
 export interface MissingInstructions {
   normRoot: string;
+  /** 프로젝트 폴더의 이름(ProjectFact.name) */
+  name: string;
   tools: string[];
 }
 
@@ -27,6 +29,8 @@ export interface MissingInstructions {
 export interface WorstOverlap {
   tool: ToolId;
   normRoot: string;
+  /** 프로젝트 폴더의 이름(ProjectFact.name) */
+  name: string;
 }
 
 const hasInstructionFiles = (set: InstructionSet): boolean => set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
@@ -51,7 +55,7 @@ function f3(tools: readonly ToolSetup[], usage: ProjectUsage): { measurement: Me
     if (project.kind !== "git" && !treatedAsProject(project) && !tools.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
     targets++;
     const without = mainTools(use).filter((tool) => !hasInstructions(projectIn(byId.get(tool), project.normRoot)));
-    if (without.length > 0) missing.push({ normRoot: project.normRoot, tools: without });
+    if (without.length > 0) missing.push({ normRoot: project.normRoot, name: project.name, tools: without });
   }
   const withInstructions = targets - missing.length;
   const evidence = { targets, withInstructions };
@@ -79,14 +83,14 @@ function f4(tools: readonly ToolSetup[]): { measurement: Measurement; worst: Wor
       if (!project.instructions.files.some((file) => !file.sameAsGlobal)) continue;
       comparedProjects++;
       const overlapping = new Set(project.instructions.lineHashes.filter((hash) => lines.has(hash))).size;
-      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, overlapping, globalLines: lines.size };
+      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name: project.name, overlapping, globalLines: lines.size };
     }
   }
   // 읽지 못한 곳에 겹치는 줄이 있을 수 있다. 보이는 것만으로 재면 좋게 틀린다(설계 11.3)
   if (unreadable) return { measurement: unmeasured("unreadable", { comparedProjects: null, globalLines: null, overlappingLines: null }), worst: null };
   if (worst === null) return { measurement: unmeasured("not_applicable", { comparedProjects: 0, globalLines, overlappingLines: 0 }), worst: null };
   const evidence = { comparedProjects, globalLines: worst.globalLines, overlappingLines: worst.overlapping };
-  return { measurement: scored(worst.overlapping / worst.globalLines, evidence), worst: { tool: worst.tool, normRoot: worst.normRoot } };
+  return { measurement: scored(worst.overlapping / worst.globalLines, evidence), worst: { tool: worst.tool, normRoot: worst.normRoot, name: worst.name } };
 }
 
 function f5(tool: ToolSetup): Measurement {

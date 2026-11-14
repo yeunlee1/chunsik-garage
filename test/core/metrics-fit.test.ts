@@ -34,7 +34,12 @@ describe("F3 자주 쓰는 프로젝트에 지침이 있다", () => {
     const projects = [withGuide("/work/a"), project("/work/b"), withGuide("/work/c"), project("/work/rare")];
     const result = merged(tool({ projects }, [...at("/work/a", 3), ...at("/work/b", 4), ...at("/work/c", 5), ...at("/work/rare", 2)]));
     expect(result.F3).toEqual({ status: "scored", value: 2 / 3, evidence: { targets: 3, withInstructions: 2 } });
-    expect(result.missingInstructions).toEqual([{ normRoot: "/work/b", tools: ["claude-code"] }]);
+    expect(result.missingInstructions).toEqual([{ normRoot: "/work/b", name: "b", tools: ["claude-code"] }]);
+  });
+  it("지침이 없는 프로젝트에는 폴더 이름을 함께 싣는다. 정규화하기 전 뿌리의 마지막 이름이라 대소문자가 그대로다", () => {
+    const mixed = project("C:/Work/MyApp", { normRoot: "c:/work/myapp", cwds: ["c:/work/myapp"] });
+    const result = merged(tool({ projects: [mixed] }, at("c:/work/myapp", 3)));
+    expect(result.missingInstructions).toEqual([{ normRoot: "c:/work/myapp", name: "MyApp", tools: ["claude-code"] }]);
   });
   it("대상은 깃 저장소 뿌리이거나, 깃이 아니어도 프로젝트 지침이나 설정이 이미 있는 폴더다", () => {
     const projects = [
@@ -79,7 +84,7 @@ describe("F3 자주 쓰는 프로젝트에 지침이 있다", () => {
       const codex = tool({ projects: [project("/work/a")] }, at("/work/a", 3), "codex");
       const result = merged(claude, codex);
       expect(result.F3).toMatchObject({ status: "scored", value: 0, evidence: { targets: 1, withInstructions: 0 } });
-      expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", tools: ["codex"] }]);
+      expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
     });
     it("한 도구로 여러 번 일하고 다른 도구를 한 번 열어 본 프로젝트는 여러 번 쓴 도구만 본다", () => {
       const claude = tool({ projects: claudeOnly("/work/a") }, at("/work/a", 20));
@@ -91,11 +96,11 @@ describe("F3 자주 쓰는 프로젝트에 지침이 있다", () => {
       expect(more.F3).toMatchObject({ status: "scored", value: 1 });
       const tie = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 2)), tool({ projects: [project("/work/a")] }, at("/work/a", 2), "codex"));
       expect(tie.F3).toMatchObject({ status: "scored", value: 0 });
-      expect(tie.missingInstructions).toEqual([{ normRoot: "/work/a", tools: ["codex"] }]);
+      expect(tie.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
     });
     it("그 도구의 셋팅 사실에 그 프로젝트가 없으면 그 도구의 지침은 없는 것이다", () => {
       const result = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 3)), tool({ projects: [] }, at("/work/a", 3), "codex"));
-      expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", tools: ["codex"] }]);
+      expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
     });
   });
 });
@@ -108,7 +113,11 @@ describe("F4 전역과 프로젝트 지침이 겹치지 않는다", () => {
     const projects = [withLines("/work/a", ["g1", "x"]), withLines("/work/b", ["g1", "g2", "g3", "y"]), withLines("/work/c", [])];
     const result = merged(tool({ globalInstructions: GLOBAL, projects }));
     expect(result.F4).toEqual({ status: "scored", value: 0.75, evidence: { comparedProjects: 3, globalLines: 4, overlappingLines: 3 } });
-    expect(result.worstOverlap).toEqual({ tool: "claude-code", normRoot: "/work/b" });
+    expect(result.worstOverlap).toEqual({ tool: "claude-code", normRoot: "/work/b", name: "b" });
+  });
+  it("가장 많이 겹치는 프로젝트에도 폴더 이름을 함께 싣는다", () => {
+    const mixed = withLines("C:/Work/MyApp", ["g1"], { normRoot: "c:/work/myapp", cwds: ["c:/work/myapp"] });
+    expect(merged(tool({ globalInstructions: GLOBAL, projects: [mixed] })).worstOverlap).toEqual({ tool: "claude-code", normRoot: "c:/work/myapp", name: "MyApp" });
   });
   it("세션을 세지 않는다. 점수 구간에 쓰지 않은 프로젝트의 지침도 견준다", () => {
     expect(merged(tool({ globalInstructions: GLOBAL, projects: [withLines("/work/idle", ["g1", "g2", "g3", "g4"])] })).F4).toMatchObject({ status: "scored", value: 1 });
@@ -121,7 +130,7 @@ describe("F4 전역과 프로젝트 지침이 겹치지 않는다", () => {
   });
   it("가장 큰 값이 같은 프로젝트가 여럿이면 정규화한 뿌리가 앞선 것을 가리킨다", () => {
     const projects = [withLines("/work/b", ["g1", "g2"]), withLines("/work/a", ["g3", "g4"])];
-    expect(merged(tool({ globalInstructions: GLOBAL, projects })).worstOverlap).toEqual({ tool: "claude-code", normRoot: "/work/a" });
+    expect(merged(tool({ globalInstructions: GLOBAL, projects })).worstOverlap).toEqual({ tool: "claude-code", normRoot: "/work/a", name: "a" });
   });
   it("한쪽 지침이 없거나 전역 지침에 견줄 줄이 없으면 not_applicable이다", () => {
     const NA = { status: "unmeasured", reason: "not_applicable" };
@@ -152,7 +161,7 @@ describe("F4 전역과 프로젝트 지침이 겹치지 않는다", () => {
     const codex = tool({ globalInstructions: written("/home/u/.codex/AGENTS.md", ["c1", "c2"]), projects: [withLines("/work/a", ["c1", "c2"])] }, [], "codex");
     const result = merged(claude, codex);
     expect(result.F4).toEqual({ status: "scored", value: 1, evidence: { comparedProjects: 2, globalLines: 2, overlappingLines: 2 } });
-    expect(result.worstOverlap).toEqual({ tool: "codex", normRoot: "/work/a" });
+    expect(result.worstOverlap).toEqual({ tool: "codex", normRoot: "/work/a", name: "a" });
     expect(merged(claude, tool({}, [], "codex")).F4).toMatchObject({ status: "scored", value: 0.25 });
   });
 });

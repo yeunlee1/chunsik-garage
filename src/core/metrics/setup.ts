@@ -77,20 +77,37 @@ function s2(tools: readonly ToolSetup[], safeguards: readonly ToolSafeguard[]): 
 
 const PROBLEM_COUNTERS = { danglingLink: "danglingLinks", noFrontmatter: "noFrontmatter", unparsable: "unparsable" } as const satisfies Record<SetupProblem["kind"], string>;
 
-function s3(tools: readonly ToolSetup[]): Measurement {
-  const counts = { danglingLinks: 0, noFrontmatter: 0, unparsable: 0 };
+/** S3가 센 문제 하나. 결과 화면이 그 위치를 보인다(설계 「3단계 계획 전 결정」의 4번) */
+export interface CountedProblem {
+  tool: ToolId;
+  kind: SetupProblem["kind"];
+  /** 도구의 설정 폴더나 프로젝트 폴더 이름부터의 위치(SetupProblem.place). 절대 경로가 아니다 */
+  place: string;
+}
+
+/**
+ * S3가 세는 문제. 사용자가 직접 고치는 셋팅만 세고(플러그인 안의 것, 관리 정책 파일, 도구가 쓰는 상태 파일은 세지 않는다), 같은 실제 파일은 처음 본 것 하나다.
+ * 차례는 도구의 차례, 그 안에서는 스캐너의 차례(경로, 종류, 주인)이고 위치로 다시 정렬하지 않는다
+ */
+export function countedProblems(tools: readonly ToolSetup[]): CountedProblem[] {
+  const counted: CountedProblem[] = [];
   const seen = new Set<string>();
   for (const tool of tools) {
     for (const problem of tool.setup.problems) {
-      // 사용자가 직접 고치는 셋팅만 센다. 플러그인 안의 것, 관리 정책 파일, 도구가 쓰는 상태 파일은 세지 않는다
       if (problem.owner !== "user") continue;
-      const place = problem.realPath ?? problem.path;
-      if (seen.has(place)) continue;
-      seen.add(place);
-      counts[PROBLEM_COUNTERS[problem.kind]]++;
+      const at = problem.realPath ?? problem.path;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      counted.push({ tool: tool.tool, kind: problem.kind, place: problem.place });
     }
   }
-  return scored(seen.size, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: seen.size, unparsable: counts.unparsable });
+  return counted;
+}
+
+function s3(problems: readonly CountedProblem[]): Measurement {
+  const counts = { danglingLinks: 0, noFrontmatter: 0, unparsable: 0 };
+  for (const problem of problems) counts[PROBLEM_COUNTERS[problem.kind]]++;
+  return scored(problems.length, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: problems.length, unparsable: counts.unparsable });
 }
 
 function s5(tool: ToolSetup): Measurement {
@@ -107,10 +124,11 @@ function s5(tool: ToolSetup): Measurement {
   return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
 }
 
-/** 도구를 합쳐서 재는 셋팅 규칙. tools는 점수에 넣는 도구다. safeguards는 S2의 근거이고 도구의 차례 그대로다. */
-export function mergedSetupRules(tools: readonly ToolSetup[]): Record<"S1" | "S2" | "S3", Measurement> & { safeguards: ToolSafeguard[] } {
+/** 도구를 합쳐서 재는 셋팅 규칙. tools는 점수에 넣는 도구다. safeguards는 S2의 근거이고 도구의 차례 그대로다. setupProblems는 S3가 센 문제다 */
+export function mergedSetupRules(tools: readonly ToolSetup[]): Record<"S1" | "S2" | "S3", Measurement> & { safeguards: ToolSafeguard[]; setupProblems: CountedProblem[] } {
   const safeguards = tools.map(safeguardOf);
-  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(tools), safeguards };
+  const setupProblems = countedProblems(tools);
+  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
 }
 
 /** 도구 하나에서 재는 셋팅 규칙 */

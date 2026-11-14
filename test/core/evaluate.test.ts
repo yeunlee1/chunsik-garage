@@ -62,7 +62,7 @@ describe("evaluate", () => {
     expect(finding(result, "I3")).toMatchObject({ value: 2, evidence: { humanRequests: 30, toolCalls: 60 } });
     expect(finding(result, "I4")).toMatchObject({ value: 1, score: 0 });
     expect(result.safeguards).toEqual([{ tool: "claude-code", guardHook: false, permissionChecks: true }]);
-    expect(result.worstOverlap).toEqual({ tool: "claude-code", normRoot: APP });
+    expect(result.worstOverlap).toEqual({ tool: "claude-code", normRoot: APP, name: "app" });
     expect(result.missingInstructions).toEqual([]);
     expect(result.projects.projects.map((use) => [use.project.normRoot, use.total])).toEqual([[APP, 3]]);
   });

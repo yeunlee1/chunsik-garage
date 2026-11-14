@@ -11,7 +11,7 @@ import { judgeSkills, type SkillBundle } from "./installs/skills.ts";
 import { recordMap } from "./installs/verdict.ts";
 import { fitToolRules, mergedFitRules, type MissingInstructions, type WorstOverlap } from "./metrics/fit.ts";
 import { intensityRules } from "./metrics/intensity.ts";
-import { highestMainVersion, mergedSetupRules, setupToolRules, type ToolSafeguard, type ToolSetup } from "./metrics/setup.ts";
+import { highestMainVersion, mergedSetupRules, setupToolRules, type CountedProblem, type ToolSafeguard, type ToolSetup } from "./metrics/setup.ts";
 import { usageRules } from "./metrics/usage.ts";
 import { projectLookup, projectUsage, type NormalizedCwds, type ProjectUsage } from "./projects.ts";
 import { RULES_VERSION } from "./rules.ts";
@@ -75,6 +75,8 @@ export interface Evaluation {
   missingInstructions: MissingInstructions[];
   /** F4에서 전역 지침과 가장 많이 겹친 프로젝트 지침 */
   worstOverlap: WorstOverlap | null;
+  /** S3가 센 문제(위치와 종류) */
+  setupProblems: CountedProblem[];
   /** 점수 구간에 주 세션이 있었던 프로젝트 */
   projects: ProjectUsage;
 }
@@ -110,7 +112,7 @@ export function evaluate(input: EvaluationInput): Evaluation {
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured };
   });
 
-  const { S1, S2, S3, safeguards } = mergedSetupRules(setups);
+  const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
   const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage);
   const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage) }, tools: judged.map((tool) => tool.measured) });
 
@@ -132,6 +134,7 @@ export function evaluate(input: EvaluationInput): Evaluation {
     safeguards,
     missingInstructions,
     worstOverlap,
+    setupProblems,
     projects: usage,
   };
 }

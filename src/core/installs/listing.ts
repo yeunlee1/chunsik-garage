@@ -97,3 +97,23 @@ export function restartedRecently(listings: readonly SessionListing[], recordNam
   }
   return listings.some((listing) => listing.cwdKey !== null && loadedIn.has(listing.cwdKey) && listing.initial !== null && recent(listing.firstDate) && !anyIn(recordNames, listing.initial));
 }
+
+/**
+ * ㉱의 근거가 든 날. restartedRecently가 보는 두 몫에서 지금 최근 14일 안인 근거마다 그 날을 낸다(다시 실린 날, 처음 목록에 없던 세션이 시작한 날).
+ * 시작한 날을 모르는 세션이 근거이면 null이다. 그 근거는 날이 지나도 최근으로 남는다. 근거가 없으면 빈 목록이다.
+ */
+export function restartDates(listings: readonly SessionListing[], recordNames: readonly string[], today: LocalDate): LocalDate[] | null {
+  const recent = (date: LocalDate): boolean => !olderThan(today, date, ESTABLISHED_DAYS);
+  const dates: LocalDate[] = [];
+  const loadedIn = new Set<string>();
+  for (const listing of listings) {
+    for (const day of listing.days) if (recent(day.date) && anyIn(recordNames, day.reloaded)) dates.push(day.date);
+    if (listing.cwdKey !== null && anyIn(recordNames, listing.everLoaded)) loadedIn.add(listing.cwdKey);
+  }
+  for (const listing of listings) {
+    if (listing.cwdKey === null || !loadedIn.has(listing.cwdKey) || listing.initial === null || anyIn(recordNames, listing.initial)) continue;
+    if (listing.firstDate === null) return null;
+    if (recent(listing.firstDate)) dates.push(listing.firstDate);
+  }
+  return dates;
+}

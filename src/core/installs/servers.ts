@@ -1,4 +1,5 @@
 // E6(안 쓰는 MCP 서버)을 도구 하나에서 잰다. 서버 하나가 설치 하나이고, 설정 층을 합쳐 켜져 있는 서버만 센다(순수 함수, 설계 11.3 E6)
+import type { LocalDate } from "../../adapters/common/dates.ts";
 import type { McpFact } from "../../scan/types.ts";
 import { blank, unmeasured, type Measurement } from "../measure.ts";
 import type { ToolSetup } from "../metrics/setup.ts";
@@ -6,7 +7,7 @@ import { byContent } from "../order.ts";
 import { enablementUnread, unread } from "../readability.ts";
 import { BLANK_INSTALL_EVIDENCE, measureInstalls, type Counted } from "./gate.ts";
 import { sameInstall } from "./same.ts";
-import { serverVerdict, type Verdict, type VerdictContext } from "./verdict.ts";
+import { serverJudgeableFrom, serverVerdict, type Verdict, type VerdictContext } from "./verdict.ts";
 
 /** E6의 분모(판정된 서버)와 판정할 수 있는 대상의 최소 개수 */
 export const MIN_JUDGED_SERVERS = 2;
@@ -19,6 +20,8 @@ export interface JudgedServer {
    * plugin_unread는 MCP 정의를 읽지 못했거나 구성을 모르는 플러그인이 넣은 서버다(읽힌 것도 세지 않는다). 판정할 수 있으면 null이다
    */
   excluded: "no_definition" | "plugin_unread" | null;
+  /** 판정을 시작할 수 있는 날(serverJudgeableFrom). 쓰는지 모름이고 구조상 빼지 않은 서버만 날을 셈하고, 그 밖은 null이다(설계 12.1, 13.1) */
+  judgeFrom: LocalDate | null;
 }
 
 export interface ServerJudgement {
@@ -56,9 +59,10 @@ export function judgeServers(tool: ToolSetup, context: VerdictContext): ServerJu
   // 같은 이름의 서버는 나중에 선언된 것이 통째로 대신하므로, 읽지 못한 선언이 읽힌 서버를 덮었을 수 있다
   const unreadPlugins = new Set(setup.plugins.filter((plugin) => !plugin.compositionKnown || plugin.mcpUnreadable).map((plugin) => plugin.id));
   const servers = [...setup.mcpServers].sort(byServer).map((server): JudgedServer => {
-    if (server.installKey === null) return { server, verdict: "unknown", excluded: "no_definition" };
-    if (server.pluginId !== null && unreadPlugins.has(server.pluginId)) return { server, verdict: "unknown", excluded: "plugin_unread" };
-    return { server, verdict: serverVerdict(server, context), excluded: null };
+    if (server.installKey === null) return { server, verdict: "unknown", excluded: "no_definition", judgeFrom: null };
+    if (server.pluginId !== null && unreadPlugins.has(server.pluginId)) return { server, verdict: "unknown", excluded: "plugin_unread", judgeFrom: null };
+    const verdict = serverVerdict(server, context);
+    return { server, verdict, excluded: null, judgeFrom: verdict === "unknown" ? serverJudgeableFrom(server, context) : null };
   });
   // 정체가 같은 사실은 설치 하나다. 켜져 있는 사실만 모아 설치마다 한 번 센다. 하나라도 켜져 있으면 켜진 설치다.
   // 스캐너가 같은 플러그인을 두 길로 찾으면 그 서버의 사실이 둘 오는데, 사실마다 세면 서버 하나가 최소 개수 둘을 채운다

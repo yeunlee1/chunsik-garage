@@ -83,10 +83,10 @@ describe("셋팅 쪽 알림", () => {
       setup: {
         claudeJson: "unparsable",
         problems: [
-          { kind: "unparsable", owner: "tool", path: `${HOME}/../.claude.json`, realPath: null },
-          { kind: "noFrontmatter", owner: "plugin", path: "/p/b/skills/x", realPath: null },
-          { kind: "danglingLink", owner: "plugin", path: "/p/a/skills/y", realPath: null },
-          { kind: "noFrontmatter", owner: "user", path: `${HOME}/skills/z`, realPath: null },
+          { kind: "unparsable", owner: "tool", path: `${HOME}/../.claude.json`, realPath: null, place: null },
+          { kind: "noFrontmatter", owner: "plugin", path: "/p/b/skills/x", realPath: null, place: null },
+          { kind: "danglingLink", owner: "plugin", path: "/p/a/skills/y", realPath: null, place: null },
+          { kind: "noFrontmatter", owner: "user", path: `${HOME}/skills/z`, realPath: null, place: "~/.claude/skills/z" },
         ],
       },
     });

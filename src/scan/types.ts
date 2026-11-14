@@ -100,6 +100,8 @@ export interface PluginFact {
 
 export interface ProjectFact {
   root: string;
+  /** 프로젝트 폴더의 이름. 정규화하기 전 뿌리 경로의 마지막 이름이다. 결과 화면이 경로 대신 보인다(설계 19.1, 「3단계 계획 전 결정」의 10번) */
+  name: string;
   normRoot: string;
   kind: "git" | "folder";
   exists: boolean;
@@ -137,14 +139,27 @@ export interface ClaudeHooksFacts {
 }
 
 /** S3의 재료. 누구의 파일인지를 붙인다. 규칙이 어느 것을 셀지는 설계 11.3 S3가 정한다 */
-export interface SetupProblem {
+export type SetupProblem = {
   kind: "unparsable" | "noFrontmatter" | "danglingLink";
-  /** user는 사용자가 고치는 셋팅(설정 층·.mcp.json·사용자와 프로젝트 스킬), managed는 관리 정책, plugin은 플러그인 안, tool은 도구가 쓰는 상태 파일(.claude.json) */
-  owner: "user" | "managed" | "plugin" | "tool";
   path: string;
   /** 링크를 푼 실제 경로(정규화). 가리키는 곳이 없는 링크처럼 풀지 못하면 null이다. 같은 실제 파일을 한 번만 세는 데 쓴다(설계 11.3 S3) */
   realPath: string | null;
-}
+} & (
+  | {
+      /** 사용자가 고치는 셋팅(설정 층·.mcp.json·사용자와 프로젝트 스킬) */
+      owner: "user";
+      /**
+       * 결과 화면에 보일 위치. 절대 경로 대신, 사용자 범위의 것은 도구의 설정 폴더부터(~/.claude/… 또는 $CLAUDE_CONFIG_DIR/…), 프로젝트의 것은 프로젝트 폴더 이름부터 적고 나눔표는 /다
+       * (설계 19.1, 「3단계 계획 전 결정」의 4번)
+       */
+      place: string;
+    }
+  | {
+      /** managed는 관리 정책, plugin은 플러그인 안, tool은 도구가 쓰는 상태 파일(.claude.json)이다. S3가 세지 않아 위치를 적지 않는다 */
+      owner: "managed" | "plugin" | "tool";
+      place: null;
+    }
+);
 
 export interface ClaudeSetupFacts {
   tool: "claude-code";

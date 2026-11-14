@@ -96,6 +96,8 @@ describe("serverJudgeableFrom: 판정을 시작할 수 있는 날", () => {
     ["작업 폴더가 없는 세션에서 다시 실렸다(한 세션 안의 몫은 작업 폴더와 상관없다)", { records: [record("2026-09-01")], sessions: [{ ...reloadedOn("2026-11-11"), cwd: null }] }],
     ["처음 목록을 모르는 최근 세션은 견주지 않는다", { records: [record("2026-11-10")], sessions: [loadedBefore, { initialMcpServers: null, firstDate: "2026-11-12", days: { "2026-11-12": { responses: 1, loadedMcpServers: [] } } }] }],
     ["시계가 뒤로 가서 다시 실린 날이 오늘보다 뒤", { records: [record("2026-09-01")], sessions: [reloadedOn("2026-11-20")] }],
+    ["관측 첫날이 다시 실린 날보다 늦으면 관측 첫날로 셈한다(가장 늦은 날이 마지막 근거가 아니다)", { records: [record("2026-11-10")], sessions: [reloadedOn("2026-11-01")] }],
+    ["다시 실린 날이 여럿이면 차례와 상관없이 가장 늦은 날이다", { records: [record("2026-09-01")], sessions: [reloadedOn("2026-11-12"), reloadedOn("2026-11-01")] }],
   ];
   for (const [name, scene] of scenes) {
     it(`${name}: 날을 지나 보며 처음 판정할 수 있게 되는 날과 같다`, () => {

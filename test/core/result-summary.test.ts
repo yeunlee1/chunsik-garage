@@ -158,9 +158,13 @@ describe("요약의 문장", () => {
     expect(summary.fixFirst).toEqual([]);
     expect(summary.text.fixFirst).toEqual([]);
     expect(summary.text.noFixFirst).toBeNull();
-    // 같은 결과에서 AQ만 냈다고 바꾸면 먼저 고칠 것이 나온다
-    const scored = { ...result, score: { ...result.score, aq: 70, grade: "B", tier: 3, withheld: [] } as CheckupResult["score"] };
-    expect(checkupSummary(scored, null).fixFirst.length).toBeGreaterThan(0);
+    // 같은 결과에서 AQ만 냈다고 바꾸면 먼저 고칠 것이 나온다. AQ 0점도 낸 점수라서 비우지 않는다(0과 null을 가른다)
+    const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, 3).map((finding) => finding.ruleId);
+    for (const [aq, grade, tier] of [[70, "B", 3], [0, "D", 1]] as const) {
+      const scored = checkupSummary({ ...result, score: { ...result.score, aq, grade, tier, withheld: [] } as CheckupResult["score"] }, null);
+      expect(scored.fixFirst.map((fix) => fix.ruleId), `AQ ${aq}`).toEqual(repairs);
+      expect(scored.text.fixFirst, `AQ ${aq}`).toHaveLength(repairs.length);
+    }
   });
 
   it("AQ를 내지 않았고 정비할 것도 없으면 빈 목록의 문장을 그대로 싣는다", () => {

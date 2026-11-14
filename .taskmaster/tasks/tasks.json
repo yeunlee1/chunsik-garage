@@ -374,6 +374,32 @@
         ],
         "subtasks": [],
         "updatedAt": "2026-11-14T12:38:05.808Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 28,
+        "title": "4단계 구현 계획 쓰기: 스킬, Claude Code 플러그인, 버전 일치 검사",
+        "description": "로드맵 4단계(설계 5, 7.1, 15, 23)와 3단계 2부가 넘긴 것(결과 화면 경로 알림, 쓰기·열기 실패 안내, AQ가 없을 때 먼저 고칠 것의 줄)의 상세 계획을 쓴다.",
+        "details": "3단계 병합(7b67748) 뒤에 쓴다(로드맵 규칙). 연습 폴더(%TEMP%aq-stage4)에서 과제마다 시험을 먼저 놓아 실패를 본 뒤 구현해 통과시키고, 그 코드로 계획을 만든다. 짝 리뷰에서 짝과 주 세션 모두 필수 0건이면 끝낸다. 2026-11-15 사용자 지시(\"아오 끝까지 진행해 멈추지말고\")로 로드맵 끝까지 단계 사이에서 멈추지 않는다.",
+        "testStrategy": "계획 글에서 코드를 뽑아 develop 새 복제본에 과제마다 적용해 실패 뒤 통과와 npm run check를 본다. 짝 둘의 리뷰.",
+        "status": "in-progress",
+        "dependencies": [
+          27
+        ]
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 29,
+        "title": "4단계 구현: 스킬, Claude Code 플러그인, 버전 일치 검사",
+        "description": "4단계 계획의 과제를 구현하고 짝 검증 뒤 develop에 병합한다. 끝나면 플러그인을 깔고 \"AQ 점검해 줘\"로 처음부터 끝까지 돈다.",
+        "details": "짝 검증에서 짝과 주 세션 모두 필수 0건이면 주 세션이 묻지 않고 병합한다(사용자 지시 2026-11-13). 병합 뒤 develop에서 npm run check를 다시 돌리고 끝남으로 적는다.",
+        "testStrategy": "npm run check, Node.js 22, 플러그인 설치와 스킬 실행의 실제 확인, 짝 둘의 검증.",
+        "status": "pending",
+        "dependencies": [
+          28
+        ]
       }
     ],
     "metadata": {

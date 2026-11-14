@@ -25,10 +25,32 @@ export interface CliContext {
   /** 실행한 파일. 주지 않으면 process.argv[1]이다 */
   entryFile?: string;
   managedDir?: string;
+  /** OS의 언어. 주지 않으면 실행 환경의 로캘이다. 시험이 고정한다 */
+  locale?: string;
 }
 
-/** aq checkup이 받는 옵션. --no-open은 결과 화면(3단계)을 열지 않는 것이라 지금은 할 일이 없다. --lang은 문구(4부)와 함께 받는다 */
+/** aq checkup이 받는 옵션. --no-open은 결과 화면(3단계)을 열지 않는 것이라 지금은 할 일이 없다. --lang은 값을 하나 받는다 */
 const CHECKUP_FLAGS: ReadonlySet<string> = new Set(["--no-open", "--no-save", "--rescan"]);
+
+/** aq checkup의 옵션을 읽는다. 모르는 옵션이 있거나 --lang 뒤에 값이 없으면(값 자리에 -로 시작하는 것이 와도) null이다. --lang이 여럿이면 마지막 것이다 */
+function checkupArgs(rest: readonly string[]): { flags: Set<string>; lang: string | null } | null {
+  const flags = new Set<string>();
+  let lang: string | null = null;
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index]!;
+    if (arg === "--lang") {
+      const value = rest[index + 1];
+      if (value === undefined || value.startsWith("-")) return null;
+      lang = value;
+      index++;
+    } else if (CHECKUP_FLAGS.has(arg)) {
+      flags.add(arg);
+    } else {
+      return null;
+    }
+  }
+  return { flags, lang };
+}
 
 const printJson = (value: unknown): void => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
@@ -56,17 +78,18 @@ async function run(command: string | undefined, rest: string[], context: CliCont
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
     return 0;
   }
-  if (command === "checkup" && rest.every((flag) => CHECKUP_FLAGS.has(flag))) {
+  const args = command === "checkup" ? checkupArgs(rest) : null;
+  if (args !== null) {
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
       tmpdir: context.tmpdir ?? tmpdir(),
       platform: context.platform ?? process.platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-      lang: pickLang(null, Intl.DateTimeFormat().resolvedOptions().locale),
+      lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
       stateDir: stateDir(context.homedir),
-      save: !rest.includes("--no-save"),
-      rescan: rest.includes("--rescan"),
+      save: !args.flags.has("--no-save"),
+      rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
     });

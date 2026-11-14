@@ -68,7 +68,7 @@ describe("저장하는 점검", () => {
   it("결과 파일, 이력 한 줄, 상태(마지막 점검 시각과 관측 기록), 캐시를 남기고 요약과 실행 기록을 낸다", async () => {
     const outcome = await runCheckup(options());
     const resultPath = join(stateDir, "reports", `${STAMP}.json`);
-    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: true, reportPath: null, resultPath, notices: [] });
+    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: true, reportPath: null, resultPath, notices: [], text: { notices: [] } });
     expect(JSON.parse(await readFile(resultPath, "utf8"))).toEqual(outcome.result);
     const history = (await readFile(join(stateDir, "history.jsonl"), "utf8")).trim().split("\n");
     expect(history).toHaveLength(1);
@@ -182,7 +182,7 @@ describe("저장하는 점검", () => {
 describe("저장하지 않는 점검", () => {
   it("상태 폴더에 아무것도 쓰지 않고 캐시도 쓰지 않는다. 결과 파일은 OS 임시 폴더에 쓴다", async () => {
     const outcome = await runCheckup(options({ save: false }));
-    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: null, resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }] });
+    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: null, resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder."] } });
     await expect(readdir(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
     expect(JSON.parse(await readFile(outcome.run.resultPath!, "utf8"))).toEqual(outcome.result);
   });

@@ -12,6 +12,7 @@ import { KEEP_REPORTS, pruneReports, resultStamp, writeResult, writeTempResult }
 import { saveState } from "../state/state.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
+import { runNoticeText } from "./run-notices.ts";
 import { selfIdentity } from "./self.ts";
 
 export interface CheckupOptions {
@@ -60,6 +61,8 @@ export interface RunRecord {
   /** 평가 결과 파일의 경로. 쓰지 못했으면 null */
   resultPath: string | null;
   notices: RunNotice[];
+  /** 실행 알림의 문장(notices와 같은 차례, 요약의 언어) */
+  text: { notices: string[] };
 }
 
 export interface CheckupOutcome {
@@ -128,6 +131,6 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     }
   }
 
-  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices };
+  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, null), run, result };
 }

@@ -7,6 +7,7 @@ import { noticeText } from "../../src/core/copy/notices.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, RESULT_SCHEMA, type ResultInput } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
+import type { SetupProblem } from "../../src/scan/types.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
 import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
@@ -61,7 +62,7 @@ describe("평가 결과의 조립", () => {
     const sessions = [...enough, { days: { "2026-11-12": { responses: 1, mcpCalls: { called: 2 } } } }];
     const input = resultInput({ sessions, setup: { mcpServers: servers } });
     const result = checkupResult(input);
-    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers"]);
+    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
       { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established", judgeFrom: "2026-11-28" },
@@ -87,6 +88,22 @@ describe("평가 결과의 조립", () => {
     expect(judgeFromWith(seen("2026-11-03"))).toEqual(["2026-11-18"]);
     expect(judgeFromWith(null)).toEqual(["2026-11-28"]);
     expect(judgeFromWith(seen("2026-11-13"))).toEqual(judgeFromWith(null));
+  });
+
+  it("따로 둔 자리에 S3가 센 문제의 도구, 종류, 위치를 S3가 센 차례대로 싣는다. 절대 경로는 싣지 않는다", () => {
+    const problems: SetupProblem[] = [
+      { kind: "unparsable", owner: "user", path: "/home/u/.claude/settings.json", realPath: "/home/u/.claude/settings.json", place: "~/.claude/settings.json" },
+      { kind: "noFrontmatter", owner: "user", path: "/work/app/.claude/skills/x", realPath: "/shared/x", place: "app/.claude/skills/x" },
+      { kind: "noFrontmatter", owner: "user", path: "/home/u/.claude/skills/x", realPath: "/shared/x", place: "~/.claude/skills/x" },
+      { kind: "noFrontmatter", owner: "plugin", path: "/home/u/.claude/plugins/p/skills/y", realPath: null, place: null },
+    ];
+    const result = checkupResult(resultInput({ setup: { problems } }));
+    expect(result.details.setupProblems).toEqual([
+      { tool: "claude-code", kind: "unparsable", place: "~/.claude/settings.json" },
+      { tool: "claude-code", kind: "noFrontmatter", place: "app/.claude/skills/x" },
+    ]);
+    expect(result.findings.find((finding) => finding.ruleId === "S3")!.evidence).toMatchObject({ problems: 2 });
+    expect(JSON.stringify(result.details.setupProblems)).not.toMatch(/\/home|\/work|\/shared/);
   });
 
   it("JSON으로 바꿨다가 되살려도 같다. 값이 없는 자리는 null이다", () => {

@@ -203,12 +203,56 @@ describe("scanClaudeSetup", () => {
   it("문제: 머리말이 없는 스킬과 가리키는 곳이 없는 링크를 주인과 실제 경로와 함께 낸다", async () => {
     const nofront = join(input.homedir, ".claude", "skills", "nofront");
     expect(facts.problems).toEqual([
-      { kind: "danglingLink", owner: "user", path: join(input.homedir, ".claude", "skills", "gone"), realPath: null },
-      { kind: "noFrontmatter", owner: "user", path: nofront, realPath: normalizePath(await realpath(nofront)) },
+      { kind: "danglingLink", owner: "user", path: join(input.homedir, ".claude", "skills", "gone"), realPath: null, place: "~/.claude/skills/gone" },
+      { kind: "noFrontmatter", owner: "user", path: nofront, realPath: normalizePath(await realpath(nofront)), place: "~/.claude/skills/nofront" },
     ]);
   });
 
-  it("같은 원본을 두 곳에서 링크로 걸었으면 문제의 경로는 둘이고 실제 경로는 하나다(S3은 한 번만 센다)", async () => {
+  it("사용자의 문제에는 결과 화면에 보일 위치를 붙인다. 프로젝트의 것은 프로젝트 폴더 이름부터, 사용자 범위의 것은 설정 폴더부터이고 그 밖의 주인은 위치가 없다", async () => {
+    const proj = join(root, "work", "proj");
+    await put(join(proj, ".claude", "settings.json"), "{ 깨짐");
+    await put(join(proj, ".claude", "settings.local.json"), "{ 깨짐");
+    await put(join(proj, ".mcp.json"), "{ 깨짐");
+    await put(join(proj, ".claude", "skills", "bare", "SKILL.md"), "# 머리말 없음\n");
+    await put(join(root, "managed", "managed-settings.json"), "{ 깨짐");
+    const scanned = await scanClaudeSetup(input);
+    const places = scanned.problems.map((p) => [p.owner, p.place]);
+    expect(places).toEqual(expect.arrayContaining([
+      ["user", "proj/.claude/settings.json"],
+      ["user", "proj/.claude/settings.local.json"],
+      ["user", "proj/.mcp.json"],
+      ["user", "proj/.claude/skills/bare"],
+      ["user", "~/.claude/skills/nofront"],
+      ["managed", null],
+    ]));
+    // 위치에는 사용자 이름이 든 홈 경로나 프로젝트의 위 폴더가 없다
+    for (const problem of scanned.problems) if (problem.place !== null) expect(problem.place).not.toContain(root.replace(/\\/g, "/"));
+  });
+
+  it("설정 폴더를 CLAUDE_CONFIG_DIR로 옮겼으면 사용자 범위의 위치를 그 이름부터 적는다. 이름이 같은 프로젝트는 차례 번호가 붙은 이름부터 적는다", async () => {
+    const config = join(root, "elsewhere", "claude-config");
+    await put(join(config, "settings.json"), "{ 깨짐");
+    const first = join(root, "a", "app");
+    const second = join(root, "b", "app");
+    for (const dir of [first, second]) {
+      await put(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+      await put(join(dir, ".mcp.json"), "{ 깨짐");
+    }
+    const scanned = await scanClaudeSetup({ ...input, env: { CLAUDE_CONFIG_DIR: config }, cwds: [first, second] });
+    expect(scanned.problems.filter((p) => p.owner === "user").map((p) => p.place).sort()).toEqual(["$CLAUDE_CONFIG_DIR/settings.json", "app (2)/.mcp.json", "app/.mcp.json"]);
+  });
+
+  it("이름이 ~인 프로젝트의 설정 문제는 사용자 설정의 문제와 다른 위치로 적는다", async () => {
+    await put(join(input.homedir, ".claude", "settings.json"), "{ 깨짐");
+    const tilde = join(root, "x", "~");
+    await put(join(tilde, ".git", "HEAD"), "ref: refs/heads/main\n");
+    await put(join(tilde, ".claude", "settings.json"), "{ 깨짐");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [tilde] });
+    const places = scanned.problems.filter((p) => p.owner === "user" && p.kind === "unparsable").map((p) => p.place).sort();
+    expect(places).toEqual(["~ (2)/.claude/settings.json", "~/.claude/settings.json"]);
+  });
+
+  it("같은 원본을 두 곳에서 링크로 걸었으면 문제의 경로는 둘이고 실제 경로는 하나다(S3은 한 번만 센다). 위치는 링크를 푼 실제 경로가 아니라 링크가 놓인 경로로 만든다", async () => {
     const store = join(root, "store", "bare");
     await put(join(store, "SKILL.md"), "# 머리말 없음\n");
     await linkDir(store, join(input.homedir, ".claude", "skills", "bare"));
@@ -216,6 +260,8 @@ describe("scanClaudeSetup", () => {
     const bare = (await scanClaudeSetup(input)).problems.filter((p) => p.kind === "noFrontmatter" && p.path.endsWith("bare"));
     expect(bare).toHaveLength(2);
     expect([...new Set(bare.map((p) => p.realPath))]).toEqual([normalizePath(await realpath(store))]);
+    // 원본은 설정 폴더와 프로젝트 밖(store)에 있다. 위치에 원본 쪽 폴더 이름이 나오면 안 된다
+    expect(bare.map((p) => p.place).sort()).toEqual(["proj/.claude/skills/bare", "~/.claude/skills/bare"]);
   });
 
   it("MCP 서버: 막은 것, 승인하지 않은 .mcp.json 서버는 꺼져 있고, claude.ai 서버는 정의가 없다", () => {
@@ -331,7 +377,7 @@ describe("scanClaudeSetup", () => {
     const broken = await scanClaudeSetup(input);
     expect(broken.claudeJson).toBe("unparsable");
     expect(broken.problems.filter((p) => p.kind === "unparsable")).toEqual([
-      { kind: "unparsable", owner: "tool", path: join(input.homedir, ".claude.json"), realPath: normalizePath(await realpath(join(input.homedir, ".claude.json"))) },
+      { kind: "unparsable", owner: "tool", path: join(input.homedir, ".claude.json"), realPath: normalizePath(await realpath(join(input.homedir, ".claude.json"))), place: null },
     ]);
     expect(broken.mcpServers.some((s) => s.scope === "user")).toBe(false);
   });

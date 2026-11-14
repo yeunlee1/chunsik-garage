@@ -1,5 +1,5 @@
 // Claude Code의 지금 셋팅을 읽어 셋팅 사실로 낸다. 설정 층·지침·스킬·플러그인·MCP 서버·권한과 훅의 겉모양을 프로젝트 목록과 함께 본다. 값과 글은 메모리에서 쓰고 버린다(설계 7.2, 10, 11.3, 19.1)
-import { basename, join } from "node:path";
+import { basename, join, relative } from "node:path";
 import { claudeHome, normalizePath } from "../adapters/claude/locate.ts";
 import { claudeJsonPath, readClaudeJson, type ClaudeJsonProject } from "./claude-json.ts";
 import { entryInfo, readJson } from "./fs.ts";
@@ -126,6 +126,10 @@ function projectNamesOf(refs: readonly { root: string; normRoot: string; exists:
   }
   return names;
 }
+/** 실제 경로를 붙이기 전의 문제. 주인에 따라 위치가 있거나 없다 */
+type ProblemDraft = SetupProblem extends infer P ? (P extends SetupProblem ? Omit<P, "realPath"> : never) : never;
+/** 경로의 나눔표를 /로 바꾼다 */
+const slashed = (path: string): string => path.replace(/\\/g, "/");
 
 export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFacts> {
   const home = claudeHome(input.env, input.homedir);
@@ -136,14 +140,19 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
   // 실제 경로는 마지막에 한 번에 붙인다
-  const problems: Omit<SetupProblem, "realPath">[] = [];
-  const unparsable = (layer: SettingsLayer, owner: SetupProblem["owner"]): void => {
-    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner, path: part.path });
+  const problems: ProblemDraft[] = [];
+  /** 사용자 범위의 셋팅이 있는 곳(도구의 설정 폴더)부터의 위치. 설정 폴더를 환경 변수로 옮겼으면 그 이름으로 적는다 */
+  const configPlace = (path: string): string => `${input.env.CLAUDE_CONFIG_DIR?.trim() ? "$CLAUDE_CONFIG_DIR" : "~/.claude"}/${slashed(relative(home, path))}`;
+  const unparsable = (layer: SettingsLayer, owner: Exclude<SetupProblem["owner"], "user">): void => {
+    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner, path: part.path, place: null });
   };
-  unparsable(userLayer, "user");
+  const unparsableUser = (layer: SettingsLayer, placeOf: (path: string) => string): void => {
+    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: part.path, place: placeOf(part.path) });
+  };
+  unparsableUser(userLayer, configPlace);
   unparsable(managedLayer, "managed");
   // .claude.json은 도구가 수시로 다시 쓰는 상태 파일이다. 주인을 tool로 적어 사용자의 셋팅과 가른다
-  if (claudeJson.status === "unparsable") problems.push({ kind: "unparsable", owner: "tool", path: claudeJsonFile });
+  if (claudeJson.status === "unparsable") problems.push({ kind: "unparsable", owner: "tool", path: claudeJsonFile, place: null });
 
   // 프로젝트와 맥락
   const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
@@ -152,11 +161,13 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   const contexts = new Map<string, Context>();
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
   const projectNames = projectNamesOf(refs);
+  /** 프로젝트 폴더 이름(차례 번호가 붙은 것)부터의 위치. 결과 화면이 절대 경로 대신 보인다(설계 19.1) */
+  const projectPlace = (ref: { root: string; normRoot: string }, path: string): string => `${projectNames.get(ref.normRoot)!}/${slashed(relative(ref.root, path))}`;
   for (const ref of active) {
     const project = await readLayer(join(ref.root, ".claude", "settings.json"));
     const local = await readLayer(join(ref.root, ".claude", "settings.local.json"));
-    unparsable(project, "user");
-    unparsable(local, "user");
+    unparsableUser(project, (path) => projectPlace(ref, path));
+    unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
     const projectView = viewOf(project.value);
     const localView = viewOf(local.value);
@@ -228,8 +239,8 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       ...usageOf(fields.recordNames.map((name) => claudeJson.skillUsage[name])),
     });
   };
-  const addOwnSkills = (scan: SkillRootScan, scope: "user" | "project", projectRoot: string | null, scopeContexts: readonly Context[]): void => {
-    for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path });
+  const addOwnSkills = (scan: SkillRootScan, scope: "user" | "project", projectRoot: string | null, scopeContexts: readonly Context[], placeOf: (path: string) => string): void => {
+    for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path, place: placeOf(path) });
     unreadableDirs.push(...scan.unreadableDirs);
     if (scan.unreadableDirs.length > 0) {
       if (projectRoot === null) unreadableSkillPlaces.user = true;
@@ -238,7 +249,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     for (const folder of scan.skills) {
       const recordNames = skillRecordNames(folder.dirName, folder.declaredName, null);
       const modes = scopeContexts.map((context) => overrideIn(context, recordNames));
-      if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "user", path: folder.path });
+      if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "user", path: folder.path, place: placeOf(folder.path) });
       addSkill(folder, {
         scope,
         name: folder.dirName,
@@ -252,13 +263,13 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       });
     }
   };
-  addOwnSkills(userSkillScan, "user", null, everyContext);
-  for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot)!, "project", ref.normRoot, [contexts.get(ref.normRoot)!]);
+  addOwnSkills(userSkillScan, "user", null, everyContext, configPlace);
+  for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot)!, "project", ref.normRoot, [contexts.get(ref.normRoot)!], (path) => projectPlace(ref, path));
 
   const plugins: PluginFact[] = [];
   const mcpServers: Omit<McpFact, "installKey">[] = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join(plugin.installPath, ".claude-plugin", "plugin.json") });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     // 훅이 든 플러그인: 구성에 훅이 있다. 돌지 않는 꼴(경로로 적은 마켓 항목의 훅)도 든다(설계 10 「마켓 항목」, 11.3 E5 ⑤)
     const hasHooks = plugin.components.includes("hooks");
@@ -272,7 +283,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     if (plugin.compositionKnown) {
       for (const root of plugin.skillRoots) {
         const scan = await scanSkillPath(root);
-        for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path });
+        for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path, place: null });
         unreadableDirs.push(...scan.unreadableDirs);
         if (scan.unreadableDirs.length > 0) unreadableSkillPlaces.plugins.push(plugin.id);
         for (const folder of scan.skills) {
@@ -282,7 +293,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
           const recordNames = [...new Set(pluginNames.flatMap((pluginName) => skillRecordNames(folder.dirName, folder.declaredName, pluginName)))].sort();
           const name = `${plugin.name}:${folder.dirName}`;
           skillNames.push(name);
-          if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "plugin", path: folder.path });
+          if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "plugin", path: folder.path, place: null });
           addSkill(folder, {
             scope: "plugin",
             name,
@@ -383,7 +394,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status: FileStatus = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
     mcpJsonStatus.set(ref.normRoot, status);
-    if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file });
+    if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
     for (const entry of entries ?? []) {
       const approved = projectServerApproved(context.mcp, entry.name) && mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition);
       addServer("project", entry, ref.normRoot, approved);

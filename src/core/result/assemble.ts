@@ -10,7 +10,7 @@ import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Candidate } from "../installs/candidates.ts";
 import { anyIn, calledMcpNames } from "../installs/signals.ts";
 import type { MissingInstructions, WorstOverlap } from "../metrics/fit.ts";
-import type { ToolSafeguard } from "../metrics/setup.ts";
+import type { CountedProblem, ToolSafeguard } from "../metrics/setup.ts";
 import type { AxisScore, Finding, Overall, ToolRuleId, ToolValue } from "../scoreboard.ts";
 import { resultCoverage, type ResultCoverage } from "./coverage.ts";
 import { deepHints, type DeepHint } from "./hints.ts";
@@ -80,6 +80,8 @@ export interface CheckupResult {
     missingInstructions: MissingInstructions[];
     worstOverlap: WorstOverlap | null;
     unjudgedServers: UnjudgedServer[];
+    /** S3가 센 문제의 도구, 종류, 위치(절대 경로가 아니다). 결과 화면이 S3 항목에 보인다 */
+    setupProblems: CountedProblem[];
   };
 }
 
@@ -109,7 +111,7 @@ function unjudgedServers(input: EvaluationInput, evaluation: Evaluation): Unjudg
 export function checkupResult(source: ResultInput): CheckupResult {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
   const findings = evaluation.findings.map((finding): ResultFinding => {
     const source = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId as ToolRuleId, coverageByTool.get(value.tool)!) })) };
     return { ...source, text: textsOf((lang) => findingText(source, details, lang)) };

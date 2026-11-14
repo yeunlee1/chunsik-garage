@@ -172,7 +172,11 @@ describe("highestMainVersion", () => {
 });
 
 describe("S3 설정이 깨지지 않았다", () => {
-  const problem = (kind: SetupProblem["kind"], path: string, input: Partial<SetupProblem> = {}): SetupProblem => ({ kind, owner: "user", path, realPath: path, ...input });
+  /** 사용자의 문제는 위치를 경로에서 만들고, 그 밖의 주인은 위치가 없다 */
+  const problem = (kind: SetupProblem["kind"], path: string, input: { owner?: SetupProblem["owner"]; realPath?: string | null } = {}): SetupProblem => {
+    const base = { kind, path, realPath: input.realPath === undefined ? path : input.realPath };
+    return input.owner === undefined || input.owner === "user" ? { ...base, owner: "user", place: `~/${path.split("/").slice(-2).join("/")}` } : { ...base, owner: input.owner, place: null };
+  };
   it("사용자가 직접 고치는 셋팅의 문제만 센다", () => {
     const problems = [
       problem("unparsable", "/home/u/.claude/settings.json"),
@@ -184,6 +188,16 @@ describe("S3 설정이 깨지지 않았다", () => {
       problem("unparsable", "/home/u/.claude.json", { owner: "tool" }),
     ];
     expect(mergedSetupRules([tool({ problems })]).S3).toEqual({ status: "scored", value: 4, evidence: { danglingLinks: 1, noFrontmatter: 1, problems: 4, unparsable: 2 } });
+  });
+  it("센 문제의 목록은 도구의 차례, 그 안에서는 스캐너의 차례이고 같은 실제 파일은 처음 본 것 하나다. 위치는 문제의 위치 그대로다", () => {
+    const claude = tool({ problems: [problem("unparsable", "/work/a/.mcp.json"), problem("noFrontmatter", "/home/u/.claude/skills/x", { realPath: "/shared/x" }), problem("noFrontmatter", "/home/u/.claude/plugins/p/skills/y", { owner: "plugin" })] });
+    const codex = tool({ problems: [problem("noFrontmatter", "/home/u/.codex/skills/x", { realPath: "/shared/x" }), problem("unparsable", "/home/u/.codex/config.toml")] }, { id: "codex" });
+    expect(mergedSetupRules([claude, codex]).setupProblems).toEqual([
+      { tool: "claude-code", kind: "unparsable", place: "~/a/.mcp.json" },
+      { tool: "claude-code", kind: "noFrontmatter", place: "~/skills/x" },
+      { tool: "codex", kind: "unparsable", place: "~/.codex/config.toml" },
+    ]);
+    expect(mergedSetupRules([claude, codex]).S3).toMatchObject({ value: 3, evidence: { problems: 3 } });
   });
   it("같은 실제 파일이나 폴더는 한 번만 센다", () => {
     const linked = [problem("noFrontmatter", "/home/u/.claude/skills/x", { realPath: "/shared/x" }), problem("noFrontmatter", "/work/a/.claude/skills/x", { realPath: "/shared/x" })];

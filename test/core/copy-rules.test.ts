@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { slots } from "../../src/core/copy/format.ts";
 import { LANGS, type Texts } from "../../src/core/copy/lang.ts";
+import { EFFICIENCY_COPY } from "../../src/core/copy/rules-efficiency.ts";
 import { SETUP_COPY } from "../../src/core/copy/rules-setup.ts";
 import type { RuleCopy } from "../../src/core/copy/types.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
@@ -35,7 +36,10 @@ const EVIDENCE_KEYS: Record<RuleId, string[]> = {
 };
 
 /** 기준마다의 규칙 문구. 기준의 문구를 더할 때마다 여기에 더한다 */
-const AXES: [Axis, Partial<Record<RuleId, Texts<RuleCopy>>>][] = [["setup", SETUP_COPY]];
+const AXES: [Axis, Partial<Record<RuleId, Texts<RuleCopy>>>][] = [
+  ["setup", SETUP_COPY],
+  ["efficiency", EFFICIENCY_COPY],
+];
 
 const TITLES = ["name", "good", "fix"] as const;
 const SENTENCES = ["why", "problem", "prescription", "method"] as const;

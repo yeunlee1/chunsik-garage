@@ -43,6 +43,29 @@ const judge = (setup: Partial<ClaudeSetupFacts>, options: Options = {}) => {
 const many = (prefix: string, count: number, input: Partial<McpFact> = {}): McpFact[] => Array.from({ length: count }, (_, i) => mcpServer(`${prefix}${i + 1}`, input));
 const remote = (name: string) => mcpServer(name, { scope: "claude-ai", definitionHash: null });
 
+describe("판정한 서버의 판정을 시작할 수 있는 날", () => {
+  it("쓰는지 모름이고 구조상 빼지 않은 서버만 날을 셈한다. 첫 점검이면 오늘의 15일 뒤다", () => {
+    const servers = [mcpServer("called"), mcpServer("fresh"), mcpServer("idle"), remote("claude.ai Mail")];
+    const judgement = judge({ mcpServers: servers }, { called: ["called"], watched: [servers[2]!] });
+    expect(judgement.servers.map((s) => [s.server.name, s.verdict, s.excluded, s.judgeFrom])).toEqual([
+      ["called", "used", null, null],
+      ["claude.ai Mail", "unknown", "no_definition", null],
+      ["fresh", "unknown", null, "2026-11-28"],
+      ["idle", "unused", null, null],
+    ]);
+  });
+  it("MCP 정의를 읽지 못한 플러그인과 구성을 모르는 플러그인이 넣은 서버(구조상 뺀 것)는 날이 없다", () => {
+    const unread = mcpServer("unread", { scope: "plugin", pluginId: "unread@m", recordNames: ["plugin:unread:unread"] });
+    const unknown = mcpServer("mystery", { scope: "plugin", pluginId: "unknown@m", recordNames: ["plugin:unknown:mystery"] });
+    const plugins = [plugin("unread@m", { components: ["mcpServers"], mcpUnreadable: true }), plugin("unknown@m", { compositionKnown: false, hooksUnreadable: true, mcpUnreadable: true })];
+    const judgement = judge({ mcpServers: [unread, unknown], plugins }, { watched: null });
+    expect(judgement.servers.map((s) => [s.server.name, s.excluded, s.judgeFrom])).toEqual([
+      ["mystery", "plugin_unread", null],
+      ["unread", "plugin_unread", null],
+    ]);
+  });
+});
+
 describe("E6 안 쓰는 MCP 서버", () => {
   it("안 부른 것이 확인된 서버를 판정된 서버로 나눈다. 쓰는지 모름은 분자와 분모에서 뺀다", () => {
     const called = many("called", 1);

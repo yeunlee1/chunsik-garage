@@ -1,5 +1,5 @@
 // 평가와 수집 결과에서 평가 결과(결과 파일에 저장하는 것)를 조립한다. 입력 묶음이 같으면 글자 하나 다르지 않다. 규칙, 알림, 결과 전체에 두 언어의 문장을 싣는다(순수 함수, 설계 12.1, 12.2, 13.1, 13.2)
-import { makeWindows } from "../../adapters/common/dates.ts";
+import { makeWindows, type LocalDate } from "../../adapters/common/dates.ts";
 import type { Coverage, ToolId } from "../../adapters/types.ts";
 import { findingText, type FindingText } from "../copy/findings.ts";
 import { resultText, type ResultText } from "../copy/grades.ts";
@@ -49,6 +49,8 @@ export interface UnjudgedServer {
   pluginId: string | null;
   /** no_definition은 정의가 PC에 없거나 읽지 못한 것, plugin_unread는 정의를 읽지 못한 플러그인의 것, not_established는 아직 지켜보는 중인 것, observation_incomplete는 관측이 빠짐없지 않은 것이다 */
   why: "no_definition" | "plugin_unread" | "not_established" | "observation_incomplete";
+  /** 지켜보는 중인 서버(not_established)를 판정할 수 있게 되는 날. 그날의 점검부터 판정한다. 날을 모르거나 다른 까닭이면 null이다(설계 12.1의 예외, 13.1) */
+  judgeFrom: LocalDate | null;
 }
 
 export interface CheckupResult {
@@ -97,7 +99,8 @@ function unjudgedServers(input: EvaluationInput, evaluation: Evaluation): Unjudg
       const { server } = judged;
       if (!server.enabled || judged.verdict !== "unknown" || anyIn(server.recordNames, called.inCollect)) continue;
       const why = judged.excluded ?? (source.complete.mcp ? "not_established" : "observation_incomplete");
-      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, projectName: server.projectRoot === null ? null : (names.get(server.projectRoot) ?? null), pluginId: server.pluginId, why });
+      const projectName = server.projectRoot === null ? null : (names.get(server.projectRoot) ?? null);
+      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, projectName, pluginId: server.pluginId, why, judgeFrom: why === "not_established" ? judged.judgeFrom : null });
     }
   }
   return servers.sort((a, b) => byText(a.name, b.name) || SCOPE_ORDER.indexOf(a.scope) - SCOPE_ORDER.indexOf(b.scope) || byText(a.projectRoot ?? "", b.projectRoot ?? "") || byText(a.pluginId ?? "", b.pluginId ?? "") || byText(a.tool, b.tool));

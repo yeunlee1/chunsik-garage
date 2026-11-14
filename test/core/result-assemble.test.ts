@@ -64,17 +64,29 @@ describe("평가 결과의 조립", () => {
     expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
-      { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established" },
-      { tool: "claude-code", name: "zeta", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "no_definition" },
+      { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established", judgeFrom: "2026-11-28" },
+      { tool: "claude-code", name: "zeta", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "no_definition", judgeFrom: null },
     ]);
     const incomplete = checkupResult(resultInput({ sessions, setup: { mcpServers: servers }, complete: { mcp: false } }));
-    expect(incomplete.details.unjudgedServers.map((server) => server.why)).toEqual(["observation_incomplete", "no_definition"]);
+    expect(incomplete.details.unjudgedServers.map((server) => [server.why, server.judgeFrom])).toEqual([["observation_incomplete", null], ["no_definition", null]]);
   });
 
   it("프로젝트 범위의 판정에서 뺀 서버에는 그 프로젝트의 폴더 이름을 함께 싣는다. 경로는 정규화한 것 그대로 둔다", () => {
     const local = mcpServer("local-db", { scope: "local", projectRoot: "c:/work/myapp" });
     const result = checkupResult(resultInput({ setup: { mcpServers: [local], projects: [project("C:/Work/MyApp", { normRoot: "c:/work/myapp", cwds: ["c:/work/myapp"] })] } }));
-    expect(result.details.unjudgedServers).toEqual([{ tool: "claude-code", name: "local-db", scope: "local", projectRoot: "c:/work/myapp", projectName: "MyApp", pluginId: null, why: "not_established" }]);
+    expect(result.details.unjudgedServers).toEqual([{ tool: "claude-code", name: "local-db", scope: "local", projectRoot: "c:/work/myapp", projectName: "MyApp", pluginId: null, why: "not_established", judgeFrom: "2026-11-28" }]);
+  });
+
+  it("지켜보는 중인 서버를 판정할 수 있게 되는 날은 관측 기록의 첫날로 셈하고, 첫 점검을 저장한 뒤 같은 날 다시 점검해도 같다(설계 12.1의 예외)", () => {
+    const watching = mcpServer("watching");
+    const seen = (firstSeen: string) => [{ key: watching.installKey!, firstSeen, appeared: false }];
+    const judgeFromWith = (installs: { key: string; firstSeen: string; appeared: boolean }[] | null) => {
+      const input = evaluationInput([claudeTool({ sessions: enough, setup: { mcpServers: [watching] } })], { installs });
+      return checkupResult({ input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } }).details.unjudgedServers.map((server) => server.judgeFrom);
+    };
+    expect(judgeFromWith(seen("2026-11-03"))).toEqual(["2026-11-18"]);
+    expect(judgeFromWith(null)).toEqual(["2026-11-28"]);
+    expect(judgeFromWith(seen("2026-11-13"))).toEqual(judgeFromWith(null));
   });
 
   it("JSON으로 바꿨다가 되살려도 같다. 값이 없는 자리는 null이다", () => {

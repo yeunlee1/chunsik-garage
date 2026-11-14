@@ -35,7 +35,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `EDDCD0BDE4E0DA14FBC0167709AC85FB87A25F712F587444ED49A30A02CFD5AA`, 3,877줄)이다. 설계 끝에 「3단계 2부 계획에서 보완」(열 가지)을 더하고 12.3에 결과 화면 파일의 줄을 더했다. 정한 것은 그 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었고, 만든 결과 화면을 브라우저에서 확인했다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `890148A7044497183A53B9A61F1F554516A231A9B9A212235FE684B1B991198D`, 3,893줄)이다. 설계 끝에 「3단계 2부 계획에서 보완」(열 가지)을 더하고 12.3에 결과 화면 파일의 줄을 더했다. 정한 것은 그 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었고, 만든 결과 화면을 브라우저에서 확인했다.
 
 ## 파일 구조
 
@@ -50,6 +50,7 @@
 | `src/report/style.ts`(새, 6에서 고침) | 5, 6 | 결과 화면의 스타일 |
 | `src/report/script.ts`(새) | 5 | 화면 안의 스크립트(언어, 복사, 표, 말풍선, 카드)와 그 자료의 꼴 |
 | `src/report/html.ts`(새) | 6 | 결과 화면 HTML 한 파일 |
+| `test/helpers/fake-dom.ts`(새) | 6 | 시험 전용 문서 대역. 만든 HTML을 읽어 화면 안의 스크립트를 Node에서 돌린다 |
 | `src/core/result/summary.ts`(고침) | 6 | 먼저 고칠 것의 덧붙이는 말 함수를 내보냄 |
 | `src/state/reports.ts`, `src/state/history.ts`(고침) | 7 | 결과 화면 파일 쓰기, 이력의 줄 수 |
 | `src/commands/open.ts`(새) | 7 | 기본 브라우저로 열기 |
@@ -64,7 +65,7 @@
 - `` `경로`(그림 파일): `` 줄은 글로 싣지 않은 그림이다. 저장소 밖의 원본(사용자가 확인한 그림)을 `scripts/make-assets.py`로 줄인 WebP이고, 적힌 크기와 SHA-256이 같아야 한다. 원본은 공개하지 않으므로 이 계획을 적용할 때는 연습 작업 폴더의 같은 파일을 쓰고 지문을 견준다.
 - 묶은 실행 파일(`skills/aq/scripts/aq.mjs`)은 글로 싣지 않는다. 과제 7의 `npm run build`가 원본에서 다시 만든다.
 - 과제의 확인 명령은 그 과제와 관계있는 시험과 타입 검사다. 전체 검사(`npm run check`)는 마지막 과제에서 돌린다. 과제 6까지는 묶은 실행 파일이 원본과 같아 묶음 검사도 통과하지만, 과제 7에서 점검이 결과 화면을 부르면 다시 묶어야 한다.
-- 화면이 맞는지는 시험만으로 보증하지 않는다. 마지막 과제에서 실제 결과 화면을 브라우저로 확인한다.
+- 화면 안의 스크립트 동작은 과제 6의 문서 대역 시험이 실제로 만든 HTML 위에서 본다. 모양, 넘침, 초점 테두리는 시험만으로 보증하지 않으므로 마지막 과제에서 실제 결과 화면을 브라우저로 확인한다.
 
 ---
 
@@ -91,7 +92,7 @@
 - Consumes: 없다. 2부의 첫 과제다. 설계 13.3, 7.1, 「3단계 계획 전 결정」의 12번, 「3단계 2부 계획에서 보완」의 7번을 따른다.
 - Produces: `ART_FILES`, `ArtName`, `ReportArt`(`{scene, face, good, fix}`, 읽지 못한 그림은 `null`), `sceneFor(tier, unreadable)`, `stickerFor(repairs)`, `assetsDirOf(entryFile)`, `loadArt(dir, {tier, unreadable, repairs})`(`src/report/assets.ts`). 과제 6과 7이 쓴다. 과제 6이 `SceneName`을 더한다.
 
-- 그림은 사용자가 확인한 2차 그림 6장(얼굴, 춘삼이 스티커, 춘식이 스티커 둘, 점수를 못 낸 화면의 장면 둘)과 점수별 장면 5장이다. 원본 PNG는 저장소 밖에 있고 `scripts/make-assets.py`가 Pillow로 줄인다(장면 512px, 그 밖 128px, 품질 82). 저장소에는 WebP만 넣고 그림 몫은 한 화면에 50KB 안쪽이다(설계 13.3).
+- 그림은 사용자가 확인한 2차 그림 6장(얼굴, 춘삼이 스티커, 춘식이 스티커 둘, 점수를 못 낸 화면의 장면 둘)과 점수별 장면 5장이다. 원본 PNG는 저장소 밖에 있고 `scripts/make-assets.py`가 Pillow로 줄인다(장면 512px, 그 밖 128px, 품질 82). 저장소에는 WebP만 넣는다. 그림 몫(설계 13.3의 50KB)은 WebP 파일의 바이트로 세고, 시험이 가장 큰 조합(가장 큰 장면, 얼굴, 춘삼이 스티커, 춘식이 스티커 둘 가운데 큰 것)이 50,000바이트를 넘지 않는 것을 본다. HTML에는 base64로 들어가 약 3분의 1이 늘어난다(「3단계 2부 계획에서 보완」의 7번).
 - `ART-LICENSE.md`는 설계 7.1의 그림 이용 조건을 영어와 한국어로 적는다. 결과 화면과 카드에 든 그림은 그대로 공유해도 되고, 그림만 떼어 다른 데 쓰는 것은 허락하지 않는다.
 - 장면은 AQ를 냈으면 등급 단계의 장면, 내지 않았으면 기록을 읽지 못했다는 알림(`record_unreadable`)이 있을 때 "읽지 못함", 없으면 "모자람"이다. 스티커는 정비할 것이 있으면 고칠 것, 없으면 다 고침이다.
 - 그림 폴더는 묶은 실행 파일(`<스킬>/scripts/aq.mjs`) 옆의 `<스킬>/assets`다. 원본으로 돌릴 때(시험과 개발)는 `null`이고 그림 없이 그린다. 읽지 못한 그림 하나는 `null`이 되고 다른 그림은 그대로 읽는다.
@@ -127,10 +128,11 @@ describe("그림 폴더", () => {
       expect(webpSize(join(ASSETS, file)), name).toEqual({ width: size, height: size });
     }
   });
-  it("한 화면에 넣는 그림(장면 하나, 얼굴, 스티커 둘)은 60KB를 넘지 않는다", () => {
-    const largestScene = Math.max(...Object.entries(ART_FILES).filter(([name]) => name.startsWith("scene")).map(([, file]) => statSync(join(ASSETS, file)).size));
-    const small = ["face", "sticker-good", "sticker-fix"].map((name) => statSync(join(ASSETS, ART_FILES[name as keyof typeof ART_FILES])).size);
-    expect(largestScene + small.reduce((a, b) => a + b, 0)).toBeLessThan(60 * 1024);
+  it("한 화면에 넣는 그림(장면 하나, 얼굴, 스티커 둘)의 WebP는 가장 큰 조합도 50,000바이트를 넘지 않는다", () => {
+    const sizeOf = (name: keyof typeof ART_FILES): number => statSync(join(ASSETS, ART_FILES[name])).size;
+    const scenes = (Object.keys(ART_FILES) as (keyof typeof ART_FILES)[]).filter((name) => name.startsWith("scene"));
+    const largest = Math.max(...scenes.map(sizeOf)) + sizeOf("face") + sizeOf("sticker-good") + Math.max(sizeOf("sticker-fix"), sizeOf("sticker-done"));
+    expect(largest).toBeLessThanOrEqual(50_000);
   });
   it("그림 이용 조건 파일에 설계의 문장이 그대로 있다(설계 7.1)", () => {
     const terms = readFileSync(join(ASSETS, "ART-LICENSE.md"), "utf8");
@@ -857,13 +859,13 @@ describe("출력 토큰의 줄임", () => {
   it("영어는 원래 값이 속한 단위를 먼저 고르고 소수 한 자리로 반올림한다. 반올림한 값이 1,000이 될 때만 한 단계 올린다", () => {
     const cases: [number, string][] = [
       [0, "0"], [999, "999"], [1_000, "1K"], [1_500, "1.5K"], [949_999, "950K"], [950_000, "950K"], [999_499, "999.5K"], [999_949, "999.9K"], [999_950, "1M"],
-      [111_588_153, "111.6M"], [950_000_000, "950M"], [999_949_999, "999.9M"], [999_950_000, "1B"], [1_500_000_000, "1.5B"], [1_234_567_890_123, "1,234.6B"],
+      [123_456_789, "123.5M"], [950_000_000, "950M"], [999_949_999, "999.9M"], [999_950_000, "1B"], [1_500_000_000, "1.5B"], [1_234_567_890_123, "1,234.6B"],
     ];
     for (const [value, text] of cases) expect(shortTokens(value, "en"), String(value)).toBe(text);
   });
   it("한국어는 만 단위로 반올림한 뒤 억으로 올린다. 1억 10,000만이나 9,999만 5천처럼 쓰지 않는다", () => {
     const cases: [number, string][] = [
-      [0, "0"], [9_999, "9,999"], [10_000, "1만"], [14_999, "1만"], [15_000, "2만"], [99_994_999, "9,999만"], [99_995_000, "1억"], [100_000_000, "1억"], [111_588_153, "1억 1,159만"], [200_004_999, "2억"], [1_234_567_890_123, "12,345억 6,789만"],
+      [0, "0"], [9_999, "9,999"], [10_000, "1만"], [14_999, "1만"], [15_000, "2만"], [99_994_999, "9,999만"], [99_995_000, "1억"], [100_000_000, "1억"], [123_456_789, "1억 2,346만"], [200_004_999, "2억"], [1_234_567_890_123, "12,345억 6,789만"],
     ];
     for (const [value, text] of cases) expect(shortTokens(value, "ko"), String(value)).toBe(text);
   });
@@ -959,7 +961,9 @@ git commit -m "feat: 결과 화면의 토큰 줄임과 백분율 서식을 더�
 
 - 스타일은 확정 시안(`sheet-wide-v4`)과 3단계 시안 후보 가의 배치를 옮겼다. 지금 언어가 아닌 쪽(`data-l`)을 숨기는 규칙, `hidden` 속성이 단추의 `display`보다 앞서는 규칙, 표로 보기의 전환, 폭 1100·920·760의 배치, 움직임을 줄이는 설정이 있다. 바깥 자원(그림 주소, 글꼴, 다른 스타일 파일)을 부르지 않는다.
 - 화면 안의 스크립트는 언어 바꾸기(문서의 `data-ui`와 `lang`, 단추의 눌림, `data-tr`이 붙은 요소의 정해 둔 속성), [정리하기]의 복사(성공하면 알림, 막히면 글상자를 골라 둔 채 보이고 초점을 옮긴다), 표로 보기, 달력의 말풍선, 공유 카드 1의 그리기(1200×630, 그리지 못하면 그 글을 보임)와 창을 닫으면 단추로 초점을 돌리는 것만 맡는다. 문장을 만들지 않고 화면에 이미 있는 두 언어의 글과 넘겨받은 자료를 쓴다.
-- 스크립트는 템플릿 글자와 역슬래시를 쓰지 않는 글로 두고(`String.raw`), 찾는 요소의 id는 `SCRIPT_IDS`에서 끼운다. 시험이 문법, 네트워크를 부르는 이름이 없음(묶음 검사와 같은 규칙), 글을 HTML로 넣거나 코드로 돌리지 않음, 브라우저 저장소와 쿠키를 쓰지 않음, 찾는 요소가 정해 둔 것뿐임, 바꾸는 속성이 정해 둔 다섯뿐임을 본다. 실제 동작은 마지막 과제에서 브라우저로 본다.
+- 언어를 바꾸면 떠 있는 복사 알림, 화면 읽기 프로그램용 알림 글(늦게 들어올 글까지), 달력의 말풍선을 닫는다. 지난 언어의 글이 남지 않게 한다(계획 리뷰 1차의 짝 Codex 1).
+- 언어 단추 묶음은 잘라내기 없이 양 끝 단추에 둥근 모서리를 준다. 묶음이 잘라내면 단추의 키보드 초점 테두리가 가려진다(계획 리뷰 1차의 짝 Codex 2가 실제 화면에서 찾았다).
+- 스크립트는 템플릿 글자와 역슬래시를 쓰지 않는 글로 두고(`String.raw`), 찾는 요소의 id는 `SCRIPT_IDS`에서 끼운다. 이 과제의 시험은 문법, 네트워크를 부르는 이름이 없음(묶음 검사와 같은 규칙), 글을 HTML로 넣거나 코드로 돌리지 않음, 브라우저 저장소와 쿠키를 쓰지 않음, 찾는 요소가 정해 둔 것뿐임, 바꾸는 속성이 정해 둔 다섯뿐임을 본다. 스크립트를 실제로 돌려 동작을 보는 시험은 결과 화면 HTML이 생기는 과제 6에 있다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -1109,9 +1113,36 @@ const MONO = 'ui-monospace,"Cascadia Mono",Consolas,monospace';
 const lang = () => (root.getAttribute("data-ui") === "en" ? "en" : "ko");
 const pick = (texts) => (texts ? texts[lang()] || "" : "");
 
-/* 언어 바꾸기. 다시 그리지 않으므로 펼친 항목과 초점이 그대로다 */
+/* 알림. 눈에 보이는 알림과 화면 읽기 프로그램용 자리를 따로 둔다 */
+const toast = document.getElementById("${ID.toast}");
+const live = document.getElementById("${ID.live}");
+let toastTimer = 0;
+let liveTimer = 0;
+const hideToast = () => {
+  clearTimeout(toastTimer);
+  if (toast) toast.style.display = "none";
+};
+const announce = (message) => {
+  if (live) {
+    clearTimeout(liveTimer);
+    live.textContent = "";
+    liveTimer = setTimeout(() => { live.textContent = message; }, 60);
+  }
+  if (toast) {
+    clearTimeout(toastTimer);
+    toast.textContent = message;
+    toast.style.display = "block";
+    toastTimer = setTimeout(hideToast, 2600);
+  }
+};
+
+/* 언어 바꾸기. 다시 그리지 않으므로 펼친 항목과 초점이 그대로다. 떠 있는 알림과 말풍선은 지난 언어의 글이라 닫는다 */
 const setLang = (next) => {
   if (next !== "en" && next !== "ko") return;
+  hideToast();
+  clearTimeout(liveTimer);
+  if (live) live.textContent = "";
+  document.querySelectorAll(".tip").forEach((tip) => { tip.style.display = "none"; });
   root.setAttribute("data-ui", next);
   root.setAttribute("lang", next);
   document.querySelectorAll("[data-set-lang]").forEach((button) => button.setAttribute("aria-pressed", String(button.getAttribute("data-set-lang") === next)));
@@ -1126,27 +1157,6 @@ const setLang = (next) => {
       else el.setAttribute(target, attr.value);
     });
   });
-};
-
-/* 알림. 눈에 보이는 알림과 화면 읽기 프로그램용 자리를 따로 둔다 */
-const toast = document.getElementById("${ID.toast}");
-const live = document.getElementById("${ID.live}");
-let toastTimer = 0;
-const hideToast = () => {
-  clearTimeout(toastTimer);
-  if (toast) toast.style.display = "none";
-};
-const announce = (message) => {
-  if (live) {
-    live.textContent = "";
-    setTimeout(() => { live.textContent = message; }, 60);
-  }
-  if (toast) {
-    clearTimeout(toastTimer);
-    toast.textContent = message;
-    toast.style.display = "block";
-    toastTimer = setTimeout(hideToast, 2600);
-  }
 };
 
 /* 두 언어의 글을 담은 요소 */
@@ -1427,10 +1437,13 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .brand{font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase;color:var(--ink2)}
 .title{font-size:32px;font-weight:800;letter-spacing:-.02em;margin:2px 0 0;line-height:1.15}
 .hdr{display:grid;gap:10px;justify-items:end}
-.langsw{display:inline-flex;border:1px solid var(--ink);border-radius:8px;overflow:hidden}
-.langsw button{min-height:44px;min-width:44px;padding:0 14px;border:0;background:var(--paper);font-size:14px;color:var(--ink2)}
+.langsw{display:inline-flex;border:1px solid var(--ink);border-radius:8px}
+.langsw button{min-height:44px;min-width:44px;padding:0 14px;border:0;border-radius:0;background:var(--paper);font-size:14px;color:var(--ink2)}
+.langsw button:first-child{border-radius:7px 0 0 7px}
+.langsw button:last-child{border-radius:0 7px 7px 0}
 .langsw button+button{border-left:1px solid var(--ink)}
 .langsw button[aria-pressed="true"]{background:var(--ink);color:#fff;font-weight:700}
+.langsw button:focus-visible{position:relative;z-index:1}
 .info{display:grid;grid-auto-flow:column;gap:0;margin:0;border:1px solid var(--ink);border-radius:2px}
 .info div{padding:7px 16px;border-left:1px solid var(--ink)}
 .info div:first-child{border-left:0}
@@ -1623,7 +1636,9 @@ git commit -m "feat: 결과 화면의 스타일과 화면 스크립트를 더함
 - Modify: `src/report/assets.ts`
 - Modify: `src/report/copy.ts`
 - Modify: `src/report/style.ts`
+- Test: `test/helpers/fake-dom.ts`
 - Test: `test/report/html.test.ts`
+- Test: `test/report/script-run.test.ts`
 
 **Interfaces:**
 - Consumes: 과제 1의 `sceneFor`와 `ReportArt`, 과제 2의 `ReportView`와 `reportView`, 과제 3의 고정 글, 과제 4의 서식, 과제 5의 `REPORT_CSS`, `REPORT_SCRIPT`, `SCRIPT_IDS`, `ClientData`, 4부의 `AXIS_NAMES`, `SUMMARY_COPY`, `TOOL_NAMES`, `UNJUDGED_COPY`, `joinValue`, `fill`, `groupDigits`, 1부의 요약 `fixDetail`(`src/core/result/summary.ts`, 이 과제가 내보낸다).
@@ -1633,12 +1648,312 @@ git commit -m "feat: 결과 화면의 스타일과 화면 스크립트를 더함
 
 - 두 언어의 글을 언어 표시가 붙은 짝(`<span lang data-l>`)으로 모두 그리고, 언어마다 모양이 다른 요소(큰 숫자 자리, 어떻게 쟀나, 도구별 나눔)는 언어마다 따로 그린다. 시험이 두 언어의 칸 수가 같은지 본다. 언어를 바꿀 때 옮길 속성은 처음 언어의 값으로 채워 두고 두 언어의 값을 함께 둔다(스크립트가 돌지 않아도 처음 언어로 읽힌다).
 - CSP는 `default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-<스크립트의 해시>'; base-uri 'none'; form-action 'none'`이다. 스크립트는 둘(실행하지 않는 JSON 자료와 해시가 맞는 본문)뿐이고, 주소(`http`), 링크, 틀(iframe, object, embed)이 없다.
-- 큰 숫자 자리는 규칙을 못 쟀으면 "잴 수 없음"과 이유의 낱말, 쟀으면 잰 값과 단위다(예상 효과만 없으면 잰 값 그대로). AQ를 내지 않았으면 예상 효과 꼬리표, 먼저 고칠 것, 카드 단추, 카드 창과 카드 자료가 없다. 시험이 정비 항목에 예상 효과를 억지로 넣어도 꼬리표가 없는 것을 본다.
+- 큰 숫자 자리는 규칙을 못 쟀으면 "잴 수 없음"과 이유의 낱말, 쟀으면 잰 값과 단위다(예상 효과만 없으면 잰 값 그대로). AQ를 내지 않았으면 예상 효과 꼬리표, 먼저 고칠 것, 카드 단추, 카드 창과 카드 자료가 없고, 장면 아래 글이 AQ를 내지 않은 까닭이다(그 글을 다른 자리에 또 쓰지 않는다). 시험이 정비 항목에 예상 효과를 억지로 넣어도 꼬리표가 없는 것을 본다. 카드 단추와 창은 카드 자료(AQ와 등급)가 있을 때만 둔다.
+- 바깥에서 오는 글이 들어가는 자리마다(정리할 것, 서버와 그 프로젝트, claude.ai 연결, S3 위치, F3·F4 프로젝트, 규칙 문장과 어떻게 쟀나, E6 정보 줄, 알림, 별명과 진단) 표시가 다른 공격 글을 넣어, 그 자리가 그려졌는지와 HTML로 풀리지 않았는지, JSON 자료가 `</script>`로 끊기지 않고 원래 글로 읽히는지를 시험이 본다(계획 리뷰 1차에서 두 짝이 찾은 빈틈).
+- 화면 안의 스크립트는 시험 전용 문서 대역(`test/helpers/fake-dom.ts`. 이 저장소가 만드는 HTML을 읽고 스크립트가 쓰는 만큼의 요소, 사건, 그림, 캔버스만 흉내 낸다) 위에서 실제로 만든 결과 화면에 돌린다. 언어 바꾸기(문서 언어, 단추의 눌림, 옮길 속성 전부, 정해 둔 다섯 밖은 옮기지 않음, 펼친 항목), 복사가 막힐 때와 거절될 때의 글상자(골라 둠, 초점, 언어를 바꾸면 말이 바뀜, 하나만), 복사 성공 알림과 언어를 바꿀 때 닫기, 표로 보기, 말풍선, 카드(1200×630, 내려받기 이름, 창을 닫으면 초점이 돌아옴, 그림이 없을 때, 그리지 못할 때), AQ가 없는 화면을 본다. 연습 작업 폴더에서 그럴듯한 틀린 구현 22개(이름을 바꾸는 곳 하나씩 뺌, JSON 보호 뺌, 언어 표시·속성·목록 확인 뺌, 글상자·초점·알림 닫기·말풍선 닫기·표 전환·카드 크기·초점 돌리기·못 그림 알림 뺌, 장면 아래 까닭 뺌, 등급 없는 카드 단추)를 하나씩 넣어 모두 실패하는 것을 확인했다(계획 리뷰 1차의 짝 Codex 2가 찾은 빈틈).
 - 판정에서 뺀 서버는 까닭마다 이름(프로젝트 범위면 폴더 이름을 곁에)을 적고, 지켜보는 중이면 "다른 조건이 같으면 N일 뒤의 점검부터 판정할 수 있습니다", 날을 모르면 정하지 못했다고 적는다. claude.ai 연결은 `deniedMcpServers`에 더할 항목을 JSON 목록으로 보인다. S3의 위치, F3과 F4의 프로젝트는 이름 칩이다.
 - 그림을 읽지 못하면 장면 자리에 대체 글을 그리고 카드가 쓸 그림 요소를 두지 않는다. 카드 자료에는 점수, 등급, 별명, 기준, 점검일, 고정 글만 싣고 JSON의 `<`를 `\u003c`로 적는다.
 - 연습 작업 폴더의 화면 확인에서 고친 것이 이 과제에 들었다. 영어의 "Not measured"가 기준 값 칸에서 글자 중간에 끊겨 칸을 64px로 넓히고 낱말로만 끊었다. 정보 표의 낱말 값(찾지 못함, 저장 안 함)은 고정폭 글꼴에서 한글 사이가 벌어져 본문 글꼴로 썼다. 두 언어의 짝이 든 숫자 칸의 글자가 작아지지 않게 자손 선택자를 바로 아래로 좁혔다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
+
+`test/helpers/fake-dom.ts`(새 파일):
+
+```ts
+// 결과 화면 HTML을 읽어 화면 안의 스크립트를 Node에서 돌려 보는 작은 문서 대역. 이 저장소가 만드는 HTML과 그 스크립트가 쓰는 만큼의 요소, 속성, 사건, 그림, 캔버스만 흉내 낸다(시험 전용)
+const VOID = new Set(["meta", "img", "link", "br", "hr", "input"]);
+const RAW = new Set(["script", "style"]);
+const decode = (text: string): string => text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+
+type Listener = (event: FakeEvent) => void;
+export interface FakeEvent {
+  type: string;
+  target: FakeElement;
+  relatedTarget: FakeElement | null;
+}
+
+class FakeText {
+  constructor(public text: string) {}
+}
+
+export class FakeElement {
+  attributes: { name: string; value: string }[] = [];
+  childNodes: (FakeElement | FakeText)[] = [];
+  parent: FakeElement | null = null;
+  style: Record<string, string> = {};
+  value = "";
+  readOnly = false;
+  rows = 0;
+  open = false;
+  selected = false;
+  listeners = new Map<string, Listener[]>();
+  constructor(
+    public tagName: string,
+    public ownerDocument: FakeDocument,
+  ) {}
+
+  getAttribute(name: string): string | null {
+    return this.attributes.find((attr) => attr.name === name)?.value ?? null;
+  }
+  setAttribute(name: string, value: string): void {
+    const found = this.attributes.find((attr) => attr.name === name);
+    if (found) found.value = String(value);
+    else this.attributes.push({ name, value: String(value) });
+  }
+  hasAttribute(name: string): boolean {
+    return this.getAttribute(name) !== null;
+  }
+  removeAttribute(name: string): void {
+    this.attributes = this.attributes.filter((attr) => attr.name !== name);
+  }
+  get id(): string {
+    return this.getAttribute("id") ?? "";
+  }
+  set id(value: string) {
+    this.setAttribute("id", value);
+  }
+  set className(value: string) {
+    this.setAttribute("class", value);
+  }
+  get classList() {
+    const list = () => (this.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
+    return {
+      contains: (name: string) => list().includes(name),
+      toggle: (name: string) => {
+        const has = list().includes(name);
+        this.setAttribute("class", (has ? list().filter((item) => item !== name) : [...list(), name]).join(" "));
+        return !has;
+      },
+    };
+  }
+  get hidden(): boolean {
+    return this.hasAttribute("hidden");
+  }
+  set hidden(value: boolean) {
+    if (value) this.setAttribute("hidden", "");
+    else this.removeAttribute("hidden");
+  }
+  get src(): string {
+    return this.getAttribute("src") ?? "";
+  }
+  set src(value: string) {
+    this.setAttribute("src", value);
+  }
+  get alt(): string {
+    return this.getAttribute("alt") ?? "";
+  }
+  set alt(value: string) {
+    this.setAttribute("alt", value);
+  }
+  get href(): string {
+    return this.getAttribute("href") ?? "";
+  }
+  set href(value: string) {
+    this.setAttribute("href", value);
+  }
+  get download(): string {
+    return this.getAttribute("download") ?? "";
+  }
+  set download(value: string) {
+    this.setAttribute("download", value);
+  }
+  get textContent(): string {
+    return this.childNodes.map((node) => (node instanceof FakeText ? node.text : node.textContent)).join("");
+  }
+  set textContent(value: string) {
+    this.childNodes = value === "" ? [] : [new FakeText(String(value))];
+  }
+  get children(): FakeElement[] {
+    return this.childNodes.filter((node): node is FakeElement => node instanceof FakeElement);
+  }
+  appendChild(child: FakeElement): FakeElement {
+    child.remove();
+    child.parent = this;
+    this.childNodes.push(child);
+    return child;
+  }
+  insertAdjacentElement(where: "afterend", element: FakeElement): FakeElement {
+    if (where !== "afterend" || this.parent === null) throw new Error(`대역이 다루지 않는 자리: ${where}`);
+    element.remove();
+    const siblings = this.parent.childNodes;
+    siblings.splice(siblings.indexOf(this) + 1, 0, element);
+    element.parent = this.parent;
+    return element;
+  }
+  remove(): void {
+    if (this.parent === null) return;
+    this.parent.childNodes.splice(this.parent.childNodes.indexOf(this), 1);
+    this.parent = null;
+  }
+  get nextElementSibling(): FakeElement | null {
+    if (this.parent === null) return null;
+    const siblings = this.parent.children;
+    return siblings[siblings.indexOf(this) + 1] ?? null;
+  }
+  /** 이 대역은 단순 선택자(`[이름]`, `.이름`, `태그`)만 다룬다 */
+  matches(selector: string): boolean {
+    const attr = /^\[([\w-]+)\]$/.exec(selector);
+    if (attr) return this.hasAttribute(attr[1]!);
+    if (selector.startsWith(".")) return this.classList.contains(selector.slice(1));
+    if (/^[a-z]+$/.test(selector)) return this.tagName === selector;
+    throw new Error(`대역이 다루지 않는 선택자: ${selector}`);
+  }
+  closest(selector: string): FakeElement | null {
+    for (let node: FakeElement | null = this; node !== null; node = node.parent) if (node.matches(selector)) return node;
+    return null;
+  }
+  querySelectorAll(selector: string): FakeElement[] {
+    const found: FakeElement[] = [];
+    const walk = (node: FakeElement) => {
+      for (const child of node.children) {
+        if (child.matches(selector)) found.push(child);
+        walk(child);
+      }
+    };
+    walk(this);
+    return found;
+  }
+  querySelector(selector: string): FakeElement | null {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
+  addEventListener(type: string, listener: Listener): void {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+  focus(): void {
+    this.ownerDocument.activeElement = this;
+  }
+  select(): void {
+    this.selected = true;
+  }
+  getBoundingClientRect() {
+    return { left: 0, top: 0, width: 10, height: 10 };
+  }
+  /** 브라우저처럼 창 안의 첫 단추로 초점을 옮긴다 */
+  showModal(): void {
+    this.open = true;
+    this.querySelector("button")?.focus();
+  }
+  close(): void {
+    this.open = false;
+    for (const listener of this.listeners.get("close") ?? []) listener({ type: "close", target: this, relatedTarget: null });
+  }
+}
+
+/** 캔버스. 그리기 함수는 아무 일도 하지 않고, 그림 주소에 크기를 적는다 */
+export class FakeCanvas extends FakeElement {
+  width = 300;
+  height = 150;
+  getContext(kind: string): unknown {
+    if (kind !== "2d" || this.ownerDocument.canvasBroken) return null;
+    return new Proxy({} as Record<string | symbol, unknown>, { get: (target, key) => (key in target ? target[key] : () => undefined), set: (target, key, value) => ((target[key] = value), true) });
+  }
+  toDataURL(type: string): string {
+    return `data:${type};base64,FAKE-${this.width}x${this.height}`;
+  }
+}
+
+export class FakeDocument {
+  root = new FakeElement("#document", this);
+  activeElement: FakeElement | null = null;
+  /** 참이면 캔버스가 그리기 문맥을 주지 않는다(카드를 그리지 못하는 브라우저) */
+  canvasBroken = false;
+  get documentElement(): FakeElement {
+    return this.root.children[0]!;
+  }
+  getElementById(id: string): FakeElement | null {
+    return this.root.querySelectorAll(`[id]`).find((element) => element.id === id) ?? null;
+  }
+  querySelectorAll(selector: string): FakeElement[] {
+    return this.root.querySelectorAll(selector);
+  }
+  createElement(tag: string): FakeElement {
+    return tag === "canvas" ? new FakeCanvas(tag, this) : new FakeElement(tag, this);
+  }
+  addEventListener(type: string, listener: Listener): void {
+    this.root.addEventListener(type, listener);
+  }
+  /** 사건을 대상에서 문서까지 올려 보낸다 */
+  dispatch(type: string, target: FakeElement, relatedTarget: FakeElement | null = null): void {
+    for (let node: FakeElement | null = target; node !== null; node = node.parent) for (const listener of node.listeners.get(type) ?? []) listener({ type, target, relatedTarget });
+  }
+}
+
+/** 이 저장소가 만드는 HTML을 읽는다. 큰따옴표 속성, 빈 속성, 닫는 빗금, 원문 그대로인 script와 style만 다룬다 */
+export function parseHtml(html: string): FakeDocument {
+  const doc = new FakeDocument();
+  const stack: FakeElement[] = [doc.root];
+  let index = 0;
+  while (index < html.length) {
+    if (html.startsWith("<!", index)) {
+      index = html.indexOf(">", index) + 1;
+      continue;
+    }
+    if (html.startsWith("</", index)) {
+      const end = html.indexOf(">", index);
+      const name = html.slice(index + 2, end).trim().toLowerCase();
+      while (stack.length > 1 && stack.pop()!.tagName !== name);
+      index = end + 1;
+      continue;
+    }
+    if (html[index] === "<" && /[a-zA-Z]/.test(html[index + 1] ?? "")) {
+      const tag = /^<([a-zA-Z][\w-]*)/.exec(html.slice(index))!;
+      const element = doc.createElement(tag[1]!.toLowerCase());
+      let cursor = index + tag[0].length;
+      const attribute = /\s*([^\s=/>]+)(?:="([^"]*)")?/y;
+      for (;;) {
+        const rest = html.slice(cursor);
+        if (/^\s*\/?>/.test(rest)) break;
+        attribute.lastIndex = cursor;
+        const match = attribute.exec(html);
+        if (match === null) throw new Error(`속성을 읽지 못했다: ${html.slice(cursor, cursor + 40)}`);
+        element.setAttribute(match[1]!, decode(match[2] ?? ""));
+        cursor = attribute.lastIndex;
+      }
+      const close = html.indexOf(">", cursor);
+      const selfClosing = html[close - 1] === "/";
+      stack[stack.length - 1]!.appendChild(element);
+      index = close + 1;
+      if (RAW.has(element.tagName)) {
+        const end = html.indexOf(`</${element.tagName}>`, index);
+        element.textContent = html.slice(index, end);
+        index = end + element.tagName.length + 3;
+      } else if (!VOID.has(element.tagName) && !selfClosing) stack.push(element);
+      continue;
+    }
+    const next = html.indexOf("<", index);
+    const text = html.slice(index, next === -1 ? html.length : next);
+    if (text !== "") stack[stack.length - 1]!.childNodes.push(new FakeText(decode(text)));
+    index = next === -1 ? html.length : next;
+  }
+  return doc;
+}
+
+/** 그림. 주소를 넣으면 다음 차례에 불러온 것으로 알린다. 빈 주소는 불러오지 못한 것이다 */
+export class FakeImage {
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  set src(value: string) {
+    queueMicrotask(() => (value ? this.onload?.() : this.onerror?.()));
+  }
+}
+
+export interface ScriptWorld {
+  doc: FakeDocument;
+  clipboard: { writeText: (text: string) => Promise<void> } | undefined;
+}
+
+/** 문서 대역 위에서 스크립트를 돌린다. 시계는 지금 전역의 setTimeout이다(시험이 가짜 시계로 바꿀 수 있다) */
+export function runScript(script: string, world: ScriptWorld): void {
+  const navigator = world.clipboard === undefined ? {} : { clipboard: world.clipboard };
+  const window = { isSecureContext: true };
+  new Function("document", "window", "navigator", "Image", "Element", "setTimeout", "clearTimeout", script)(world.doc, window, navigator, FakeImage, FakeElement, setTimeout, clearTimeout);
+}
+
+/** 기다리고 있는 약속을 모두 풀어 준다 */
+export async function settle(): Promise<void> {
+  for (let round = 0; round < 20; round++) await Promise.resolve();
+}
+```
 
 `test/report/html.test.ts`(새 파일):
 
@@ -1761,6 +2076,51 @@ describe("reportHtml", () => {
     expect(html).toContain(`<code>${esc(evil)}</code>`);
   });
 
+  it("바깥에서 온 이름과 글은 어느 자리에서도 HTML로 풀리지 않고, JSON 자료는 </script>로 끊기지 않는다", () => {
+    // 자리마다 다른 표시를 붙여, 그 자리가 실제로 그려졌는지와 HTML로 풀리지 않았는지를 함께 본다
+    const evil = (mark: string): string => `${mark}"><img src=x onerror=alert(1)></script><b>&'`;
+    const base = viewOf(result({ setup: { mcpServers: [mcpServer("watching")] } }));
+    const hostile = (mark: string) => ({ en: evil(`${mark}-en`), ko: evil(`${mark}-ko`) });
+    const findings = base.findings.map((finding) => {
+      // E6의 정보 줄은 판정에서 뺀 서버 칸에만 그린다
+      if (finding.ruleId === "E6") return { ...finding, text: { en: { ...finding.text.en, notes: [evil("note-en")] }, ko: { ...finding.text.ko, notes: [evil("note-ko")] } } };
+      if (finding.ruleId !== "E5") return finding;
+      const text = (lang: "en" | "ko") => ({ ...finding.text[lang], title: evil(`title-${lang}`), name: evil(`name-${lang}`), description: evil(`description-${lang}`), prescription: evil(`prescription-${lang}`), method: [evil(`method-${lang}`)] });
+      return { ...finding, category: "repair" as const, severity: "caution" as const, gain: 3, targets: [evil("target")], text: { en: text("en"), ko: text("ko") } };
+    });
+    const view: ReportView = {
+      ...base,
+      findings,
+      servers: [
+        { tool: "claude-code", name: evil("server"), scope: "local", projectName: evil("server-project"), why: "not_established", daysUntil: 3 },
+        { tool: "claude-code", name: evil("connector"), scope: "claude-ai", projectName: null, why: "no_definition", daysUntil: null },
+      ],
+      setupProblems: [{ tool: "claude-code", kind: "unparsable", place: evil("place") }],
+      missingInstructions: [evil("missing")],
+      worstOverlap: evil("overlap"),
+      notices: [{ kind: "record_unreadable", text: hostile("notice") }],
+      text: { en: { ...base.text.en, grade: evil("grade-en"), diagnosis: evil("diagnosis-en") }, ko: { ...base.text.ko, grade: evil("grade-ko"), diagnosis: evil("diagnosis-ko") } },
+    };
+    const html = reportHtml(view, art);
+    expect(html).not.toContain("<img src=x");
+    expect(html).not.toContain("<b>&");
+    expect(count(html, "<script")).toBe(2);
+    expect(count(html, "</script>")).toBe(2);
+    const marks = ["target", "server", "server-project", "connector", "place", "missing", "overlap", "notice-en", "notice-ko", "grade-en", "grade-ko", "diagnosis-en", "diagnosis-ko", "title-ko", "name-ko", "description-ko", "prescription-ko", "method-ko", "note-ko"];
+    for (const mark of marks) expect(html, mark).toContain(esc(evil(mark)));
+    expect(html).toContain(`data-phrase-ko="${esc(REPORT_COPY.phrase.ko.replace("{name}", evil("name-ko")))}"`);
+    expect(html).toContain(esc(JSON.stringify(evil("connector"))));
+    expect(dataOf(html).card!.nick).toEqual({ en: evil("grade-en"), ko: evil("grade-ko") });
+  });
+
+  it("AQ가 있는데 등급이 없으면(평가가 내지 않는 조합) 카드 단추와 창과 자료를 모두 두지 않는다", () => {
+    const view = viewOf(result());
+    const html = reportHtml({ ...view, score: { ...view.score, grade: null } }, art);
+    expect(html).not.toContain('data-act="card"');
+    expect(html).not.toContain(`id="${SCRIPT_IDS.dialog}"`);
+    expect(dataOf(html).card).toBeNull();
+  });
+
   it("AQ를 냈으면 등급 단계의 장면과 별명, 도장, 먼저 고칠 것을 그린다", () => {
     const checked = result();
     const view = viewOf(checked);
@@ -1773,14 +2133,16 @@ describe("reportHtml", () => {
     expect(html.includes(REPORT_COPY.fixFirst.ko)).toBe(repairs.length > 0);
   });
 
-  it("AQ를 내지 않았으면 점수 없음과 까닭을 보이고, 먼저 고칠 것과 예상 효과 꼬리표와 카드 단추를 그리지 않는다", () => {
+  it("AQ를 내지 않았으면 점수 없음과 장면 아래의 까닭을 보이고, 먼저 고칠 것과 예상 효과 꼬리표와 카드 단추를 그리지 않는다", () => {
     const thin = result({ sessions: thinSessions });
     const view = viewOf(thin, { saved: false, round: null });
     // 정비 항목에 예상 효과가 있다고 해도 꼬리표를 그리지 않는다
     const forced: ReportView = { ...view, findings: [...view.findings, { ...view.findings[0]!, ruleId: "E5", category: "repair", gain: 7, targets: ["old-skill"] }] };
     const html = reportHtml(forced, art);
     expect(html).toContain(`<div class="n none"><span lang="en" data-l="en">${REPORT_COPY.noScore.en}</span>`);
-    expect(html).toContain(`<p class="withheld">${pairOf(view.withheldText!)}</p>`);
+    // 장면 아래의 글이 AQ를 내지 않은 까닭이다(「3단계 계획 전 결정」의 12번). 같은 글을 다른 자리에 또 쓰지 않는다
+    expect(between(html, '<figure class="scene">', "</figure>")).toContain(`<figcaption class="why">${pairOf(view.withheldText!)}</figcaption>`);
+    expect(count(html, esc(view.withheldText!.ko))).toBe(1);
     expect(html).not.toContain('class="tag up"');
     expect(html).not.toContain(REPORT_COPY.fixFirst.ko);
     expect(html).toContain(`data-ko-alt="${esc(SCENE_ALT["scene-few-records"].ko)}"`);
@@ -1845,10 +2207,230 @@ describe("reportHtml", () => {
 const pairOf = (texts: { en: string; ko: string }): string => `<span lang="en" data-l="en">${esc(texts.en)}</span><span lang="ko" data-l="ko">${esc(texts.ko)}</span>`;
 ```
 
+`test/report/script-run.test.ts`(새 파일):
+
+```ts
+// 결과 화면 안의 스크립트를 실제로 만든 HTML 위에서 돌려 본다. 언어 바꾸기, 복사와 막힐 때의 글상자, 떠 있는 알림과 말풍선 닫기, 표로 보기, 공유 카드 그리기와 초점을 문서 대역에서 본다(설계 13.2, 13.4, 14, 「3단계 2부 계획에서 보완」의 2·9·10번)
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { evaluate } from "../../src/core/evaluate.ts";
+import { checkupResult, type CheckupResult } from "../../src/core/result/assemble.ts";
+import type { CollectedTool } from "../../src/core/result/tools.ts";
+import type { ReportArt } from "../../src/report/assets.ts";
+import { REPORT_COPY } from "../../src/report/copy.ts";
+import { reportHtml } from "../../src/report/html.ts";
+import { REPORT_SCRIPT, SCRIPT_IDS, SWAP_TARGETS } from "../../src/report/script.ts";
+import { reportView, type ReportView } from "../../src/report/view.ts";
+import { parseHtml, runScript, settle, type FakeDocument, type FakeElement, type ScriptWorld } from "../helpers/fake-dom.ts";
+import { claudeTool, evaluationInput } from "../helpers/evaluation.ts";
+
+const collected: CollectedTool = {
+  tool: "claude-code",
+  detected: true,
+  visibleFrom: "2026-10-01",
+  overlappingSessions: 0,
+  read: { files: 3, listedBytes: 300, bytes: 300, inProgress: 0, olderThanWindow: 0, unreadableFiles: [], unreadableFileBytes: 0, unknownSizeFiles: 0, unreadableDirs: [] },
+  observation: { skills: { complete: true, reasons: [] }, mcp: { complete: true, reasons: [] } },
+};
+const enough = Array.from({ length: 3 }, (_, index) => ({ days: { [`2026-11-1${index}`]: { responses: 3, humanRequests: 10 } } }));
+const result = (sessions = enough): CheckupResult => {
+  const input = evaluationInput([claudeTool({ sessions })]);
+  return checkupResult({ input, evaluation: evaluate(input), collected: [collected], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+};
+const art: ReportArt = { scene: "data:image/webp;base64,U0NFTkU=", face: "data:image/webp;base64,RkFDRQ==", good: "data:image/webp;base64,R09PRA==", fix: "data:image/webp;base64,RklY" };
+const scoredView = (): ReportView => reportView(result(), { saved: true, round: 1 });
+/** 정리할 것이 있는 정비 항목을 하나 넣은 자료(작성자 PC에 없는 경우라 지어낸다) */
+const withRepair = (view: ReportView): ReportView => ({
+  ...view,
+  findings: view.findings.map((finding) => (finding.ruleId === "E5" ? { ...finding, category: "repair" as const, severity: "caution" as const, gain: 4, targets: ["old-skill"] } : finding)),
+});
+
+function open(view: ReportView, clipboard?: ScriptWorld["clipboard"], pictures: ReportArt = art): FakeDocument {
+  const doc = parseHtml(reportHtml(view, pictures));
+  runScript(REPORT_SCRIPT, { doc, clipboard });
+  return doc;
+}
+const byId = (doc: FakeDocument, id: string): FakeElement => {
+  const element = doc.getElementById(id);
+  if (element === null) throw new Error(`요소가 없다: ${id}`);
+  return element;
+};
+const action = (doc: FakeDocument, kind: string): FakeElement => doc.querySelectorAll("[data-act]").find((element) => element.getAttribute("data-act") === kind)!;
+const langButton = (doc: FakeDocument, code: "en" | "ko"): FakeElement => doc.querySelectorAll("[data-set-lang]").find((element) => element.getAttribute("data-set-lang") === code)!;
+const click = (doc: FakeDocument, element: FakeElement): void => doc.dispatch("click", element);
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+describe("언어 바꾸기", () => {
+  it("언어 단추를 누르면 문서의 언어, 단추의 눌림, 정해 둔 속성이 모두 그 언어로 바뀌고 펼친 항목은 그대로다", () => {
+    const doc = open(scoredView());
+    const details = doc.querySelectorAll("details")[0]!;
+    details.setAttribute("open", "");
+    for (const code of ["en", "ko"] as const) {
+      click(doc, langButton(doc, code));
+      expect(doc.documentElement.getAttribute("data-ui")).toBe(code);
+      expect(doc.documentElement.getAttribute("lang")).toBe(code);
+      expect(langButton(doc, code).getAttribute("aria-pressed")).toBe("true");
+      expect(langButton(doc, code === "en" ? "ko" : "en").getAttribute("aria-pressed")).toBe("false");
+      let swapped = 0;
+      for (const element of doc.querySelectorAll("[data-tr]")) {
+        for (const target of SWAP_TARGETS) {
+          const want = element.getAttribute(`data-${code}-${target}`);
+          if (want === null) continue;
+          swapped++;
+          const now = target === "text" ? element.textContent : target === "value" ? element.value : element.getAttribute(target);
+          expect(now, `${element.tagName} ${target}`).toBe(want);
+        }
+      }
+      // 옮길 속성을 단 요소마다 적어도 하나를 옮겼다
+      expect(swapped).toBeGreaterThanOrEqual(doc.querySelectorAll("[data-tr]").length);
+      expect(swapped).toBeGreaterThan(0);
+      expect(details.hasAttribute("open")).toBe(true);
+    }
+  });
+
+  it("정해 둔 다섯 밖의 속성은 옮기지 않는다", () => {
+    const doc = open(scoredView());
+    const element = doc.querySelectorAll("[data-tr]")[0]!;
+    element.setAttribute("data-en-onclick", "alert(1)");
+    click(doc, langButton(doc, "en"));
+    expect(element.hasAttribute("onclick")).toBe(false);
+  });
+});
+
+describe("붙여 넣을 말 복사", () => {
+  it("복사가 막히면(클립보드가 없다) 단추 아래 글상자에 붙여 넣을 말을 골라 두고 초점을 옮긴다. 언어를 바꾸면 그 말도 바뀌고, 다시 누르면 글상자는 하나다", () => {
+    const doc = open(withRepair(scoredView()));
+    const button = action(doc, "copy");
+    click(doc, button);
+    const box = button.nextElementSibling!;
+    expect(box.classList.contains("copybox")).toBe(true);
+    const area = box.querySelector("textarea")!;
+    expect(area.value).toBe(button.getAttribute("data-phrase-ko"));
+    expect(area.readOnly).toBe(true);
+    expect(area.selected).toBe(true);
+    expect(doc.activeElement).toBe(area);
+    expect(area.getAttribute("aria-label")).toBe(REPORT_COPY.copyLabel.ko);
+    click(doc, langButton(doc, "en"));
+    expect(area.value).toBe(button.getAttribute("data-phrase-en"));
+    expect(area.getAttribute("aria-label")).toBe(REPORT_COPY.copyLabel.en);
+    click(doc, button);
+    expect(doc.querySelectorAll(".copybox")).toHaveLength(1);
+  });
+
+  it("브라우저가 복사를 거절해도 글상자를 보인다", async () => {
+    const doc = open(withRepair(scoredView()), { writeText: () => Promise.reject(new Error("denied")) });
+    click(doc, action(doc, "copy"));
+    await settle();
+    expect(doc.querySelectorAll(".copybox")).toHaveLength(1);
+  });
+
+  it("복사에 성공하면 지금 언어로 알리고, 언어를 바꾸면 떠 있는 알림과 화면 읽기 프로그램용 글을 비운다", async () => {
+    vi.useFakeTimers();
+    const written: string[] = [];
+    const doc = open(withRepair(scoredView()), { writeText: async (text) => void written.push(text) });
+    const button = action(doc, "copy");
+    const toast = byId(doc, SCRIPT_IDS.toast);
+    const live = byId(doc, SCRIPT_IDS.live);
+    click(doc, button);
+    await settle();
+    expect(written).toEqual([button.getAttribute("data-phrase-ko")]);
+    expect(toast.style.display).toBe("block");
+    expect(toast.textContent).toBe(REPORT_COPY.copied.ko);
+    vi.advanceTimersByTime(60);
+    expect(live.textContent).toBe(REPORT_COPY.copied.ko);
+    click(doc, langButton(doc, "en"));
+    expect(toast.style.display).toBe("none");
+    expect(live.textContent).toBe("");
+    // 알린 바로 뒤에 언어를 바꿔도 지난 언어의 글이 나중에 들어오지 않는다
+    click(doc, button);
+    await settle();
+    click(doc, langButton(doc, "ko"));
+    vi.advanceTimersByTime(3000);
+    expect(live.textContent).toBe("");
+    expect(written).toEqual([button.getAttribute("data-phrase-ko"), button.getAttribute("data-phrase-en")]);
+  });
+});
+
+describe("표로 보기와 달력의 말풍선", () => {
+  it("표로 보기 단추는 사용 기록 칸을 표로 바꾸고 다시 누르면 되돌린다", () => {
+    const doc = open(scoredView());
+    const use = doc.querySelectorAll(".use")[0]!;
+    click(doc, action(doc, "table"));
+    expect(use.classList.contains("as-table")).toBe(true);
+    click(doc, action(doc, "table"));
+    expect(use.classList.contains("as-table")).toBe(false);
+  });
+
+  it("달력 칸에 마우스를 올리면 지금 언어의 말풍선이 뜨고, 칸 밖으로 나가거나 언어를 바꾸면 닫힌다", () => {
+    const doc = open(scoredView());
+    const cell = doc.querySelectorAll("[data-tip-en]")[0]!;
+    const tip = doc.querySelectorAll(".tip")[0]!;
+    doc.dispatch("mouseover", cell);
+    expect(tip.style.display).toBe("block");
+    expect(tip.textContent).toBe(cell.getAttribute("data-tip-ko"));
+    doc.dispatch("mouseout", cell, cell.parent);
+    expect(tip.style.display).toBe("none");
+    doc.dispatch("mouseover", cell);
+    click(doc, langButton(doc, "en"));
+    expect(tip.style.display).toBe("none");
+    doc.dispatch("mouseover", cell);
+    expect(tip.textContent).toBe(cell.getAttribute("data-tip-en"));
+  });
+});
+
+describe("공유 카드", () => {
+  it("카드 단추는 1200×630 그림을 그려 창에 넣고 내려받기 이름을 단다. 창을 닫으면 단추로 초점이 돌아온다", async () => {
+    const view = scoredView();
+    const doc = open(view);
+    const share = action(doc, "card");
+    share.focus();
+    click(doc, share);
+    expect(byId(doc, SCRIPT_IDS.dialog).open).toBe(true);
+    await settle();
+    const image = byId(doc, SCRIPT_IDS.cardImage);
+    const link = byId(doc, SCRIPT_IDS.cardLink);
+    expect(image.src).toBe("data:image/png;base64,FAKE-1200x630");
+    expect(image.hidden).toBe(false);
+    expect(image.alt).toContain(`AQ ${view.score.aq}`);
+    expect(link.href).toBe(image.src);
+    expect(link.download).toBe(`chunsik-garage-aq-${view.today}.png`);
+    expect(link.hidden).toBe(false);
+    expect(byId(doc, SCRIPT_IDS.cardFail).hidden).toBe(true);
+    click(doc, byId(doc, SCRIPT_IDS.cardClose));
+    expect(byId(doc, SCRIPT_IDS.dialog).open).toBe(false);
+    expect(doc.activeElement).toBe(share);
+  });
+
+  it("그림이 없어도 카드를 그리고, 그리기 문맥이 없으면 그림 대신 그리지 못했다는 글을 보인다", async () => {
+    const plain = open(scoredView(), undefined, { scene: null, face: null, good: null, fix: null });
+    click(plain, action(plain, "card"));
+    await settle();
+    expect(byId(plain, SCRIPT_IDS.cardImage).src).toBe("data:image/png;base64,FAKE-1200x630");
+    const broken = open(scoredView());
+    broken.canvasBroken = true;
+    click(broken, action(broken, "card"));
+    await settle();
+    expect(byId(broken, SCRIPT_IDS.cardFail).hidden).toBe(false);
+    expect(byId(broken, SCRIPT_IDS.cardImage).hidden).toBe(true);
+    expect(byId(broken, SCRIPT_IDS.cardLink).hidden).toBe(true);
+  });
+
+  it("AQ가 없는 화면에도 스크립트가 돌고 카드 요소가 없다", () => {
+    const doc = open(reportView(result([{ days: { "2026-11-12": { responses: 1, humanRequests: 1 } } }]), { saved: false, round: null }));
+    expect(doc.getElementById(SCRIPT_IDS.dialog)).toBeNull();
+    expect(doc.querySelectorAll("[data-act]").some((element) => element.getAttribute("data-act") === "card")).toBe(false);
+    click(doc, langButton(doc, "en"));
+    expect(doc.documentElement.getAttribute("data-ui")).toBe("en");
+  });
+});
+```
+
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
-Run: `npx vitest run test/report/html.test.ts`
-Expected: FAIL. `test/report/html.test.ts`가 `../../src/report/html.ts`를 찾지 못해 불러오기에서 실패한다.
+Run: `npx vitest run test/report/html.test.ts test/report/script-run.test.ts`
+Expected: FAIL. `test/report/html.test.ts`와 `test/report/script-run.test.ts`가 `../../src/report/html.ts`를 찾지 못해 불러오기에서 실패한다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -2057,7 +2639,12 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
   const scored = view.score.aq !== null;
   const alt = SCENE_ALT[sceneFor(view.score.tier, view.unreadable)];
   const picture = art.scene === null ? `<div class="ph" role="img"${swap(lang, { "aria-label": alt })}>${both(alt)}</div>` : `<img id="${SCRIPT_IDS.scene}" src="${esc(art.scene)}" width="264" height="264"${swap(lang, { alt })}>`;
-  const caption = scored ? `<figcaption>${both(textsOf((l) => view.text[l].grade ?? ""))}</figcaption>` : "";
+  // 장면 아래는 AQ를 냈으면 별명, 내지 않았으면 그 까닭이다(「3단계 계획 전 결정」의 12번)
+  const caption = scored
+    ? `<figcaption>${both(textsOf((l) => view.text[l].grade ?? ""))}</figcaption>`
+    : view.withheldText === null
+      ? ""
+      : `<figcaption class="why">${both(view.withheldText)}</figcaption>`;
   const score = scored
     ? `<div class="score"><div class="n">${view.score.aq}</div><div class="lb">${both(REPORT_COPY.aqLabel)}</div><div class="stamp" role="img"${swap(lang, { "aria-label": copy("gradeAria", { g: view.score.grade }) })}><div><b>${esc(view.score.grade ?? "")}</b><em>${both(REPORT_COPY.grade)}</em></div></div></div>`
     : `<div class="score"><div class="n none">${both(REPORT_COPY.noScore)}</div><div class="lb">${both(REPORT_COPY.aqLabel)}</div></div>`;
@@ -2071,7 +2658,6 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
     .join("");
   const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
   const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
-  const withheld = !scored && view.withheldText !== null ? `<p class="withheld">${both(view.withheldText)}</p>` : "";
   const best = view.findings.find((finding) => finding.category === "strength") ?? null;
   const first = scored ? (view.findings.find((finding) => finding.category === "repair") ?? null) : null;
   const bestLine =
@@ -2090,7 +2676,7 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
           textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`),
         )}</span></div>`;
-  return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div>${withheld}<div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
+  return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
 
 function columns(view: ReportView, art: ReportArt, lang: Lang): string {
@@ -2179,14 +2765,15 @@ function notices(view: ReportView): string {
   return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
 }
 
-function footer(view: ReportView): string {
-  const share = view.score.aq === null ? "<span></span>" : `<button type="button" class="share" data-act="card" aria-haspopup="dialog">${both(REPORT_COPY.cardBtn)}</button>`;
+/** hasCard는 카드 자료가 있는지다. 카드 단추와 창은 자료가 있을 때만 둔다 */
+function footer(hasCard: boolean): string {
+  const share = hasCard ? `<button type="button" class="share" data-act="card" aria-haspopup="dialog">${both(REPORT_COPY.cardBtn)}</button>` : "<span></span>";
   return `<footer class="ft"><span class="lock">${LOCK}<span>${both(textsOf((l) => `${REPORT_COPY.footCalc[l]} ${REPORT_COPY.footPromise[l]}`))}</span></span>${share}<p class="names-note">${both(REPORT_COPY.footNames)}</p></footer>`;
 }
 
 /** 공유 카드 창(설계 14). 그림은 스크립트가 그린다. 내려받기가 막히면 창의 그림을 직접 저장한다 */
-function cardDialog(view: ReportView): string {
-  if (view.score.aq === null) return "";
+function cardDialog(hasCard: boolean): string {
+  if (!hasCard) return "";
   return `<dialog class="card" id="${SCRIPT_IDS.dialog}" aria-labelledby="card-title"><h2 id="card-title">${both(REPORT_COPY.cardTitle)}</h2><img class="cardimg" id="${SCRIPT_IDS.cardImage}" alt="" width="1200" height="630" hidden><p class="empty" id="${SCRIPT_IDS.cardFail}" hidden>${both(REPORT_COPY.cardFail)}</p><div class="cardft"><span>${both(REPORT_COPY.cardNote)}</span><div class="btns"><a id="${SCRIPT_IDS.cardLink}" href="#" hidden>${both(REPORT_COPY.download)}</a><button type="button" id="${SCRIPT_IDS.cardClose}">${both(REPORT_COPY.close)}</button></div></div></dialog>`;
 }
 
@@ -2222,7 +2809,8 @@ export function reportHtml(view: ReportView, art: ReportArt): string {
   const hash = createHash("sha256").update(REPORT_SCRIPT, "utf8").digest("base64");
   const csp = `default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; base-uri 'none'; form-action 'none'`;
   const title = copy("pageTitle", { date: view.today });
-  const data = JSON.stringify(clientData(view)).replace(/</g, "\\u003c");
+  const client = clientData(view);
+  const data = JSON.stringify(client).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="${lang}" data-ui="${lang}">
 <head>
@@ -2235,8 +2823,8 @@ export function reportHtml(view: ReportView, art: ReportArt): string {
 </head>
 <body>
 <div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
-<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(view)}</article></main>
-${cardDialog(view)}
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+${cardDialog(client.card !== null)}
 <div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
 <script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>
 <script>${REPORT_SCRIPT}</script>
@@ -2246,14 +2834,14 @@ ${cardDialog(view)}
 }
 ```
 
-`src/report/style.ts`(찾을 곳 1/7):
+`src/report/style.ts`(찾을 곳 1/10):
 
 ```ts
 .info dd{margin:0;font-family:var(--mono);font-size:13px;font-weight:700;white-space:nowrap}
 .hero{display:grid;grid-template-columns:264px 330px 1fr;gap:26px 40px;align-items:center;padding:28px 0 26px}
 ```
 
-`src/report/style.ts`(바꾼 뒤 1/7):
+`src/report/style.ts`(바꾼 뒤 1/10):
 
 ```ts
 .info dd{margin:0;font-family:var(--mono);font-size:13px;font-weight:700;white-space:nowrap}
@@ -2261,7 +2849,22 @@ ${cardDialog(view)}
 .hero{display:grid;grid-template-columns:264px 330px 1fr;gap:26px 40px;align-items:center;padding:28px 0 26px}
 ```
 
-`src/report/style.ts`(찾을 곳 2/7):
+`src/report/style.ts`(찾을 곳 2/10):
+
+```ts
+.scene figcaption{margin-top:8px;font-size:13px;font-weight:700;color:var(--ink2);text-align:center;line-height:1.4}
+.score{position:relative;height:170px}
+```
+
+`src/report/style.ts`(바꾼 뒤 2/10):
+
+```ts
+.scene figcaption{margin-top:8px;font-size:13px;font-weight:700;color:var(--ink2);text-align:center;line-height:1.4}
+.scene figcaption.why{text-align:left;font-weight:400;width:0;min-width:100%}
+.score{position:relative;height:170px}
+```
+
+`src/report/style.ts`(찾을 곳 3/10):
 
 ```ts
 .axes{display:grid;gap:12px}
@@ -2269,7 +2872,7 @@ ${cardDialog(view)}
 .ax .nm{font-size:15px;font-weight:700;line-height:1.25}
 ```
 
-`src/report/style.ts`(바꾼 뒤 2/7):
+`src/report/style.ts`(바꾼 뒤 3/10):
 
 ```ts
 .axes{display:grid;gap:12px}
@@ -2277,7 +2880,7 @@ ${cardDialog(view)}
 .ax .nm{font-size:15px;font-weight:700;line-height:1.25}
 ```
 
-`src/report/style.ts`(찾을 곳 3/7):
+`src/report/style.ts`(찾을 곳 4/10):
 
 ```ts
 .ax .v{font-family:var(--mono);font-size:20px;font-weight:700;text-align:right}
@@ -2285,7 +2888,7 @@ ${cardDialog(view)}
 .ax .ct{display:block;font-size:12px;font-weight:400;color:var(--ink2);white-space:nowrap}
 ```
 
-`src/report/style.ts`(바꾼 뒤 3/7):
+`src/report/style.ts`(바꾼 뒤 4/10):
 
 ```ts
 .ax .v{font-family:var(--mono);font-size:20px;font-weight:700;text-align:right}
@@ -2293,14 +2896,29 @@ ${cardDialog(view)}
 .ax .ct{display:block;font-size:12px;font-weight:400;color:var(--ink2);white-space:nowrap}
 ```
 
-`src/report/style.ts`(찾을 곳 4/7):
+`src/report/style.ts`(찾을 곳 5/10):
+
+```ts
+.verdict .pt svg{margin-top:2px}
+.withheld{grid-column:2/-1;margin:0;font-size:14px;color:var(--ink2)}
+h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
+```
+
+`src/report/style.ts`(바꾼 뒤 5/10):
+
+```ts
+.verdict .pt svg{margin-top:2px}
+h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
+```
+
+`src/report/style.ts`(찾을 곳 6/10):
 
 ```ts
 .names code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:1px 7px;margin:0 4px 2px 0;display:inline-block}
 .names .when{display:block;margin:2px 0 4px;color:var(--ink2)}
 ```
 
-`src/report/style.ts`(바꾼 뒤 4/7):
+`src/report/style.ts`(바꾼 뒤 6/10):
 
 ```ts
 .names code{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:1px 7px;margin:0 4px 2px 0;display:inline-block}
@@ -2308,7 +2926,7 @@ ${cardDialog(view)}
 .names .when{display:block;margin:2px 0 4px;color:var(--ink2)}
 ```
 
-`src/report/style.ts`(찾을 곳 5/7):
+`src/report/style.ts`(찾을 곳 7/10):
 
 ```ts
 .kpi b{display:block;font-size:30px;letter-spacing:-.03em;line-height:1.15;white-space:nowrap}
@@ -2316,7 +2934,7 @@ ${cardDialog(view)}
 .sub{font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 8px}
 ```
 
-`src/report/style.ts`(바꾼 뒤 5/7):
+`src/report/style.ts`(바꾼 뒤 7/10):
 
 ```ts
 .kpi b{display:block;font-size:30px;letter-spacing:-.03em;line-height:1.15;white-space:nowrap}
@@ -2324,7 +2942,7 @@ ${cardDialog(view)}
 .sub{font-size:12px;font-weight:700;color:var(--ink2);margin:0 0 8px}
 ```
 
-`src/report/style.ts`(찾을 곳 6/7):
+`src/report/style.ts`(찾을 곳 8/10):
 
 ```ts
 .heat{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
@@ -2336,7 +2954,7 @@ ${cardDialog(view)}
 .heatwrap{position:relative}
 ```
 
-`src/report/style.ts`(바꾼 뒤 6/7):
+`src/report/style.ts`(바꾼 뒤 8/10):
 
 ```ts
 .heat{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
@@ -2348,7 +2966,22 @@ ${cardDialog(view)}
 .heatwrap{position:relative}
 ```
 
-`src/report/style.ts`(찾을 곳 7/7):
+`src/report/style.ts`(찾을 곳 9/10):
+
+```ts
+.hero{grid-template-columns:208px 1fr}.axes{grid-column:1/-1}.score{max-width:300px}
+.withheld{grid-column:1/-1}
+.kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(odd){border-left:0}.kpi:nth-child(n+3){border-top:1px solid var(--hair)}
+```
+
+`src/report/style.ts`(바꾼 뒤 9/10):
+
+```ts
+.hero{grid-template-columns:208px 1fr}.axes{grid-column:1/-1}.score{max-width:300px}
+.kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(odd){border-left:0}.kpi:nth-child(n+3){border-top:1px solid var(--hair)}
+```
+
+`src/report/style.ts`(찾을 곳 10/10):
 
 ```ts
 .hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
@@ -2356,7 +2989,7 @@ ${cardDialog(view)}
 .kpi b{font-size:24px}
 ```
 
-`src/report/style.ts`(바꾼 뒤 7/7):
+`src/report/style.ts`(바꾼 뒤 10/10):
 
 ```ts
 .hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
@@ -2366,13 +2999,13 @@ ${cardDialog(view)}
 
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
-Run: `npx tsc --noEmit && npx vitest run test/report/html.test.ts test/report/assets.test.ts test/report/copy.test.ts test/report/style.test.ts test/core/result-summary.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 5개, 시험 44개.
+Run: `npx tsc --noEmit && npx vitest run test/report/html.test.ts test/report/script-run.test.ts test/report/assets.test.ts test/report/copy.test.ts test/report/style.test.ts test/core/result-summary.test.ts`
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 6개, 시험 56개.
 
 - [ ] **Step 5: 커밋한다**
 
 ```bash
-git add test/report/html.test.ts src/core/result/summary.ts src/report/assets.ts src/report/copy.ts src/report/html.ts src/report/style.ts
+git add test/helpers/fake-dom.ts test/report/html.test.ts test/report/script-run.test.ts src/core/result/summary.ts src/report/assets.ts src/report/copy.ts src/report/html.ts src/report/style.ts
 git commit -m "feat: 결과 화면 HTML 한 파일을 만드는 함수를 더함"
 ```
 
@@ -2401,7 +3034,7 @@ git commit -m "feat: 결과 화면 HTML 한 파일을 만드는 함수를 더함
 
 설계 12.3, 13.2, 20.2, 「3단계 2부 계획에서 보완」의 4·5·6번이다.
 
-- 결과 화면은 저장한 점검이면 결과 폴더의 `<시각>.html`(평가 결과 파일과 같은 시각이라 한 점검으로 세어 20번을 남긴다), 저장하지 않았거나 결과 폴더에 쓰지 못하면 OS 임시 폴더의 `chunsik-garage-result-<시각>.html`이다. 쓰기는 평가 결과 파일과 같이 임시 파일에 쓰고 이름을 바꾸며 실패하면 임시 파일을 남기지 않는다. 결과 화면은 결과 폴더 정리 뒤에 쓰고, 정리는 이번 점검의 시각을 늘 남긴다.
+- 결과 화면은 저장한 점검이면 결과 폴더의 `<시각>.html`(평가 결과 파일과 같은 시각이라 한 점검으로 세어 20번을 남긴다), 저장하지 않았거나 결과 폴더에 쓰지 못하면 OS 임시 폴더의 `chunsik-garage-report-<시각>.html`이다(설계 19.2의 보관 표와 같은 이름). 쓰기는 평가 결과 파일과 같이 임시 파일에 쓰고 이름을 바꾸며 실패하면 임시 파일을 남기지 않는다. 결과 화면은 결과 폴더 정리 뒤에 쓰고, 정리는 이번 점검의 시각을 늘 남긴다.
 - 회차는 저장한 점검일 때 이력의 줄 수(빈 줄은 세지 않는다)이고, 이력을 읽지 못하면 줄표다. 저장하지 않은 점검은 "저장 안 함"이다.
 - 여는 것은 `--no-open`이 없을 때만이다. 운영체제의 열기 프로그램에 경로 하나만 넘기고(셸 없음, 창 없음, 기다리지 않음) 띄우지 못하면 실행 알림에 적는다. 결과 화면을 쓰지 못했으면 열지 않는다. 시험은 여는 함수를 바꿔 넣어 브라우저를 열지 않는다(명령줄 시험의 기본 문맥에도 넣었다).
 - 3부와 4부의 시험 가운데 결과 화면의 경로가 `null`이라고 본 것과 결과 폴더의 파일 수를 센 것을 새 동작에 맞게 고쳤다(결과 폴더에 이번 점검의 `.html`이 하나 더 있다. 상태 폴더에 쓰지 못한 점검은 결과 화면이 임시 폴더로 간다).
@@ -2608,7 +3241,7 @@ describe("결과 화면", () => {
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(true);
     expect(outcome.run.notices).toEqual([{ kind: "report_failed", code: expected }]);
-    expect(outcome.run.reportPath).toBe(join(tmp, `chunsik-garage-result-${STAMP}.html`));
+    expect(outcome.run.reportPath).toBe(join(tmp, `chunsik-garage-report-${STAMP}.html`));
     expect(outcome.summary.reportPath).toBe(outcome.run.reportPath);
   });
 
@@ -2650,7 +3283,7 @@ describe("결과 화면", () => {
 
 ```ts
     const outcome = await runCheckup(options({ save: false }));
-    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: join(tmp, `chunsik-garage-result-${STAMP}.html`), resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history."] } });
+    expect(outcome.run).toEqual({ durationMs: 250, cachedFiles: 0, saved: false, reportPath: join(tmp, `chunsik-garage-report-${STAMP}.html`), resultPath: join(tmp, `chunsik-garage-result-${STAMP}.json`), notices: [{ kind: "not_saved" }], text: { notices: ["This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history."] } });
     await expect(readdir(stateDir)).rejects.toMatchObject({ code: "ENOENT" });
 ```
 
@@ -2847,14 +3480,14 @@ import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
 ```ts
 
-  it("결과 화면은 같은 시각의 <시각>.html로 결과 폴더에 쓴다. 저장 없는 실행은 임시 폴더에 chunsik-garage-result-<시각>.html로 쓴다", async () => {
+  it("결과 화면은 같은 시각의 <시각>.html로 결과 폴더에 쓴다. 저장 없는 실행은 임시 폴더에 chunsik-garage-report-<시각>.html로 쓴다", async () => {
     const stamp = stampAt(3);
     const path = await writeReport(dir, stamp, "<!doctype html>\n");
     expect(path).toBe(join(dir, "reports", `${stamp}.html`));
     expect(await readFile(path, "utf8")).toBe("<!doctype html>\n");
     expect(await readdir(join(dir, "reports"))).toEqual([`${stamp}.html`]);
     const temp = await writeTempReport(root, stamp, "<p>");
-    expect(temp).toBe(join(root, `chunsik-garage-result-${stamp}.html`));
+    expect(temp).toBe(join(root, `chunsik-garage-report-${stamp}.html`));
     expect(await readFile(temp, "utf8")).toBe("<p>");
   });
 
@@ -3239,21 +3872,37 @@ export async function historyCount(stateDir: string): Promise<number> {
 }
 ```
 
-`src/state/reports.ts`(찾을 곳 1/4):
+`src/state/reports.ts`(찾을 곳 1/5):
 
 ```ts
 // 평가 결과 파일을 결과 폴더(reports/)나 OS 임시 폴더에 쓰고, 결과 폴더에서 최근 20번의 점검만 남긴다. 이름의 시각은 평가 시계를 UTC로 적어 글자 차례가 시각 차례다(설계 12.3, 13.2, 19.2)
 import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 ```
 
-`src/state/reports.ts`(바꾼 뒤 1/4):
+`src/state/reports.ts`(바꾼 뒤 1/5):
 
 ```ts
 // 평가 결과 파일과 결과 화면을 결과 폴더(reports/)나 OS 임시 폴더에 쓰고, 결과 폴더에서 최근 20번의 점검만 남긴다. 이름의 시각은 평가 시계를 UTC로 적어 글자 차례가 시각 차례다(설계 12.3, 13.2, 19.2)
 import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 ```
 
-`src/state/reports.ts`(찾을 곳 2/4):
+`src/state/reports.ts`(찾을 곳 2/5):
+
+```ts
+const TEMP_PREFIX = "chunsik-garage-result-";
+/** 이 도구가 결과 폴더에 쓰는 이름. 시각 뒤에 결과 화면(.html)이나 평가 결과 파일(.json)이 붙는다 */
+```
+
+`src/state/reports.ts`(바꾼 뒤 2/5):
+
+```ts
+const TEMP_PREFIX = "chunsik-garage-result-";
+/** 저장 없는 실행의 결과 화면 이름 앞머리(설계 19.2의 보관 표) */
+const TEMP_REPORT_PREFIX = "chunsik-garage-report-";
+/** 이 도구가 결과 폴더에 쓰는 이름. 시각 뒤에 결과 화면(.html)이나 평가 결과 파일(.json)이 붙는다 */
+```
+
+`src/state/reports.ts`(찾을 곳 3/5):
 
 ```ts
 /** 임시 파일에 쓰고 이름을 바꾼다. 실패하면 임시 파일을 남기지 않는다 */
@@ -3264,7 +3913,7 @@ async function writeJson(path: string, value: unknown): Promise<void> {
     await rename(temporary, path);
 ```
 
-`src/state/reports.ts`(바꾼 뒤 2/4):
+`src/state/reports.ts`(바꾼 뒤 3/5):
 
 ```ts
 /** 임시 파일에 쓰고 이름을 바꾼다. 실패하면 임시 파일을 남기지 않는다 */
@@ -3275,14 +3924,14 @@ async function writeText(path: string, text: string): Promise<void> {
     await rename(temporary, path);
 ```
 
-`src/state/reports.ts`(찾을 곳 3/4):
+`src/state/reports.ts`(찾을 곳 4/5):
 
 ```ts
 
 /** 결과 폴더에 <시각>.json으로 쓰고 경로를 돌려준다. 같은 이름이 있으면 덮어쓴다 */
 ```
 
-`src/state/reports.ts`(바꾼 뒤 3/4):
+`src/state/reports.ts`(바꾼 뒤 4/5):
 
 ```ts
 
@@ -3293,14 +3942,14 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 /** 결과 폴더에 <시각>.json으로 쓰고 경로를 돌려준다. 같은 이름이 있으면 덮어쓴다 */
 ```
 
-`src/state/reports.ts`(찾을 곳 4/4):
+`src/state/reports.ts`(찾을 곳 5/5):
 
 ```ts
 
 export interface StaleReports {
 ```
 
-`src/state/reports.ts`(바꾼 뒤 4/4):
+`src/state/reports.ts`(바꾼 뒤 5/5):
 
 ```ts
 
@@ -3315,7 +3964,7 @@ export async function writeReport(stateDir: string, stamp: string, html: string)
 
 /** 저장 없는 실행이나 결과 폴더에 쓰지 못한 점검의 결과 화면. OS 임시 폴더에 쓰고 경로를 돌려준다(설계 20.2) */
 export async function writeTempReport(tmpdir: string, stamp: string, html: string): Promise<string> {
-  const path = join(tmpdir, `${TEMP_PREFIX}${stamp}.html`);
+  const path = join(tmpdir, `${TEMP_REPORT_PREFIX}${stamp}.html`);
   await writeText(path, html);
   return path;
 }
@@ -3356,7 +4005,7 @@ git commit -m "feat: 점검이 결과 화면을 쓰고 브라우저로 여는 �
 - [ ] **Step 1: 전체 검사를 돌린다**
 
 Run: `npm run check`
-Expected: 타입 검사 통과, 시험 파일 83개·시험 1,235개 통과(3단계 1부까지의 75개·1,174개에 이 계획이 더한 것), 마지막 줄이 `묶음 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다.
+Expected: 타입 검사 통과, 시험 파일 84개·시험 1,247개 통과(3단계 1부까지의 75개·1,174개에 이 계획이 더한 것), 마지막 줄이 `묶음 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다.
 
 - [ ] **Step 2: 묶음을 다시 만들어도 그대로인지 확인한다**
 
@@ -3376,27 +4025,31 @@ Expected: 24에서와 같은 수의 시험이 모두 PASS. 막히면 짝 검증�
 묶은 실행 파일로 점검한다. 상태 폴더에는 쓰지 않고 브라우저도 열지 않는다. 빈 홈은 그 실행에서만 `USERPROFILE`과 `HOME`을 빈 임시 폴더로 바꾸고 `CLAUDE_CONFIG_DIR`을 지운다. 부모 셸의 환경은 바꾸지 않는다.
 
 Run: `node skills/aq/scripts/aq.mjs checkup --no-save --no-open --lang ko`(빈 홈)
-Expected: 종료 코드 0. `run.reportPath`와 `summary.reportPath`가 같고 OS 임시 폴더의 `chunsik-garage-result-<시각>.html`이다. 파일이 `<!doctype html>`로 시작하고, 그림 넷(`data:image/webp`)이 들었으며, 카드 단추(`data-act="card"`)가 없고, 빈 홈의 경로가 없다.
+Expected: 종료 코드 0. `run.reportPath`와 `summary.reportPath`가 같고 OS 임시 폴더의 `chunsik-garage-report-<시각>.html`이다. 파일이 `<!doctype html>`로 시작하고, 그림 넷(`data:image/webp`)이 들었으며, 카드 단추(`data-act="card"`)가 없고, 빈 홈의 경로가 없다.
 
 Run: `node skills/aq/scripts/aq.mjs checkup --no-save --no-open --lang ko`(이 PC의 홈)
-Expected: 종료 코드 0. 위와 같은 꼴의 결과 화면 파일이고, 이 PC의 홈 경로(역슬래시 꼴과 빗금 꼴 모두)와 상태 폴더 경로가 파일에 없다. AQ를 냈으면 카드 단추가 하나 있다. 숫자와 이름은 저장소 밖 작업 기록에만 적고, 결과 파일과 결과 화면 파일은 확인한 뒤 지운다.
+Expected: 종료 코드 0. 위와 같은 꼴의 결과 화면 파일이고, 이 PC의 홈 경로(역슬래시 꼴과 빗금 꼴 모두)와 상태 폴더 경로가 파일에 없다. AQ를 냈으면 카드 단추가 하나 있다. 숫자와 이름은 저장소 밖 작업 기록에만 적는다. 두 결과 화면 파일은 Step 5에서 열어 보므로 아직 지우지 않는다.
 
 - [ ] **Step 5: 실제 결과 화면을 이고라이트로 확인한다**
 
-Step 4의 두 결과 화면과, 이 PC에 없는 경우를 보이려고 시험 도우미로 지어낸 결과(정비 후보와 [정리하기], 판정에서 뺀 서버와 claude.ai 연결, 설정 문제, 같은 이름 프로젝트)로 만든 결과 화면을 연다. 이고라이트 창은 시작 전에 올리고 끝나면 내린다(사용자 전역 지침). 화면 사진은 저장소 밖에 두고 직접 열어 본다.
+Step 4의 두 결과 화면과, 이 PC에 없는 경우를 보이려고 시험 도우미로 지어낸 결과(정비 후보와 [정리하기], 판정에서 뺀 서버와 claude.ai 연결, 설정 문제, 같은 이름 프로젝트)로 만든 결과 화면을 연다. 이고라이트 창은 시작 전에 올리고 끝나면 내린다(사용자 전역 지침). 화면 사진은 저장소 밖에 두고 직접 열어 본다. CSP 위반은 문서가 시작될 때 수신기를 먼저 달아 모은다(이고라이트에서 `page.cdp("Page.addScriptToEvaluateOnNewDocument", …)`로 `securitypolicyviolation` 수신기를 단 뒤 화면을 연다). 이 방법이 듣는지는 스크립트 해시를 틀리게 한 사본을 먼저 열어 위반이 잡히고 스크립트가 돌지 않는 것으로 확인한다.
 
 - 폭 1440, 1024, 840, 390에서 가로 넘침이 없다(문서의 `scrollWidth`가 `clientWidth`보다 크지 않다). 단추와 펼치기의 높이가 44px 이상이다.
-- 언어를 바꾸면 문서의 `data-ui`와 `lang`, 쪽 제목, 언어 묶음의 이름, 단추의 눌림, 장면의 대체 글이 바뀌고, 펼쳐 둔 항목과 초점이 그대로이며, 다른 언어의 글이 하나도 보이지 않는다.
+- 언어를 바꾸면 문서의 `data-ui`와 `lang`, 쪽 제목, 언어 묶음의 이름, 단추의 눌림, 장면의 대체 글이 바뀌고, 펼쳐 둔 항목과 초점이 그대로이며, 다른 언어의 글이 하나도 보이지 않는다. 복사 알림이나 말풍선이 떠 있을 때 언어를 바꾸면 닫힌다.
+- 두 언어 단추를 키보드로 하나씩 방문하면 고른 단추와 고르지 않은 단추 모두 초점 테두리가 보인다(폭 390과 1440의 화면 사진으로 본다).
+- AQ가 없는 화면에서 장면 아래에 AQ를 내지 않은 까닭이 그림 폭 안에 있고, 같은 글이 다른 자리에 없다.
 - [정리하기]는 복사에 성공하면 알림을 보이고, 복사가 막히면(`navigator.clipboard.writeText`를 거절하게 바꿔) 글상자에 붙여 넣을 말을 골라 둔 채 초점을 옮기며, 언어를 바꾸면 글상자의 말도 바뀐다.
 - 표로 보기는 달력과 도구별 나눔을 표로 바꾸고 단추의 글이 바뀐다. 달력의 칸에 마우스를 올리면 그 날의 말풍선이 지금 언어로 보인다.
 - [카드로 저장]은 두 언어에서 1200×630 그림을 그리고, 내려받기 이름이 `chunsik-garage-aq-<점검일>.png`이며, 창을 닫으면 단추로 초점이 돌아온다. 카드에 스킬, 서버, 프로젝트의 이름이 없다. AQ가 없는 화면에는 단추가 없다.
 - 판정에서 뺀 서버 칸, S3의 위치 칩, F3과 F4의 프로젝트 칩이 두 언어로 보인다.
-- 화면을 연 뒤에 건 `securitypolicyviolation` 수신기에 위반이 하나도 잡히지 않는다.
+- 문서가 시작될 때부터 모은 CSP 위반이 실제 결과 화면마다 0건이다(틀린 사본에서는 잡혀야 한다).
+
+화면 확인이 끝나면 Step 4의 결과 파일, 결과 화면 파일, 지어낸 결과 화면을 지운다.
 
 - [ ] **Step 6: 기본 브라우저로 여는 것을 본다**
 
 Run: `node skills/aq/scripts/aq.mjs checkup --no-save --lang ko`
-Expected: 종료 코드 0. 기본 브라우저에 결과 화면이 열리고(창 제목이 「AQ 점검 명세서 · <점검일>」) 실행 알림에 `report_unopened`가 없다. 연 탭은 확인한 뒤 닫는다.
+Expected: 종료 코드 0. 기본 브라우저에 결과 화면이 열리고(창 제목이 「AQ 점검 명세서 · <점검일>」) 실행 알림에 `report_unopened`가 없다. 연 탭을 확인한 뒤 닫고, 이 실행이 OS 임시 폴더에 만든 결과 파일과 결과 화면 파일을 지운다.
 
 - [ ] **Step 7: 원장을 고치고 커밋한다**
 
@@ -3465,8 +4118,8 @@ git push origin develop
 | 13.1, 「3단계 계획 전 결정」 1·5·6·10번 | 못 잰 규칙의 큰 숫자 자리, AQ가 없을 때 꼬리표와 먼저 고칠 것과 카드가 없음, 판정에서 뺀 서버의 이름과 날의 줄, 이름 칩(S3, F3, F4) | 2, 6 |
 | 13.2 | HTML 한 파일, 바깥 요청 없음, 저장 위치와 20개, 열기와 열지 못하면 경로, 두 언어와 처음 언어, [정리하기]의 복사와 막힐 때의 글상자, 색 | 5, 6, 7 |
 | 13.3, 「3단계 계획 전 결정」 12번 | 그림의 자리와 크기, 장면 고르기, 스티커 둘, 대체 글, WebP와 50KB 안쪽 | 1, 3, 6 |
-| 13.4 | 폭에 따른 배치, 44px 단추, 키보드와 초점, 언어를 바꿔도 펼침과 초점 유지, 상태의 아이콘과 낱말, 움직임 줄이기, 표로 보기, 긴 이름 | 5, 6, 8(화면 확인) |
-| 14, 「3단계 계획 전 결정」 2번 | 카드 1의 배치, 1200×630, 화면의 언어, 이름과 경로 없음, AQ가 없으면 단추 없음, 내려받기가 막히면 그림을 띄움 | 5, 6, 8(화면 확인) |
+| 13.4 | 폭에 따른 배치, 44px 단추, 키보드와 초점, 언어를 바꿔도 펼침과 초점 유지, 상태의 아이콘과 낱말, 움직임 줄이기, 표로 보기, 긴 이름 | 5, 6(문서 대역 위의 동작 시험), 8(화면 확인) |
+| 14, 「3단계 계획 전 결정」 2번 | 카드 1의 배치, 1200×630, 화면의 언어, 이름과 경로 없음, AQ가 없으면 단추 없음, 내려받기가 막히면 그림을 띄움 | 5, 6(문서 대역 위의 동작 시험), 8(화면 확인) |
 | 12.3 | 실행 기록과 요약의 결과 화면 경로, 결과 화면 파일의 자리 | 7 |
 | 19.1, 「3단계 계획 전 결정」 10번 | 그리는 칸만 담고 절대 경로를 넣지 않음, 프로젝트는 폴더 이름 | 2, 6 |
 | 20.2 | 저장하지 않는 실행과 쓰지 못하는 곳에서 결과 화면을 임시 폴더에, 거기도 못 쓰면 알림 | 7 |
@@ -3483,8 +4136,8 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`92e97a3`)에서 과제 1부터 7까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨으며, 그림 파일은 연습 작업 폴더에서 가져와 계획에 적힌 크기와 지문이 같은지 봤다. 과제 1~7은 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일은 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 7의 묶은 실행 파일 다시 만들기도 통과했다. 과제 7 뒤의 `npm run check`는 시험 파일 83개·시험 1,235개가 통과했고 `묶음 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드, 시험, 그림 파일 215개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 연습 작업 폴더가 앞 버전을 들고 있어 견주지 않았다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`b8c44b5`. 코드는 `92e97a3`과 같다)에서 과제 1부터 7까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨으며, 그림 파일은 연습 작업 폴더에서 가져와 계획에 적힌 크기와 지문이 같은지 봤다. 과제 1~7은 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일은 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 7의 묶은 실행 파일 다시 만들기도 통과했다. 과제 7 뒤의 `npm run check`는 시험 파일 84개·시험 1,247개가 통과했고 `묶음 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드, 시험, 그림 파일 217개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 연습 작업 폴더가 앞 버전을 들고 있어 견주지 않았다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 묶은 실행 파일로 이 PC의 기록을 저장 없이 점검해 OS 임시 폴더에 결과 화면 파일이 생기고 그림 넷이 들어간 것을 봤고, `--no-open` 없이 한 번 돌려 Windows의 기본 브라우저(Chrome)에 결과 화면이 열린 것을 봤다. 이 PC의 기록, 기록이 없는 빈 홈, 시험 도우미로 지어낸 결과(정비 후보와 [정리하기], 판정에서 뺀 서버와 claude.ai 연결 둘, 설정 문제 둘, 같은 이름 프로젝트)로 결과 화면을 만들어 이고라이트로 폭 1440, 1280, 1024, 840, 390에서 열었다. 가로 넘침과 44px보다 작은 누름 대상이 없었고, 두 언어 바꾸기(문서 언어, 쪽 제목, 속성, 펼친 항목과 초점), 복사 성공과 막힘(글상자, 초점, 언어를 바꾸면 글도 바뀜), 표로 보기, 달력의 말풍선, 공유 카드(두 언어, 1200×630, 내려받기 이름, 창을 닫으면 초점이 돌아옴), AQ가 없는 화면(장면, 점수 없음과 까닭, 먼저 고칠 것과 카드 단추 없음)이 기대대로였고 CSP 위반이 없었다. 이 확인에서 고친 것(영어의 "Not measured"가 글자 중간에 끊김, 정보 표의 한글 낱말 사이가 벌어짐)은 과제 6에 들었다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 계획 리뷰 1차에서 두 짝이 든 변이와 주 세션의 변이 22개(이름을 글로 바꾸는 곳 하나씩 뺌, JSON 보호 뺌, 언어 표시와 속성 옮기기와 그 목록 확인 뺌, 복사 글상자와 초점, 알림과 말풍선 닫기, 표 전환, 카드 크기, 카드 창을 닫은 뒤 초점, 카드를 못 그린 알림, 점수 없는 장면 아래의 까닭, 등급 없는 카드 단추)를 하나씩 넣어 모두 시험이 잡았다. 묶은 실행 파일로 이 PC의 기록을 저장 없이 점검해 OS 임시 폴더에 결과 화면 파일이 생기고 그림 넷이 들어간 것을 봤고, `--no-open` 없이 한 번 돌려 Windows의 기본 브라우저(Chrome)에 결과 화면이 열린 것을 봤다. 이 PC의 기록, 기록이 없는 빈 홈, 시험 도우미로 지어낸 결과(정비 후보와 [정리하기], 판정에서 뺀 서버와 claude.ai 연결 둘, 설정 문제 둘, 같은 이름 프로젝트)로 결과 화면을 만들어 이고라이트로 폭 1440, 1280, 1024, 840, 390에서 열었다. 가로 넘침과 44px보다 작은 누름 대상이 없었고, 두 언어 바꾸기(문서 언어, 쪽 제목, 속성, 펼친 항목과 초점), 언어 단추 둘의 키보드 초점 테두리(폭 390과 1440), 복사 성공과 막힘(글상자, 초점, 언어를 바꾸면 글도 바뀜), 표로 보기, 달력의 말풍선, 공유 카드(두 언어, 1200×630, 내려받기 이름, 창을 닫으면 초점이 돌아옴), AQ가 없는 화면(장면과 그 아래의 까닭, 점수 없음, 먼저 고칠 것과 카드 단추 없음)이 기대대로였다. 문서가 시작될 때 단 수신기로 모은 CSP 위반은 결과 화면 셋에서 0건이었고, 스크립트 해시를 틀리게 한 사본에서는 위반 1건이 잡히고 스크립트가 돌지 않았다.
 
-확인하지 못한 것은 이렇다. macOS와 Linux에서 돌리고 여는 것, 실제 휴대폰, 화면 읽기 프로그램, Chrome 계열이 아닌 브라우저는 보지 않았다. 작성자 PC가 A등급이라 다른 등급의 장면과 진단은 지어낸 결과로만 봤다. 이 PC에는 판정에서 뺀 서버와 S3의 문제가 없어 그 칸은 지어낸 결과로만 봤다.
+확인하지 못한 것은 이렇다. macOS와 Linux에서 돌리고 여는 것, 실제 휴대폰, 화면 읽기 프로그램, Chrome 계열이 아닌 브라우저는 보지 않았다. 작성자 PC가 A등급이라 다른 등급의 장면과 진단은 지어낸 결과로만 봤다. 이 PC에는 판정에서 뺀 서버와 S3의 문제가 없어 그 칸은 지어낸 결과로만 봤다. 문서 대역은 이 저장소가 만드는 HTML과 그 스크립트가 쓰는 만큼만 흉내 내므로 브라우저의 그리기, 초점 이동, 클립보드 권한은 보증하지 않는다(그것은 과제 8의 화면 확인이 본다).

@@ -1,0 +1,15 @@
+{
+  "name": "chunsik-garage",
+  "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
+  "owner": {
+    "name": "yeunlee1"
+  },
+  "plugins": [
+    {
+      "name": "chunsik-garage",
+      "source": "./",
+      "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
+      "version": "0.1.0"
+    }
+  ]
+}

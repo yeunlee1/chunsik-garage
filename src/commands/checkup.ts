@@ -1,14 +1,17 @@
-// aq checkup을 돌린다. 상태를 열고, 입력 묶음을 모아 평가하고, 평가 결과를 결과 폴더(저장하지 않는 실행이면 OS 임시 폴더)에 쓰고, 상태와 이력을 고치고, 오래된 결과와 원본이 없어진 캐시를 정리한다. 상태 폴더에 쓰다가 막히면 남은 저장을 멈추고 저장 없는 실행으로 바꾼다(설계 7.4, 12.2, 12.3, 18.1, 19.2, 20.1, 20.2)
+// aq checkup을 돌린다. 상태를 열고, 입력 묶음을 모아 평가하고, 평가 결과와 결과 화면을 결과 폴더(저장하지 않는 실행이면 OS 임시 폴더)에 쓰고, 상태와 이력을 고치고, 오래된 결과와 원본이 없어진 캐시를 정리하고, 결과 화면을 연다. 상태 폴더에 쓰다가 막히면 남은 저장을 멈추고 저장 없는 실행으로 바꾼다(설계 7.4, 12.2, 12.3, 18.1, 19.2, 20.1, 20.2)
 import { join } from "node:path";
 import type { EvalClock } from "../collect/claude.ts";
 import type { Lang } from "../core/copy/lang.ts";
 import { evaluate } from "../core/evaluate.ts";
 import { checkupResult, type CheckupResult } from "../core/result/assemble.ts";
 import { checkupSummary, type CheckupSummary } from "../core/result/summary.ts";
+import { assetsDirOf, loadArt } from "../report/assets.ts";
+import { reportHtml } from "../report/html.ts";
+import { reportView } from "../report/view.ts";
 import { pruneCache } from "../state/cache.ts";
-import { appendHistory, historyEntry } from "../state/history.ts";
+import { appendHistory, historyCount, historyEntry } from "../state/history.ts";
 import { nextState, openState } from "../state/next-state.ts";
-import { KEEP_REPORTS, pruneReports, resultStamp, writeResult, writeTempResult } from "../state/reports.ts";
+import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
 import { saveState } from "../state/state.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
@@ -35,6 +38,8 @@ export interface CheckupOptions {
   managedDir?: string;
   /** 걸린 시간을 재는 시계(밀리초). 주지 않으면 Date.now다 */
   now?: () => number;
+  /** 결과 화면을 여는 것. 주지 않으면(--no-open) 열지 않는다. 열지 못하면 거짓이다 */
+  open?: (path: string) => Promise<boolean>;
 }
 
 /** 실행 기록의 알림. 평가 결과가 아니라 이번 실행에서 생긴 것이다 */
@@ -48,7 +53,13 @@ export type RunNotice =
   /** 저장하지 않는 실행이다. 이력 비교와 캐시가 없다 */
   | { kind: "not_saved" }
   /** OS 임시 폴더에도 평가 결과 파일을 쓰지 못했다 */
-  | { kind: "result_unwritten"; code: string };
+  | { kind: "result_unwritten"; code: string }
+  /** 저장한 점검의 결과 화면을 결과 폴더에 쓰지 못했다. OS 임시 폴더에 쓴다 */
+  | { kind: "report_failed"; code: string }
+  /** OS 임시 폴더에도 결과 화면을 쓰지 못했다 */
+  | { kind: "report_unwritten"; code: string }
+  /** 결과 화면을 브라우저로 열지 못했다. 경로는 실행 기록의 reportPath에 있다 */
+  | { kind: "report_unopened" };
 
 export interface RunRecord {
   durationMs: number;
@@ -56,7 +67,7 @@ export interface RunRecord {
   cachedFiles: number;
   /** 결과, 상태, 이력을 모두 상태 폴더에 썼다 */
   saved: boolean;
-  /** 결과 화면의 경로. 결과 화면은 3단계에 만든다 */
+  /** 결과 화면의 경로. 쓰지 못했으면 null */
   reportPath: string | null;
   /** 평가 결과 파일의 경로. 쓰지 못했으면 null */
   resultPath: string | null;
@@ -131,6 +142,28 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     }
   }
 
-  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath: null, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
-  return { summary: checkupSummary(result, null), run, result };
+  // 결과 화면. 저장한 점검은 결과 폴더에, 저장하지 않았거나 결과 폴더에 쓰지 못하면 OS 임시 폴더에 쓴다. 회차는 이력의 줄 수다(설계 13.1, 13.2, 20.2)
+  const round = saved ? await historyCount(options.stateDir).catch(() => null) : null;
+  const view = reportView(result, { saved, round });
+  const repairs = view.findings.filter((finding) => finding.category === "repair").length;
+  const html = reportHtml(view, await loadArt(assetsDirOf(options.entryFile), { tier: result.score.tier, unreadable: view.unreadable, repairs }));
+  let reportPath: string | null = null;
+  if (saved) {
+    try {
+      reportPath = await writeReport(options.stateDir, stamp, html);
+    } catch (error) {
+      notices.push({ kind: "report_failed", code: codeOf(error) });
+    }
+  }
+  if (reportPath === null) {
+    try {
+      reportPath = await writeTempReport(options.tmpdir, stamp, html);
+    } catch (error) {
+      notices.push({ kind: "report_unwritten", code: codeOf(error) });
+    }
+  }
+  if (reportPath !== null && options.open !== undefined && !(await options.open(reportPath))) notices.push({ kind: "report_unopened" });
+
+  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
+  return { summary: checkupSummary(result, reportPath), run, result };
 }

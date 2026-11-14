@@ -3,7 +3,7 @@ import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { removeFiles } from "../../src/state/folder.ts";
-import { KEEP_REPORTS, pruneReports, resultStamp, staleReports, writeResult, writeTempResult } from "../../src/state/reports.ts";
+import { KEEP_REPORTS, pruneReports, resultStamp, staleReports, writeReport, writeResult, writeTempReport, writeTempResult } from "../../src/state/reports.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
 let root: string;
@@ -52,6 +52,24 @@ describe("결과 폴더에 쓰기", () => {
     await mkdir(join(dir, "reports", `${stamp}.json`), { recursive: true });
     await expect(writeResult(dir, stamp, { n: 1 })).rejects.toBeDefined();
     expect(await readdir(join(dir, "reports"))).toEqual([`${stamp}.json`]);
+  });
+
+  it("결과 화면은 같은 시각의 <시각>.html로 결과 폴더에 쓴다. 저장 없는 실행은 임시 폴더에 chunsik-garage-report-<시각>.html로 쓴다", async () => {
+    const stamp = stampAt(3);
+    const path = await writeReport(dir, stamp, "<!doctype html>\n");
+    expect(path).toBe(join(dir, "reports", `${stamp}.html`));
+    expect(await readFile(path, "utf8")).toBe("<!doctype html>\n");
+    expect(await readdir(join(dir, "reports"))).toEqual([`${stamp}.html`]);
+    const temp = await writeTempReport(root, stamp, "<p>");
+    expect(temp).toBe(join(root, `chunsik-garage-report-${stamp}.html`));
+    expect(await readFile(temp, "utf8")).toBe("<p>");
+  });
+
+  it("결과 화면을 쓰지 못하면 임시 파일을 남기지 않는다", async () => {
+    const stamp = stampAt(3);
+    await mkdir(join(dir, "reports", `${stamp}.html`), { recursive: true });
+    await expect(writeReport(dir, stamp, "<p>")).rejects.toBeDefined();
+    expect(await readdir(join(dir, "reports"))).toEqual([`${stamp}.html`]);
   });
 
   it("저장 없는 실행은 임시 폴더에 chunsik-garage-result-<시각>.json으로 쓴다", async () => {

@@ -1,4 +1,4 @@
-// 실행 기록의 알림 다섯 종류의 문장. 오류 코드와 정해진 낱말만 넣고 경로는 넣지 않는다(순수 함수, 설계 12.3, 20.2)
+// 실행 기록의 알림 여덟 종류의 문장. 오류 코드와 정해진 낱말만 넣고 경로는 넣지 않는다(순수 함수, 설계 12.3, 20.2)
 import type { Lang, Texts } from "../core/copy/lang.ts";
 import { fill } from "../core/copy/format.ts";
 import type { RunNotice } from "./checkup.ts";
@@ -30,6 +30,9 @@ const LINES: Texts<Record<RunNotice["kind"], string>> = {
     prune_skipped: "The {link} folder is a link, so {what} were not cleaned up.",
     not_saved: "This run does not save, so nothing was written to the state folder. It did not use the cache and is not added to the score history.",
     result_unwritten: "Could not write the result file to the OS temp folder ({code}), so only the summary is given.",
+    report_failed: "Could not write the report page to the state folder ({code}).",
+    report_unwritten: "Could not write the report page to the OS temp folder ({code}), so there is no report page this time.",
+    report_unopened: "Could not open the report page in a browser. Open the file at the report path.",
   },
   ko: {
     save_failed: "상태 폴더에 {step} 쓰지 못해({code}) 남은 저장을 멈췄습니다.",
@@ -37,6 +40,9 @@ const LINES: Texts<Record<RunNotice["kind"], string>> = {
     prune_skipped: "{link} 폴더가 링크라서 {what} 정리하지 않았습니다.",
     not_saved: "저장하지 않는 실행이라 상태 폴더에 아무것도 쓰지 않았습니다. 이 점검은 캐시를 쓰지 않았고 점수 이력에도 남지 않습니다.",
     result_unwritten: "평가 결과 파일을 운영체제 임시 폴더에 쓰지 못해({code}) 요약만 냅니다.",
+    report_failed: "결과 화면을 상태 폴더에 쓰지 못했습니다({code}).",
+    report_unwritten: "결과 화면을 운영체제 임시 폴더에 쓰지 못해({code}) 이번에는 결과 화면이 없습니다.",
+    report_unopened: "결과 화면을 브라우저로 열지 못했습니다. 결과 화면의 경로에 있는 파일을 여세요.",
   },
 };
 
@@ -53,5 +59,11 @@ export function runNoticeText(notice: RunNotice, lang: Lang): string {
       return lines.not_saved;
     case "result_unwritten":
       return fill(lines.result_unwritten, { code: notice.code });
+    case "report_failed":
+      return fill(lines.report_failed, { code: notice.code });
+    case "report_unwritten":
+      return fill(lines.report_unwritten, { code: notice.code });
+    case "report_unopened":
+      return lines.report_unopened;
   }
 }

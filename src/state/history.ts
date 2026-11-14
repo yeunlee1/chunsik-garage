@@ -1,5 +1,5 @@
-// 점수 이력(history.jsonl)에 점검마다 한 줄(시각, AQ, 기준 점수, 빠진 기준, 규칙 버전)을 더한다. 결과 화면의 이력 그래프가 읽는다(설계 12.3, 18.1)
-import { appendFile, mkdir, open } from "node:fs/promises";
+// 점수 이력(history.jsonl)에 점검마다 한 줄(시각, AQ, 기준 점수, 빠진 기준, 규칙 버전)을 더하고 줄 수를 센다. 결과 화면의 회차와 이력 그래프가 읽는다(설계 12.3, 13.1, 18.1)
+import { appendFile, mkdir, open, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Axis } from "../core/rules.ts";
 import { AXES, type AxisScore, type Overall } from "../core/scoreboard.ts";
@@ -50,4 +50,16 @@ export async function appendHistory(stateDir: string, entry: HistoryEntry): Prom
   const path = join(stateDir, HISTORY_FILE);
   const prefix = (await endsMidLine(path)) ? "\n" : "";
   await appendFile(path, `${prefix}${JSON.stringify(entry)}\n`);
+}
+
+/** 이력의 줄 수(빈 줄은 세지 않는다). 파일이 없으면 0이다. 결과 화면의 회차다(설계 13.1) */
+export async function historyCount(stateDir: string): Promise<number> {
+  let text;
+  try {
+    text = await readFile(join(stateDir, HISTORY_FILE), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+  return text.split("\n").filter((line) => line.trim() !== "").length;
 }

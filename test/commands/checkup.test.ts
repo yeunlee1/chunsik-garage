@@ -3,7 +3,9 @@ import { mkdir, readdir, readFile, rm, utimes, writeFile } from "node:fs/promise
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runCheckup, type CheckupOptions } from "../../src/commands/checkup.ts";
-import { resultStamp } from "../../src/state/reports.ts";
+import { appendHistory } from "../../src/state/history.ts";
+import { resultStamp, writeResult } from "../../src/state/reports.ts";
+import { newState, saveState } from "../../src/state/state.ts";
 import { assistant, user } from "../helpers/claude-lines.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -24,6 +26,22 @@ async function session(folder: string, id: string, lines: string[]): Promise<str
   await writeFile(path, `${lines.join("\n")}\n`);
   await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
   return path;
+}
+/**
+ * 다른 폴더에 같은 막힘을 만들고 같은 저장 함수를 불러 실제로 나는 오류 코드를 얻는다. 폴더 자리로 이름을 바꿀 때 Windows는 EPERM을 내는 것처럼
+ * 코드는 운영체제마다 다르므로, 실행 알림이 그 단계에서 난 코드를 그대로 싣는지를 운영체제와 상관없이 견주려는 것이다
+ */
+async function blockedCode(block: (dir: string) => Promise<unknown>, write: (dir: string) => Promise<unknown>): Promise<string> {
+  const dir = join(root, "probe-state");
+  await rm(dir, { recursive: true, force: true });
+  await block(dir);
+  const code = await write(dir).then(
+    () => "none",
+    (error: NodeJS.ErrnoException) => error.code ?? "unknown",
+  );
+  await rm(dir, { recursive: true, force: true });
+  expect(code).toMatch(/^E[A-Z]+$/);
+  return code;
 }
 const turn = (id: string, at: string): string[] => [
   user({ at, content: "고쳐 줘", origin: "human", extra: { cwd: proj } }),
@@ -132,9 +150,13 @@ describe("저장하는 점검", () => {
   it("상태를 쓰다가 막히면 이력을 쓰지 않고 정리도 하지 않는다. 쓴 결과 파일은 남고 임시 파일은 남지 않는다", async () => {
     await mkdir(join(stateDir, "state.json"), { recursive: true });
     for (let index = 0; index < 21; index++) await put(join(stateDir, "reports", `${resultStamp(NOW - (index + 1) * 60_000)}.json`), "{}");
+    const expected = await blockedCode(
+      (dir) => mkdir(join(dir, "state.json"), { recursive: true }),
+      (dir) => saveState(dir, newState()),
+    );
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(false);
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "state", code: expect.stringMatching(/^E[A-Z]+$/) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "state", code: expected }]);
     expect(outcome.run.resultPath).toBe(join(stateDir, "reports", `${STAMP}.json`));
     expect(JSON.parse(await readFile(outcome.run.resultPath!, "utf8"))).toEqual(outcome.result);
     await expect(readFile(join(stateDir, "history.jsonl"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
@@ -144,17 +166,25 @@ describe("저장하는 점검", () => {
 
   it("이력을 쓰다가 막히면 결과와 상태는 남고 저장하지 않은 것으로 알린다", async () => {
     await mkdir(join(stateDir, "history.jsonl"), { recursive: true });
+    const expected = await blockedCode(
+      (dir) => mkdir(join(dir, "history.jsonl"), { recursive: true }),
+      (dir) => appendHistory(dir, { at: "2026-11-12T03:00:00.000Z", aq: null, axes: { setup: null, efficiency: null, fit: null, intensity: null }, missingAxes: [], rulesVersion: "1.0.0" }),
+    );
     const outcome = await runCheckup(options());
     expect(outcome.run.saved).toBe(false);
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "history", code: expect.stringMatching(/^E[A-Z]+$/) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "history", code: expected }]);
     expect(JSON.parse(await readFile(join(stateDir, "state.json"), "utf8")).lastCheckupAt).toBe("2026-11-12T03:00:00.000Z");
     expect(outcome.run.resultPath).toBe(join(stateDir, "reports", `${STAMP}.json`));
   });
 
   it("결과 파일 자리가 막혀 있으면 결과를 OS 임시 폴더에 쓰고 결과 폴더에 임시 파일을 남기지 않는다", async () => {
     await mkdir(join(stateDir, "reports", `${STAMP}.json`), { recursive: true });
+    const expected = await blockedCode(
+      (dir) => mkdir(join(dir, "reports", `${STAMP}.json`), { recursive: true }),
+      (dir) => writeResult(dir, STAMP, {}),
+    );
     const outcome = await runCheckup(options());
-    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expect.stringMatching(/^E[A-Z]+$/) }]);
+    expect(outcome.run.notices).toEqual([{ kind: "save_failed", step: "result", code: expected }]);
     expect(outcome.run.resultPath).toBe(join(tmp, `chunsik-garage-result-${STAMP}.json`));
     expect(await readdir(join(stateDir, "reports"))).toEqual([`${STAMP}.json`]);
   });

@@ -30,7 +30,7 @@ const collected = (files: string[]): CollectedTool => ({
   read: { files: 9, listedBytes: 900, bytes: 800, inProgress: 0, olderThanWindow: 2, unreadableFiles: files, unreadableFileBytes: 100, unknownSizeFiles: 0, unreadableDirs: [] },
   observation: { skills: { complete: false, reasons: ["unreadable-files"] }, mcp: { complete: false, reasons: ["unreadable-files"] } },
 });
-const resultText = (input: EvaluationInput, files: string[]): string => JSON.stringify(checkupResult({ input, evaluation: evaluate(input), collected: [collected(files)], appVersion: "0.1.0", run: { stateBroken: true } }));
+const resultText = (input: EvaluationInput, files: string[]): string => JSON.stringify(checkupResult({ input, evaluation: evaluate(input), collected: [collected(files)], appVersion: "0.1.0", lang: "en", run: { stateBroken: true } }));
 
 describe("평가 결과의 결정성", () => {
   it("연달아 두 번 만들어도 글자 하나 다르지 않다", () => {

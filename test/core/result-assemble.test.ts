@@ -1,6 +1,9 @@
 // 평가 결과의 조립(필드와 차례, 도구별 값의 관측 범위, 알림을 합친 차례, 따로 둔 자리와 E6 정보)을 시험한다(설계 12.2, 13.1)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { findingText } from "../../src/core/copy/findings.ts";
+import { resultText } from "../../src/core/copy/grades.ts";
+import { noticeText } from "../../src/core/copy/notices.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, RESULT_SCHEMA, type ResultInput } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
@@ -19,16 +22,16 @@ const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
 const enough = Array.from({ length: 3 }, (_, index) => ({ days: { [`2026-11-1${index}`]: { responses: 3, humanRequests: 10 } } }));
 const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): ResultInput => {
   const input = evaluationInput([claudeTool({ sessions: enough, ...tool })]);
-  return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", run: { stateBroken: false }, ...extra };
+  return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
 
 describe("평가 결과의 조립", () => {
   it("필드를 정해진 차례로 싣고 형식 버전, 규칙 버전, 프로그램 버전, 평가 시계, 시간대, 구간을 담는다", () => {
     const input = resultInput({});
     const result = checkupResult(input);
-    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "window", "tools", "coverage", "score", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details"]);
+    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details"]);
     expect(RESULT_SCHEMA).toBe(1);
-    expect(result).toMatchObject({ schema: 1, rulesVersion: "1.0.0", appVersion: "0.1.0", evaluatedAt: "2026-11-13T03:00:00.000Z", timezone: "Asia/Seoul", window: input.evaluation.windows });
+    expect(result).toMatchObject({ schema: 1, rulesVersion: "1.0.0", appVersion: "0.1.0", evaluatedAt: "2026-11-13T03:00:00.000Z", timezone: "Asia/Seoul", lang: "ko", window: input.evaluation.windows });
     expect(result.score).toEqual(input.evaluation.score);
     expect(result.axes).toEqual(input.evaluation.axes);
     expect(result.candidates).toEqual(input.evaluation.candidates);
@@ -42,7 +45,7 @@ describe("평가 결과의 조립", () => {
     expect(f1.tools.map((value) => value.observed)).toEqual(["proxy"]);
     expect(result.findings.find((finding) => finding.ruleId === "E1")!.tools[0]!.observed).toBe("measured");
     expect(result.findings.find((finding) => finding.ruleId === "S1")!.tools).toEqual([]);
-    const { tools, ...rest } = f1;
+    const { tools, text: _text, ...rest } = f1;
     const { tools: originalTools, ...originalRest } = input.evaluation.findings.find((finding) => finding.ruleId === "F1")!;
     expect(rest).toEqual(originalRest);
     expect(tools.map(({ observed: _observed, ...value }) => value)).toEqual(originalTools);
@@ -72,5 +75,31 @@ describe("평가 결과의 조립", () => {
     const result = checkupResult(resultInput({}));
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
     expect(JSON.stringify(result)).not.toContain("undefined");
+  });
+
+  it("규칙, 알림, 결과에 두 언어의 문장을 싣는다. 문장은 문구 표에서 만든 그대로이고 이름과 경로가 없다", () => {
+    const servers = [mcpServer("secret-server", { scope: "claude-ai", definitionHash: null })];
+    const result = checkupResult(resultInput({ setup: { mcpServers: servers, pluginsWithoutInstall: ["secret-plugin@m"] } }, { collected: [collected({ read: { ...collected().read, unreadableFiles: ["/secret/s.jsonl"] } })] }));
+    const details = { safeguards: result.details.safeguards, unjudgedServers: result.details.unjudgedServers };
+    for (const finding of result.findings) {
+      const { text, ...rest } = finding;
+      expect(text).toEqual({ en: findingText(rest, details, "en"), ko: findingText(rest, details, "ko") });
+    }
+    for (const notice of result.notices) {
+      const { text, ...rest } = notice;
+      expect(text).toEqual({ en: noticeText(rest, "en"), ko: noticeText(rest, "ko") });
+    }
+    const categories = result.findings.map((finding) => finding.category);
+    expect(result.text).toEqual({ en: resultText(result.score, categories, "en"), ko: resultText(result.score, categories, "ko") });
+    expect(result.details.unjudgedServers.length).toBeGreaterThan(0);
+    expect(result.notices.length).toBeGreaterThan(0);
+    expect(JSON.stringify([result.text, result.findings.map((finding) => finding.text), result.notices.map((notice) => notice.text)])).not.toMatch(/secret/);
+  });
+
+  it("언어만 다르면 처음 보일 언어만 다르다", () => {
+    const korean = checkupResult(resultInput({}));
+    const english = checkupResult(resultInput({}, { lang: "en" }));
+    expect(english.lang).toBe("en");
+    expect({ ...english, lang: "ko" }).toEqual(korean);
   });
 });

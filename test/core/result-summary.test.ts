@@ -1,5 +1,7 @@
 // 터미널에 전할 요약(AQ와 등급, 기준 점수, 가장 잘하는 것, 먼저 고칠 것 셋까지, 이름 없는 알림)을 시험한다. 요약에는 스킬·서버·프로젝트의 이름과 경로가 들어가지 않는다(설계 11.5, 12.3, 15, 19.1)
 import { describe, expect, it } from "vitest";
+import { findingText, type FindingInput } from "../../src/core/copy/findings.ts";
+import { noticeText } from "../../src/core/copy/notices.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, type CheckupResult, type ResultFinding } from "../../src/core/result/assemble.ts";
 import type { Notice } from "../../src/core/result/notices.ts";
@@ -18,9 +20,13 @@ const collected: CollectedTool = {
 const enough = Array.from({ length: 3 }, (_, index) => ({ days: { [`2026-11-1${index}`]: { responses: 3, humanRequests: 10 } } }));
 function baseResult(): CheckupResult {
   const input = evaluationInput([claudeTool({ sessions: enough, setup: { pluginsWithoutInstall: ["secret-plugin@m"] } })]);
-  return checkupResult({ input, evaluation: evaluate(input), collected: [collected], appVersion: "0.1.0", run: { stateBroken: false } });
+  return checkupResult({ input, evaluation: evaluate(input), collected: [collected], appVersion: "0.1.0", lang: "en", run: { stateBroken: false } });
 }
-const finding = (ruleId: ResultFinding["ruleId"], input: Partial<ResultFinding>): ResultFinding => ({ ruleId, axis: "efficiency", kind: "share", weight: 2, status: "scored", reason: null, value: 0.5, score: 0.5, category: "average", severity: null, gain: null, evidence: {}, tools: [], candidates: [], ...input });
+const finding = (ruleId: ResultFinding["ruleId"], input: Partial<FindingInput>): ResultFinding => {
+  const source: FindingInput = { ruleId, axis: "efficiency", kind: "share", weight: 2, status: "scored", reason: null, value: 0.5, score: 0.5, category: "average", severity: null, gain: null, evidence: {}, tools: [], candidates: [], ...input };
+  const details = { safeguards: [], unjudgedServers: [] };
+  return { ...source, text: { en: findingText(source, details, "en"), ko: findingText(source, details, "ko") } };
+};
 
 describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
@@ -73,7 +79,7 @@ describe("요약", () => {
       { kind: "unclassified", tool: "claude-code", counts: [{ what: "compaction", count: 1 }, { what: "denial:secret-kind", count: 2 }] },
       { kind: "orphan_subsessions", tool: "claude-code", sessions: 4 },
     ];
-    const summary = checkupSummary({ ...baseResult(), notices }, null);
+    const summary = checkupSummary({ ...baseResult(), notices: notices.map((notice) => ({ ...notice, text: { en: noticeText(notice, "en"), ko: noticeText(notice, "ko") } })) }, null);
     expect(summary.notices).toEqual([
       { kind: "score_withheld", tool: null, detail: null, count: null },
       { kind: "state_reset", tool: null, detail: null, count: null },

@@ -2,6 +2,7 @@
 import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
 import { runCheckup } from "./commands/checkup.ts";
+import { pickLang } from "./core/copy/lang.ts";
 import { clean } from "./commands/clean.ts";
 import { doctor } from "./commands/doctor.ts";
 import { where } from "./commands/where.ts";
@@ -62,6 +63,7 @@ async function run(command: string | undefined, rest: string[], context: CliCont
       tmpdir: context.tmpdir ?? tmpdir(),
       platform: context.platform ?? process.platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(null, Intl.DateTimeFormat().resolvedOptions().locale),
       stateDir: stateDir(context.homedir),
       save: !rest.includes("--no-save"),
       rescan: rest.includes("--rescan"),

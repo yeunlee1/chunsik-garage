@@ -1,6 +1,7 @@
 // aq checkup을 돌린다. 상태를 열고, 입력 묶음을 모아 평가하고, 평가 결과를 결과 폴더(저장하지 않는 실행이면 OS 임시 폴더)에 쓰고, 상태와 이력을 고치고, 오래된 결과와 원본이 없어진 캐시를 정리한다. 상태 폴더에 쓰다가 막히면 남은 저장을 멈추고 저장 없는 실행으로 바꾼다(설계 7.4, 12.2, 12.3, 18.1, 19.2, 20.1, 20.2)
 import { join } from "node:path";
 import type { EvalClock } from "../collect/claude.ts";
+import type { Lang } from "../core/copy/lang.ts";
 import { evaluate } from "../core/evaluate.ts";
 import { checkupResult, type CheckupResult } from "../core/result/assemble.ts";
 import { checkupSummary, type CheckupSummary } from "../core/result/summary.ts";
@@ -20,6 +21,8 @@ export interface CheckupOptions {
   platform: NodeJS.Platform;
   /** 평가 시계. 점검을 시작한 시각과 시간대 */
   clock: EvalClock;
+  /** 처음 보일 언어(설계 13.2) */
+  lang: Lang;
   stateDir: string;
   /** 상태 폴더에 캐시, 결과, 이력, 상태를 쓴다. --no-save면 거짓이다 */
   save: boolean;
@@ -85,7 +88,7 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     ...(options.managedDir === undefined ? {} : { managedDir: options.managedDir }),
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, run: { stateBroken: opened.broken } });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
   const stamp = resultStamp(options.clock.nowMs);
 
   const notices: RunNotice[] = [];

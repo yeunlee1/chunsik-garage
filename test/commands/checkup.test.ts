@@ -37,6 +37,7 @@ const options = (overrides: Partial<CheckupOptions> = {}): CheckupOptions => {
     tmpdir: tmp,
     platform: process.platform,
     clock: { nowMs: NOW, timeZone: "Asia/Seoul" },
+    lang: "en",
     stateDir,
     save: true,
     rescan: false,

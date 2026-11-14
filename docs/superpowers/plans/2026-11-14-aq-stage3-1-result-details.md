@@ -37,7 +37,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `2565353D340B393CE1C586CA610A5D01769CDFAE49C5015D5742C8FC9789411F`, 3,855줄)이다. 정한 것은 「3단계 계획 전 결정」의 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `9D11EFCF332C63ABF3D3001AEA4251EFE0150AED68481ADA03499CF6E97F5AE1`, 3,857줄)이다. 정한 것은 「3단계 계획 전 결정」의 번호로 과제마다 적었다. 계획은 저장소 밖의 연습 작업 폴더에서 과제마다 시험과 구현을 실제로 쓰고 돌려서 만들었다.
 
 ## 파일 구조
 
@@ -83,7 +83,7 @@
 
 - 날은 "이 점검의 관측을 상태 파일에 남긴다고 볼 때" 서버 하나가 조건 ④(`serverEstablished`)를 처음 채울 수 있는 날이다. 관측 기록의 첫날(이 정체의 기록이 없으면 평가 시계의 오늘. 첫 점검, 정체가 바뀐 서버, 지난 관측이 빈 목록인 경우)의 15일 뒤와, ㉱의 근거로 든 날마다의 15일 뒤 가운데 가장 늦은 날이다. "14일 넘게 전"은 15일 이상 앞선 날이라서(`olderThan`) 15일 뒤다.
 - ㉱의 근거는 `restartedRecently`가 보는 두 몫 그대로다. 한 세션 안에서 다시 실린 날과, 그 이름이 실리던 작업 폴더에서 처음 목록에 없이 시작한 최근 세션의 시작한 날이다. 지금 최근 14일 안인 근거만 날을 낸다. 시작한 날을 모르는 세션이 근거이면 그 근거는 날이 지나도 최근으로 남으므로 `null`이다.
-- 시험은 식을 다시 적지 않고 실제 판정 함수와 견준다. 장면마다 오늘 점검을 저장했다고 보고(`updateInstalls`) 날을 하루씩 넘겨 `serverEstablished`가 처음 참이 되는 날을 찾아 계산한 날과 같은지 본다. 하루 어긋난 식(`ESTABLISHED_DAYS` 뒤)과 ㉱를 빼먹은 식은 이 시험에서 실패한다(연습 작업 폴더에서 변이로 확인).
+- 시험은 식을 다시 적지 않고 실제 판정 함수와 견준다. 장면마다 오늘 점검을 저장했다고 보고(`updateInstalls`) 날을 하루씩 넘겨 `serverEstablished`가 처음 참이 되는 날을 찾아 계산한 날과 같은지 본다. 장면에는 `restartedRecently`의 경계 셋(작업 폴더가 없는 세션의 다시 실림은 센다, 처음 목록을 모르는 세션은 견주지 않는다, 시계가 뒤로 가 오늘보다 뒤인 날도 최근이다)이 든다. 하루 어긋난 식, ㉱를 빼먹은 식, 위 경계 셋을 어긴 식은 이 시험에서 실패한다(연습 작업 폴더에서 변이로 확인. 경계 셋은 계획 리뷰 1차에서 짝 Codex 1이 찾은 빈틈이다).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -185,6 +185,9 @@ describe("serverJudgeableFrom: 판정을 시작할 수 있는 날", () => {
     ["처음 목록에 없이 시작한 최근 세션", { records: [record("2026-09-01")], sessions: [loadedBefore, startedWithout("2026-11-12")] }],
     ["근거가 여럿이면 가장 늦은 날", { records: [record("2026-11-03")], sessions: [reloadedOn("2026-11-01"), loadedBefore, startedWithout("2026-11-09")] }],
     ["시계가 뒤로 가서 첫날이 오늘보다 뒤", { records: [record("2026-11-20")] }],
+    ["작업 폴더가 없는 세션에서 다시 실렸다(한 세션 안의 몫은 작업 폴더와 상관없다)", { records: [record("2026-09-01")], sessions: [{ ...reloadedOn("2026-11-11"), cwd: null }] }],
+    ["처음 목록을 모르는 최근 세션은 견주지 않는다", { records: [record("2026-11-10")], sessions: [loadedBefore, { initialMcpServers: null, firstDate: "2026-11-12", days: { "2026-11-12": { responses: 1, loadedMcpServers: [] } } }] }],
+    ["시계가 뒤로 가서 다시 실린 날이 오늘보다 뒤", { records: [record("2026-09-01")], sessions: [reloadedOn("2026-11-20")] }],
   ];
   for (const [name, scene] of scenes) {
     it(`${name}: 날을 지나 보며 처음 판정할 수 있게 되는 날과 같다`, () => {
@@ -218,7 +221,7 @@ describe("serverJudgeableFrom: 판정을 시작할 수 있는 날", () => {
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/core/installs-judge-from.test.ts`
-Expected: FAIL. `test/core/installs-judge-from.test.ts`의 시험 18개가 모두 실패한다. `daysAfter`, `restartDates`, `serverJudgeableFrom`이 아직 없다.
+Expected: FAIL. `test/core/installs-judge-from.test.ts`의 시험 21개가 모두 실패한다. `daysAfter`, `restartDates`, `serverJudgeableFrom`이 아직 없다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -329,7 +332,7 @@ export function serverJudgeableFrom(server: McpFact, context: VerdictContext): L
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/core/installs-judge-from.test.ts test/core/installs-basics.test.ts test/core/installs-verdict.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 72개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 75개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -362,8 +365,8 @@ git commit -m "feat: 지켜보는 서버를 판정할 수 있는 날을 계산"
 설계 「3단계 계획 전 결정」의 10번과 19.1이다.
 
 - 이름은 정규화하기 전 뿌리 경로의 마지막 이름이다. 정규화한 경로는 Windows에서 소문자라서 거기서 떼면 대소문자가 달라진다. 경로를 다루는 일이라 스캐너가 하고 core는 옮긴다(설계 7.2).
-- 읽는 프로젝트(있고 프로젝트로 보지 않는 폴더가 아닌 것)는 이름이 서로 다르게 정한다. 읽는 프로젝트의 원래 이름을 모두 먼저 잡아 두고 정규화한 뿌리 차례로 보며, 원래 이름을 아직 아무도 받지 않았으면 그 이름이고, 이미 받았으면 ` (2)`, ` (3)`… 가운데 잡아 둔 원래 이름과도 이미 정한 이름과도 겹치지 않는 가장 작은 번호를 붙인다. 겹치는지는 대소문자를 가리지 않는다. 원래 이름에 ` (2)`가 든 폴더가 있어도 겹치지 않는다(짝 검증 6차의 반례를 시험에 넣었다).
-- 읽지 않는 프로젝트(없어진 폴더, 홈 같은 폴더)는 원래 이름 그대로이고 번호를 쓰지 않는다. 결과 화면에 보이지 않는다.
+- 읽는 프로젝트(있고 프로젝트로 보지 않는 폴더가 아닌 것)는 이름이 서로 다르게 정한다. 읽는 프로젝트의 원래 이름을 모두 먼저 잡아 두고 정규화한 뿌리 차례로 보며, 원래 이름을 아직 아무도 받지 않았으면 그 이름이고, 이미 받았으면 ` (2)`, ` (3)`… 가운데 잡아 둔 원래 이름과도 이미 정한 이름과도 겹치지 않는 가장 작은 번호를 붙인다. 겹치는지는 대소문자를 가리지 않는다. 사용자 범위 위치의 앞머리(`~`, `$CLAUDE_CONFIG_DIR`)는 처음부터 받은 것으로 본다. 원래 이름에 ` (2)`가 든 폴더가 있어도, 이름이 `~`인 폴더가 있어도 겹치지 않는다(설계 짝 검증 6차와 7차의 반례를 시험에 넣었다).
+- 읽지 않는 프로젝트(없어진 폴더, 홈 같은 폴더)는 원래 이름 그대로이고 번호를 쓰지 않으며, 같은 이름의 읽는 프로젝트보다 앞서도 그 이름을 먼저 받지 않는다(시험이 홈과 같은 이름의 프로젝트로 본다. 계획 리뷰 1차에서 짝 Codex 1이 찾은 빈틈). 결과 화면에 보이지 않는다.
 - 판정에서 뺀 서버의 프로젝트 자리는 입력의 프로젝트 목록에서 정규화한 뿌리로 이름을 찾는다. 프로젝트의 것이 아니면 `null`이다. 정규화한 경로(`normRoot`, `projectRoot`)는 결과 파일에 그대로 남는다. 결과 화면에 넣지 않는 것은 2부가 한다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -626,6 +629,24 @@ import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/ev
     expect(new Set(names.map((name) => name.toLowerCase())).size).toBe(names.length);
   });
 
+  it("사용자 범위 위치의 앞머리(~, $CLAUDE_CONFIG_DIR)와 같은 이름의 프로젝트에도 번호를 붙인다. S3 위치가 사용자 설정과 같은 글이 되지 않게 한다", async () => {
+    const tilde = join(root, "x", "~");
+    const config = join(root, "y", "$claude_config_dir");
+    for (const dir of [tilde, config]) await put(join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [tilde, config] });
+    expect([tilde, config].map((dir) => scanned.projects.find((p) => p.root === dir)!.name)).toEqual(["~ (2)", "$claude_config_dir (2)"]);
+  });
+
+  it("있지만 프로젝트로 보지 않는 폴더(홈)는 이름을 받지 않아, 같은 이름의 읽는 프로젝트가 번호 없이 이름을 받는다. 입력 차례와 상관없다", async () => {
+    const namesake = join(root, "x", "home");
+    await put(join(namesake, ".git", "HEAD"), "ref: refs/heads/main\n");
+    for (const cwds of [[input.homedir, namesake], [namesake, input.homedir]]) {
+      const scanned = await scanClaudeSetup({ ...input, cwds });
+      expect(scanned.projects.find((p) => p.root === input.homedir)).toMatchObject({ excluded: true, name: "home" });
+      expect(scanned.projects.find((p) => p.root === namesake)).toMatchObject({ excluded: false, name: "home" });
+    }
+  });
+
   it("스킬: skillOverrides의 off는 꺼짐, user-invocable-only와 disable-model-invocation은 켜져 있지만 목록에 실리지 않는다", () => {
 ```
 
@@ -647,7 +668,7 @@ import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/ev
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/core/copy-findings.test.ts test/core/evaluate.test.ts test/core/metrics-fit.test.ts test/core/result-assemble.test.ts test/scan/claude.test.ts test/scan/identity.test.ts`
-Expected: FAIL. 기대에 `name`과 `projectName`을 더한 시험 15개가 실패한다(`metrics-fit` 9, `claude`(스캐너의 이름과 차례 번호) 3, `result-assemble` 2, `evaluate` 1). 구현 전에는 그 칸이 없다. `copy-findings`와 `identity`는 시험의 자료 모양만 맞춘 것이라 통과한다.
+Expected: FAIL. 기대에 `name`과 `projectName`을 더한 시험 17개가 실패한다(`metrics-fit` 9, `claude`(스캐너의 이름과 차례 번호) 5, `result-assemble` 2, `evaluate` 1). 구현 전에는 그 칸이 없다. `copy-findings`와 `identity`는 시험의 자료 모양만 맞춘 것이라 통과한다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -805,10 +826,14 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
 
 ```ts
 
+/** 사용자 범위 설정 문제의 위치가 시작하는 앞머리. 설정 폴더를 옮기지 않았으면 ~(~/.claude/…), 옮겼으면 환경 변수의 이름이다 */
+const USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
+
 /**
  * 프로젝트마다 결과 화면에 보일 폴더 이름(정규화하기 전 뿌리 경로의 마지막 이름). 읽는 프로젝트(있고 프로젝트로 보지 않는 폴더가 아닌 것)는 이름이 서로 다르게 정한다.
  * 읽는 프로젝트의 원래 이름을 모두 먼저 잡아 두고 정규화한 뿌리 차례로 보며, 원래 이름을 아직 아무도 받지 않았으면 그 이름이고, 이미 받았으면
  * " (2)", " (3)"… 가운데 잡아 둔 원래 이름과도 이미 정한 이름과도 겹치지 않는 가장 작은 번호를 붙인다. 겹치는지는 대소문자를 가리지 않는다.
+ * 사용자 범위 위치의 앞머리(USER_PLACE_HEADS)는 처음부터 받은 것으로 본다. 이름이 ~인 프로젝트의 S3 위치가 사용자 설정과 같은 글이 되지 않게 하려는 것이다.
  * 위 폴더 이름을 보이지 않고도 두 프로젝트를 가른다(설계 「3단계 계획 전 결정」의 10번)
  */
 function projectNamesOf(refs: readonly { root: string; normRoot: string; exists: boolean; excluded: boolean }[]): Map<string, string> {
@@ -816,7 +841,7 @@ function projectNamesOf(refs: readonly { root: string; normRoot: string; exists:
   const original = (ref: { root: string }): string => basename(ref.root) || ref.root;
   const reading = (ref: { exists: boolean; excluded: boolean }): boolean => ref.exists && !ref.excluded;
   const reserved = new Set(sorted.filter(reading).map((ref) => original(ref).toLowerCase()));
-  const taken = new Set<string>();
+  const taken = new Set<string>(USER_PLACE_HEADS.map((head) => head.toLowerCase()));
   const names = new Map<string, string>();
   for (const ref of sorted) {
     const name = original(ref);
@@ -884,7 +909,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/claude.test.ts test/scan/identity.test.ts test/core/metrics-fit.test.ts test/core/evaluate.test.ts test/core/result-assemble.test.ts test/core/copy-findings.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 6개, 시험 141개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 6개, 시험 143개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -910,7 +935,7 @@ git commit -m "feat: 평가 결과에 프로젝트 폴더 이름을 실음"
 
 설계 「3단계 계획 전 결정」의 5번과 13.1이다.
 
-- 판정한 서버 가운데 쓰는지 모름이고 구조상 빼지 않은 것만 날을 셈한다. 결과의 판정에서 뺀 서버에는 까닭이 지켜보는 중(`not_established`)일 때만 날을 싣고, 정의가 없음, 정의를 읽지 못한 플러그인의 것, 관측이 빠짐없지 않음은 `null`이다.
+- 판정한 서버 가운데 쓰는지 모름이고 구조상 빼지 않은 것만 날을 셈한다. MCP 정의를 읽지 못한 플러그인과 구성을 모르는 플러그인이 넣은 서버는 날이 없다는 것을 시험이 직접 본다(계획 리뷰 1차에서 짝 Codex 1이 찾은 빈틈). 결과의 판정에서 뺀 서버에는 까닭이 지켜보는 중(`not_established`)일 때만 날을 싣고, 정의가 없음, 정의를 읽지 못한 플러그인의 것, 관측이 빠짐없지 않음은 `null`이다.
 - 같은 날 저장한 점검 뒤 다시 점검해도 날이 같다. 결과 조립의 시험이 관측 기록이 없는 입력과 오늘 첫날로 적은 입력에서 같은 날을 확인한다.
 - 날은 평가 결과에 싣지만 관측 기록의 첫날은 싣지 않는다(12.1의 예외). 문장(`text`)은 바꾸지 않는다.
 
@@ -948,6 +973,16 @@ describe("판정한 서버의 판정을 시작할 수 있는 날", () => {
       ["claude.ai Mail", "unknown", "no_definition", null],
       ["fresh", "unknown", null, "2026-11-28"],
       ["idle", "unused", null, null],
+    ]);
+  });
+  it("MCP 정의를 읽지 못한 플러그인과 구성을 모르는 플러그인이 넣은 서버(구조상 뺀 것)는 날이 없다", () => {
+    const unread = mcpServer("unread", { scope: "plugin", pluginId: "unread@m", recordNames: ["plugin:unread:unread"] });
+    const unknown = mcpServer("mystery", { scope: "plugin", pluginId: "unknown@m", recordNames: ["plugin:unknown:mystery"] });
+    const plugins = [plugin("unread@m", { components: ["mcpServers"], mcpUnreadable: true }), plugin("unknown@m", { compositionKnown: false, hooksUnreadable: true, mcpUnreadable: true })];
+    const judgement = judge({ mcpServers: [unread, unknown], plugins }, { watched: null });
+    expect(judgement.servers.map((s) => [s.server.name, s.excluded, s.judgeFrom])).toEqual([
+      ["mystery", "plugin_unread", null],
+      ["unread", "plugin_unread", null],
     ]);
   });
 });
@@ -1008,7 +1043,7 @@ describe("E6 안 쓰는 MCP 서버", () => {
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/core/copy-findings.test.ts test/core/installs-servers.test.ts test/core/result-assemble.test.ts`
-Expected: FAIL. 판정한 서버와 판정에서 뺀 서버에 `judgeFrom`을 기대하는 시험 4개가 실패한다(`result-assemble` 3, `installs-servers` 1). `copy-findings`는 자료 모양만 맞춘 것이라 통과한다.
+Expected: FAIL. 판정한 서버와 판정에서 뺀 서버에 `judgeFrom`을 기대하는 시험 5개가 실패한다(`result-assemble` 3, `installs-servers` 2). `copy-findings`는 자료 모양만 맞춘 것이라 통과한다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -1132,7 +1167,7 @@ import type { Coverage, ToolId } from "../../adapters/types.ts";
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/core/installs-servers.test.ts test/core/result-assemble.test.ts test/core/copy-findings.test.ts test/core/result-determinism.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 4개, 시험 57개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 4개, 시험 58개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -1163,7 +1198,7 @@ git commit -m "feat: 판정에서 뺀 서버에 판정을 시작할 날을 실�
 
 설계 「3단계 계획 전 결정」의 4번과 12.2, 19.1이다.
 
-- 위치는 절대 경로가 아니다. 사용자 범위의 것은 도구의 설정 폴더부터(`~/.claude/settings.json`, 설정 폴더를 `CLAUDE_CONFIG_DIR`로 옮겼으면 `$CLAUDE_CONFIG_DIR/settings.json`), 프로젝트의 것은 과제 2의 프로젝트 이름부터(`app/.claude/settings.json`) 적고 나눔표는 `/`다. 링크를 푼 실제 경로가 아니라 스캐너가 찾은 경로로 만든다. 실제 경로는 두 뿌리 밖일 수 있다.
+- 위치는 절대 경로가 아니다. 사용자 범위의 것은 도구의 설정 폴더부터(`~/.claude/settings.json`, 설정 폴더를 `CLAUDE_CONFIG_DIR`로 옮겼으면 `$CLAUDE_CONFIG_DIR/settings.json`), 프로젝트의 것은 과제 2의 프로젝트 이름부터(`app/.claude/settings.json`) 적고 나눔표는 `/`다. 링크를 푼 실제 경로가 아니라 스캐너가 찾은 경로(링크가 놓인 곳)로 만든다. 실제 경로는 두 뿌리 밖일 수 있어 위 폴더 이름이 드러난다. 기존의 공유 링크 시험에 위치 기대를 더해, 위치를 실제 경로로 만드는 구현이 실패하게 했다(계획 리뷰 1차에서 두 짝이 찾은 빈틈).
 - `SetupProblem`은 주인에 따라 위치가 있거나 없는 꼴로 바꾼다. 사용자 문제가 위치 없이 만들어지면 타입 검사가 잡는다.
 - S3가 세는 것과 목록은 한 함수(`countedProblems`)에서 나온다. 범위(사용자가 고치는 셋팅만)와 같은 실제 파일을 한 번 세는 것, 차례(도구, 그 안에서 스캐너의 차례)가 S3 그대로이고 위치로 다시 정렬하지 않는다. S3의 값과 근거 숫자는 바뀌지 않는다.
 - 요약에는 싣지 않는다(설계 12.3, 19.1).
@@ -1305,7 +1340,7 @@ import { mcpServer, project } from "../helpers/facts.ts";
   const problems: SetupProblem[] = Array.from({ length: p.problems }, (_, i) => ({ kind: "noFrontmatter", owner: "user", path: `/home/u/.claude/skills/broken${i + 1}`, realPath: `/home/u/.claude/skills/broken${i + 1}`, place: `~/.claude/skills/broken${i + 1}` }));
 ```
 
-`test/scan/claude.test.ts`(찾을 곳 1/3):
+`test/scan/claude.test.ts`(찾을 곳 1/4):
 
 ```ts
     expect(facts.problems).toEqual([
@@ -1314,7 +1349,7 @@ import { mcpServer, project } from "../helpers/facts.ts";
     ]);
 ```
 
-`test/scan/claude.test.ts`(바꾼 뒤 1/3):
+`test/scan/claude.test.ts`(바꾼 뒤 1/4):
 
 ```ts
     expect(facts.problems).toEqual([
@@ -1323,14 +1358,15 @@ import { mcpServer, project } from "../helpers/facts.ts";
     ]);
 ```
 
-`test/scan/claude.test.ts`(찾을 곳 2/3):
+`test/scan/claude.test.ts`(찾을 곳 2/4):
 
 ```ts
 
   it("같은 원본을 두 곳에서 링크로 걸었으면 문제의 경로는 둘이고 실제 경로는 하나다(S3은 한 번만 센다)", async () => {
+    const store = join(root, "store", "bare");
 ```
 
-`test/scan/claude.test.ts`(바꾼 뒤 2/3):
+`test/scan/claude.test.ts`(바꾼 뒤 2/4):
 
 ```ts
 
@@ -1368,10 +1404,37 @@ import { mcpServer, project } from "../helpers/facts.ts";
     expect(scanned.problems.filter((p) => p.owner === "user").map((p) => p.place).sort()).toEqual(["$CLAUDE_CONFIG_DIR/settings.json", "app (2)/.mcp.json", "app/.mcp.json"]);
   });
 
-  it("같은 원본을 두 곳에서 링크로 걸었으면 문제의 경로는 둘이고 실제 경로는 하나다(S3은 한 번만 센다)", async () => {
+  it("이름이 ~인 프로젝트의 설정 문제는 사용자 설정의 문제와 다른 위치로 적는다", async () => {
+    await put(join(input.homedir, ".claude", "settings.json"), "{ 깨짐");
+    const tilde = join(root, "x", "~");
+    await put(join(tilde, ".git", "HEAD"), "ref: refs/heads/main\n");
+    await put(join(tilde, ".claude", "settings.json"), "{ 깨짐");
+    const scanned = await scanClaudeSetup({ ...input, cwds: [tilde] });
+    const places = scanned.problems.filter((p) => p.owner === "user" && p.kind === "unparsable").map((p) => p.place).sort();
+    expect(places).toEqual(["~ (2)/.claude/settings.json", "~/.claude/settings.json"]);
+  });
+
+  it("같은 원본을 두 곳에서 링크로 걸었으면 문제의 경로는 둘이고 실제 경로는 하나다(S3은 한 번만 센다). 위치는 링크를 푼 실제 경로가 아니라 링크가 놓인 경로로 만든다", async () => {
+    const store = join(root, "store", "bare");
 ```
 
-`test/scan/claude.test.ts`(찾을 곳 3/3):
+`test/scan/claude.test.ts`(찾을 곳 3/4):
+
+```ts
+    expect([...new Set(bare.map((p) => p.realPath))]).toEqual([normalizePath(await realpath(store))]);
+  });
+```
+
+`test/scan/claude.test.ts`(바꾼 뒤 3/4):
+
+```ts
+    expect([...new Set(bare.map((p) => p.realPath))]).toEqual([normalizePath(await realpath(store))]);
+    // 원본은 설정 폴더와 프로젝트 밖(store)에 있다. 위치에 원본 쪽 폴더 이름이 나오면 안 된다
+    expect(bare.map((p) => p.place).sort()).toEqual(["proj/.claude/skills/bare", "~/.claude/skills/bare"]);
+  });
+```
+
+`test/scan/claude.test.ts`(찾을 곳 4/4):
 
 ```ts
     expect(broken.problems.filter((p) => p.kind === "unparsable")).toEqual([
@@ -1379,7 +1442,7 @@ import { mcpServer, project } from "../helpers/facts.ts";
     ]);
 ```
 
-`test/scan/claude.test.ts`(바꾼 뒤 3/3):
+`test/scan/claude.test.ts`(바꾼 뒤 4/4):
 
 ```ts
     expect(broken.problems.filter((p) => p.kind === "unparsable")).toEqual([
@@ -1390,7 +1453,7 @@ import { mcpServer, project } from "../helpers/facts.ts";
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/core/metrics-setup.test.ts test/core/result-assemble.test.ts test/core/result-notices-setup.test.ts test/scan/claude.test.ts`
-Expected: FAIL. 시험 7개가 실패한다. 문제의 위치(`place`)를 기대하는 스캐너 시험 4개, 센 문제 목록을 기대하는 S3 시험 1개와 결과 조립 시험 2개다. `result-notices-setup`은 자료 모양만 맞춘 것이라 통과한다.
+Expected: FAIL. 시험 9개가 실패한다. 문제의 위치(`place`)를 기대하는 스캐너 시험 6개, 센 문제 목록을 기대하는 S3 시험 1개와 결과 조립 시험 2개다. `result-notices-setup`은 자료 모양만 맞춘 것이라 통과한다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -1899,7 +1962,7 @@ export type SetupProblem = {
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/claude.test.ts test/core/metrics-setup.test.ts test/core/result-notices-setup.test.ts test/core/result-assemble.test.ts test/core/personas.test.ts test/core/purity.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 6개, 시험 218개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 6개, 시험 221개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2020,7 +2083,7 @@ git commit -m "feat: AQ가 없으면 요약의 먼저 고칠 것을 비움"
 - [ ] **Step 1: 전체 검사를 돌린다**
 
 Run: `npm run check`
-Expected: 타입 검사 통과, 시험 파일 75개·시험 1,165개 통과(2단계까지의 74개·1,133개에 이 계획이 더한 것), 마지막 줄이 `묶음 검사 통과`. Windows 밖에서는 1부의 시험 1개를 건너뛴다.
+Expected: 타입 검사 통과, 시험 파일 75개·시험 1,172개 통과(2단계까지의 74개·1,133개에 이 계획이 더한 것), 마지막 줄이 `묶음 검사 통과`. Windows 밖에서는 1부의 시험 1개를 건너뛴다.
 
 - [ ] **Step 2: 묶음을 다시 만들어도 그대로인지 확인한다**
 
@@ -2037,7 +2100,7 @@ Expected: 24에서와 같은 수의 시험이 모두 PASS. 막히면 짝 검증�
 
 - [ ] **Step 4: 빈 홈과 이 PC의 기록으로 저장 없이 돌려 본다**
 
-묶은 실행 파일로 점검한다. 상태 폴더에는 쓰지 않는다. 빈 홈은 `USERPROFILE`과 `HOME`을 빈 임시 폴더로 바꿔 돌린다.
+묶은 실행 파일로 점검한다. 상태 폴더에는 쓰지 않는다. 빈 홈은 그 실행에서만 `USERPROFILE`과 `HOME`을 빈 임시 폴더로 바꾸고 `CLAUDE_CONFIG_DIR`을 지운다(설정 폴더를 옮겨 둔 PC에서는 그 변수가 홈보다 먼저 쓰인다). 부모 셸의 환경은 바꾸지 않는다.
 
 Run: `node skills/aq/scripts/aq.mjs checkup --no-save --no-open --lang ko`(빈 홈)
 Expected: 종료 코드 0. `summary.aq`가 `null`이고 `summary.fixFirst`와 `summary.text.fixFirst`가 빈 목록이며 칸은 있다. `run.resultPath`의 파일의 `details`가 `safeguards`, `missingInstructions`, `worstOverlap`, `unjudgedServers`, `setupProblems`의 차례다.
@@ -2125,8 +2188,8 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`765f967`)에서 과제 1부터 5까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~5는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일은 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 5의 묶은 실행 파일 다시 만들기도 통과했다. 과제 5 뒤의 `npm run check`는 시험 파일 75개·시험 1,165개가 통과했고 `묶음 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 186개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 연습 작업 폴더가 앞 버전을 들고 있어 견주지 않았다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`65f6c7d`)에서 과제 1부터 5까지 차례대로 만들었다(Windows 11, Node.js 24). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~5는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일은 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 5의 묶은 실행 파일 다시 만들기도 통과했다. 과제 5 뒤의 `npm run check`는 시험 파일 75개·시험 1,172개가 통과했고 `묶음 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 186개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 연습 작업 폴더가 앞 버전을 들고 있어 견주지 않았다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제 1의 변이 둘(15일 대신 14일 뒤로 셈, ㉱의 근거를 빼먹음)을 시험이 잡았다(실패 10개, 5개). 묶은 실행 파일로 빈 홈과 이 PC의 기록을 저장 없이 점검했고 둘 다 종료 코드 0으로 끝났다. 빈 홈에서는 AQ가 없고 요약의 먼저 고칠 것이 칸만 있고 비어 있었으며 빈 목록의 문장도 없었다(정비할 것이 있어서다). 이 PC의 결과 파일에는 F3과 F4의 프로젝트 자리에 대소문자가 그대로인 폴더 이름이 있었다(숫자와 이름은 저장소 밖 기록에만 둔다). 설계 보완(「3단계 계획 전 결정」)은 짝 Codex 둘이 7차까지 검증했다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 계획 리뷰에서 짝 둘이 든 변이와 주 세션의 변이를 시험이 모두 잡았다. 과제 1은 15일 대신 14일 뒤로 셈, ㉱의 근거를 빼먹음, 작업 폴더가 없는 세션을 건너뜀, 처음 목록을 모르는 세션을 빈 목록으로 봄, 오늘보다 뒤의 날을 버림이고, 과제 2는 원래 이름을 먼저 잡아 두지 않음, 대소문자를 가려 견줌, 제외 폴더도 이름을 받음이며, 과제 3은 구조상 뺀 플러그인 서버도 날을 셈, 과제 4는 위치를 실제 경로로 만듦, 설정 폴더를 옮겨도 늘 `~/.claude`로 적음, 센 문제를 위치로 다시 정렬함, 과제 5는 AQ와 상관없이 먼저 고칠 것을 채움이다. 묶은 실행 파일로 빈 홈과 이 PC의 기록을 저장 없이 점검했고 둘 다 종료 코드 0으로 끝났다. 빈 홈에서는 AQ가 없고 요약의 먼저 고칠 것이 칸만 있고 비어 있었으며 빈 목록의 문장도 없었다(정비할 것이 있어서다). 이 PC의 결과 파일에는 F3과 F4의 프로젝트 자리에 대소문자가 그대로인 폴더 이름이 있었다(숫자와 이름은 저장소 밖 기록에만 둔다). 설계 보완(「3단계 계획 전 결정」)은 짝 Codex 둘이 7차까지 검증했다.
 
 확인하지 못한 것은 이렇다. macOS와 Linux에서는 돌려 보지 않았다. 이 PC에는 판정에서 뺀 서버와 S3의 문제가 없어 그 칸은 지어낸 입력의 시험으로만 확인했다. 실제 claude.ai에서 이름이 겹친 연결과 실제 PC에서 설정 폴더를 옮긴 채 처음부터 끝까지 돈 점검은 보지 않았다.

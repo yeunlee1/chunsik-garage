@@ -65,6 +65,9 @@ var epochDay = (date) => {
 function daysBefore(today, date) {
   return epochDay(today) - epochDay(date);
 }
+function daysAfter(date, days) {
+  return new Date((epochDay(date) + days) * DAY_MS).toISOString().slice(0, 10);
+}
 function olderThan(today, date, days) {
   return daysBefore(today, date) > days;
 }
@@ -213,6 +216,21 @@ function restartedRecently(listings, recordNames, today) {
   }
   return listings.some((listing) => listing.cwdKey !== null && loadedIn.has(listing.cwdKey) && listing.initial !== null && recent(listing.firstDate) && !anyIn(recordNames, listing.initial));
 }
+function restartDates(listings, recordNames, today) {
+  const recent = (date) => !olderThan(today, date, ESTABLISHED_DAYS);
+  const dates = [];
+  const loadedIn = /* @__PURE__ */ new Set();
+  for (const listing of listings) {
+    for (const day of listing.days) if (recent(day.date) && anyIn(recordNames, day.reloaded)) dates.push(day.date);
+    if (listing.cwdKey !== null && anyIn(recordNames, listing.everLoaded)) loadedIn.add(listing.cwdKey);
+  }
+  for (const listing of listings) {
+    if (listing.cwdKey === null || !loadedIn.has(listing.cwdKey) || listing.initial === null || anyIn(recordNames, listing.initial)) continue;
+    if (listing.firstDate === null) return null;
+    if (recent(listing.firstDate)) dates.push(listing.firstDate);
+  }
+  return dates;
+}
 
 // src/core/measure.ts
 var scored = (value, evidence) => ({ status: "scored", value, evidence });
@@ -312,6 +330,13 @@ function serverEstablished(server, context) {
   const state = observed(server.installKey, context);
   return state.seenLong && !(restartedRecently(context.listings, server.recordNames, context.day.today) || state.appearedRecently || state.changed);
 }
+function serverJudgeableFrom(server, context) {
+  if (server.installKey === null) return null;
+  const first = context.records?.get(server.installKey)?.firstSeen ?? context.day.today;
+  const restarts = restartDates(context.listings, server.recordNames, context.day.today);
+  if (restarts === null) return null;
+  return [first, ...restarts].map((date) => daysAfter(date, ESTABLISHED_DAYS + 1)).reduce((a, b) => a > b ? a : b);
+}
 function usageStale(skill, claudeJson, day) {
   if (claudeJson !== "ok" || skill.usageUndated) return false;
   return skill.usageLastUsedMs === null || msOlderThan(day, skill.usageLastUsedMs, RECENT_USE_DAYS);
@@ -349,9 +374,10 @@ function judgeServers(tool, context) {
   if (serversUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
   const unreadPlugins = new Set(setup.plugins.filter((plugin) => !plugin.compositionKnown || plugin.mcpUnreadable).map((plugin) => plugin.id));
   const servers = [...setup.mcpServers].sort(byServer).map((server) => {
-    if (server.installKey === null) return { server, verdict: "unknown", excluded: "no_definition" };
-    if (server.pluginId !== null && unreadPlugins.has(server.pluginId)) return { server, verdict: "unknown", excluded: "plugin_unread" };
-    return { server, verdict: serverVerdict(server, context), excluded: null };
+    if (server.installKey === null) return { server, verdict: "unknown", excluded: "no_definition", judgeFrom: null };
+    if (server.pluginId !== null && unreadPlugins.has(server.pluginId)) return { server, verdict: "unknown", excluded: "plugin_unread", judgeFrom: null };
+    const verdict = serverVerdict(server, context);
+    return { server, verdict, excluded: null, judgeFrom: verdict === "unknown" ? serverJudgeableFrom(server, context) : null };
   });
   const installs = sameInstall(servers.filter((judged) => judged.server.enabled), (judged) => judged.server.installKey);
   const counted = installs.map((facts) => ({
@@ -418,7 +444,7 @@ function f3(tools, usage) {
     if (project.kind !== "git" && !treatedAsProject(project) && !tools.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
     targets++;
     const without = mainTools(use).filter((tool) => !hasInstructions(projectIn(byId.get(tool), project.normRoot)));
-    if (without.length > 0) missing.push({ normRoot: project.normRoot, tools: without });
+    if (without.length > 0) missing.push({ normRoot: project.normRoot, name: project.name, tools: without });
   }
   const withInstructions = targets - missing.length;
   const evidence = { targets, withInstructions };
@@ -441,13 +467,13 @@ function f4(tools) {
       if (!project.instructions.files.some((file) => !file.sameAsGlobal)) continue;
       comparedProjects++;
       const overlapping = new Set(project.instructions.lineHashes.filter((hash) => lines.has(hash))).size;
-      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, overlapping, globalLines: lines.size };
+      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name: project.name, overlapping, globalLines: lines.size };
     }
   }
   if (unreadable) return { measurement: unmeasured("unreadable", { comparedProjects: null, globalLines: null, overlappingLines: null }), worst: null };
   if (worst === null) return { measurement: unmeasured("not_applicable", { comparedProjects: 0, globalLines, overlappingLines: 0 }), worst: null };
   const evidence = { comparedProjects, globalLines: worst.globalLines, overlappingLines: worst.overlapping };
-  return { measurement: scored(worst.overlapping / worst.globalLines, evidence), worst: { tool: worst.tool, normRoot: worst.normRoot } };
+  return { measurement: scored(worst.overlapping / worst.globalLines, evidence), worst: { tool: worst.tool, normRoot: worst.normRoot, name: worst.name } };
 }
 function f5(tool) {
   const places = tool.setup.unreadableSkillPlaces;
@@ -670,19 +696,25 @@ function s2(tools, safeguards) {
   return countGate(true, tools.length, 1, evidence) ?? scored(guarded / tools.length, evidence);
 }
 var PROBLEM_COUNTERS = { danglingLink: "danglingLinks", noFrontmatter: "noFrontmatter", unparsable: "unparsable" };
-function s3(tools) {
-  const counts = { danglingLinks: 0, noFrontmatter: 0, unparsable: 0 };
+function countedProblems(tools) {
+  const counted = [];
   const seen = /* @__PURE__ */ new Set();
   for (const tool of tools) {
     for (const problem of tool.setup.problems) {
+      null;
       if (problem.owner !== "user") continue;
-      const place = problem.realPath ?? problem.path;
-      if (seen.has(place)) continue;
-      seen.add(place);
-      counts[PROBLEM_COUNTERS[problem.kind]]++;
+      const at = problem.realPath ?? problem.path;
+      if (seen.has(at)) continue;
+      seen.add(at);
+      counted.push({ tool: tool.tool, kind: problem.kind, place: problem.place });
     }
   }
-  return scored(seen.size, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: seen.size, unparsable: counts.unparsable });
+  return counted;
+}
+function s3(problems) {
+  const counts = { danglingLinks: 0, noFrontmatter: 0, unparsable: 0 };
+  for (const problem of problems) counts[PROBLEM_COUNTERS[problem.kind]]++;
+  return scored(problems.length, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: problems.length, unparsable: counts.unparsable });
 }
 function s5(tool) {
   const { setup, totals } = tool;
@@ -696,7 +728,8 @@ function s5(tool) {
 }
 function mergedSetupRules(tools) {
   const safeguards = tools.map(safeguardOf);
-  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(tools), safeguards };
+  const setupProblems = countedProblems(tools);
+  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
 }
 function setupToolRules(tool) {
   return { S5: s5(tool) };
@@ -1003,7 +1036,7 @@ function evaluate(input) {
     };
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured: measured2 };
   });
-  const { S1, S2, S3, safeguards } = mergedSetupRules(setups);
+  const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
   const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage);
   const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage) }, tools: judged.map((tool) => tool.measured) });
   const humanRequests = scored2.reduce((sum2, tool) => sum2 + tool.totals.humanRequests, 0);
@@ -1023,6 +1056,7 @@ function evaluate(input) {
     safeguards,
     missingInstructions,
     worstOverlap,
+    setupProblems,
     projects: usage
   };
 }
@@ -2415,6 +2449,7 @@ var textsOf = (make) => ({ en: make("en"), ko: make("ko") });
 var SCOPE_ORDER3 = ["user", "local", "project", "plugin", "claude-ai"];
 function unjudgedServers(input, evaluation) {
   const windows = makeWindows(input.clock.nowMs, input.clock.timeZone);
+  const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   const servers = [];
   for (const tool of evaluation.tools) {
     const source = input.tools.find((item) => item.tool === tool.tool);
@@ -2423,7 +2458,8 @@ function unjudgedServers(input, evaluation) {
       const { server } = judged;
       if (!server.enabled || judged.verdict !== "unknown" || anyIn(server.recordNames, called.inCollect)) continue;
       const why = judged.excluded ?? (source.complete.mcp ? "not_established" : "observation_incomplete");
-      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, pluginId: server.pluginId, why });
+      const projectName = server.projectRoot === null ? null : names2.get(server.projectRoot) ?? null;
+      servers.push({ tool: tool.tool, name: server.name, scope: server.scope, projectRoot: server.projectRoot, projectName, pluginId: server.pluginId, why, judgeFrom: why === "not_established" ? judged.judgeFrom : null });
     }
   }
   return servers.sort((a, b) => byText10(a.name, b.name) || SCOPE_ORDER3.indexOf(a.scope) - SCOPE_ORDER3.indexOf(b.scope) || byText10(a.projectRoot ?? "", b.projectRoot ?? "") || byText10(a.pluginId ?? "", b.pluginId ?? "") || byText10(a.tool, b.tool));
@@ -2431,7 +2467,7 @@ function unjudgedServers(input, evaluation) {
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
   const findings = evaluation.findings.map((finding) => {
     const source2 = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId, coverageByTool.get(value.tool)) })) };
     return { ...source2, text: textsOf((lang) => findingText(source2, details, lang)) };
@@ -2501,7 +2537,7 @@ function fixDetail(fix, lang) {
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding) => ({
     ruleId: finding.ruleId,
     axis: finding.axis,
@@ -4303,7 +4339,7 @@ function overlappingSessions(summaries) {
 }
 
 // src/scan/claude.ts
-import { join as join15 } from "node:path";
+import { basename as basename5, join as join15, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
 import { join as join10, resolve as resolve3 } from "node:path";
@@ -5574,6 +5610,28 @@ function usageOf(times) {
   }
   return { usageLastUsedMs, usageUndated };
 }
+var USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
+function projectNamesOf(refs) {
+  const sorted = [...refs].sort((x, y) => x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0);
+  const original = (ref) => basename5(ref.root) || ref.root;
+  const reading = (ref) => ref.exists && !ref.excluded;
+  const reserved = new Set(sorted.filter(reading).map((ref) => original(ref).toLowerCase()));
+  const taken = new Set(USER_PLACE_HEADS.map((head) => head.toLowerCase()));
+  const names2 = /* @__PURE__ */ new Map();
+  for (const ref of sorted) {
+    const name = original(ref);
+    if (!reading(ref)) {
+      names2.set(ref.normRoot, name);
+      continue;
+    }
+    let label = name;
+    for (let n = 2; taken.has(label.toLowerCase()) || label !== name && reserved.has(label.toLowerCase()); n++) label = `${name} (${n})`;
+    taken.add(label.toLowerCase());
+    names2.set(ref.normRoot, label);
+  }
+  return names2;
+}
+var slashed = (path) => path.replace(/\\/g, "/");
 async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
@@ -5583,22 +5641,28 @@ async function scanClaudeSetup(input) {
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
   const problems = [];
+  const configPlace = (path) => `${input.env.CLAUDE_CONFIG_DIR?.trim() ? "$CLAUDE_CONFIG_DIR" : "~/.claude"}/${slashed(relative3(home, path))}`;
   const unparsable = (layer, owner) => {
-    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner, path: part.path });
+    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner, path: part.path, place: null });
   };
-  unparsable(userLayer, "user");
+  const unparsableUser = (layer, placeOf) => {
+    for (const part of layer.parts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: part.path, place: placeOf(part.path) });
+  };
+  unparsableUser(userLayer, configPlace);
   unparsable(managedLayer, "managed");
-  if (claudeJson.status === "unparsable") problems.push({ kind: "unparsable", owner: "tool", path: claudeJsonFile });
+  if (claudeJson.status === "unparsable") problems.push({ kind: "unparsable", owner: "tool", path: claudeJsonFile, place: null });
   const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
   const global = { ordered: [userView], managed: managedView, mcp: { layers: [userView, managedView], managed: managedView, project: null } };
   const projectLayers = /* @__PURE__ */ new Map();
   const contexts = /* @__PURE__ */ new Map();
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
+  const projectNames = projectNamesOf(refs);
+  const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
     const project = await readLayer(join15(ref.root, ".claude", "settings.json"));
     const local = await readLayer(join15(ref.root, ".claude", "settings.local.json"));
-    unparsable(project, "user");
-    unparsable(local, "user");
+    unparsableUser(project, (path) => projectPlace(ref, path));
+    unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
     const projectView = viewOf(project.value);
     const localView = viewOf(local.value);
@@ -5656,8 +5720,8 @@ async function scanClaudeSetup(input) {
       ...usageOf(fields.recordNames.map((name) => claudeJson.skillUsage[name]))
     });
   };
-  const addOwnSkills = (scan, scope, projectRoot, scopeContexts) => {
-    for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path });
+  const addOwnSkills = (scan, scope, projectRoot, scopeContexts, placeOf) => {
+    for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "user", path, place: placeOf(path) });
     unreadableDirs.push(...scan.unreadableDirs);
     if (scan.unreadableDirs.length > 0) {
       if (projectRoot === null) unreadableSkillPlaces.user = true;
@@ -5666,7 +5730,7 @@ async function scanClaudeSetup(input) {
     for (const folder of scan.skills) {
       const recordNames = skillRecordNames(folder.dirName, folder.declaredName, null);
       const modes = scopeContexts.map((context) => overrideIn(context, recordNames));
-      if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "user", path: folder.path });
+      if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "user", path: folder.path, place: placeOf(folder.path) });
       addSkill(folder, {
         scope,
         name: folder.dirName,
@@ -5680,12 +5744,12 @@ async function scanClaudeSetup(input) {
       });
     }
   };
-  addOwnSkills(userSkillScan, "user", null, everyContext);
-  for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot), "project", ref.normRoot, [contexts.get(ref.normRoot)]);
+  addOwnSkills(userSkillScan, "user", null, everyContext, configPlace);
+  for (const ref of active) addOwnSkills(projectSkillScans.get(ref.normRoot), "project", ref.normRoot, [contexts.get(ref.normRoot)], (path) => projectPlace(ref, path));
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join15(plugin.installPath, ".claude-plugin", "plugin.json") });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join15(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -5694,7 +5758,7 @@ async function scanClaudeSetup(input) {
     if (plugin.compositionKnown) {
       for (const root of plugin.skillRoots) {
         const scan = await scanSkillPath(root);
-        for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path });
+        for (const path of scan.danglingLinks) problems.push({ kind: "danglingLink", owner: "plugin", path, place: null });
         unreadableDirs.push(...scan.unreadableDirs);
         if (scan.unreadableDirs.length > 0) unreadableSkillPlaces.plugins.push(plugin.id);
         for (const folder of scan.skills) {
@@ -5704,7 +5768,7 @@ async function scanClaudeSetup(input) {
           const recordNames = [...new Set(pluginNames.flatMap((pluginName) => skillRecordNames(folder.dirName, folder.declaredName, pluginName)))].sort();
           const name = `${plugin.name}:${folder.dirName}`;
           skillNames.push(name);
-          if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "plugin", path: folder.path });
+          if (folder.readable && !folder.hasFrontmatter) problems.push({ kind: "noFrontmatter", owner: "plugin", path: folder.path, place: null });
           addSkill(folder, {
             scope: "plugin",
             name,
@@ -5795,7 +5859,7 @@ async function scanClaudeSetup(input) {
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
     mcpJsonStatus.set(ref.normRoot, status);
-    if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file });
+    if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
     for (const entry of entries ?? []) {
       const approved = projectServerApproved(context.mcp, entry.name) && mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition);
       addServer("project", entry, ref.normRoot, approved);
@@ -5817,6 +5881,7 @@ async function scanClaudeSetup(input) {
     const hasLocalSettings = localSettingsStatus !== null && localSettingsStatus !== "missing";
     projects.push({
       root: ref.root,
+      name: projectNames.get(ref.normRoot),
       normRoot: ref.normRoot,
       kind: ref.kind,
       exists: ref.exists,
@@ -5989,13 +6054,13 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename5, dirname as dirname3 } from "node:path";
+import { basename as basename6, dirname as dirname3 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename5(entryFile) === BUNDLE_FILE && basename5(dirname3(entryFile)) === "scripts") {
+  if (basename6(entryFile) === BUNDLE_FILE && basename6(dirname3(entryFile)) === "scripts") {
     try {
       skillRealPaths.push(normalizePath(await realpath6(dirname3(dirname3(entryFile)))));
     } catch {

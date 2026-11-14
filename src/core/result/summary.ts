@@ -109,7 +109,8 @@ function fixDetail(fix: SummaryFix, lang: Lang): string {
 export function checkupSummary(result: CheckupResult, reportPath: string | null): CheckupSummary {
   const lang = result.lang;
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const repairs = result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  // AQ를 내지 않았으면 먼저 고칠 것을 보이지 않는다. 칸은 그대로 두고 비운다. 빈 목록의 문장(noFixFirst)은 결과의 것 그대로라 정비할 것이 실제로 없을 때만 있다(설계 12.3, 「3단계 계획 전 결정」의 6번)
+  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding): SummaryFix => ({
     ruleId: finding.ruleId,
     axis: finding.axis,

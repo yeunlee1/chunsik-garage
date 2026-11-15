@@ -4,19 +4,19 @@
 >
 > 이 저장소에서는 사용자 지침에 따라 하위 에이전트가 파일을 고치지 않는다. 주 세션(Claude)이 superpowers:executing-plans로 과제를 차례대로 구현하고, 병합 전에 짝 Codex가 코드 정독, 시험 재실행, 이 PC의 기록과 셋팅으로 돌려 보기로 검증한다.
 
-**Goal:** 5단계 1·2부가 읽은 Codex의 기록과 셋팅을 평가 엔진에 넣는다. 점검의 입력 묶음이 두 도구의 기록을 모으고 두 스캐너에 같은 프로젝트 목록을 주며, 규칙과 설치 판정이 Codex를 그 도구의 셋팅 사실로 재고, 관측 기록에 Codex 설치를 잇는다. Codex의 알림, 읽은 양의 Codex 몫, 문구, 결과 화면, 스킬 본문은 4부다.
+**Goal:** 5단계 1·2부가 읽은 Codex의 기록과 셋팅을 평가 엔진에 넣는다. 점검의 입력 묶음이 두 도구의 기록을 모으고 두 스캐너에 같은 프로젝트 목록을 주며, 규칙과 설치 판정이 Codex를 그 도구의 셋팅 사실로 재고, 관측 기록에 Codex 설치를 잇는다. Codex가 더는 받지 않는 승인 정책을 적은 설정은 풀리지 않는 설정으로 본다. Codex의 알림, 읽은 양의 Codex 몫, 문구, 결과 화면, 스킬 본문은 4부다.
 
 **Architecture:** 평가 입력의 도구 하나를 도구로 가르는 꼴로 바꾼다(`src/core/evaluate.ts`의 `ToolInput`, `src/core/metrics/setup.ts`의 `ToolSetup`). 같은 하위 꼴을 읽는 규칙은 그대로 두 도구에 쓰고, 도구마다 다른 판정(S2의 안전장치와 읽지 못한 도구 빼기, 읽지 못한 설정, F3·F4의 프로젝트 몫, E1의 식, E6의 읽지 못한 곳)은 도구를 가려 낸다(`metrics/setup.ts`, `metrics/fit.ts`, `metrics/usage.ts`, `installs/*.ts`, `readability.ts`). 입력 묶음(`src/commands/checkup-input.ts`)이 Codex의 기록과 셋팅을 모으고, 관측 기록(`src/state/next-state.ts`)이 두 도구의 설치를 고친다.
 
 **Tech Stack:** TypeScript, Node.js 22 이상(시험은 22와 24), esbuild(묶기), Vitest(시험). 새 의존성은 없다. 2부의 smol-toml이 이번에 처음 묶은 실행 파일에 든다.
 
-**Spec:** `docs/superpowers/specs/2026-11-12-aq-checkup-design.md`(이하 설계). 이 계획은 설계 끝의 「5단계 3부 계획 전 결정」(1~14번)과, 그것이 기대는 「5단계 계획 전 결정」 4~6번, 「5단계 2부 계획 전 결정」 4·6·7·9번, 11.3의 Codex 칸, 12.1, 18.1을 구현한다.
+**Spec:** `docs/superpowers/specs/2026-11-12-aq-checkup-design.md`(이하 설계). 이 계획은 설계 끝의 「5단계 3부 계획 전 결정」(1~14번)과, 그것이 기대는 「5단계 계획 전 결정」 4~6번, 「5단계 2부 계획 전 결정」 4·6·7·9번, 11.3의 Codex 칸, 12.1, 18.1을 구현한다. 계획 리뷰 1차에서 고친 「5단계 2부 계획 전 결정」 3·4번(Codex가 더는 받지 않는 승인 정책)도 구현한다.
 
 ## 5단계 3부의 범위
 
 | 넣는 것 | 넣지 않는 것(그 부) |
 |---|---|
-| 평가 입력의 Codex 도구(기록, 관측 범위, 셸 명령 도구, 관측이 빠짐없는지, 셋팅 사실), 두 도구로 만든 프로젝트 목록, 규칙의 Codex 몫(S2의 안전장치와 읽지 못한 도구 빼기, S5, E1의 식, F3·F4·F5·F6, E5·E6), Codex 정비 후보 없음, 관측 기록의 Codex 설치, 묶은 실행 파일 다시 만들기 | Codex의 알림(셋팅 쪽, 읽지 못한 기록, 관측이 빠진 것)과 그 문구, 읽은 양의 Codex 몫(건너뛴 압축 파일, 일부만 읽은 파일), 관측 알림 문장, S2의 Codex 처방, 정밀 점검 단서의 Codex 몫, 결과 화면의 Codex 색, 스킬 본문(4부). Codex 플러그인(5부). Codex 정비(6단계) |
+| 평가 입력의 Codex 도구(기록, 관측 범위, 셸 명령 도구, 관측이 빠짐없는지, 셋팅 사실), 두 도구로 만든 프로젝트 목록, 규칙의 Codex 몫(S2의 안전장치와 읽지 못한 도구 빼기, S5, E1의 식, F3·F4·F5·F6, E5·E6), Codex 정비 후보 없음, 관측 기록의 Codex 설치, Codex가 더는 받지 않는 승인 정책을 풀리지 않는 설정으로 보기, 묶은 실행 파일 다시 만들기 | Codex의 알림(셋팅 쪽, 읽지 못한 기록, 관측이 빠진 것)과 그 문구, 읽은 양의 Codex 몫(건너뛴 압축 파일, 일부만 읽은 파일), 관측 알림 문장, S2의 Codex 처방, 정밀 점검 단서의 Codex 몫, 결과 화면의 Codex 색, 스킬 본문(4부). Codex 플러그인(5부). Codex 정비(6단계) |
 
 ## Global Constraints
 
@@ -31,7 +31,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `40B4DDA66F59A4EFA54124004033D03C6D93D536F2CCBBAD42371A6E266984EE`, 4,371줄)이다. 설계 끝에 「5단계 3부 계획 전 결정」(열네 가지)을 더하고, 로드맵 문서의 5단계를 다섯 부로 나눴으며(3부 평가 엔진, 4부 결과 조립·문구·화면·스킬 본문, 5부 Codex 플러그인), 27절에 「Codex 평가의 한계」를 더했다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `0EFDD005BC795ACC6F0BEE96BB55734BD306865235E263F5D27E7150895A4C80`, 4,380줄)이다. 설계 끝에 「5단계 3부 계획 전 결정」(열네 가지)을 더하고, 로드맵 문서의 5단계를 다섯 부로 나눴으며(3부 평가 엔진, 4부 결과 조립·문구·화면·스킬 본문, 5부 Codex 플러그인), 27절에 「Codex 평가의 한계」를 더했다. 계획 리뷰 1차에서 「5단계 2부 계획 전 결정」 3·4번과 27절의 「Codex 셋팅 읽기의 한계」를 고치고, 설계 끝에 「5단계 3부 계획 리뷰 1차에서 보완」을 더했다.
 
 ## 파일 구조
 
@@ -40,16 +40,17 @@
 | `src/core/evaluate.ts`, `src/core/metrics/setup.ts`, `src/core/metrics/fit.ts`, `src/core/metrics/usage.ts`, `src/core/readability.ts`, `src/core/installs/skills.ts`, `src/core/installs/servers.ts`, `src/core/installs/candidates.ts`, `src/core/result/notices.ts`, `src/core/result/hints.ts`, `src/core/copy/rules-setup.ts`(고침) | 1 | 도구로 가르는 셋팅 사실의 꼴, 규칙과 설치 판정의 Codex 몫, S2의 근거와 그 문구, 셋팅 쪽 알림과 단서는 Claude Code만 |
 | `test/helpers/facts.ts`, `test/helpers/evaluation.ts`(고침) | 1 | Codex의 셋팅 사실과 도구 입력을 짓는 시험 도우미 |
 | `src/commands/checkup-input.ts`, `src/commands/checkup.ts`, `src/state/next-state.ts`, `src/core/result/notices.ts`(고침) | 2 | 입력 묶음과 프로젝트 목록에 Codex, 결과에 싣는 Codex의 수집 결과, 관측 기록의 Codex 설치, 기록 쪽 알림의 Codex 몫은 4부로 |
-| `skills/aq/scripts/aq.mjs`(다시 만듦) | 3 | 묶은 실행 파일 |
+| `src/scan/codex-config.ts`, `src/scan/codex-settings.ts`(고침) | 3 | Codex가 더는 받지 않는 승인 정책을 적은 설정은 풀리지 않는 설정, 승인 사실에서 그 값을 뺌 |
+| `skills/aq/scripts/aq.mjs`(다시 만듦) | 4 | 묶은 실행 파일 |
 
 ## 과제를 읽는 법
 
-과제의 코드는 연습 작업 폴더의 커밋에서 기계로 뽑았다. 과제마다 시험을 먼저 쓰고(Step 1), 실패를 확인하고(Step 2), 구현하고(Step 3), 통과를 확인하고(Step 4), 커밋한다. 과제 3은 시험이 없어 묶음을 다시 만들고 전체 검사를 돌린 뒤 커밋한다.
+과제의 코드는 연습 작업 폴더의 커밋에서 기계로 뽑았다. 과제마다 시험을 먼저 쓰고(Step 1), 실패를 확인하고(Step 2), 구현하고(Step 3), 통과를 확인하고(Step 4), 커밋한다. 과제 4는 시험이 없어 묶음을 다시 만들고 전체 검사를 돌린 뒤 커밋한다.
 
 - `` `경로`(새 파일): `` 뒤의 코드 블록은 그 파일의 전체다.
 - `` `경로`(찾을 곳): ``과 `` `경로`(바꾼 뒤): ``는 쌍이다. 그 파일에서 찾을 곳의 줄들을 찾아 바꾼 뒤의 줄들로 바꾼다. 찾을 곳은 그때의 파일에 한 번만 나온다. 한 파일에 쌍이 여럿이면 `1/2`처럼 차례가 붙고 차례대로 바꾼다.
-- 묶은 실행 파일(`skills/aq/scripts/aq.mjs`)은 글로 싣지 않는다. 과제 1부터 원본이 바뀌어 묶음 검사가 어긋나므로, 과제 3의 `npm run build`가 원본에서 다시 만든다.
-- 과제의 확인 명령은 그 과제와 관계있는 시험과 타입 검사다. 전체 검사(`npm run check`)는 묶은 실행 파일을 다시 만든 뒤 과제 3에서 돌린다.
+- 묶은 실행 파일(`skills/aq/scripts/aq.mjs`)은 글로 싣지 않는다. 과제 1부터 원본이 바뀌어 묶음 검사가 어긋나므로, 과제 4의 `npm run build`가 원본에서 다시 만든다.
+- 과제의 확인 명령은 그 과제와 관계있는 시험과 타입 검사다. 전체 검사(`npm run check`)는 묶은 실행 파일을 다시 만든 뒤 과제 4에서 돌린다.
 - 시험은 임시 폴더에 만든 홈과 프로젝트로 본다. 이 PC의 실제 기록과 셋팅에서 맞는지는 시험으로 보증하지 않으므로 마지막 과제에서 돌려 본다.
 
 ---
@@ -2813,13 +2814,206 @@ git commit -m "feat: 점검의 입력 묶음과 관측 기록에 Codex를 넣음
 
 ---
 
-### Task 3: 묶은 실행 파일과 전체 검사
+### Task 3: Codex가 더는 받지 않는 승인 정책
+
+**Files:**
+- Modify: `test/commands/checkup-input.test.ts`
+- Modify: `test/scan/codex-config.test.ts`
+- Modify: `test/scan/codex-settings.test.ts`
+- Modify: `src/scan/codex-config.ts`
+- Modify: `src/scan/codex-settings.ts`
+
+**Interfaces:**
+- Consumes: 5단계 2부의 `codexConfigShapeOk`(`src/scan/codex-config.ts`)와 `safetyOf`, `ApprovalFact`(`src/scan/codex-settings.ts`). 과제 2의 입력 묶음(`gatherCheckupInput`)과 과제 1의 S2(`codexSettingsUnread`로 Codex를 뺀다)는 시험이 거친다.
+- Produces: `approval_policy = "untrusted"`를 적은 사용자 `config.toml`과, 사용자 층과 합친 값이 그것인 신뢰한 프로젝트의 `.codex/config.toml`은 풀리지 않는 설정(`unparsable`)이다. `ApprovalFact`에 `"untrusted"`가 없다.
+
+설계 「5단계 2부 계획 전 결정」 3·4번이다(3부 계획 리뷰 1차에서 고쳤다).
+
+- Codex 0.166.0은 합친 설정의 `approval_policy`가 `"untrusted"`이면 설정을 읽다가 멈춘다(공개 소스 `core/src/config/mod.rs`의 `UnsupportedUntrustedApprovalPolicyError`). 그런데 스캐너는 그 값을 맞는 승인 값으로 읽어, Codex가 뜨지 않는 설정에서 S3이 문제를 세지 않고 S2가 안전장치가 있다고 쟀다.
+- 그 값은 스캐너가 읽는 자리의 틀린 값으로 보아 그 설정 파일을 풀리지 않는 것으로 본다(2부 결정 3번의 ②). S3이 세고, 과제 1대로 S2, E6, S5는 Codex를 읽지 못한 도구로 다룬다. 사용자 층은 그 파일만으로, 신뢰한 프로젝트의 층은 사용자 층과 합친 것으로 보는 2부의 모양 검사를 그대로 쓴다.
+- `"on-failure"`는 `"on-request"`의 옛 이름이라 맞는 값이다. 모르는 글자 값은 지금처럼 틀린 것이 아니다(새 버전이 더한 값일 수 있다).
+- 스캐너에서는 `"untrusted"`가 `safetyOf`까지 오지 않으므로 승인 사실에서 그 값을 뺀다(직접 넘기면 `"other"`다).
+
+- [ ] **Step 1: 실패하는 시험을 쓴다**
+
+`test/commands/checkup-input.test.ts`(찾을 곳):
+
+```ts
+    expect(e1.tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
+  });
+});
+
+```
+
+`test/commands/checkup-input.test.ts`(바꾼 뒤):
+
+```ts
+    expect(e1.tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
+  });
+
+  it("Codex 0.166.0이 거부하는 승인 정책 untrusted를 적은 설정은 풀리지 않는 설정이다. S3이 세고 S2는 Codex를 빼고 잰다(3부 계획 리뷰 1차)", async () => {
+    await put(join(home, ".codex", "config.toml"), 'approval_policy = "untrusted"\nsandbox_mode = "workspace-write"\n');
+    const gathered = await gatherCheckupInput(options());
+    expect(gathered.facts.codex.config).toBe("unparsable");
+    const result = evaluate(gathered.input);
+    expect(result.findings.find((f) => f.ruleId === "S3")!.evidence).toMatchObject({ unparsable: 1 });
+    expect(result.findings.find((f) => f.ruleId === "S2")!.evidence).toMatchObject({ tools: 1, unreadTools: 1 });
+  });
+
+  it("신뢰한 프로젝트의 설정이 그 승인 정책을 적어도 그 프로젝트의 설정이 풀리지 않는다(3부 계획 리뷰 1차)", async () => {
+    await put(join(other, ".codex", "config.toml"), 'approval_policy = "untrusted"\n');
+    const gathered = await gatherCheckupInput(options());
+    expect(gathered.facts.codex.config).toBe("ok");
+    expect(gathered.facts.codex.projects.find((project) => project.normRoot === normalizePath(other))).toMatchObject({ trust: "trusted", configStatus: "unparsable", safety: null });
+    const result = evaluate(gathered.input);
+    expect(result.findings.find((f) => f.ruleId === "S3")!.evidence).toMatchObject({ unparsable: 1 });
+    expect(result.findings.find((f) => f.ruleId === "S2")!.evidence).toMatchObject({ tools: 1, unreadTools: 1 });
+  });
+});
+
+```
+
+`test/scan/codex-config.test.ts`(찾을 곳):
+
+```ts
+
+  it.each([
+```
+
+`test/scan/codex-config.test.ts`(바꾼 뒤):
+
+```ts
+
+  it("Codex 0.166.0이 더는 받지 않는 승인 정책 untrusted는 틀린 값이다. 옛 이름 on-failure는 맞다(3부 계획 리뷰 1차)", () => {
+    expect(ok('approval_policy = "untrusted"\n')).toBe(false);
+    expect(ok('approval_policy = "on-failure"\n')).toBe(true);
+    expect(ok('approval_policy = "on-request"\n')).toBe(true);
+    expect(ok('approval_policy = "never"\n')).toBe(true);
+  });
+
+  it.each([
+```
+
+`test/scan/codex-settings.test.ts`(찾을 곳 1/2):
+
+```ts
+  it("승인 값을 가른다. on-failure는 on-request의 옛 이름이고, 묶음은 granular다", () => {
+```
+
+`test/scan/codex-settings.test.ts`(바꾼 뒤 1/2):
+
+```ts
+  it("승인 값을 가른다. on-failure는 on-request의 옛 이름이고, 묶음은 granular다. untrusted는 따로 가르지 않는다(3부 계획 리뷰 1차)", () => {
+```
+
+`test/scan/codex-settings.test.ts`(찾을 곳 2/2):
+
+```ts
+    expect(safetyOf([doc('approval_policy = "untrusted"\n')]).approval).toBe("untrusted");
+```
+
+`test/scan/codex-settings.test.ts`(바꾼 뒤 2/2):
+
+```ts
+    // Codex가 거부하는 값이라 그 설정 파일은 풀리지 않는 것이 되어(codexConfigShapeOk) 스캐너에서는 여기까지 오지 않는다
+    expect(safetyOf([doc('approval_policy = "untrusted"\n')]).approval).toBe("other");
+```
+
+- [ ] **Step 2: 시험을 돌려 실패를 확인한다**
+
+Run: `npx vitest run test/commands/checkup-input.test.ts test/scan/codex-config.test.ts test/scan/codex-settings.test.ts`
+Expected: FAIL. 바뀐 시험 파일 셋이 실패한다. 모양 검사가 `"untrusted"`를 맞는 값으로 보고, 승인 사실이 그 값을 따로 가르며, 그 값을 적은 사용자 설정과 신뢰한 프로젝트의 설정을 정상으로 읽는다.
+
+- [ ] **Step 3: 구현한다**
+
+`src/scan/codex-config.ts`(찾을 곳 1/3):
+
+```ts
+// Codex 설정 파일(TOML)을 읽어 묶음으로 푼다. 스캐너가 읽는 자리의 값의 종류와 MCP 서버의 전송 꼴이 Codex가 시작하지 못하는 꼴이면 풀리지 않는 것으로 보고, 층을 Codex와 같이 합치며, 지문용으로 TOML 값을 JSON 꼴로 바꾼다. 값은 메모리에서만 쓴다(설계 10, 「5단계 2부 계획 전 결정」 1·3·7번)
+```
+
+`src/scan/codex-config.ts`(바꾼 뒤 1/3):
+
+```ts
+// Codex 설정 파일(TOML)을 읽어 묶음으로 푼다. 스캐너가 읽는 자리의 값의 종류, 더는 받지 않는 승인 정책, MCP 서버의 전송 꼴이 Codex가 시작하지 못하는 꼴이면 풀리지 않는 것으로 보고, 층을 Codex와 같이 합치며, 지문용으로 TOML 값을 JSON 꼴로 바꾼다. 값은 메모리에서만 쓴다(설계 10, 「5단계 2부 계획 전 결정」 1·3·7번)
+```
+
+`src/scan/codex-config.ts`(찾을 곳 2/3):
+
+```ts
+/** 글자이거나 granular 하나를 담은 묶음이다 */
+const approvalShapeOk = (value: unknown): boolean => value === undefined || isText(value) || (isTable(value) && Object.keys(value).length === 1 && isTable(value.granular));
+```
+
+`src/scan/codex-config.ts`(바꾼 뒤 2/3):
+
+```ts
+/**
+ * 글자이거나 granular 하나를 담은 묶음이다. "untrusted"는 Codex 0.166.0이 더는 받지 않아 설정을 읽다가 멈추는 값이라 틀린 값이다(공개 소스
+ * core/src/config/mod.rs의 UnsupportedUntrustedApprovalPolicyError, 3부 계획 리뷰 1차)
+ */
+const approvalShapeOk = (value: unknown): boolean =>
+  value === undefined || (isText(value) && value !== "untrusted") || (isTable(value) && Object.keys(value).length === 1 && isTable(value.granular));
+```
+
+`src/scan/codex-config.ts`(찾을 곳 3/3):
+
+```ts
+/** 스캐너가 읽는 자리의 값의 종류가 맞는지. 모르는 열쇠와 모르는 글자 값은 틀린 것이 아니다(「5단계 2부 계획 전 결정」 3번) */
+```
+
+`src/scan/codex-config.ts`(바꾼 뒤 3/3):
+
+```ts
+/** 스캐너가 읽는 자리의 값의 종류가 맞는지. 모르는 열쇠와 모르는 글자 값은 틀린 것이 아니고, Codex가 더는 받지 않는 승인 정책은 틀린 것이다(「5단계 2부 계획 전 결정」 3번) */
+```
+
+`src/scan/codex-settings.ts`(찾을 곳 1/2):
+
+```ts
+export type ApprovalFact = "never" | "on-request" | "untrusted" | "granular" | "other" | null;
+```
+
+`src/scan/codex-settings.ts`(바꾼 뒤 1/2):
+
+```ts
+export type ApprovalFact = "never" | "on-request" | "granular" | "other" | null;
+```
+
+`src/scan/codex-settings.ts`(찾을 곳 2/2):
+
+```ts
+  if (value === "never" || value === "untrusted") return value;
+```
+
+`src/scan/codex-settings.ts`(바꾼 뒤 2/2):
+
+```ts
+  // "untrusted"는 Codex가 거부해 그 설정 파일이 풀리지 않는 것이 되므로(codex-config.ts) 따로 가르지 않는다
+  if (value === "never") return value;
+```
+
+- [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
+
+Run: `npx tsc --noEmit && npx vitest run test/scan/codex-config.test.ts test/scan/codex-settings.test.ts test/commands/checkup-input.test.ts`
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 75개.
+
+- [ ] **Step 5: 커밋한다**
+
+```bash
+git add test/commands/checkup-input.test.ts test/scan/codex-config.test.ts test/scan/codex-settings.test.ts src/scan/codex-config.ts src/scan/codex-settings.ts
+git commit -m "fix: Codex가 거부하는 옛 승인 정책을 깨진 설정으로 봄"
+```
+
+---
+
+### Task 4: 묶은 실행 파일과 전체 검사
 
 **Files:**
 - Modify: `skills/aq/scripts/aq.mjs`
 
 **Interfaces:**
-- Consumes: 과제 1·2의 원본.
+- Consumes: 과제 1~3의 원본.
 - Produces: 다시 만든 `skills/aq/scripts/aq.mjs`. 2부의 smol-toml이 처음 묶음에 든다.
 
 - 과제 1부터 원본이 바뀌어 묶음 검사가 어긋나 있다. `npm run build`로 다시 만들고 전체 검사를 돌린다.
@@ -2834,7 +3028,7 @@ git commit -m "feat: 점검의 입력 묶음과 관측 기록에 Codex를 넣음
 - [ ] **Step 2: 전체 검사가 통과하는지 확인한다**
 
 Run: `npm run build && npm run check`
-Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,753개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다. 묶음에 smol-toml의 `SPDX-License-Identifier: BSD-3-Clause` 고지가 든다.
+Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,756개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다. 묶음에 smol-toml의 `SPDX-License-Identifier: BSD-3-Clause` 고지가 든다.
 
 - [ ] **Step 3: 커밋한다**
 
@@ -2845,13 +3039,13 @@ git commit -m "build: 평가 엔진에 Codex를 넣은 묶음을 다시 만듦"
 
 ---
 
-### Task 4: Node.js 22, 이 PC의 기록과 셋팅으로 돌려 보기, 병합 요청, 짝 검증, 병합
+### Task 5: Node.js 22, 이 PC의 기록과 셋팅으로 돌려 보기, 병합 요청, 짝 검증, 병합
 
 **Files:**
 - Modify: `.taskmaster/tasks/tasks.json`
 
 **Interfaces:**
-- Consumes: 과제 1~3의 결과물 전부.
+- Consumes: 과제 1~4의 결과물 전부.
 - Produces: `develop`에 병합된 5단계 3부. 4부(결과 조립·문구·화면·스킬 본문의 Codex 몫)가 기대는 것은 평가의 Codex 몫(`Evaluation`의 도구별 값과 `safeguards`), `CheckupInput`의 `collected.codex`(1부의 알림 재료와 `CodexReadStats`)와 `facts.codex`, 결과의 `CollectedTool`과 `ResultCoverage`의 `partialFiles`·`skippedFiles` 자리다.
 
 - [ ] **Step 1: 묶음을 다시 만들어도 그대로인지 확인한다**
@@ -2863,7 +3057,7 @@ Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공�
 
 Run: `npx -y -p node@22 -- node --version` → `v22.`로 시작하는지 본다.
 Run: `npx -y -p node@22 -- node node_modules/vitest/vitest.mjs run`
-Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,753개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
+Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,756개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
 
 - [ ] **Step 3: 이 PC의 기록과 셋팅으로 실제로 돌려 본다**
 
@@ -2893,7 +3087,7 @@ git commit -m "chore: 원장에 5단계 3부 구현 결과를 적음"
 
 - [ ] **Step 5: 올리고 병합 요청을 만든다**
 
-본문을 `%TEMP%\aq-pr-stage5-3.md`(저장소 밖 임시 폴더)에 한국어로 쓴다. 절은 「바꾼 것」(과제 1~3의 결과물), 「로컬에서 돌린 검사」(`npm run check`의 시험 수와 결과, Node.js 22 결과, 이 PC의 기록과 셋팅으로 돌린 것의 확인 항목과 맞았는지), 「확인하지 못한 것」이다. 확인하지 못한 것에는 Codex의 알림·읽은 양·문구·결과 화면·스킬 본문(4부), macOS와 Linux, Codex를 실제로 돌려 판정을 맞춰 본 것, 27절의 「Codex 평가의 한계」를 적는다.
+본문을 `%TEMP%\aq-pr-stage5-3.md`(저장소 밖 임시 폴더)에 한국어로 쓴다. 절은 「바꾼 것」(과제 1~4의 결과물), 「로컬에서 돌린 검사」(`npm run check`의 시험 수와 결과, Node.js 22 결과, 이 PC의 기록과 셋팅으로 돌린 것의 확인 항목과 맞았는지), 「확인하지 못한 것」이다. 확인하지 못한 것에는 Codex의 알림·읽은 양·문구·결과 화면·스킬 본문(4부), macOS와 Linux, Codex를 실제로 돌려 판정을 맞춰 본 것, 27절의 「Codex 평가의 한계」를 적는다.
 
 ```bash
 git push -u origin 5단계-3부-평가-엔진에-Codex
@@ -2961,7 +3155,8 @@ git push origin develop
 | 12번, 18.1 | 관측 기록의 두 도구, 읽지 못한 곳의 도구 가름 | 2 |
 | 13번 | 결과 조립의 3부 몫(알림과 단서는 Claude Code만, 도구 목록과 수집 결과에 Codex) | 1, 2 |
 | 14번 | 1부가 넘긴 엔진 몫(도구로 넣지 않는 종류, 너무 긴 줄, 끊은 턴) | 바꾸는 코드 없음(27절) |
-| 「5단계 2부 계획 전 결정」의 3부 몫 | smol-toml이 묶음에 들고 라이선스 고지가 함께 듦 | 3 |
+| 「5단계 2부 계획 전 결정」 3·4번(3부 계획 리뷰 1차에서 고침) | Codex가 더는 받지 않는 승인 정책(`"untrusted"`)을 적은 설정은 풀리지 않는 설정, 승인 사실에서 그 값을 뺌 | 3 |
+| 「5단계 2부 계획 전 결정」의 3부 몫 | smol-toml이 묶음에 들고 라이선스 고지가 함께 듦 | 4 |
 
 3부에 넣지 않은 것은 「4부와 그 뒤에 넘기는 것」에 적었다.
 
@@ -2974,10 +3169,10 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e533d05`)에서 과제 1부터 3까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1과 2는 시험만 놓고 돌리면 실패하고(과제 1은 바뀐 시험 파일 아홉, 과제 2는 셋), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 3의 `npm run build && npm run check`는 시험 파일 105개·시험 1,753개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,752개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 묶음에 smol-toml의 BSD-3-Clause 고지가 들었다.
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e533d05`)에서 과제 1부터 4까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1부터 3까지는 시험만 놓고 돌리면 실패하고(과제 1은 바뀐 시험 파일 아홉, 과제 2와 3은 셋씩), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 4의 `npm run build && npm run check`는 시험 파일 105개·시험 1,756개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,755개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 묶음에 smol-toml의 BSD-3-Clause 고지가 들었다.
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 둘을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 서른다섯 시험, 과제 2는 열아홉 시험), 구현 커밋 셋을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 두 가지를 정했다. S2의 근거에 뺀 도구의 수를 더하자 근거 숫자가 모두 문구에 보여야 한다는 문구 표의 시험이 그 칸을 요구해, 근거 문구에 뺀 도구를 더했다. Codex 스킬의 관측은 늘 빠짐없지 않은데 지금의 기록 쪽 알림이 맞지 않는 문장으로 그것을 알리게 되어, 읽지 못한 기록과 관측이 빠진 것의 Codex 몫은 4부로 넘겼다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 셋을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 서른다섯 시험, 과제 2는 열아홉 시험, 과제 3은 네 시험), 구현 커밋 넷을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 두 가지를 정했다. S2의 근거에 뺀 도구의 수를 더하자 근거 숫자가 모두 문구에 보여야 한다는 문구 표의 시험이 그 칸을 요구해, 근거 문구에 뺀 도구를 더했다. Codex 스킬의 관측은 늘 빠짐없지 않은데 지금의 기록 쪽 알림이 맞지 않는 문장으로 그것을 알리게 되어, 읽지 못한 기록과 관측이 빠진 것의 Codex 몫은 4부로 넘겼다. 계획 리뷰 1차가 찾은 것(Codex가 더는 받지 않는 승인 정책을 맞는 설정으로 읽던 것)은 과제 3으로 따로 고쳤다. 과제 1과 2의 코드는 리뷰 1차가 본 것 그대로다.
 
-이 PC의 기록과 셋팅(읽기만)으로 Task 4 Step 3을 미리 돌렸다. 저장하지 않는 점검이 오류 없이 1분 안에 끝났고, 결과의 도구 목록에 두 도구가 찾음과 점수에 넣음으로 들었다. Codex의 도구별 값은 관측 범위대로였고(S4, S5, E5, E7, F2는 `unsupported`), E6은 MCP 관측이 빠짐없지 않아 `incomplete`였다. S2는 두 도구로 쟀고 뺀 도구가 없었다. 돌리기 앞뒤로 Codex의 `config.toml`과 상태 폴더의 수정 시각이 그대로였다(값과 개수는 저장소 밖 작업 기록에 적었다).
+이 PC의 기록과 셋팅(읽기만)으로 Task 5 Step 3을 미리 돌렸다(과제 3을 고친 뒤 다시 돌렸다). 저장하지 않는 점검이 오류 없이 1분 안에 끝났고, 결과의 도구 목록에 두 도구가 찾음과 점수에 넣음으로 들었다. Codex의 도구별 값은 관측 범위대로였고(S4, S5, E5, E7, F2는 `unsupported`), E6은 MCP 관측이 빠짐없지 않아 `incomplete`였다. S2는 두 도구로 쟀고 뺀 도구가 없었다. 돌리기 앞뒤로 Codex의 `config.toml`, Claude Code의 사용자 설정, 상태 폴더의 수정 시각이 그대로였다(값과 개수는 저장소 밖 작업 기록에 적었다).
 
-확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 4 Step 2에서 한다. 주 세션은 Codex를 실제로 돌려 판정을 맞춰 보지 않았다. 판정은 설계의 결정(모두 Codex 0.166.0의 공개 소스로 정한 것)대로다. macOS와 Linux는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.
+확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 5 Step 2에서 한다. 주 세션은 Codex를 실제로 돌려 판정을 맞춰 보지 않았다. 계획 리뷰 1차의 짝이 합성 홈에서 Codex 0.166.0이 옛 승인 정책을 거부하고 `"on-request"`는 받는 것을 돌려 봤다. 그 밖의 판정은 설계의 결정(모두 Codex 0.166.0의 공개 소스로 정한 것)대로다. macOS와 Linux는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.

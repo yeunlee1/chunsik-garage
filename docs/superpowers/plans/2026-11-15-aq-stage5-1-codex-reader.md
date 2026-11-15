@@ -30,7 +30,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `7CAC8D326F1D2FE1CDAE4A801490D8A8EE31FA66B2C83FFA168FD1CE464B3DED`, 4,100줄)이다. 설계 끝에 「5단계 1부 계획에서 보완」(열네 가지)과 「5단계 1부 계획 리뷰 1차에서 보완」~「…리뷰 7차에서 보완」을 더하고 9.2, 9.4, 9.6, 9.7, 9.8과 부록 A의 해당 줄을 고쳤다. 압축 기록의 여러 프레임, 옛 형식의 관측(9.6·9.7의 옛 형식 열), MCP 관측의 사용 신호가 될 수 없는 종류(9.8 표는 그대로), 새로 본 종류와 열쇠, 시각 없는 줄의 날짜, 이어받은 것의 방법과 캐시(같은 세션의 앞 기록과 구간 밖의 것, 기준을 찾지 못한 기록, 이어받은 것을 확인하지 못한 세션과 원래 기록을 찾지 못한 세션), 되돌려 생긴 기록의 이름과 같은 세션 합치기, 정본을 읽지 못할 때와 압축 기록의 판정, 크기와 수정 시각을 모르는 사본, 너무 긴 줄과 실측 도구, 첫 줄과 버전, 날짜를 넘는 턴의 도구 호출 수, 추론 강도와 모델을 붙이는 창, Codex 기록의 수정 시각(수정 시각과 변경 시각 가운데 늦은 것), 목록을 본 뒤 바뀐 파일의 캐시 열쇠(9.4. 1단계의 Claude Code 모으기도 따른다)다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `AC39F3D602545B66FD610CFBF28FAC1F5227B7E41367133D9D38AE0F42CDAD56`, 4,109줄)이다. 설계 끝에 「5단계 1부 계획에서 보완」(열네 가지)과 「5단계 1부 계획 리뷰 1차에서 보완」~「…리뷰 8차에서 보완」을 더하고 9.2, 9.4, 9.6, 9.7, 9.8과 부록 A의 해당 줄을 고쳤다. 압축 기록의 여러 프레임, 옛 형식의 관측(9.6·9.7의 옛 형식 열), MCP 관측의 사용 신호가 될 수 없는 종류(9.8 표는 그대로), 새로 본 종류와 열쇠, 시각 없는 줄의 날짜, 이어받은 것의 방법과 캐시(같은 세션의 앞 기록과 구간 밖의 것, 기준을 찾지 못한 기록, 이어받은 것을 확인하지 못한 세션과 원래 기록을 찾지 못한 세션), 되돌려 생긴 기록의 이름과 같은 세션 합치기, 정본을 읽지 못할 때와 압축 기록의 판정, 크기와 수정 시각을 모르는 사본, 너무 긴 줄과 실측 도구, 첫 줄과 버전, 날짜를 넘는 턴의 도구 호출 수, 추론 강도와 모델을 붙이는 창, Codex 기록의 수정 시각(수정 시각과 변경 시각 가운데 늦은 것), 목록을 본 뒤 바뀐 파일의 캐시 열쇠(9.4. 1단계의 Claude Code 모으기도 따른다)다.
 
 ## 파일 구조
 
@@ -435,12 +435,13 @@ git commit -m "feat: Codex 기록 파일 목록과 정본 차례를 더함"
 
 **Files:**
 - Create: `src/adapters/codex/zstd.ts`
+- Modify: `test/adapters/common/lines.test.ts`
 - Modify: `src/adapters/common/lines.ts`
 - Test: `test/adapters/codex/zstd.test.ts`
 
 **Interfaces:**
 - Consumes: 1단계의 줄 읽기(`src/adapters/common/lines.ts`의 `readLines`, `LineSink`, `MAX_LINE_BYTES`, `IN_PROGRESS_WINDOW_MS`).
-- Produces: `LineSplitter`, `lineSplitter(sink, maxLine)`(`src/adapters/common/lines.ts`. `readLines`가 이것을 쓴다), `zstdAvailable()`, `ZstdFrameStatus`, `ZstdFrames`(`status`, `frames`, `ranges`, `brokenFrameStart`), `scanZstdFrames(path)`, `ZstdReadOutcome`, `readZstdLines(path, nowMs, sink, options)`(`options`는 `maxLineBytes`와 시험용 `afterOpen`)(`src/adapters/codex/zstd.ts`). 과제 8이 쓴다.
+- Produces: `LineSplitter`, `lineSplitter(sink, maxLine)`(`src/adapters/common/lines.ts`. `readLines`가 이것을 쓴다), `zstdAvailable()`, `ZstdFrameStatus`, `ZstdFrames`(`status`, `frames`, `ranges`, `brokenFrameStart`), `scanZstdFrames(path, maxBytes)`, `ZstdReadOutcome`, `readZstdLines(path, nowMs, sink, options)`(`options`는 `maxLineBytes`와 시험용 `afterOpen`)(`src/adapters/codex/zstd.ts`). 과제 8이 쓴다.
 
 설계 9.8, 「5단계 계획 전 결정」 2번, 「5단계 1부 계획에서 보완」의 1·8번이다.
 
@@ -448,7 +449,7 @@ git commit -m "feat: Codex 기록 파일 목록과 정본 차례를 더함"
 - 실행 중인 Node.js에 `zlib.createZstdDecompress`가 있는지로 풀 수 있는지를 가린다(결정 2).
 - **Node.js의 zstd 풀기는 여러 프레임 가운데 첫 프레임만 푼다.** 동기(`zstdDecompressSync`)와 흘려 풀기 모두 그렇고 오류를 내지 않는다(Node.js 24.18에서 확인). 그래서 RFC 8878의 프레임 머리(매직, 프레임 머리 바이트, 창과 사전과 크기 칸)와 블록 머리(3바이트, 마지막 블록 표지, 블록 종류와 크기), 체크섬(4바이트)을 따라가며 프레임마다 바이트 자리를 알고, 프레임마다 디코더를 새로 만들어 차례로 푼다. 건너뛸 수 있는 프레임(매직 `0x184D2A50`~`0x184D2A5F`)은 건너뛴다.
 - 프레임 훑기의 결과는 `complete`(모든 프레임이 끝까지 있음), `truncated`(끝 프레임이 잘림. 남은 4바이트 미만이 매직의 앞부분인 것도 든다), `invalid`(매직이 틀림, 예약 비트, 블록 종류 3, 완결된 프레임 뒤의 다른 것, 빈 파일)다. 끝까지 있는 프레임을 차례로 풀고, 잘렸거나 깨진 프레임은 나오는 만큼 푼다. 풀다가 오류가 나면 그 앞까지의 줄만 내고 오류를 돌려준다. 구조가 완결된 프레임이라도 체크섬이 틀리면 Node.js가 풀기 오류를 낸다(과제 8이 일부만 읽은 파일로 가르는 근거). 줄 나누기는 프레임 사이에서 새로 시작하지 않는다(두 프레임에 걸친 너무 긴 줄은 한 번만 센다). 작성자 PC의 압축 기록은 모두 완결된 한 프레임이었다.
-- 쓰는 중인지는 1단계와 같다(열 때와 다 읽은 뒤의 크기와 수정 시각이 다르거나, 수정 시각이 평가 시각에서 2초 안쪽). 연 순간의 크기까지만 푼다(연 뒤에 덧붙은 프레임은 풀지 않는다). 1단계 `readLines`처럼 연 직후에 부르는 시험용 `afterOpen`을 받아, 연 뒤에 늘거나 줄거나 수정 시각만 늦어지거나 앞당겨진 것과 2초 경계를 시험한다(계획 리뷰 7차).
+- 쓰는 중인지는 1단계와 같다(열 때와 다 읽은 뒤의 크기와 수정 시각이 다르거나, 수정 시각이 평가 시각에서 2초 안쪽). 프레임을 훑는 것도 푸는 것도 연 순간의 크기까지만 한다(연 뒤에 덧붙거나 완성된 프레임이 그 앞의 판정을 바꾸지 않는다. 계획 리뷰 8차가 찾았다). 1단계 `readLines`처럼 연 직후에 부르는 시험용 `afterOpen`을 받아, 연 뒤에 늘거나 줄거나 수정 시각만 늦어지거나 앞당겨진 것, 2초 경계, 평가 시각보다 뒤의 변경을 시험한다(계획 리뷰 7차·8차). 1단계 줄 읽기의 같은 조건도 하나씩 시험한다(1단계 동작 그대로다).
 - 시험은 `zlib.zstdCompressSync`로 만든 합성 자료다(정상 하나, 두 프레임, 끝 프레임 3바이트 자름, 프레임 가운데 자름, 둘째 프레임을 매직 뒤 어느 자리에서 자름, RLE 블록, 매직 틀림, 정상 뒤 쓰레기, 빈 파일, 체크섬 있음과 틀린 체크섬, 건너뛸 수 있는 프레임, 두 프레임에 걸친 너무 긴 줄, 연 뒤에 바뀐 것, 2초 경계). 그 Node.js에 zstd가 없으면 건너뛴다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -457,6 +458,7 @@ git commit -m "feat: Codex 기록 파일 목록과 정본 차례를 더함"
 
 ```ts
 // Codex 압축 기록(.jsonl.zst)의 프레임 훑기(완결·잘림·깨짐)와 흘려 풀어 한 줄씩 읽기를 시험한다. Node.js는 끝 프레임이 잘린 파일을 오류 없이 앞 프레임까지만 풀어 주므로 프레임 훑기가 잘림을 잡아야 한다(설계 9.8, 「5단계 계획 전 결정」 2번)
+import { createHash } from "node:crypto";
 import { appendFile, mkdtemp, rm, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -573,6 +575,7 @@ describe.skipIf(!has)("readZstdLines", () => {
     });
     expect(one.lines).toEqual(['{"a":1}', '{"a":2}']);
     expect(outcome.inProgress).toBe(true);
+    expect(outcome.bytesRead).toBeLessThanOrEqual(outcome.sizeAtOpen);
   });
 
   it("연 뒤에 줄어든 것과 수정 시각만 늦어지거나 앞당겨진 압축 기록도 진행 중이다(늘었는지가 아니라 다른지를 본다)", async () => {
@@ -593,11 +596,51 @@ describe.skipIf(!has)("readZstdLines", () => {
     }
   });
 
-  it("수정 시각이 평가 시각에서 2초 안쪽이면 진행 중이고, 정확히 2초 전이면 아니다", async () => {
+  it("수정 시각이 평가 시각에서 2초 안쪽이거나 평가 시각보다 뒤면 진행 중이고, 정확히 2초 전이면 아니다", async () => {
     const path = await put("recent.zst", compress(ONE));
     await utimes(path, OLD / 1000, OLD / 1000);
     expect((await readZstdLines(path, OLD + 1999, collect().sink)).inProgress).toBe(true);
     expect((await readZstdLines(path, OLD + 2000, collect().sink)).inProgress).toBe(false);
+    expect((await readZstdLines(path, OLD - 5000, collect().sink)).inProgress).toBe(true);
+  });
+
+  it("연 뒤에 덧붙은 잘린 프레임 머리나 쓰레기는 연 크기 안의 프레임 판정을 바꾸지 않는다", async () => {
+    const extras: Array<[string, Buffer]> = [
+      ["잘린 매직", Buffer.from([0x28, 0xb5])],
+      ["쓰레기", Buffer.from("garbage")],
+    ];
+    for (const [name, extra] of extras) {
+      const path = await put(`tail-${name}.zst`, compress(ONE));
+      await utimes(path, OLD / 1000, OLD / 1000);
+      const one = collect();
+      const outcome = await readZstdLines(path, OLD + 60_000, one.sink, { afterOpen: () => appendFile(path, extra) });
+      expect(outcome.frames.status, name).toBe("complete");
+      expect(outcome.decodeError, name).toBeNull();
+      expect(one.lines, name).toEqual(['{"a":1}', '{"a":2}']);
+      expect(outcome.inProgress, name).toBe(true);
+    }
+  });
+
+  it("연 순간에 잘려 있던 끝 프레임이 연 뒤에 완성돼도 연 크기 안에서 풀리던 줄을 그대로 내고 연 크기 밖은 읽지 않는다(앞 프레임이 있을 때와 하나뿐일 때)", async () => {
+    const many = `${Array.from({ length: 2000 }, (_, index) => `{"b":${index}}`).join("\n")}\n`;
+    const second = compress(many, true);
+    const big = compress(`{"first":1}\n${Array.from({ length: 6000 }, (_, index) => JSON.stringify({ noise: createHash("sha256").update(String(index)).digest("hex") })).join("\n")}\n`);
+    const layouts: Array<[string, Buffer, Buffer]> = [
+      ["앞 프레임 뒤", Buffer.concat([compress(ONE), second.subarray(0, second.length - 2)]), second.subarray(second.length - 2)],
+      ["하나뿐", big.subarray(0, big.length - 1), big.subarray(big.length - 1)],
+    ];
+    for (const [name, bytes, rest] of layouts) {
+      const untouched = collect();
+      const before = await readZstdLines(await put(`cut-${name}.zst`, bytes), OLD + 60_000, untouched.sink);
+      const path = await put(`done-${name}.zst`, bytes);
+      const done = collect();
+      const after = await readZstdLines(path, OLD + 60_000, done.sink, { afterOpen: () => appendFile(path, rest) });
+      expect(before.frames.status, name).toBe("truncated");
+      expect(after.frames.status, name).toBe("truncated");
+      expect(done.lines.length, name).toBeGreaterThan(2);
+      expect(done.lines, name).toEqual(untouched.lines);
+      expect(after.bytesRead, name).toBeLessThanOrEqual(after.sizeAtOpen);
+    }
   });
 
   it("끝 프레임이 잘린 파일은 앞 프레임까지의 줄을 낸다. 오류가 나지 않을 수 있어 잘림은 프레임 훑기로 가린다", async () => {
@@ -636,10 +679,66 @@ describe.skipIf(!has)("readZstdLines", () => {
 });
 ```
 
+`test/adapters/common/lines.test.ts`(찾을 곳 1/2):
+
+```ts
+// 줄 읽기(줄 가르기, 끝 조각, 너무 긴 줄, 연 크기까지만 읽기, 진행 중 판정)를 시험한다(설계 9.4)
+import { appendFile, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+```
+
+`test/adapters/common/lines.test.ts`(바꾼 뒤 1/2):
+
+```ts
+// 줄 읽기(줄 가르기, 끝 조각, 너무 긴 줄, 연 크기까지만 읽기, 진행 중 판정)를 시험한다(설계 9.4)
+import { appendFile, mkdtemp, rm, truncate, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+```
+
+`test/adapters/common/lines.test.ts`(찾을 곳 2/2):
+
+```ts
+  });
+});
+```
+
+`test/adapters/common/lines.test.ts`(바꾼 뒤 2/2):
+
+```ts
+  });
+  it("연 뒤에 크기만 늘거나 줄거나, 수정 시각만 늦어지거나 앞당겨진 파일도 진행 중이다(늘었는지가 아니라 다른지를 본다)", async () => {
+    const changes: Array<[string, (path: string) => Promise<void>]> = [
+      ["늘어남", async (path) => {
+        await appendFile(path, "c\n");
+        await utimes(path, OLD / 1000, OLD / 1000);
+      }],
+      ["줄어듦", async (path) => {
+        await truncate(path, 2);
+        await utimes(path, OLD / 1000, OLD / 1000);
+      }],
+      ["늦어짐", (path) => utimes(path, (OLD + 1000) / 1000, (OLD + 1000) / 1000)],
+      ["앞당겨짐", (path) => utimes(path, (OLD - 1000) / 1000, (OLD - 1000) / 1000)],
+    ];
+    for (const [name, change] of changes) {
+      const path = await fileWith(`g-${name}.jsonl`, "a\nb\n");
+      const r = await read(path, OLD + 60_000, { afterOpen: () => change(path) });
+      expect(r.outcome.inProgress, name).toBe(true);
+    }
+  });
+  it("수정 시각이 평가 시각에서 1999밀리초 전이거나 평가 시각보다 뒤면 진행 중이고, 2000·2001밀리초 전이면 아니다", async () => {
+    const path = await fileWith("h.jsonl", "a\n");
+    expect((await read(path, OLD - 5000)).outcome.inProgress).toBe(true);
+    expect((await read(path, OLD + 1999)).outcome.inProgress).toBe(true);
+    expect((await read(path, OLD + 2000)).outcome.inProgress).toBe(false);
+    expect((await read(path, OLD + 2001)).outcome.inProgress).toBe(false);
+  });
+});
+```
+
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
-Run: `npx vitest run test/adapters/codex/zstd.test.ts`
-Expected: FAIL. `test/adapters/codex/zstd.test.ts`가 `../../../src/adapters/codex/zstd.ts`를 찾지 못해 불러오기에서 실패한다.
+Run: `npx vitest run test/adapters/codex/zstd.test.ts test/adapters/common/lines.test.ts`
+Expected: FAIL. `test/adapters/codex/zstd.test.ts`가 `../../../src/adapters/codex/zstd.ts`를 찾지 못해 불러오기에서 실패한다. `test/adapters/common/lines.test.ts`에 더한 시험(1단계 줄 읽기의 쓰는 중 조건)은 1단계 동작 그대로라 통과한다.
 
 - [ ] **Step 3: 구현한다**
 
@@ -677,10 +776,11 @@ export interface ZstdFrames {
   brokenFrameStart: number | null;
 }
 
-export async function scanZstdFrames(path: string): Promise<ZstdFrames> {
+/** 프레임을 훑는다. maxBytes를 주면 그 바이트까지만 본다(압축 읽기는 연 순간의 크기를 준다) */
+export async function scanZstdFrames(path: string, maxBytes = Infinity): Promise<ZstdFrames> {
   const handle = await open(path, "r");
   try {
-    const size = (await handle.stat()).size;
+    const size = Math.min((await handle.stat()).size, maxBytes);
     const small = Buffer.alloc(18);
     const readAt = async (position: number, length: number): Promise<Buffer> => {
       const { bytesRead } = await handle.read(small, 0, length, position);
@@ -792,15 +892,15 @@ export async function readZstdLines(path: string, nowMs: number, sink: LineSink,
   const mtimeMsAtOpen = opened.mtimeMs;
   // 시험용. 연 순간의 크기와 수정 시각을 잡은 직후에 부른다(1단계 readLines와 같다)
   if (options.afterOpen) await options.afterOpen();
-  const frames = await scanZstdFrames(path);
+  // 프레임 훑기도 연 순간의 크기까지만 한다(연 뒤에 덧붙거나 완성된 프레임이 그 앞의 판정을 바꾸지 않게)
+  const frames = await scanZstdFrames(path, sizeAtOpen);
   const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES);
   let bytesRead = 0;
   let decodedBytes = 0;
   let decodeError: string | null = sizeAtOpen === 0 ? "EMPTY" : null;
-  const targets: Array<[number, number]> = frames.ranges.filter(([, end]) => end <= sizeAtOpen);
+  const targets: Array<[number, number]> = [...frames.ranges];
   if (frames.brokenFrameStart !== null) targets.push([frames.brokenFrameStart, sizeAtOpen]);
   for (const [start, end] of targets) {
-    if (end <= start) continue;
     const result = await decodeRange(path, start, end, (chunk) => splitter.push(chunk));
     bytesRead += result.bytesRead;
     decodedBytes += result.decodedBytes;
@@ -923,12 +1023,12 @@ export async function readLines(path: string, nowMs: number, sink: LineSink, opt
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex/zstd.test.ts test/adapters/common/lines.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 2개, 시험 22개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 2개, 시험 26개.
 
 - [ ] **Step 5: 커밋한다**
 
 ```bash
-git add test/adapters/codex/zstd.test.ts src/adapters/codex/zstd.ts src/adapters/common/lines.ts
+git add test/adapters/codex/zstd.test.ts test/adapters/common/lines.test.ts src/adapters/codex/zstd.ts src/adapters/common/lines.ts
 git commit -m "feat: 압축된 Codex 기록을 프레임마다 풀어 읽음"
 ```
 
@@ -2417,7 +2517,7 @@ const totalPrint = (total: Usage): string => fnv1a64(KEYS.map((key) => total[key
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 5개, 시험 78개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 5개, 시험 80개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2764,7 +2864,7 @@ import { canonicalDay, emptyDay, emptyToolCounts, type DayCell, type SessionKind
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/adapters/claude/observation.test.ts test/collect/claude.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 8개, 시험 118개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 8개, 시험 120개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2790,14 +2890,14 @@ git commit -m "feat: Codex 관측 범위와 MCP 호출 관측을 더함"
 
 **Interfaces:**
 - Consumes: 과제 5의 `CodexFingerprints`와 `fingerprints()`, 1단계의 캐시(`cacheKeyFor`, `loadCached`, `storeCached`, `CacheEntry`)와 `reviveSummary`, 1단계의 Claude Code 모으기(`collectFromList`).
-- Produces: `FingerprintLists`, `CodexCacheExtra`(`fingerprints`, `sharedDigest`), `toLists`, `fromLists`, `unionOf`, `sharedDigest(own, inherited)`, `reviveCodexExtra`(`src/adapters/codex/fingerprints.ts`), `CacheEntry.codex`와 목록을 본 뒤 바뀐 파일에는 `null`을 돌려주는 `cacheKeyFor(file, parser, timeZone): Promise<CacheKey | null>`(`src/state/cache.ts`), Codex 요약을 받는 `reviveSummary`(`src/adapters/types.ts`). 과제 8이 쓴다.
+- Produces: `FingerprintLists`, `CodexCacheExtra`(`fingerprints`, `sharedDigest`), `toLists`, `fromLists`, `unionOf`, `sharedDigest(own, inherited)`, `reviveCodexExtra`(`src/adapters/codex/fingerprints.ts`), `CacheEntry.codex`와 목록을 본 뒤 바뀐 파일에는 `null`을 돌려주는 `cacheKeyFor(file, parser, timeZone): Promise<CacheKey | null>`, 넣기 직전에 열쇠를 다시 보는 `keyStillMatches(path, key)`(`src/state/cache.ts`), Codex 요약을 받는 `reviveSummary`(`src/adapters/types.ts`). 과제 8이 쓴다.
 
 설계 9.4, 12.2, 「5단계 계획 전 결정」 7번, 「5단계 1부 계획에서 보완」의 6·14번이다.
 
 - 요약 되살리기는 Codex 요약을 받는다. Codex 요약은 `codex` 칸이 있어야 하고 Claude Code 요약에는 없어야 한다. `codex` 칸의 값도 본다(세션 ID를 대신 쓴 까닭은 정해진 넷 가운데 하나나 `null`, 기준을 찾지 못했는지는 참거짓). 모양이 다르면 없는 것으로 보고 원본을 다시 읽는다. 되살린 요약은 새로 해석한 요약과 JSON 글까지 같아야 해서 해석기는 정체 모를 종류의 기록을 열쇠 차례로 낸다.
 - 요약은 기록 파일뿐 아니라 뺄 지문(부모 세션의 기록과 같은 세션의 앞 기록의 지문. 과제 5·8)에도 기댄다. 해석기는 자기 지문이 뺄 지문에 드는지만 보므로, 기록이 그대로이고 "뺄 지문 가운데 자기 지문에도 있는 것"이 같으면 요약도 같다. 그래서 캐시 항목에 요약과 함께 자기 지문 목록과 그 겹침을 종류마다 차례로 이어 SHA-256한 값(`sharedDigest`)을 넣는다. 뺄 지문이 없으면 겹침이 없는 것과 같다. 부모가 하위와 관계없는 줄을 덧붙여도 하위를 다시 읽지 않는다. 겹침이 같은지는 모으기(과제 8)가 꺼낸 뒤 견준다.
 - 캐시 열쇠의 칸(경로, 크기, 수정 시각, 앞뒤 4KB 지문, 캐시 형식, 해석 버전, 시간대)은 1단계 그대로다. Codex 항목에 지문 칸이 없거나 모양이 다르면 꺼내지 않고, Claude Code 항목에 지문 칸이 있어도 꺼내지 않는다.
-- 열쇠를 만들려고 연 파일의 크기나 수정 시각이 목록에서 받은 것과 다르면(목록을 본 뒤 덧쓰였거나 줄었거나 수정 시각이 바뀌었으면. 늘었는지가 아니라 다른지를 본다) 열쇠를 만들지 않고(`null`), 부르는 쪽은 그 파일의 캐시를 꺼내지도 넣지도 않는다(설계 9.4). 1단계는 목록의 크기까지의 앞뒤 지문과 목록의 크기·수정 시각으로 열쇠를 만들어, 목록을 본 뒤 덧쓴 기록이 예전 열쇠와 같아져 예전 요약을 돌려줬다(캐시 없이 읽으면 덧쓴 줄까지 센다. 계획 리뷰 5차가 찾았다). 1단계의 Claude Code 모으기도 이 함수를 쓰므로 함께 고치고, 쓰는 동안 수정 시각이 머물러 크기만 바뀐 경우와, 줄어든 파일과 수정 시각이 앞당겨진 파일을 시험한다(계획 리뷰 6차). 가짜 수정 시각으로 열쇠를 만들던 캐시 정리 시험은 만든 파일의 실제 크기와 수정 시각을 쓴다.
+- 열쇠를 만들려고 앞뒤 지문을 읽은 뒤의 크기나 수정 시각이 목록에서 받은 것과 다르면(목록을 본 뒤나 지문을 읽는 동안 덧쓰였거나 줄었거나 수정 시각이 바뀌었으면. 늘었는지가 아니라 다른지를 보고 밀리초 아래도 버리지 않는다) 열쇠를 만들지 않고(`null`), 부르는 쪽은 그 파일의 캐시를 꺼내지도 넣지도 않는다(설계 9.4). 넣기 직전에는 `keyStillMatches`로 열쇠를 다시 만들어 같을 때만 넣는다(해석하는 동안 같은 크기로 바뀐 내용의 요약을 예전 열쇠로 넣지 않게. 계획 리뷰 8차가 찾았다). 1단계는 목록의 크기까지의 앞뒤 지문과 목록의 크기·수정 시각으로 열쇠를 만들어, 목록을 본 뒤 덧쓴 기록이 예전 열쇠와 같아져 예전 요약을 돌려줬다(캐시 없이 읽으면 덧쓴 줄까지 센다. 계획 리뷰 5차가 찾았다). 1단계의 Claude Code 모으기도 이 함수를 쓰므로 함께 고치고, 쓰는 동안 수정 시각이 머물러 크기만 바뀐 경우와, 줄어든 파일과 수정 시각이 앞당겨진 파일, 지문을 읽는 동안 바뀐 것, 밀리초 아래 차이, 큰 파일의 앞뒤 지문이 따로 드는 것, 해석하는 동안 같은 크기로 바뀐 내용을 시험한다(계획 리뷰 6차·8차). 가짜 수정 시각으로 열쇠를 만들던 캐시 정리 시험은 만든 파일의 실제 크기와 수정 시각을 쓴다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -2944,6 +3044,9 @@ describe("캐시에 넣고 꺼내기", () => {
 // Claude Code 기록 모으기(캐시를 켜고 끈 결과의 같음, 날짜가 바뀐 경우, 진행 중인 파일, 볼 수 있는 날짜 범위, 겹친 응답)를 시험한다(설계 9.4, 9.8, 21.1 반례)
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { claudeObservation } from "../../src/adapters/claude/observation.ts";
 ```
 
 `test/collect/claude.test.ts`(바꾼 뒤 1/2):
@@ -2952,6 +3055,11 @@ import { tmpdir } from "node:os";
 // Claude Code 기록 모으기(캐시를 켜고 끈 결과의 같음, 날짜가 바뀐 경우, 진행 중인 파일, 볼 수 있는 날짜 범위, 겹친 응답)를 시험한다(설계 9.4, 9.8, 21.1 반례)
 import { appendFile, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { utimesSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ClaudeSessionParser } from "../../src/adapters/claude/parser.ts";
+import { claudeObservation } from "../../src/adapters/claude/observation.ts";
 ```
 
 `test/collect/claude.test.ts`(찾을 곳 2/2):
@@ -2977,6 +3085,40 @@ import { tmpdir } from "node:os";
     const plain = await collectFromList(home, list, options());
     expect(cached.read.fromCache).toBe(0);
     expect(JSON.stringify(plain.summaries)).not.toBe(JSON.stringify(before.summaries));
+    expect(JSON.stringify(cached.summaries)).toBe(JSON.stringify(plain.summaries));
+  });
+  it("해석하는 사이 같은 크기와 수정 시각으로 바뀐 내용은 예전 열쇠로 캐시에 넣지 않는다(넣기 직전에 열쇠를 다시 만든다)", async () => {
+    const pad = JSON.stringify({ type: "padding", timestamp: "2026-11-11T01:00:00Z", text: "x".repeat(1_200_000) });
+    const linesOf = (n: number) => [user({ at: "2026-11-11T01:00:00Z", content: "hi", origin: "human" }), pad, assistant({ id: "a1", at: "2026-11-11T01:00:05Z", usage: { input: n, output: 1 } })];
+    const contentOf = (n: number) => `${linesOf(n).join("\n")}\n`;
+    expect(contentOf(10).length).toBe(contentOf(20).length);
+    const path = await session("p", "s1", linesOf(10));
+    const input = (result: Awaited<ReturnType<typeof collectClaude>>) => result.summaries.reduce((sum, summary) => sum + Object.values(summary.days).reduce((acc, day) => acc + day.tokens.input, 0), 0);
+    const cacheDir = join(root, "state", "cache");
+    const parse = ClaudeSessionParser.prototype.line;
+    let changed = false;
+    // 첫 줄을 해석할 때 같은 크기의 다른 내용으로 바꾸고 수정 시각을 되돌린다. 뒤쪽 응답은 바뀐 내용에서 읽힌다
+    const spy = vi.spyOn(ClaudeSessionParser.prototype, "line").mockImplementation(function (this: ClaudeSessionParser, ...args: Parameters<ClaudeSessionParser["line"]>) {
+      if (!changed) {
+        changed = true;
+        writeFileSync(path, contentOf(20));
+        utimesSync(path, FILE_TIME / 1000, FILE_TIME / 1000);
+      }
+      return parse.apply(this, args);
+    });
+    let first: Awaited<ReturnType<typeof collectClaude>>;
+    try {
+      first = await collectClaude(options({ cacheDir }));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(changed).toBe(true);
+    expect(input(first)).toBe(20);
+    await writeFile(path, contentOf(10));
+    await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
+    const cached = await collectClaude(options({ cacheDir }));
+    const plain = await collectClaude(options());
+    expect(input(plain)).toBe(10);
     expect(JSON.stringify(cached.summaries)).toBe(JSON.stringify(plain.summaries));
   });
   it("수집 구간보다 오래된 파일이 있으면 수집 구간 전체를 볼 수 있다. 없으면 가장 이른 기록의 날짜부터다", async () => {
@@ -3013,14 +3155,20 @@ import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/p
 // 캐시 열쇠 만들기, 넣고 꺼내기, 열쇠가 하나라도 다르면 꺼내지 않기를 시험한다(설계 9.4, 21.1 반례)
 import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { cacheKeyFor, loadCached, storeCached } from "../../src/state/cache.ts";
 ```
 
 `test/state/cache.test.ts`(바꾼 뒤 1/8):
 
 ```ts
 // 캐시 열쇠 만들기, 넣고 꺼내기, 열쇠가 하나라도 다르면 꺼내지 않기를 시험한다(설계 9.4, 21.1 반례)
-import { appendFile, mkdtemp, readdir, readFile, rm, truncate, utimes, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, open, readdir, readFile, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cacheKeyFor, loadCached, storeCached } from "../../src/state/cache.ts";
 ```
 
 `test/state/cache.test.ts`(찾을 곳 2/8):
@@ -3155,13 +3303,64 @@ import { tmpdir } from "node:os";
     await utimes(older.path, (MTIME - 1000) / 1000, (MTIME - 1000) / 1000);
     expect(await cacheKeyFor(older, "claude-code@1", "UTC")).toBeNull();
   });
+  it("앞뒤 지문을 읽는 동안 크기나 수정 시각이 바뀌면 열쇠를 만들지 않는다(앞 지문 뒤와 뒤 지문 뒤, 늘거나 줄거나 늦어지거나 앞당겨진 것)", async () => {
+    const probe = await open(join(dir, "probe"), "w");
+    const proto: { read(...args: unknown[]): Promise<unknown> } = Object.getPrototypeOf(probe);
+    await probe.close();
+    const read = proto.read;
+    const changes: Array<[string, (path: string) => Promise<void>]> = [
+      ["늘어남", async (path) => {
+        await appendFile(path, "more\n");
+        await utimes(path, MTIME / 1000, MTIME / 1000);
+      }],
+      ["줄어듦", async (path) => {
+        await truncate(path, 8500);
+        await utimes(path, MTIME / 1000, MTIME / 1000);
+      }],
+      ["늦어짐", (path) => utimes(path, (MTIME + 1000) / 1000, (MTIME + 1000) / 1000)],
+      ["앞당겨짐", (path) => utimes(path, (MTIME - 1000) / 1000, (MTIME - 1000) / 1000)],
+    ];
+    for (const after of [1, 2]) {
+      for (const [name, change] of changes) {
+        const file = await logFile(`k-${after}-${name}.jsonl`, "x".repeat(9000));
+        let reads = 0;
+        // 지문을 after번째로 읽은 직후에 파일을 바꾼다
+        const spy = vi.spyOn(proto, "read").mockImplementation(async function (this: unknown, ...args: unknown[]) {
+          const result = await read.apply(this, args);
+          if (++reads === after) await change(file.path);
+          return result;
+        });
+        try {
+          expect(await cacheKeyFor(file, "claude-code@1", "UTC"), `${after}번째 지문 뒤 ${name}`).toBeNull();
+        } finally {
+          spy.mockRestore();
+        }
+      }
+    }
+  });
+  it("목록에서 본 뒤 수정 시각이 1밀리초보다 작게 바뀌어도 열쇠를 만들지 않는다(밀리초 아래를 버리지 않는다)", async () => {
+    const file = await logFile("m.jsonl", "line\n");
+    await utimes(file.path, (MTIME + 0.25) / 1000, (MTIME + 0.25) / 1000);
+    const changed = (await stat(file.path)).mtimeMs;
+    expect(changed).toBeGreaterThan(MTIME);
+    expect(Math.round(changed)).toBe(MTIME);
+    expect(await cacheKeyFor(file, "claude-code@1", "UTC")).toBeNull();
+  });
+  it("큰 파일은 앞 4KB와 끝 4KB가 따로 열쇠에 든다(앞만 바뀌면 앞 지문만, 끝만 바뀌면 끝 지문만 다르다)", async () => {
+    const body = `A${"x".repeat(8998)}Z`;
+    const key = (await cacheKeyFor(await logFile("n.jsonl", body), "claude-code@1", "UTC"))!;
+    const front = (await cacheKeyFor(await logFile("n.jsonl", `B${body.slice(1)}`), "claude-code@1", "UTC"))!;
+    expect([front.head === key.head, front.tail === key.tail]).toEqual([false, true]);
+    const back = (await cacheKeyFor(await logFile("n.jsonl", `${body.slice(0, -1)}Y`), "claude-code@1", "UTC"))!;
+    expect([back.head === key.head, back.tail === key.tail]).toEqual([true, false]);
+  });
 });
 ```
 
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
 Run: `npx vitest run test/adapters/codex/cache.test.ts test/collect/claude.test.ts test/state/cache-prune.test.ts test/state/cache.test.ts`
-Expected: FAIL. `test/adapters/codex/cache.test.ts`가 `../../../src/adapters/codex/fingerprints.ts`를 찾지 못해 불러오기에서 실패한다. `test/state/cache.test.ts`는 새 시험 둘(목록에서 본 뒤 커진 파일과 수정 시각이 늦어진 파일의 열쇠, 줄어든 파일과 수정 시각이 앞당겨진 파일의 열쇠)이, `test/collect/claude.test.ts`는 새 시험 하나(목록을 얻은 뒤 덧쓴 파일)가 실패한다. 그 밖의 시험 34개는 통과한다.
+Expected: FAIL. `test/adapters/codex/cache.test.ts`가 `../../../src/adapters/codex/fingerprints.ts`를 찾지 못해 불러오기에서 실패한다. `test/state/cache.test.ts`는 새 시험 넷(목록에서 본 뒤 커진 파일과 수정 시각이 늦어진 파일의 열쇠, 줄어든 파일과 수정 시각이 앞당겨진 파일의 열쇠, 지문을 읽는 동안 바뀐 파일의 열쇠, 밀리초 아래만 바뀐 수정 시각)이, `test/collect/claude.test.ts`는 새 시험 둘(목록을 얻은 뒤 덧쓴 파일, 해석하는 사이 같은 크기로 바뀐 내용)이 실패한다. 그 밖의 시험 35개는 통과한다(큰 파일의 앞뒤 지문이 따로 드는지 보는 새 시험은 1단계 동작 그대로라 통과한다).
 
 - [ ] **Step 3: 구현한다**
 
@@ -3324,40 +3523,65 @@ export function reviveSummary(value: unknown): SessionSummary | null {
   };
 ```
 
-`src/collect/claude.ts`(찾을 곳):
+`src/collect/claude.ts`(찾을 곳 1/3):
+
+```ts
+import { cacheKeyFor, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
+```
+
+`src/collect/claude.ts`(바꾼 뒤 1/3):
+
+```ts
+import { cacheKeyFor, keyStillMatches, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
+```
+
+`src/collect/claude.ts`(찾을 곳 2/3):
 
 ```ts
         if (!options.rescan) {
 ```
 
-`src/collect/claude.ts`(바꾼 뒤):
+`src/collect/claude.ts`(바꾼 뒤 2/3):
 
 ```ts
         if (!options.rescan && key !== null) {
 ```
 
-`src/state/cache.ts`(찾을 곳 1/5):
+`src/collect/claude.ts`(찾을 곳 3/3):
+
+```ts
+          await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
+```
+
+`src/collect/claude.ts`(바꾼 뒤 3/3):
+
+```ts
+          // 해석하는 동안 바뀌었으면(크기와 수정 시각을 되돌렸어도 앞뒤 지문이 다르면) 그 요약을 이 열쇠로 넣지 않는다
+          if (await keyStillMatches(file.path, key)) await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
+```
+
+`src/state/cache.ts`(찾을 곳 1/7):
 
 ```ts
 // 파일마다의 세션 요약을 상태 폴더에 저장하고, 열쇠(경로·크기·수정 시각·앞뒤 4KB 지문·캐시 형식·해석 버전·시간대)가 모두 같고 요약의 모양이 맞을 때만 꺼낸다(설계 9.4)
 import { createHash } from "node:crypto";
 ```
 
-`src/state/cache.ts`(바꾼 뒤 1/5):
+`src/state/cache.ts`(바꾼 뒤 1/7):
 
 ```ts
 // 파일마다의 세션 요약을 상태 폴더에 저장하고, 열쇠(경로·크기·수정 시각·앞뒤 4KB 지문·캐시 형식·해석 버전·시간대)가 모두 같고 요약의 모양이 맞을 때만 꺼낸다. Codex 항목은 지문 목록과 뺄 지문과의 겹침도 함께 넣고 꺼낸다(설계 9.4, 「5단계 계획 전 결정」 7번)
 import { createHash } from "node:crypto";
 ```
 
-`src/state/cache.ts`(찾을 곳 2/5):
+`src/state/cache.ts`(찾을 곳 2/7):
 
 ```ts
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 ```
 
-`src/state/cache.ts`(바꾼 뒤 2/5):
+`src/state/cache.ts`(바꾼 뒤 2/7):
 
 ```ts
 import { normalizePath } from "../adapters/claude/locate.ts";
@@ -3365,14 +3589,14 @@ import { reviveCodexExtra, type CodexCacheExtra } from "../adapters/codex/finger
 import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 ```
 
-`src/state/cache.ts`(찾을 곳 3/5):
+`src/state/cache.ts`(찾을 곳 3/7):
 
 ```ts
   bytesRead: number;
 }
 ```
 
-`src/state/cache.ts`(바꾼 뒤 3/5):
+`src/state/cache.ts`(바꾼 뒤 3/7):
 
 ```ts
   bytesRead: number;
@@ -3381,30 +3605,61 @@ import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 }
 ```
 
-`src/state/cache.ts`(찾을 곳 4/5):
+`src/state/cache.ts`(찾을 곳 4/7):
 
 ```ts
 
 export async function cacheKeyFor(file: KeySource, parser: string, timeZone: string): Promise<CacheKey> {
   const handle = await open(file.path, "r");
-  try {
-    const length = Math.min(EDGE_BYTES, file.size);
 ```
 
-`src/state/cache.ts`(바꾼 뒤 4/5):
+`src/state/cache.ts`(바꾼 뒤 4/7):
 
 ```ts
 
-/** 열쇠를 만든다. 연 파일의 크기나 수정 시각이 목록에서 받은 것과 다르면(목록을 본 뒤 바뀌었으면) null이다. 부르는 쪽은 그 파일의 캐시를 꺼내지도 넣지도 않는다 */
+/** 열쇠를 만든다. 앞뒤 지문을 읽은 뒤의 크기나 수정 시각이 목록에서 받은 것과 다르면(목록을 본 뒤나 지문을 읽는 동안 바뀌었으면) null이다. 부르는 쪽은 그 파일의 캐시를 꺼내지도 넣지도 않는다 */
 export async function cacheKeyFor(file: KeySource, parser: string, timeZone: string): Promise<CacheKey | null> {
   const handle = await open(file.path, "r");
-  try {
-    const opened = await handle.stat();
-    if (opened.size !== file.size || opened.mtimeMs !== file.mtimeMs) return null;
-    const length = Math.min(EDGE_BYTES, file.size);
 ```
 
-`src/state/cache.ts`(찾을 곳 5/5):
+`src/state/cache.ts`(찾을 곳 5/7):
+
+```ts
+    }
+    return {
+```
+
+`src/state/cache.ts`(바꾼 뒤 5/7):
+
+```ts
+    }
+    // 목록을 본 뒤나 앞뒤 지문을 읽는 동안 바뀌었으면 그 지문은 목록에서 본 파일의 것이 아니다
+    const after = await handle.stat();
+    if (after.size !== file.size || after.mtimeMs !== file.mtimeMs) return null;
+    return {
+```
+
+`src/state/cache.ts`(찾을 곳 6/7):
+
+```ts
+
+function entryPath(dir: string, normPath: string): string {
+```
+
+`src/state/cache.ts`(바꾼 뒤 6/7):
+
+```ts
+
+/** 넣기 직전에 열쇠를 다시 만들어 처음 열쇠와 같을 때만 참이다. 해석하는 동안 내용이 바뀌었으면(크기와 수정 시각을 되돌렸어도 앞뒤 지문이 다르면) 그 요약은 이 열쇠의 것이 아니다 */
+export async function keyStillMatches(path: string, key: CacheKey): Promise<boolean> {
+  const now = await cacheKeyFor({ path, normPath: key.normPath, size: key.size, mtimeMs: key.mtimeMs }, key.parser, key.timeZone);
+  return now !== null && sameKey(now, key);
+}
+
+function entryPath(dir: string, normPath: string): string {
+```
+
+`src/state/cache.ts`(찾을 곳 7/7):
 
 ```ts
     const summary = reviveSummary(entry.summary);
@@ -3412,7 +3667,7 @@ export async function cacheKeyFor(file: KeySource, parser: string, timeZone: str
   } catch {
 ```
 
-`src/state/cache.ts`(바꾼 뒤 5/5):
+`src/state/cache.ts`(바꾼 뒤 7/7):
 
 ```ts
     const summary = reviveSummary(entry.summary);
@@ -3426,7 +3681,7 @@ export async function cacheKeyFor(file: KeySource, parser: string, timeZone: str
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/state test/adapters/types.test.ts test/collect/claude.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 16개, 시험 196개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 16개, 시험 202개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -3452,13 +3707,13 @@ git commit -m "feat: Codex 요약과 지문을 캐시에 넣고 목록 뒤 바�
 
 설계 9.2, 9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번, 「5단계 1부 계획에서 보완」의 6·7·8·11·14번이다.
 
-- 목록은 거르지 않고 받아 정본마다 수집 구간을 가른다. 가르는 시각은 수정 시각과 변경 시각 가운데 늦은 것이다(과제 1. 모르면 구간에 넣는다. `--rescan`이면 모두 넣는다). 쓰는 중인지도 1단계의 판정에 더해, 그 늦은 시각이 평가 시각에서 2초 안쪽이면 쓰는 중으로 본다. 그런 기록은 캐시 열쇠가 맞아도 캐시를 꺼내지 않고 다시 읽는다(바이트가 그대로여도 끝 조각의 판정이 달라진다. 계획 리뷰 4차가 찾았다). 가르는 시각은 읽는 사본의 것이다(정본을 읽지 못해 다음 사본을 읽으면 그 사본의 것). 목록을 본 뒤 크기나 수정 시각이 바뀐 기록(늘거나 줄거나, 크기는 그대로이고 수정 시각만 바뀐 것도)도 이번 실행 중에 바뀐 것이라 쓰는 중으로 보고, 캐시 열쇠가 없어(과제 7) 캐시를 꺼내지 않는다(쓰는 동안 수정 시각이 머무는 기록은 크기로만 드러난다. 계획 리뷰 5차~7차가 찾았다). 목록 뒤 변경은 원래 수정 시각과 파일 크기로 견준다(늦은 쪽 시각이나 디코더가 읽은 양이 아니다). 읽기 함수가 읽는 동안의 변화로 쓰는 중이라고 하면 그것도 따른다. 크기와 시각을 읽는 함수(`statFile`)는 시험용 선택이다. 구간 밖의 기록은 열지 않고 센다. 다만 하위 세션의 부모이거나 구간 안 기록과 같은 세션일 때는 지문을 얻으려고 읽고 요약에는 넣지 않는다. 부모는 기록 파일의 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID(`baseId`)로 찾고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다.
+- 목록은 거르지 않고 받아 정본마다 수집 구간을 가른다. 가르는 시각은 수정 시각과 변경 시각 가운데 늦은 것이다(과제 1. 모르면 구간에 넣는다. `--rescan`이면 모두 넣는다). 쓰는 중인지도 1단계의 판정에 더해, 그 늦은 시각이 평가 시각에서 2초 안쪽이면 쓰는 중으로 본다. 그런 기록은 캐시 열쇠가 맞아도 캐시를 꺼내지 않고 다시 읽는다(바이트가 그대로여도 끝 조각의 판정이 달라진다. 계획 리뷰 4차가 찾았다). 가르는 시각은 읽는 사본의 것이다(정본을 읽지 못해 다음 사본을 읽으면 그 사본의 것). 목록을 본 뒤 크기나 수정 시각이 바뀐 기록(늘거나 줄거나, 크기는 그대로이고 수정 시각만 바뀐 것도)도 이번 실행 중에 바뀐 것이라 쓰는 중으로 보고, 캐시 열쇠가 없어(과제 7) 캐시를 꺼내지 않는다(쓰는 동안 수정 시각이 머무는 기록은 크기로만 드러난다. 계획 리뷰 5차~7차가 찾았다). 목록 뒤 변경은 원래 수정 시각과 파일 크기로 견준다(늦은 쪽 시각이나 디코더가 읽은 양이 아니다). 읽기 함수가 읽는 동안의 변화로 쓰는 중이라고 하면 그것도 따른다. 늦은 쪽 시각이 평가 시각보다 뒤인 기록도 그 실행 중에 쓰인 것이라 쓰는 중이고, 캐시를 꺼낼 때도 2초 안쪽만 쓰는 중이다(정확히 2초 전이면 캐시를 쓴다. 계획 리뷰 8차). 크기와 시각을 읽는 함수(`statFile`)는 시험용 선택이다. 구간 밖의 기록은 열지 않고 센다. 다만 하위 세션의 부모이거나 구간 안 기록과 같은 세션일 때는 지문을 얻으려고 읽고 요약에는 넣지 않는다. 부모는 기록 파일의 식별자와, 대화를 되돌려 생긴 기록이면 이름 앞의 원래 세션 ID(`baseId`)로 찾고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다.
 - 기록마다 정본부터 사본 차례로 읽는다. 크기를 보지 못한 사본, 그 Node.js가 풀지 못하는 압축 사본, 열거나 읽지 못한 사본은 다음 사본으로 넘어간다. 어느 사본도 읽지 못하면 정본의 까닭으로 센다(크기를 모름은 읽지 못한 파일, 압축을 풀지 못함은 건너뛴 압축 파일, 그 밖은 읽지 못한 파일). 읽지 않은 사본의 수를 센다(설계 9.2).
 - 크기를 보지 못한 사본은 다른 사본을 읽은 기록의 것이어도 크기를 모르는 파일로 센다(그래서 읽지 못한 비율은 아래 경계다). 수정 시각을 보지 못한 사본이 있던 세션을 센다(그 기록을 읽지 못했으면 기록 파일 하나를 하나로 센다. 결정 3). 목록의 바이트는 기록마다 읽은 사본의 파일 크기다(어느 사본도 읽지 못하면 정본의 것. 디코더가 읽은 양이 아니라 건너뛸 수 있는 프레임도 든다). 크기는 알고 수정 시각만 모르는 사본은 크기를 모르는 사본이 아니다. 계획 초안은 정본의 크기만 보고, 수정 시각을 모르는 사본을 세지 않았다(계획 리뷰 1차가 찾았다).
 - 압축 기록에서 아무것도 풀지 못하면(크기 0인 파일처럼 프레임이 없거나 깨진 것) 읽지 못한 것이고, 일부를 풀었는데 프레임이 잘렸거나 깨졌거나 풀다가 오류가 났으면(체크섬이 틀린 것도 든다) 일부만 읽은 파일이다. 빈 내용을 담은 완결된 프레임은 빈 `.jsonl`처럼 빈 기록이다(줄이 없어 세션 ID를 대신 쓴다). 절반 넘게 깨진 기록은 일부만 읽은 것보다 읽지 못한 파일이 앞선다. 절반 넘게 깨진 기록도 풀린 줄의 숫자는 쓴다(설계 9.8, 20.1, 결정 2).
 - 두 번에 나눠 읽는다. 먼저 정본마다 캐시에서 꺼내거나(캐시 열쇠가 맞고 지문 칸이 있을 때) 뺄 지문 없이 해석한다. 자기 지문은 뺄 지문과 상관없이 정해진다. 그다음 기록마다 뺄 지문을 모은다. 하위 세션이면 부모 세션의 기록 파일들의 지문이고, 같은 세션에 기록 파일이 여럿이면 그보다 앞선 기록들의 지문도 넣는다. 같은 세션의 기록이 수집 구간 밖에 있어도 지문을 얻으려고 읽어 차례에 넣는다(요약에는 넣지 않고, 이름으로 찾은 기록은 읽어서 세션 ID가 맞을 때만 쓴다. 계획 리뷰 2차가 찾았다). 같은 세션의 기록 차례는 식별자가 세션 ID와 같은 원래 기록이 먼저이고, 그다음은 파일 이름(`rollout-<시각>-…`이라 만든 차례), 그다음은 정규화한 경로 차례다(목록의 차례와 상관없다). 계획 초안은 같은 세션의 기록끼리 빼지 않았다(계획 리뷰 1차가 찾았다). 뺄 지문은 처음 읽은 지문으로 모든 기록의 것을 먼저 정한 뒤 다시 읽는다(다시 읽기의 차례나 그새 바뀐 파일에 따라 달라지지 않는다). 뺄 지문과의 `sharedDigest`가 해석 때와 다르면 뺄 지문을 넣어 다시 읽는다. 부모 기록이 없어진 하위 요약도 다시 읽어 다 센다. 그러면 처음 실행에서 겹치는 기록만 두 번 읽고, 그다음부터는 캐시를 쓴다. 부모 값은 있는데 부모 기록을 하나도 읽지 못한 하위 세션의 수를 센다.
 - 이어받은 것을 확인하지 못한 세션의 수는 다시 읽기가 모두 끝난 뒤에 센다(결정 7의 "대신 봄". 알림은 3부). 다시 읽다가 읽지 못했거나 다시 읽은 것이 일부만 읽혔으면(절반 넘게 깨짐 포함) 그 세션의 기록이 모자란 것이다(계획 리뷰 3차가 찾았다). 기준을 찾지 못한 기록(과제 5)이 있는 세션, 부모를 모르는(부모 값이 없거나 글자가 아니거나 자기 자신) 하위 세션, 부모 기록을 하나도 읽지 못했거나 일부를 읽지 못한(읽지 못함, 건너뜀, 일부만 읽음, 절반 넘게 깨짐, 부모 세션의 원래 기록을 찾지 못함. 구간 밖의 부모 기록을 읽지 못한 것도 든다) 하위 세션, 같은 세션의 다른 기록(구간 밖의 것도. 그 Node.js가 풀 수 없는 압축이라 건너뛴 것도 든다)을 읽지 못했거나 일부만 읽은 세션, 원래 기록(식별자가 세션 ID와 같은 기록. 압축본으로 읽었어도 원래 기록이다)을 찾지 못한 세션이다. 원래 기록 규칙은 주 세션과 하위 세션에 모두 쓴다(대화를 되돌려 생긴 기록만 남은 세션은 무엇을 이어받았는지 확인할 수 없다). 읽지 못한 기록이 어느 세션의 것인지는 이름의 식별자와 `baseId`로만 안다. 세션 ID를 대신 쓴 기록(과제 3)의 수를 까닭별로 센다.
-- 캐시에는 쓰는 중이 아니고(목록을 본 뒤나 연 동안 바뀐 기록도 쓰는 중이다) 끝까지 읽은 기록만 넣는다(끊긴 압축과 쓰는 중인 파일은 넣지 않는다). 다시 읽다가 읽지 못한 기록은 읽지 못한 파일로 센다.
+- 캐시에는 쓰는 중이 아니고(목록을 본 뒤나 연 동안 바뀐 기록도 쓰는 중이다) 끝까지 읽은 기록만 넣는다(끊긴 압축과 쓰는 중인 파일은 넣지 않는다). 넣기 직전에 열쇠를 다시 만들어 같을 때만 넣는다(과제 7). 다시 읽다가 읽지 못한 기록은 읽지 못한 파일로 센다.
 - 같은 세션 ID의 기록 파일은 하나로 합친다(결정 7). 정체(세션 ID, 주·하위, 부모, 작업 폴더, 지침)와 기록 파일 식별자, 세션 ID를 대신 쓴 까닭은 식별자가 세션 ID와 같은 원래 기록에서, 없으면 식별자 차례로 첫 기록에서 가져온다. 날짜 칸(칸 모양 표대로 더하는 `addDayInto`), 빠진 것, 알림의 수, 정체 모를 종류, 이어받아 뺀 수는 더하고, 버전은 가장 높은 것, 가장 이른 날짜는 가장 이른 것이며, 기준을 찾지 못한 기록이 하나라도 있으면 그렇다고 남긴다. 수집 구간 밖이라 지문을 얻으려고 읽은 같은 세션의 기록도 정체, 기록 파일 식별자, 대신 쓴 까닭, 버전, 가장 이른 날짜에는 쓰고 수에는 넣지 않는다(`mergeRecords`의 `outside`. 계획 리뷰 3차가 찾았다). 합친 세션의 수를 센다(구간 밖의 그런 기록도 센다). 작성자 PC에서는 대화를 되돌려 생긴 기록이 원래 기록과 응답·요청·항목 ID가 겹치지 않았다(결정 7의 까닭).
 - 결과는 세션마다 가장 앞선 정본의 정규화한 경로 차례이고, 목록의 차례와 상관없이 같다. 읽은 양은 정본의 수, 목록의 바이트, 읽은 바이트, 캐시에서 꺼낸 수, 쓰는 중이었던 수, 구간 밖의 수, 읽지 못한 파일(과 그 바이트), 크기를 모르는 사본의 수, 읽지 못한 폴더, 건너뛴 압축 파일(과 그 바이트), 일부만 읽은 파일, 읽지 않은 사본, 이름 없는 파일이다. 읽지 못한 파일의 경로와 바이트는 목록의 바이트에 넣은 사본(읽은 사본. 어느 사본도 읽지 못했으면 정본)의 것이라 읽지 못한 비율이 1을 넘지 않는다(계획 리뷰 2차가 찾았다). 관측에 넘기는 읽지 못한 것의 수는 읽지 못한 파일과 폴더, 건너뛴 압축 파일, 일부만 읽은 파일을 더한 것이다.
 
@@ -3592,14 +3847,16 @@ describe("같은 세션의 기록 파일 합치기", () => {
 
 ```ts
 // Codex 기록 모으기(정본과 다음 사본, 압축 기록과 건너뛴 압축, 끊긴 압축, 읽지 못한 파일, 이어받은 앞부분 빼기, 구간 밖의 부모와 같은 세션 기록, 같은 세션의 기록 합치기, 캐시와 그 무효화, 쓰는 중인 파일, 목록의 차례)를 시험한다(설계 9.1~9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번)
-import { appendFile, mkdir, mkdtemp, readFile, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, open, readFile, rm, stat, truncate, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as zlib from "node:zlib";
-import { appendFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listCodexFiles, type StatFile } from "../../src/adapters/codex/locate.ts";
 import { CodexSessionParser } from "../../src/adapters/codex/parser.ts";
+import * as zstdModule from "../../src/adapters/codex/zstd.ts";
 import { zstdAvailable } from "../../src/adapters/codex/zstd.ts";
 import { codexUnreadableCount, collectCodex, collectCodexFromList, type CodexCollectOptions } from "../../src/collect/codex.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
@@ -3834,6 +4091,38 @@ describe.skipIf(!zstdAvailable())("사본과 압축 기록", () => {
     expect(first.read).toMatchObject({ inProgress: 0, unreadableFiles: [], partialFiles: [] });
     expect(second.read.fromCache).toBe(1);
     expect(second.summaries).toEqual(first.summaries);
+  });
+
+  it("연 뒤에 마지막 바이트가 붙어 하나뿐인 압축 프레임이 완성돼도 연 크기 안에서 풀리던 응답을 잃지 않는다", async () => {
+    const noise = Array.from({ length: 6000 }, (_, index) => JSON.stringify({ noise: createHash("sha256").update(`codex${index}`).digest("hex") }));
+    const full = compress(Buffer.from(`${[meta(ID(1)), record("r1", 10), ...noise].join("\n")}\n`));
+    const prefix = full.subarray(0, full.length - 1);
+    const path = await rollout(1, [], { compressed: true, bytes: () => prefix });
+    const control = await collectCodex(options({ cacheDir: null }));
+    expect(responses(bySession(control, ID(1)))).toBe(1);
+    expect(control.read.partialFiles).toEqual([path]);
+    const read = zstdModule.readZstdLines;
+    let appended = false;
+    // 압축 읽기가 크기를 잡은 직후에 마지막 바이트를 붙인다
+    const spy = vi.spyOn(zstdModule, "readZstdLines").mockImplementation(async (file, nowMs, sink, readOptions) =>
+      read(file, nowMs, sink, {
+        ...readOptions,
+        afterOpen: async () => {
+          if (!appended) {
+            appended = true;
+            await appendFile(path, full.subarray(prefix.length));
+          }
+        },
+      }),
+    );
+    try {
+      const raced = await collectCodex(options({ cacheDir: null }));
+      expect(appended).toBe(true);
+      expect(responses(bySession(raced, ID(1)))).toBe(1);
+      expect(raced.read.partialFiles).toEqual([path]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("절반 넘게 깨진 압축 기록의 읽지 못한 바이트는 파일의 크기다(앞의 건너뛸 수 있는 프레임도 든다)", async () => {
@@ -4517,6 +4806,107 @@ describe("캐시", () => {
     });
   }
 
+  it("캐시 열쇠의 앞 지문을 읽는 동안 덧쓴 기록은 예전 캐시를 쓰지 않고 쓰는 중으로 센다(수정 시각을 되돌려도 크기로 안다)", async () => {
+    const unfinished = `{"timestamp":"${T}","type":"session_meta","payload":{"id":"${ID(1)}","cwd":"${"x".repeat(16000)}"`;
+    const path = await rollout(1, [], { bytes: () => Buffer.from(unfinished) });
+    expect((await collectCodex(options())).read).toMatchObject({ inProgress: 0, unreadableFiles: [path] });
+    const probe = await open(path, "r");
+    const proto: { read(...args: unknown[]): Promise<unknown> } = Object.getPrototypeOf(probe);
+    await probe.close();
+    const read = proto.read;
+    let reads = 0;
+    // 캐시 열쇠가 앞 지문을 읽은 직후에 줄을 마저 써서, 목록과 연 순간은 같고 지문을 읽는 동안만 바뀌게 한다
+    const spy = vi.spyOn(proto, "read").mockImplementation(async function (this: unknown, ...args: unknown[]) {
+      const result = await read.apply(this, args);
+      if (++reads === 1) {
+        await appendFile(path, "}}\n");
+        await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
+      }
+      return result;
+    });
+    try {
+      const result = await collectCodex(options());
+      expect(result.read).toMatchObject({ fromCache: 0, inProgress: 1, unreadableFiles: [] });
+      expect(result.summaries[0]!.missing).toMatchObject({ brokenLines: 0, tailFragments: 0 });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  for (const compressed of [false, true]) {
+    it.skipIf(compressed && !zstdAvailable())(`해석하는 사이 같은 크기와 수정 시각으로 바뀐 ${compressed ? "압축" : "보통"} 기록의 요약은 예전 열쇠로 캐시에 넣지 않는다(넣기 직전에 열쇠를 다시 만든다)`, async () => {
+      const pad = line("event_msg", { type: "padding", text: "x".repeat(1_200_000) });
+      const plainOf = (n: number) => Buffer.from(`${[meta(ID(1)), pad, record("r1", n)].join("\n")}\n`);
+      // 압축 기록은 머리 프레임과, 끝의 공백으로 길이를 맞춘 자료 프레임으로 같은 크기의 둘을 만든다
+      const packedPair = (): [Buffer, Buffer] => {
+        const head = compress(Buffer.from(`${meta(ID(1))}\n`));
+        const byLength = new Map<number, Buffer>();
+        for (let k = 0; k < 257; k++) {
+          const frame = compress(Buffer.from(`${record("r1", 10)}\n${" ".repeat(k)}`));
+          byLength.set(frame.length, frame);
+        }
+        for (let k = 0; k < 257; k++) {
+          const frame = compress(Buffer.from(`${record("r1", 20)}\n${" ".repeat(k)}`));
+          const same = byLength.get(frame.length);
+          if (same) return [Buffer.concat([head, same]), Buffer.concat([head, frame])];
+        }
+        throw new Error("같은 길이의 자료 프레임을 만들지 못했다");
+      };
+      const [a, b] = compressed ? packedPair() : [plainOf(10), plainOf(20)];
+      expect(a.length).toBe(b.length);
+      const path = await rollout(1, [], { compressed, bytes: () => a });
+      const parse = CodexSessionParser.prototype.line;
+      let changed = false;
+      // 첫 줄을 해석할 때 같은 크기의 다른 내용으로 바꾸고 수정 시각을 되돌린다. 뒤쪽 응답은 바뀐 내용에서 읽힌다
+      const spy = vi.spyOn(CodexSessionParser.prototype, "line").mockImplementation(function (this: CodexSessionParser, ...args: Parameters<CodexSessionParser["line"]>) {
+        if (!changed) {
+          changed = true;
+          writeFileSync(path, b);
+          utimesSync(path, FILE_TIME / 1000, FILE_TIME / 1000);
+        }
+        return parse.apply(this, args);
+      });
+      let first: Awaited<ReturnType<typeof collectCodex>>;
+      try {
+        first = await collectCodex(options());
+      } finally {
+        spy.mockRestore();
+      }
+      expect(changed).toBe(true);
+      expect(Object.values(bySession(first, ID(1)).days)[0]!.tokens.input).toBe(20);
+      await writeFile(path, a);
+      await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
+      const cached = await collectCodex(options());
+      const direct = await collectCodex(options({ cacheDir: null }));
+      expect(Object.values(bySession(direct, ID(1)).days)[0]!.tokens.input).toBe(10);
+      expect(cached.summaries).toEqual(direct.summaries);
+    });
+  }
+
+  it("캐시가 있고 늦은 쪽 시각이 정확히 2초 전인 기록은 쓰는 중이 아니라 캐시에서 꺼낸다(캐시를 꺼낼 때도 2초 안쪽만 쓰는 중이다)", async () => {
+    await rollout(1, [meta(ID(1)), record("r1", 10)]);
+    await collectCodex(options());
+    const twoSeconds: StatFile = async (path) => {
+      const info = await stat(path);
+      return { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: NOW - 2000 };
+    };
+    expect((await collectCodex(options({ statFile: twoSeconds }))).read).toMatchObject({ inProgress: 0, fromCache: 1 });
+  });
+
+  for (const compressed of [false, true]) {
+    it.skipIf(compressed && !zstdAvailable())(`캐시가 있어도 늦은 쪽 시각이 평가 시각보다 뒤인 ${compressed ? "압축" : "보통"} 기록은 그 실행 중에 쓰인 것이라 쓰는 중이다`, async () => {
+      const raw = Buffer.from(`${[meta(ID(1)), record("r1", 10)].join("\n")}\n{"type":"event_msg"`);
+      await rollout(1, [], { compressed, bytes: () => (compressed ? compress(raw) : raw) });
+      await collectCodex(options());
+      const afterNow: StatFile = async (path) => {
+        const info = await stat(path);
+        return { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: NOW + 5000 };
+      };
+      const result = await collectCodex(options({ statFile: afterNow }));
+      expect([result.read.inProgress, result.read.fromCache]).toEqual([1, 0]);
+    });
+  }
+
   it("실제 모으기에서 목록을 만드는 사이에 덧쓴 기록도 새 응답을 놓치지 않는다", async () => {
     const path = await rollout(1, [meta(ID(1)), record("r1", 10)]);
     await collectCodex(options());
@@ -4730,7 +5120,7 @@ import { mergeRecords } from "../adapters/codex/merge.ts";
 import { CODEX_PARSER_VERSION, CodexSessionParser, type CodexFingerprints } from "../adapters/codex/parser.ts";
 import { readZstdLines, zstdAvailable } from "../adapters/codex/zstd.ts";
 import type { SessionSummary } from "../adapters/types.ts";
-import { cacheKeyFor, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
+import { cacheKeyFor, keyStillMatches, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
 import { visibleFrom, type CollectOptions } from "./claude.ts";
 
 export const CODEX_PARSER_ID = `codex@${CODEX_PARSER_VERSION}`;
@@ -5095,7 +5485,8 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
     for (const record of [...kept, ...[...extra.values()].filter((result): result is RecordRead => typeof result !== "string")]) {
       if (record.fromCache || !record.storable || record.key === null) continue;
       try {
-        await storeCached(cacheDir, { key: record.key, summary: record.summary, bytesRead: record.bytesRead, codex: { fingerprints: toLists(record.prints), sharedDigest: record.digest } });
+        // 해석하는 동안 바뀌었으면(크기와 수정 시각을 되돌렸어도 앞뒤 지문이 다르면) 그 요약을 이 열쇠로 넣지 않는다
+        if (await keyStillMatches(record.file.path, record.key)) await storeCached(cacheDir, { key: record.key, summary: record.summary, bytesRead: record.bytesRead, codex: { fingerprints: toLists(record.prints), sharedDigest: record.digest } });
       } catch {
         // 캐시를 쓰지 못해도 점검은 이어 간다. 다음 점검이 다시 읽는다
       }
@@ -5134,7 +5525,7 @@ export async function collectCodexFromList(home: string, list: CodexFileList, op
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/adapters/codex test/collect`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 10개, 시험 207개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 10개, 시험 217개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -5404,7 +5795,7 @@ git commit -m "feat: 진단 명령에 Codex 기록 폴더 정보를 더함"
 - [ ] **Step 1: 전체 검사를 돌린다**
 
 Run: `npm run check`
-Expected: 타입 검사 통과, 시험 파일 97개·시험 1,484개 통과(4단계까지의 88개·1,290개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다. 그 Node.js에 zstd가 없으면 압축 기록을 만드는 시험 묶음 둘을 건너뛴다.
+Expected: 타입 검사 통과, 시험 파일 97개·시험 1,499개 통과(4단계까지의 88개·1,290개에 이 계획이 더한 것), `묶음 검사 통과` 다음 마지막 줄이 `버전 검사 통과`. Windows 밖에서는 2단계 1부의 시험 1개를 건너뛴다. 그 Node.js에 zstd가 없으면 압축 기록을 만드는 시험 묶음 둘을 건너뛴다.
 
 - [ ] **Step 2: 묶음을 다시 만들어도 그대로인지 확인한다**
 
@@ -5525,21 +5916,21 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`2d0de19`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~9는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 9의 묶은 실행 파일 다시 만들기도 통과했다. 과제 9 뒤의 `npm run check`는 시험 파일 97개·시험 1,484개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 246개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`2d0de19`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~9는 시험만 놓고 돌리면 실패하고(실패한 시험의 수와 파일을 시험 커밋마다 따로 세어 과제의 Expected와 맞는지 봤다), 구현을 놓으면 그 과제의 확인 명령(타입 검사와 관계있는 시험)이 통과했다. 과제 9의 묶은 실행 파일 다시 만들기도 통과했다. 과제 9 뒤의 `npm run check`는 시험 파일 97개·시험 1,499개가 통과했고 `묶음 검사 통과`와 `버전 검사 통과`였다. 다시 묶어도 묶은 실행 파일은 달라지지 않았다. 다 만든 복제본의 코드와 시험 파일 246개는 시험을 통과한 연습 작업 폴더의 파일과 글자 하나 다르지 않았다(문서와 원장은 견주지 않았다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 202개를 하나씩 넣어 모두 시험이 잡았다(리뷰 6차·7차에 더한 30개와 7차에 바뀐 압축 읽기의 앞선 변이 6개는 그 차수의 원본으로, 나머지는 리뷰 5차 뒤에 같은 원본으로 돌린 결과다. 6차와 7차는 시험과 시험용 갈고리만 더했다). 계획 초안 때 넣은 60개(처음에는 57개를 잡아 시험 셋을 더했다)에, 계획 리뷰 1차~7차와 3차 뒤 실측에서 바뀐 동작의 것과 짝이 찾은 것을 더했다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 그럴듯한 틀린 구현 256개를 하나씩 넣어 모두 시험이 잡았다(리뷰 8차에 원본이 바뀌어 256개 모두 새 원본으로 돌렸다). 계획 초안 때 넣은 60개(처음에는 57개를 잡아 시험 셋을 더했다)에, 계획 리뷰 1차~8차와 3차 뒤 실측에서 바뀐 동작의 것과 짝이 찾은 것을 더했다.
 
 - 목록 아홉. 두 UUID 이름에서 앞 UUID를 식별자로, 끝 UUID 앞의 밑줄을 받지 않음, 크기를 보지 못한 파일을 버림, 압축본을 정본으로 앞세움, 수정 시각을 모르는 사본을 앞세움, 날짜 폴더 자리의 파일을 세지 않음, 변경 시각을 보지 않음, 늦은 쪽 대신 변경 시각만 씀, 정본 차례를 수정 시각만으로.
-- 압축 열넷. 프레임을 나누지 않고 한 번에 풂, 블록 머리 앞에서 잘린 끝 프레임을 완결로, 건너뛸 수 있는 프레임을 깨짐으로, 체크섬을 세지 않음, RLE 블록의 길이를 압축 길이로, 프레임 사이에서 줄 나누기를 새로 시작, 연 뒤의 변화를 보지 않음, 연 뒤의 크기나 수정 시각 가운데 하나를 보지 않음, 늘어난 크기나 늦어진 수정 시각만 봄, 2초 안쪽을 보지 않거나 2초 경계를 넣음, 연 뒤 덧붙은 프레임도 읽음.
+- 압축과 줄 읽기 서른넷. 프레임을 나누지 않고 한 번에 풂, 블록 머리 앞에서 잘린 끝 프레임을 완결로, 건너뛸 수 있는 프레임을 깨짐으로, 체크섬을 세지 않음, RLE 블록의 길이를 압축 길이로, 프레임 사이에서 줄 나누기를 새로 시작, 연 뒤의 변화를 보지 않음, 연 뒤의 크기나 수정 시각 가운데 하나를 보지 않음, 늘어난 크기나 늦어진 수정 시각만 봄, 2초 안쪽을 보지 않거나 2초 경계를 넣음, 프레임 훑기가 연 크기를 넘어 보거나 상한을 쓰지 않음, 고침 전 압축 읽기(훑기는 그때 크기 전부), 2초 안쪽을 평가 시각과의 거리로 봄(압축과 줄 읽기), 자료 범위의 끝을 하나 더 읽거나 하나 줄임, 잘린 프레임을 풀지 않거나(맨 앞에서 잘린 것도) 그 시작이나 끝을 한 바이트 옮김, 완결 프레임 하나만 읽음, 연 크기 끝에 닿은 프레임을 뺌, 1단계 줄 읽기의 쓰는 중 조건 여덟(크기와 수정 시각의 항과 방향, 둘 다 바뀌어야 함, 2초 경계).
 - 해석 마흔일곱. 정체와 토큰 열넷(넘어가는 자리를 견주지 않음, 누적값이 줄면 차분으로, 같아도 셈, 누적값 견주기에서 캐시 칸을 뺌, 응답 ID를 소문자로 견줌, 하위 세션 값 하나를 빠뜨림, 정체 모름을 하위로, 앞선 버전 꼬리를 떼지 않음, 버전을 첫 `session_meta`에서만, 버전을 글자 차례로 견줌, 뒤의 `session_meta`로도 정체를 정함, 깨진 첫 줄을 첫 줄로 보지 않음, 첫 줄이 `session_meta`가 아닌 것과 줄이 없는 것을 적지 않음), 도구와 지표 스물(셸 종료 코드 0을 오류로, 상태를 보지 않는 종류도 결과로, 이름 모름의 호출을 더하지 않음, 이름 모름을 첫 날짜에 모두 넣음, 날짜마다 차이를 턴 전체 차이로 자르지 않음, 늦은 날짜부터 나눔, 호출 층에서 `function_call`이나 `web_search_call`을 뺌, 턴 시작에서 묶음을 닫지 않음, 도구가 아닌 종류를 정체 모름으로, 정체 모를 종류를 세지 않음, 시각 없는 줄이 앞 줄의 날짜를 쓰지 않음, 강도 없음을 세지 않음, 턴 시작에서 문맥을 닫음, 턴이 끝나도 문맥을 닫지 않음, 문맥보다 앞에 온 응답에 붙이지 않음, 그런 응답을 같은 날 하나로 합침, 모델이 없는 새 문맥에 앞 모델을 이어 씀, 지침 크기를 마지막 것으로, 깨진 줄의 종류를 읽지 않음), 이어받은 것 열셋(이어받은 항목·누적값·응답·호출 층 호출을 셈, 직전 값도 부모 것일 때만 누적값을 뺌, 누적값 지문에서 캐시 쓰기 칸을 뺌, 뺀 항목과 뺀 응답을 자기 지문에 넣지 않음, 기준을 찾지 못한 기록을 늘 아니라고 함, 약한 항목도 복사된 앞부분의 끝으로 봄, 이어받은 호출이나 응답을 끝으로 보지 않음, 직전 누적값이 있으면 처음 센 자기 누적값을 적지 않음).
 - 관측 다섯. 사용 신호의 종류를 상관없는 것으로(`event_msg`, `response_item`), 종류를 읽지 못한 조각을 상관없는 것으로, 너무 긴 줄을 까닭으로 보지 않음, 덮는 범위의 칸 하나를 바꿈.
-- 캐시와 되살리기 열일곱. 겹침 지문을 뺄 지문 전부로, 겹침 지문에서 호출 종류나 누적값 종류를 뺌, 열쇠를 만들 때 연 파일을 목록과 견주지 않음·크기만 견줌·수정 시각만 견줌·둘 다 달라야 거절함·늘어난 크기나 늦어진 수정 시각만 거절함·연 파일의 값으로 만들고 목록과 달라도 만듦·목록 뒤 바뀐 파일에서 던짐, 지문 꼴을 보지 않음, 지문 칸이 없어도 꺼냄, Claude Code 요약의 `codex` 칸을 받음, 되살린 요약에서 `codex` 칸을 뺌, 대신 쓴 까닭을 보지 않고 되살림, 정체 모를 종류를 들어온 차례로 냄.
+- 캐시와 되살리기 서른. 겹침 지문을 뺄 지문 전부로, 겹침 지문에서 호출 종류나 누적값 종류를 뺌, 열쇠를 만들 때 목록과 견주지 않음·크기만 견줌·수정 시각만 견줌·둘 다 달라야 거절함·늘어난 크기나 늦어진 수정 시각만 거절함·줄어든 크기나 앞당겨진 수정 시각만 거절함·같은 크기나 같은 수정 시각도 거절함·수정 시각의 밀리초 아래를 버리거나 반올림함·읽은 뒤의 값으로 만들고 목록과 달라도 만듦·목록과 다른 파일에서 던짐·고침 전 열쇠(연 순간에만 견줌), 빈 파일의 열쇠를 만들지 않음, 앞뒤 지문에 서로의 4KB를 넣거나 빈 값으로, 넣기 직전 재확인이 열쇠가 있기만 하면 참, 지문 꼴을 보지 않음, 지문 칸이 없어도 꺼냄, Claude Code 요약의 `codex` 칸을 받음, 되살린 요약에서 `codex` 칸을 뺌, 대신 쓴 까닭을 보지 않고 되살림, 정체 모를 종류를 들어온 차례로 냄.
 - 합치기 열넷. 같은 날의 수를 덮어씀, 원래 기록 대신 식별자 차례 첫 기록의 정체, 버전과 가장 이른 날짜를 원래 기록의 것으로, 날짜 없는 줄의 수와 캐시 쓰기 토큰과 기준을 찾지 못함을 버림, 구간 밖 기록을 정체·버전·가장 이른 날짜에 쓰지 않음, 구간 밖 기록의 수를 더함, 기록이 하나면 구간 밖 기록이 있어도 그대로 냄, 구간 밖 원래 기록의 출처와 주·하위·부모를 보지 않음.
-- 모으기 아흔셋. 다시 읽어야 할 때 다시 읽지 않음, 다시 읽기에서도 캐시를 씀, 다음 사본을 읽지 않음, 같은 세션을 합치지 않음, 같은 세션의 앞 기록 지문을 빼지 않음, 바로 앞 기록의 지문만 뺌, 기록 차례에서 원래 기록을 앞세우지 않음, 뒤 기록을 파일 이름 대신 식별자 차례로, 끊긴 압축과 쓰는 중인 파일을 캐시에 넣음, 체크섬 오류를 일부 읽기로 보지 않음, 구간 밖의 부모를 읽지 않음, 이름으로 찾은 부모의 세션 ID를 견주지 않음, 구간 밖 부모가 깨져도 세지 않음, 구간 밖의 같은 세션 기록을 읽지 않음·읽지 못해도 세지 않음·세션 ID를 견주지 않음·깨져도 세지 않음, 건너뛴 압축과 일부만 읽은 파일을 읽지 못한 파일로, 절반 넘게 깨진 기록과 그 바이트를 세지 않음, 읽지 못한 바이트를 정본의 크기로, 읽지 않은 사본을 세지 않음, 부모 기록이 없어도 캐시의 하위 요약을 씀, 관측에 건너뛴 압축과 일부만 읽은 파일을 넣지 않음, 크기 모르는 사본을 정본만이나 기록마다 하나까지만 셈, 수정 시각만 모르는 사본도 크기 모름으로, 수정 시각 모르는 사본의 세션을 세지 않거나 기록마다 셈, 목록 바이트를 정본의 것이나 디코더가 읽은 양으로, 부모를 모르는 하위 세션·부모 기록이 모자란 하위 세션·부모의 원래 기록을 찾지 못한 하위 세션·같은 세션의 다른 기록을 읽지 못했거나 깨진 세션·원래 기록을 찾지 못한 세션·기준을 찾지 못한 기록의 세션을 세지 않음, 부모 기록 실패를 자식 세션 ID로 찾음, 대신 쓴 세션 ID를 세지 않거나 같은 까닭을 하나만 셈, 구간 밖 같은 세션 기록을 합치기에 넘기지 않음·합친 세션에 세지 않음·첫 하나만 읽음·압축 기록을 빼고 읽음·건너뛴 압축을 확인 못 함에 넣지 않음, 다시 읽다가 실패하거나 깨진 기록의 세션을 모자란 것으로 보지 않음, 그런 기록을 요약에 남기거나 그 세션도 셈, 압축본으로 읽은 원래 기록(자기와 부모)을 원래 기록으로 보지 않음, 자기 자신을 부모로 적은 하위 세션과 원래 기록이 없는 하위 세션을 세지 않음, 읽지 못한 바이트를 디코더가 읽은 양으로 세거나 덮어씀, 수집 구간을 수정 시각만으로 가름, 쓰는 중인지를 변경 시각으로 보지 않음(압축 기록만 그런 것도), 캐시를 꺼낼 때 쓰는 중인지를 보지 않음, 쓰는 중의 2초 경계를 넣음, 수집 구간의 아래 경계와 같은 기록을 뺌, 다시 읽은 것이 일부만 읽혀도 손상으로 보지 않음, 목록을 본 뒤 바뀐 기록(보통과 압축)을 쓰는 중으로 보지 않음, 캐시를 꺼낼 때 압축본과 되돌려 생긴 기록은 최근 변경을 보지 않음, 다음 사본의 캐시를 정본의 시각으로 가림, 캐시를 꺼낼 때만 변경 시각을 1밀리초 앞당김, `--rescan`이 아니면 최근 변경이어도 캐시를 꺼냄, 압축 기록이 쓰는 중이어도 캐시에 넣음, 넣지 말라고 한 기록도 캐시에 넣음, 크기는 그대로이고 수정 시각만 바뀐 기록(보통과 압축)을 쓰는 중으로 보지 않음, 열쇠가 없으면 읽기 실패로 셈, 1단계 모으기가 열쇠가 없으면 그 파일을 버림·`--rescan`에서도 캐시를 꺼냄, 목록 뒤 변경에서 줄어든 크기나 늘어난 크기나 앞당겨진 수정 시각을 안정으로 봄(보통과 압축), 목록 뒤 변경을 늦은 쪽 시각이나 읽은 바이트나 푼 바이트로 견줌, 크기와 수정 시각 가운데 하나만 같아도 안정(보통과 압축), 목록 뒤 변경과 최근 변경이 둘 다 있어야 쓰는 중, 읽기 함수의 쓰는 중을 버림(보통과 압축).
+- 모으기 백열넷. 다시 읽어야 할 때 다시 읽지 않음, 다시 읽기에서도 캐시를 씀, 다음 사본을 읽지 않음, 같은 세션을 합치지 않음, 같은 세션의 앞 기록 지문을 빼지 않음, 바로 앞 기록의 지문만 뺌, 기록 차례에서 원래 기록을 앞세우지 않음, 뒤 기록을 파일 이름 대신 식별자 차례로, 끊긴 압축과 쓰는 중인 파일을 캐시에 넣음, 체크섬 오류를 일부 읽기로 보지 않음, 구간 밖의 부모를 읽지 않음, 이름으로 찾은 부모의 세션 ID를 견주지 않음, 구간 밖 부모가 깨져도 세지 않음, 구간 밖의 같은 세션 기록을 읽지 않음·읽지 못해도 세지 않음·세션 ID를 견주지 않음·깨져도 세지 않음, 건너뛴 압축과 일부만 읽은 파일을 읽지 못한 파일로, 절반 넘게 깨진 기록과 그 바이트를 세지 않음, 읽지 못한 바이트를 정본의 크기로, 읽지 않은 사본을 세지 않음, 부모 기록이 없어도 캐시의 하위 요약을 씀, 관측에 건너뛴 압축과 일부만 읽은 파일을 넣지 않음, 크기 모르는 사본을 정본만이나 기록마다 하나까지만 셈, 수정 시각만 모르는 사본도 크기 모름으로, 수정 시각 모르는 사본의 세션을 세지 않거나 기록마다 셈, 목록 바이트를 정본의 것이나 디코더가 읽은 양으로, 부모를 모르는 하위 세션·부모 기록이 모자란 하위 세션·부모의 원래 기록을 찾지 못한 하위 세션·같은 세션의 다른 기록을 읽지 못했거나 깨진 세션·원래 기록을 찾지 못한 세션·기준을 찾지 못한 기록의 세션을 세지 않음, 부모 기록 실패를 자식 세션 ID로 찾음, 대신 쓴 세션 ID를 세지 않거나 같은 까닭을 하나만 셈, 구간 밖 같은 세션 기록을 합치기에 넘기지 않음·합친 세션에 세지 않음·첫 하나만 읽음·압축 기록을 빼고 읽음·건너뛴 압축을 확인 못 함에 넣지 않음, 다시 읽다가 실패하거나 깨진 기록의 세션을 모자란 것으로 보지 않음, 그런 기록을 요약에 남기거나 그 세션도 셈, 압축본으로 읽은 원래 기록(자기와 부모)을 원래 기록으로 보지 않음, 자기 자신을 부모로 적은 하위 세션과 원래 기록이 없는 하위 세션을 세지 않음, 읽지 못한 바이트를 디코더가 읽은 양으로 세거나 덮어씀, 수집 구간을 수정 시각만으로 가름, 쓰는 중인지를 변경 시각으로 보지 않음(압축 기록만 그런 것도), 캐시를 꺼낼 때 쓰는 중인지를 보지 않음, 쓰는 중의 2초 경계를 넣음, 수집 구간의 아래 경계와 같은 기록을 뺌, 다시 읽은 것이 일부만 읽혀도 손상으로 보지 않음, 목록을 본 뒤 바뀐 기록(보통과 압축)을 쓰는 중으로 보지 않음, 캐시를 꺼낼 때 압축본과 되돌려 생긴 기록은 최근 변경을 보지 않음, 다음 사본의 캐시를 정본의 시각으로 가림, 캐시를 꺼낼 때만 변경 시각을 1밀리초 앞당김, `--rescan`이 아니면 최근 변경이어도 캐시를 꺼냄, 압축 기록이 쓰는 중이어도 캐시에 넣음, 넣지 말라고 한 기록도 캐시에 넣음, 크기는 그대로이고 수정 시각만 바뀐 기록(보통과 압축)을 쓰는 중으로 보지 않음, 열쇠가 없으면 읽기 실패로 셈, 1단계 모으기가 열쇠가 없으면 그 파일을 버림·`--rescan`에서도 캐시를 꺼냄, 목록 뒤 변경에서 줄어든 크기나 늘어난 크기나 앞당겨진 수정 시각을 안정으로 봄(보통과 압축), 목록 뒤 변경을 늦은 쪽 시각이나 읽은 바이트나 푼 바이트로 견줌, 크기와 수정 시각 가운데 하나만 같아도 안정(보통과 압축), 목록 뒤 변경과 최근 변경이 둘 다 있어야 쓰는 중, 읽기 함수의 쓰는 중을 버림(보통과 압축), 캐시를 꺼내는 조건을 잘못 묶거나 또는으로 묶음(1단계 모으기도), 캐시를 꺼낼 때만 변경 시각을 1밀리초 뒤로 밂, 캐시에 넣지 않는 조건이나 넣어도 됨 표지를 잘못 묶거나 뒤집음, 다시 읽은 기록의 캐시 표지를 내리지 않음, 목록 뒤 늦어지거나 앞당겨진 수정 시각이나 늘어난 크기를 안정으로 봄(보통과 압축), 쓰는 중의 세 항 가운데 둘이 다 있어야로 묶음(보통과 압축), 최근 변경을 평가 시각과의 거리로 봄, 일부만 읽은 압축 판정을 둘 다 있어야로 묶음, 넣기 직전 열쇠를 다시 보지 않음(1단계 모으기와 Codex 모으기).
 - doctor 셋. 기록 파일을 사본까지 셈, 사본 하나라도 압축이면 압축본만으로, 크기 모르는 파일을 세지 않음.
 
-이 PC의 Codex 기록(읽기만, 캐시는 임시 폴더)으로 Task 10 Step 4를 미리 돌렸다(계획 리뷰 5차의 고침을 넣은 코드로 다시 돌렸다. 리뷰 6차와 7차는 시험과 시험용 갈고리만 더해 다시 돌리지 않았다). 수집 구간과 모든 기록(`--rescan`) 모두 오류 없이 끝났고 음수 칸이 없었다. 큰 압축 기록도 끝까지 흘려 읽었고 최대 메모리는 Node.js 기본 한도 안이었다. 수정 시각과 변경 시각 가운데 늦은 것으로 수집 구간을 가르니 구간에 드는 기록이 두 배쯤 됐고(작성자 PC는 변경 시각이 새로 찍힌 기록이 많았다), 그래서 첫 실행은 더 걸렸고 캐시를 쓰는 둘째 실행은 짧았다. 캐시가 있을 때와 없을 때 세션마다의 요약이 모두 같았고 둘째 실행은 모두 캐시에서 꺼냈다(이번에는 측정 중에 쓰이던 기록이 없었다. 리뷰 3차 뒤에는 쓰이던 기록 하나의 세션만 달랐고, 측정 도구가 그 기록을 늦은 쪽 시각으로 가려냈으며 모으기도 그 기록을 쓰는 중으로 보아 캐시에 넣지 않았다). 하위 세션마다 부모 기록을 찾았고 이어받아 뺀 항목과 누적값이 있었다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴. 짝 2가 리뷰 2차·3차에서 그 가운데 다섯을 원본에서 직접 열어 맞는 판정임을 확인했다), 리뷰 2차에서 새로 센 까닭(부모를 모름, 원래 기록을 찾지 못함, 부모의 원래 기록을 찾지 못함)으로 늘어난 세션은 없었다(짝 2가 리뷰 3차에서 원본의 첫 줄로 따로 확인했다). 세션 ID를 대신 쓴 기록과 수정 시각을 모르는 사본은 없었다. 대화를 되돌려 생긴 기록이 원래 세션과 합쳐졌고 이름 없는 파일이 없었다. 원본에서 따로 센 값(압축하지 않은 새 형식 세션의 응답, 주 세션의 사람 요청, 셸 실행과, 순수 옛 형식 주 세션의 응답과 입력 토큰)이 모두 같았다. Claude Code 기록(1단계)도 캐시 없이 한 번, 같은 임시 캐시로 두 번 모으니 세션마다의 요약이 모두 같았고, 둘째 실행은 측정 직전에 쓰여 쓰는 중으로 본 파일 하나 말고는 모두 캐시에서 꺼냈다. 묶은 실행 파일의 `aq doctor`도 임시 홈에서 Expected대로였고 상태 폴더는 임시 홈 아래에만 생겼다.
+이 PC의 Codex 기록(읽기만, 캐시는 임시 폴더)으로 Task 10 Step 4를 미리 돌렸다(계획 리뷰 8차의 고침을 넣은 코드로 다시 돌렸다). 수집 구간과 모든 기록(`--rescan`) 모두 오류 없이 끝났고 음수 칸이 없었다. 큰 압축 기록도 끝까지 흘려 읽었고 최대 메모리는 Node.js 기본 한도 안이었다. 수정 시각과 변경 시각 가운데 늦은 것으로 수집 구간을 가르니 구간에 드는 기록이 두 배쯤 됐고(작성자 PC는 변경 시각이 새로 찍힌 기록이 많았다), 그래서 첫 실행은 더 걸렸고 캐시를 쓰는 둘째 실행은 짧았다. 캐시가 있을 때와 없을 때 세션마다의 요약이 모두 같았고, 둘째 실행은 측정 중에 쓰이던 기록 하나 말고는 모두 캐시에서 꺼냈다(모으기가 그 기록을 쓰는 중으로 보아 캐시에 넣지 않았다. 리뷰 3차 뒤에는 그런 기록의 세션이 캐시 유무에 따라 달랐고, 측정 도구가 그 기록을 늦은 쪽 시각으로 가려냈다). 하위 세션마다 부모 기록을 찾았고 이어받아 뺀 항목과 누적값이 있었다. 이어받은 것을 확인하지 못한 세션은 모두 기준을 찾지 못한 기록이 있는 세션이었고(부모를 가진 하위 기록 가운데 스무 개에 하나꼴. 짝 2가 리뷰 2차·3차에서 그 가운데 다섯을 원본에서 직접 열어 맞는 판정임을 확인했다), 리뷰 2차에서 새로 센 까닭(부모를 모름, 원래 기록을 찾지 못함, 부모의 원래 기록을 찾지 못함)으로 늘어난 세션은 없었다(짝 2가 리뷰 3차에서 원본의 첫 줄로 따로 확인했다). 세션 ID를 대신 쓴 기록과 수정 시각을 모르는 사본은 없었다. 대화를 되돌려 생긴 기록이 원래 세션과 합쳐졌고 이름 없는 파일이 없었다. 원본에서 따로 센 값(압축하지 않은 새 형식 세션의 응답, 주 세션의 사람 요청, 셸 실행과, 순수 옛 형식 주 세션의 응답과 입력 토큰)이 모두 같았다. Claude Code 기록(1단계)도 캐시 없이 한 번, 같은 임시 캐시로 두 번 모으니 측정 중에 쓰이던 파일의 세션 둘을 빼고 세션마다의 요약이 모두 같았고, 둘째 실행은 그 쓰는 중인 파일 둘 말고는 모두 캐시에서 꺼냈다. 묶은 실행 파일의 `aq doctor`도 임시 홈에서 Expected대로였고 상태 폴더는 임시 홈 아래에만 생겼다.
 
-미리 돌리며 찾아 고친 것은 둘이다. 되돌려 생긴 기록의 이름(`rollout-<시각>-<UUID1>_<UUID2>`)을 처음 이름 꼴이 받지 않아 그 기록이 이름 없는 파일로 빠졌다(「5단계 1부 계획에서 보완」 7번. 과제 1과 8을 고쳤다). 원본에서 따로 센 값과 셸 실행이 어긋나 보인 것은 대조 도구가 Node.js의 `readline`으로 읽어 U+2028·U+2029에서 줄이 잘린 탓이었다(10번. 제품의 줄 나누기는 맞았고, 대조 도구를 줄바꿈에서만 자르게 고쳤다). 계획 리뷰 1차~7차가 찾아 고친 것은 설계의 「5단계 1부 계획 리뷰 1차에서 보완」~「…리뷰 7차에서 보완」에 적었다.
+미리 돌리며 찾아 고친 것은 둘이다. 되돌려 생긴 기록의 이름(`rollout-<시각>-<UUID1>_<UUID2>`)을 처음 이름 꼴이 받지 않아 그 기록이 이름 없는 파일로 빠졌다(「5단계 1부 계획에서 보완」 7번. 과제 1과 8을 고쳤다). 원본에서 따로 센 값과 셸 실행이 어긋나 보인 것은 대조 도구가 Node.js의 `readline`으로 읽어 U+2028·U+2029에서 줄이 잘린 탓이었다(10번. 제품의 줄 나누기는 맞았고, 대조 도구를 줄바꿈에서만 자르게 고쳤다). 계획 리뷰 1차~8차가 찾아 고친 것은 설계의 「5단계 1부 계획 리뷰 1차에서 보완」~「…리뷰 8차에서 보완」에 적었다.
 
 확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 10 Step 3에서 한다. zstd가 없는 Node.js의 실제 실행은 시험용 선택(`zstd: false`)으로만 봤다. macOS와 Linux의 Codex 기록 폴더, 작성자 PC에 없던 Codex 버전(0.148~0.153, 0.166보다 새 것)과 형식, 작성자 PC에 하나뿐이던 되돌려 생긴 기록 밖의 꼴은 보지 않았다. 원본에서 따로 센 값은 압축하지 않은 기록만 있는 세션이었다(압축본만 있는 세션은 대조 도구가 풀지 않았다). 호출 층에만 남고 McpToolCall이 남지 않는 MCP 호출이 있는지는 가리지 못했다(「5단계 1부 계획에서 보완」 3번). 작성자 PC에는 부모를 모르거나 부모 기록이 모자란 하위 세션, 같은 세션의 다른 기록을 읽지 못한 세션, 원래 기록을 찾지 못한 세션, 세션 ID를 대신 쓴 기록이 없어 그 셈은 시험으로만 봤다. 수집 구간 밖의 같은 세션 기록을 읽는 길도 작성자 PC의 수집 구간에 그런 세션이 없어 시험으로만 봤다.

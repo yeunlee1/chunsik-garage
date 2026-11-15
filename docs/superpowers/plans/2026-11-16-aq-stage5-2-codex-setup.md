@@ -31,17 +31,17 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `A6F1C859E8E698C0284523C9DA02DF9FA6808C47269B4CA5DCD729929D8624E2`, 4,287줄)이다. 설계 끝에 「5단계 2부 계획 전 결정」(열 가지)을 더하고, 9.6과 9.7의 Codex 스킬 관측 문장(0.166.0은 실린 목록과 명시적으로 부른 스킬을 남기지만 빠짐없이 보지 못한다), 10절 표의 Codex 칸(`AGENTS.override.md`, 신뢰, `.codex/skills`, 사용자 층만 듣는 `[[skills.config]]`, 플러그인의 놓인 곳)과 TOML 문단, 11.3·16.2·18.1의 "Codex의 스캐너를 만들 때 정한다"는 문장(16.2의 "이름으로 다른 곳의 서버를 막지 않는다"는 틀려 고쳤다), 「5단계 계획 전 결정」 6번(`.codex/skills`), 25절과 27절(「Codex 셋팅 읽기의 한계」)을 고쳤다. 근거는 Codex 0.166.0의 공개 소스(`openai/codex`의 태그 `rust-v0.166.0`, 커밋 `6ff1e1c`)이고, 결정마다 소스의 파일을 적었다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `B55471F1D40EC8ABF5AF7F53DD2B63E4C99CB2A0AA6B562416E95F07DC417609`, 4,309줄)이다. 설계 끝에 「5단계 2부 계획 전 결정」(열 가지)을 더하고, 9.6과 9.7의 Codex 스킬 관측 문장(0.166.0은 실린 목록과 명시적으로 부른 스킬을 남기지만 빠짐없이 보지 못한다), 10절 표의 Codex 칸(`AGENTS.override.md`, 신뢰, `.codex/skills`, 사용자 층만 듣는 `[[skills.config]]`, 플러그인의 놓인 곳)과 TOML 문단, 11.3·16.2·18.1의 "Codex의 스캐너를 만들 때 정한다"는 문장(16.2의 "이름으로 다른 곳의 서버를 막지 않는다"는 틀려 고쳤다), 「5단계 계획 전 결정」 6번(`.codex/skills`), 25절과 27절(「Codex 셋팅 읽기의 한계」)을 고쳤다. 근거는 Codex 0.166.0의 공개 소스(`openai/codex`의 태그 `rust-v0.166.0`, 커밋 `6ff1e1c`)이고, 결정마다 소스의 파일을 적었다.
 
 ## 파일 구조
 
 | 파일 | 과제 | 하는 일 |
 |---|---|---|
-| `src/scan/codex-config.ts`(새), `package.json`, `package-lock.json`(고침) | 1 | TOML 1.1로 풀기(큰 정수), 스캐너가 읽는 자리의 값의 종류와 MCP 전송 검사, 층 합치기, 지문용 TOML 값 바꾸기. smol-toml을 더한다 |
-| `src/scan/codex-settings.ts`(새) | 2 | 신뢰, 승인과 샌드박스의 값, 플러그인 기능, 지침의 fallback 이름과 한도 |
+| `src/scan/codex-config.ts`(새), `package.json`, `package-lock.json`(고침) | 1 | TOML 1.1로 풀기(큰 정수, 정수 범위와 중첩 깊이의 한도), 스캐너가 읽는 자리의 값의 종류와 MCP 전송 검사, 층 합치기, 지문용 TOML 값 바꾸기. smol-toml을 더한다 |
+| `src/scan/codex-settings.ts`(새) | 2 | 신뢰, 승인과 샌드박스의 값과 층으로 본 전면 해제, 플러그인 기능, 지침의 fallback 이름과 한도 |
 | `src/scan/codex-instructions.ts`(새) | 3 | 전역 지침 하나와 프로젝트 지침 하나 고르기 |
 | `src/scan/codex-skills.ts`(새) | 4 | 스킬을 찾는 곳을 Codex와 같은 꼴로 훑기, 이름과 접두, Codex의 머리말 |
-| `src/scan/codex-plugins.ts`(새) | 5 | 설치 ID, 놓인 곳(버전 폴더), 매니페스트, 스킬을 찾는 폴더, MCP 정의 |
+| `src/scan/codex-plugins.ts`(새) | 5 | 설치 ID, 놓인 곳(버전 폴더), 매니페스트, 구성을 아는지, 스킬을 찾는 폴더, Codex가 받는 MCP 선언 |
 | `src/scan/codex-mcp.ts`(새) | 6 | MCP 서버를 맥락마다 합치기(범위, 우선순위, 켜짐, 지문) |
 | `src/scan/codex.ts`(새), `src/scan/types.ts`, `src/scan/identity.ts`, `src/scan/codex-skills.ts`, `src/scan/claude.ts`(고침) | 7 | `scanCodexSetup`. Codex 사실의 꼴, Codex용 정체 열쇠, 플러그인 스킬의 이름, 프로젝트 이름 함수 내보내기 |
 | `src/scan/identity.ts`, `src/scan/types.ts`, `src/scan/codex.ts`(고침) | 8 | Codex 설치 열쇠 모으기와 읽지 못한 곳의 판정, 읽은 프로젝트인지 |
@@ -70,15 +70,15 @@
 
 **Interfaces:**
 - Consumes: 없다. 5단계 2부의 첫 과제다. 2단계의 `readText`(`src/scan/fs.ts`), `isObject`, `canonicalJson`(`src/scan/json.ts`)을 쓴다.
-- Produces: `TomlTable`, `CodexConfigRead`, `isTable(value)`, `parseCodexConfig(text)`, `codexConfigShapeOk(doc)`, `readCodexConfig(path)`, `mergeCodexLayers(layers)`, `tomlToJson(value)`(`src/scan/codex-config.ts`). 과제 2·6·7이 쓴다.
+- Produces: `TomlTable`, `CodexConfigRead`, `isTable(value)`, `MAX_CONFIG_DEPTH`(128), `exceedsLimits(value, maxDepth)`, `parseCodexConfig(text)`, `codexServerShapeOk(server)`, `codexConfigShapeOk(doc)`, `readCodexConfig(path)`, `mergeCodexLayers(layers)`, `tomlToJson(value)`(`src/scan/codex-config.ts`). 과제 2·5·6·7이 쓴다.
 
 설계 10절의 TOML 문단, 「5단계 2부 계획 전 결정」 1·3·7번이다.
 
 - 해석기는 `smol-toml` 1.9.1이다. TOML 1.1을 받고(Codex 0.166.0의 `toml` 0.9.11+spec-1.1.0과 같다) 의존성이 없다. 정확한 버전으로 `devDependencies`에 넣는다(`npm install --save-dev --save-exact smol-toml@1.9.1`과 같은 결과다). 묶은 실행 파일에는 3부에서 스캐너를 점검에 이을 때 들어가고, 그 파일들의 `/*!` 라이선스 주석이 함께 든다(묶기 설정이 `legalComments: "inline"`이다).
-- 2^53을 넘는 정수가 있으면 smol-toml은 기본으로 문서 전체를 거부한다. Codex는 i64까지 받으므로 `integersAsBigInt: "asNeeded"`로 그런 정수만 큰 정수로 받는다.
-- S3의 "풀리지 않는" 설정 파일은 셋이다(결정 3). TOML로 풀리지 않는 것, 스캐너가 읽는 자리(결정 3의 표)의 값의 종류가 틀린 것, `[mcp_servers.<이름>]`의 전송을 정할 수 없거나 전송과 맞지 않는 열쇠가 함께 있는 것이다(공개 소스 `config/src/mcp_types.rs`의 전송 검사). 모르는 열쇠와 모르는 글자 값은 풀리지 않는 것이 아니다. `readCodexConfig`는 사용자 층처럼 한 파일이 곧 맥락인 것에 쓰고, 프로젝트 층은 사용자 층과 합친 것을 `codexConfigShapeOk`로 본다(과제 7).
+- 2^53을 넘는 정수가 있으면 smol-toml은 기본으로 문서 전체를 거부한다. Codex는 i64까지 받으므로 `integersAsBigInt: "asNeeded"`로 그런 정수만 큰 정수로 받는다. i64의 범위를 넘는 정수는 Codex가 거부하므로 풀리지 않는 것이다. 묶음과 목록이 128단(`MAX_CONFIG_DEPTH`)보다 깊게 중첩된 문서도 풀리지 않는 것으로 본다. 뒤의 재귀(층 합치기, 지문)가 스택을 넘겨 스캐너 전체가 멈추지 않게 하려는 것이고, Codex의 TOML 해석기가 받는 깊이는 확인하지 못했다(27절). 둘 다 `exceedsLimits`가 되풀이로 재어 깊은 값에서도 스택을 쓰지 않는다(계획 리뷰 1차).
+- S3의 "풀리지 않는" 설정 파일은 셋이다(결정 3). TOML로 풀리지 않는 것, 스캐너가 읽는 자리(결정 3의 표)의 값의 종류가 틀린 것, `[mcp_servers.<이름>]`의 전송을 정할 수 없거나 전송과 맞지 않는 열쇠가 함께 있는 것이다(공개 소스 `config/src/mcp_types.rs`의 전송 검사). 모르는 열쇠와 모르는 글자 값은 풀리지 않는 것이 아니다. 서버 하나의 전송 검사는 `codexServerShapeOk`로 따로 내어 과제 5가 플러그인의 선언에도 쓴다. JSON 선언의 `null`인 칸은 없는 것으로 본다(Codex의 칸은 모두 있을 수도 없을 수도 있는 값이다. TOML에는 `null`이 없다). `readCodexConfig`는 사용자 층처럼 한 파일이 곧 맥락인 것에 쓰고, 프로젝트 층은 사용자 층과 합친 것을 `codexConfigShapeOk`로 본다(과제 7).
 - 층 합치기는 Codex와 같다. 묶음은 열쇠마다 깊이 합치고, 목록과 종류가 다른 값은 위 층이 통째로 대신한다(공개 소스 `merge_toml_values`). 결과는 프로토타입 없는 묶음이고 아래 층은 바꾸지 않는다.
-- `tomlToJson`은 정의의 지문(결정 7)을 만들 때만 쓴다. 기존 `canonicalJson`은 큰 정수에서 멈추고(JSON으로 적을 수 없다) 날짜를 빈 묶음으로 만들어, 큰 정수는 `{ "$bigint": "<숫자>" }`, 날짜와 시각은 `{ "$datetime": "<그 꼴을 지킨 글>" }`, 무한대와 숫자 아님은 `{ "$float": "inf" | "-inf" | "nan" }`으로 바꾼다.
+- `tomlToJson`은 정의의 지문(결정 7)을 만들 때만 쓴다. 기존 `canonicalJson`은 큰 정수에서 멈추고(JSON으로 적을 수 없다) 날짜를 빈 묶음으로 만들어, 큰 정수는 `{ "$bigint": "<숫자>" }`, 날짜와 시각은 `{ "$datetime": "<그 꼴을 지킨 글>" }`(밀리초까지다. 해석기가 밀리초 아래를 버린다, 27절), 무한대와 숫자 아님은 `{ "$float": "inf" | "-inf" | "nan" }`으로 바꾼다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -89,7 +89,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { codexConfigShapeOk, mergeCodexLayers, parseCodexConfig, readCodexConfig, tomlToJson, type TomlTable } from "../../src/scan/codex-config.ts";
+import { codexConfigShapeOk, codexServerShapeOk, exceedsLimits, mergeCodexLayers, parseCodexConfig, readCodexConfig, tomlToJson, type TomlTable } from "../../src/scan/codex-config.ts";
 import { canonicalJson } from "../../src/scan/json.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -148,6 +148,31 @@ describe("parseCodexConfig", () => {
 
   it("빈 파일은 빈 묶음이다", () => {
     expect(parsed("")).toEqual({});
+  });
+
+  it("Codex의 해석기가 거부하는 64비트 밖의 정수는 풀리지 않는다(계획 리뷰 1차)", () => {
+    expect(parseCodexConfig("note = 9223372036854775808\n")).toBeNull();
+    expect(parseCodexConfig("note = 0x8000000000000000\n")).toBeNull();
+    expect(parseCodexConfig("note = [1, -9223372036854775809]\n")).toBeNull();
+    expect(parsed("note = -9223372036854775808\n").note).toBe(-9223372036854775808n);
+    expect(parsed("note = 0x7fffffffffffffff\n").note).toBe(9223372036854775807n);
+  });
+
+  it("128단보다 깊게 중첩된 문서는 풀리지 않는다", () => {
+    const dotted = (n: number): string => `${Array.from({ length: n }, (_, i) => `k${i}`).join(".")} = 1\n`;
+    expect(parseCodexConfig(dotted(128))).not.toBeNull();
+    expect(parseCodexConfig(dotted(129))).toBeNull();
+    expect(parseCodexConfig(`v = ${"[".repeat(2000)}${"]".repeat(2000)}\n`)).toBeNull();
+  });
+});
+
+describe("exceedsLimits", () => {
+  it("아주 깊은 값도 스택을 넘기지 않고 가른다", () => {
+    let deep: unknown = 1;
+    for (let i = 0; i < 100_000; i++) deep = { x: deep };
+    expect(exceedsLimits(deep)).toBe(true);
+    expect(exceedsLimits({ a: [{ b: 1 }] })).toBe(false);
+    expect(exceedsLimits({ a: 2n ** 63n })).toBe(true);
   });
 });
 
@@ -245,6 +270,14 @@ describe("codexConfigShapeOk", () => {
     // 맞는 꼴
     expect(ok('[mcp_servers.a]\ncommand = "x"\nargs = []\nenv = { K = "v" }\nenv_vars = ["A"]\ncwd = "C:/x"\nstartup_timeout_sec = 5\n')).toBe(true);
     expect(ok('[mcp_servers.a]\nurl = "https://e.test"\nhttp_headers = { H = "v" }\nenv_http_headers = { H = "E" }\noauth = {}\nauth = "oauth"\n')).toBe(true);
+  });
+
+  it("플러그인의 JSON 서버 선언에서는 null이 없는 것이다(serde의 Option)", () => {
+    expect(codexServerShapeOk({ command: null, url: "https://e.test", enabled: null })).toBe(true);
+    expect(codexServerShapeOk({ command: "x", url: null, http_headers: null })).toBe(true);
+    expect(codexServerShapeOk({ command: null, url: null })).toBe(false);
+    expect(codexServerShapeOk({})).toBe(false);
+    expect(codexServerShapeOk([])).toBe(false);
   });
 
   it("큰 정수의 한도는 0 이상이면 맞다", () => {
@@ -408,27 +441,55 @@ export type CodexConfigRead = { status: "ok"; value: TomlTable } | { status: "mi
 export const isTable = (value: unknown): value is TomlTable => isObject(value) && !(value instanceof Date);
 const isBool = (value: unknown): boolean => typeof value === "boolean";
 const isText = (value: unknown): boolean => typeof value === "string";
-const optional = (value: unknown, check: (value: unknown) => boolean): boolean => value === undefined || check(value);
+/** 없거나(플러그인의 JSON 선언에서는 null도 없는 것이다) 맞는 종류다. TOML에는 null이 없다 */
+const optional = (value: unknown, check: (value: unknown) => boolean): boolean => value === undefined || value === null || check(value);
 const tableOf = (value: unknown, each: (value: unknown) => boolean): boolean => isTable(value) && Object.values(value).every(each);
 const isNonNegativeInteger = (value: unknown): boolean => (typeof value === "number" && Number.isInteger(value) && value >= 0) || (typeof value === "bigint" && value >= 0n);
 
-/** TOML 1.1로 푼다. 2^53을 넘는 정수는 큰 정수(bigint)로 받아 문서 전체를 거부하지 않는다. 풀리지 않으면 null이다 */
+/** 이보다 깊게 중첩된 설정과 선언은 풀리지 않는 것으로 본다. 뒤의 재귀가 스택을 넘기지 않게 하려는 것이다(Codex의 JSON 해석기 serde_json의 기본 한도와 같은 128) */
+export const MAX_CONFIG_DEPTH = 128;
+const I64_MIN = -(2n ** 63n);
+const I64_MAX = 2n ** 63n - 1n;
+
+/** 묶음과 목록이 maxDepth단보다 깊게 중첩됐거나, TOML의 정수 범위(64비트 부호 있는 정수)를 넘는 정수가 있다. 깊은 값에서도 스택을 쓰지 않게 되풀이로 본다 */
+export function exceedsLimits(value: unknown, maxDepth: number = MAX_CONFIG_DEPTH): boolean {
+  const stack: [unknown, number][] = [[value, 0]];
+  while (stack.length > 0) {
+    const [item, depth] = stack.pop()!;
+    if (typeof item === "bigint") {
+      if (item < I64_MIN || item > I64_MAX) return true;
+      continue;
+    }
+    const children = Array.isArray(item) ? item : isTable(item) ? Object.values(item) : null;
+    if (children === null) continue;
+    if (depth >= maxDepth) return true;
+    for (const child of children) stack.push([child, depth + 1]);
+  }
+  return false;
+}
+
+/**
+ * TOML 1.1로 푼다. 2^53을 넘는 정수는 큰 정수(bigint)로 받아 문서 전체를 거부하지 않는다. Codex의 해석기가 거부하는 64비트 밖의 정수와,
+ * 너무 깊게 중첩된 문서는 풀리지 않는 것으로 본다(공개 소스의 toml 0.9는 i64를 넘는 정수에서 실패한다). 풀리지 않으면 null이다
+ */
 export function parseCodexConfig(text: string): TomlTable | null {
+  let value: TomlTable;
   try {
-    return parse(text, { integersAsBigInt: "asNeeded" }) as TomlTable;
+    value = parse(text, { integersAsBigInt: "asNeeded" }) as TomlTable;
   } catch {
     return null;
   }
+  return exceedsLimits(value) ? null : value;
 }
 
 /** stdio 전송과 함께 둘 수 없는 열쇠와 HTTP 전송과 함께 둘 수 없는 열쇠(공개 소스 config/src/mcp_types.rs의 전송 검사) */
 const HTTP_KEYS = ["url", "bearer_token_env_var", "bearer_token", "http_headers_helper", "http_headers", "env_http_headers", "oauth", "oauth_resource", "auth"];
 const STDIO_KEYS = ["args", "env", "env_vars", "cwd", "bearer_token"];
 
-/** MCP 서버 정의 하나가 Codex가 받는 꼴인지. enabled의 종류와 전송만 본다(oauth의 세부 조건은 보지 않는다) */
-function serverShapeOk(server: unknown): boolean {
+/** MCP 서버 정의 하나가 Codex가 받는 꼴인지. enabled의 종류와 전송만 본다(oauth의 세부 조건은 보지 않는다). 플러그인의 서버 선언에도 쓴다 */
+export function codexServerShapeOk(server: unknown): boolean {
   if (!isTable(server) || !optional(server.enabled, isBool)) return false;
-  const has = (key: string): boolean => server[key] !== undefined;
+  const has = (key: string): boolean => server[key] !== undefined && server[key] !== null;
   if (has("command")) return isText(server.command) && !HTTP_KEYS.some(has);
   if (has("url")) return isText(server.url) && !STDIO_KEYS.some(has);
   return false;
@@ -447,7 +508,7 @@ export function codexConfigShapeOk(doc: TomlTable): boolean {
     approvalShapeOk(doc.approval_policy) &&
     optional(doc.sandbox_mode, isText) &&
     optional(doc.default_permissions, isText) &&
-    optional(doc.mcp_servers, (servers) => tableOf(servers, serverShapeOk)) &&
+    optional(doc.mcp_servers, (servers) => tableOf(servers, codexServerShapeOk)) &&
     optional(doc.plugins, (plugins) => tableOf(plugins, pluginShapeOk)) &&
     skillsShapeOk(doc.skills) &&
     optional(doc.features, (features) => isTable(features) && optional(features.plugins, isBool)) &&
@@ -499,7 +560,7 @@ export function tomlToJson(value: unknown): unknown {
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npm ci --no-audit --no-fund && npx tsc --noEmit && npx vitest run test/scan/codex-config.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 43개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 47개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -518,12 +579,12 @@ git commit -m "feat: Codex 설정 파일을 TOML로 읽고 검사함"
 
 **Interfaces:**
 - Consumes: 과제 1의 `TomlTable`, `isTable`. 1단계의 `normalizePath`(`src/adapters/claude/locate.ts`).
-- Produces: `CodexTrust`, `trustOf(user, normRoot, platform)`, `ApprovalFact`, `SandboxFact`, `CodexSafetyFact`(`approval`, `sandbox`, `permissions`), `safetyOf(merged)`, `pluginsFeatureOn(merged)`, `fallbackNames(merged, platform)`, `projectDocDisabled(merged)`(`src/scan/codex-settings.ts`). 과제 7이 쓴다.
+- Produces: `CodexTrust`, `trustOf(user, root, platform)`, `ApprovalFact`, `SandboxFact`, `CodexSafetyFact`(`approval`, `sandbox`, `permissions`, `fullAccess`), `safetyOf(layers)`, `pluginsFeatureOn(merged)`, `fallbackNames(merged, platform)`, `projectDocDisabled(merged)`(`src/scan/codex-settings.ts`). 과제 7이 쓴다.
 
 「5단계 2부 계획 전 결정」 2·4·5·8번이다.
 
-- 신뢰는 사용자 층의 `[projects."<경로>"]` 가운데 프로젝트 뿌리(정규화한 것)와 같은 경로의 `trust_level`이다. `trusted`와 `untrusted`만 기록이고 그 밖은 기록이 없다. 맞는 열쇠가 여럿이면 원래 열쇠의 사전순으로 첫째인 것의 값이다(공개 소스 `config/src/loader/mod.rs`의 `decision_for_dir`). 하위 폴더나 위 폴더의 열쇠는 보지 않는다(결정 2, 27절).
-- 승인 값은 `never`, `on-request`(옛 이름 `on-failure`도), `untrusted`, `granular`(묶음), `other`, 적히지 않음(`null`)으로 가른다. 샌드박스는 `danger-full-access`, `workspace-write`, `read-only`, `other`, `null`이고, `default_permissions`가 `":danger-full-access"`이면 전면 접근이다(공개 소스 `protocol/src/protocol.rs`의 `AskForApproval`과 `SandboxMode`). 승인 없음과 전면 해제를 함께 쓰는지의 판정은 3부의 S2가 한다(결정 4).
+- 신뢰는 사용자 층의 `[projects."<경로>"]` 가운데 프로젝트 뿌리(정규화한 것)와 같은 경로의 `trust_level`이다. `trusted`와 `untrusted`만 기록이고 그 밖은 기록이 없다. 뿌리를 Codex가 찾는 꼴 그대로(Windows에서는 ASCII 글자를 소문자로 바꾼 것) 적은 열쇠가 있으면 그것의 값이고, 없을 때 맞는 열쇠가 여럿이면 원래 열쇠의 사전순으로 첫째인 것의 값이다(공개 소스 `config/src/loader/mod.rs`의 `decision_for_dir`과 `project_trust_for_lookup_key`). 그래서 `trustOf`는 정규화하기 전의 뿌리를 받는다. 하위 폴더나 위 폴더의 열쇠는 보지 않는다(결정 2, 27절).
+- 승인 값은 `never`, `on-request`(옛 이름 `on-failure`도), `untrusted`, `granular`(묶음), `other`, 적히지 않음(`null`)으로 가른다. 샌드박스는 `danger-full-access`, `workspace-write`, `read-only`, `other`, `null`이고, `default_permissions`가 `":danger-full-access"`이면 전면 접근이다(공개 소스 `protocol/src/protocol.rs`의 `AskForApproval`과 `SandboxMode`). 그 맥락이 전면 해제인지(`fullAccess`)는 층의 차례로 마지막에 `sandbox_mode`나 `default_permissions`를 적은 층의 방식으로 본다. 같은 층에 둘 다 있으면 `default_permissions`의 방식이다(공개 소스 `core/src/config/mod.rs`의 `resolve_permission_config_syntax`). 합친 묶음만으로는 어느 층이 방식을 정했는지 알 수 없어 `safetyOf`는 층의 목록을 받는다(계획 리뷰 1차). 승인 없음과 전면 해제를 함께 쓰는지의 판정은 3부의 S2가 `approval`과 `fullAccess`로 한다(결정 4).
 - `[features]`의 `plugins`는 기본이 켜짐이다(공개 소스 `features/src/lib.rs`).
 - fallback 이름은 앞뒤 공백을 떼고 빈 것을 버린 뒤(공개 소스 `core/src/config/mod.rs`), 파일 이름이 아닌 것과 이미 든 이름을 뺀다(공개 소스 `core/src/agents_md.rs`의 `candidate_filenames`). Windows에서는 `\`와 `:`가 든 이름도 버린다.
 
@@ -552,56 +613,87 @@ describe("trustOf", () => {
   const norm = normalizePath(root);
 
   it("뿌리와 같은 경로의 trust_level을 본다. trusted와 untrusted만 기록이고 그 밖은 기록이 없다", () => {
-    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "trusted"\n`), norm)).toBe("trusted");
-    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "untrusted"\n`), norm)).toBe("untrusted");
-    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "sometimes"\n`), norm)).toBeNull();
-    expect(trustOf(doc(`[projects.${quoted(root)}]\nother = 1\n`), norm)).toBeNull();
-    expect(trustOf(doc(""), norm)).toBeNull();
+    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "trusted"\n`), root)).toBe("trusted");
+    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "untrusted"\n`), root)).toBe("untrusted");
+    expect(trustOf(doc(`[projects.${quoted(root)}]\ntrust_level = "sometimes"\n`), root)).toBeNull();
+    expect(trustOf(doc(`[projects.${quoted(root)}]\nother = 1\n`), root)).toBeNull();
+    expect(trustOf(doc(""), root)).toBeNull();
   });
 
   it("구분 기호와 끝의 /. 를 맞춰 견주고, 하위 폴더나 위 폴더의 열쇠는 보지 않는다", () => {
-    expect(trustOf(doc(`[projects.${quoted(`${root.replace(/\\/g, "/")}/.`)}]\ntrust_level = "trusted"\n`), norm)).toBe("trusted");
-    expect(trustOf(doc(`[projects.${quoted(join(root, "sub"))}]\ntrust_level = "trusted"\n`), norm)).toBeNull();
-    expect(trustOf(doc(`[projects.${quoted(join(root, ".."))}]\ntrust_level = "trusted"\n`), norm)).toBeNull();
+    expect(trustOf(doc(`[projects.${quoted(`${root.replace(/\\/g, "/")}/.`)}]\ntrust_level = "trusted"\n`), root)).toBe("trusted");
+    expect(trustOf(doc(`[projects.${quoted(join(root, "sub"))}]\ntrust_level = "trusted"\n`), root)).toBeNull();
+    expect(trustOf(doc(`[projects.${quoted(join(root, ".."))}]\ntrust_level = "trusted"\n`), root)).toBeNull();
   });
 
   it.runIf(process.platform === "win32")("Windows에서는 대소문자를 가리지 않는다", () => {
-    expect(trustOf(doc(`[projects.${quoted(root.toUpperCase())}]\ntrust_level = "trusted"\n`), norm)).toBe("trusted");
+    expect(trustOf(doc(`[projects.${quoted(root.toUpperCase())}]\ntrust_level = "trusted"\n`), root)).toBe("trusted");
   });
 
   it("맞는 열쇠가 여럿이면 원래 열쇠의 사전순으로 첫째인 것의 값이다. 기록이 아닌 값의 열쇠는 후보가 아니다", () => {
     const slashed = `${root.replace(/\\/g, "/")}/.`;
     const [first, second] = [root, slashed].sort();
     const text = `[projects.${quoted(first!)}]\ntrust_level = "untrusted"\n[projects.${quoted(second!)}]\ntrust_level = "trusted"\n`;
-    expect(trustOf(doc(text), norm)).toBe("untrusted");
+    expect(trustOf(doc(text), root)).toBe("untrusted");
     // 적은 차례가 거꾸로여도 사전순으로 고른다
     const reversed = `[projects.${quoted(second!)}]\ntrust_level = "trusted"\n[projects.${quoted(first!)}]\ntrust_level = "untrusted"\n`;
-    expect(trustOf(doc(reversed), norm)).toBe("untrusted");
+    expect(trustOf(doc(reversed), root)).toBe("untrusted");
     const skipped = `[projects.${quoted(first!)}]\ntrust_level = "maybe"\n[projects.${quoted(second!)}]\ntrust_level = "trusted"\n`;
-    expect(trustOf(doc(skipped), norm)).toBe("trusted");
+    expect(trustOf(doc(skipped), root)).toBe("trusted");
+  });
+
+  it("뿌리를 Codex의 꼴(Windows에서는 ASCII 글자를 소문자로)로 적은 열쇠가 있으면 사전순보다 먼저 그것의 값이다(계획 리뷰 1차)", () => {
+    const exact = process.platform === "win32" ? root.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : root;
+    // 같은 뿌리를 가리키면서 사전순으로 앞서는 다른 표기
+    const other = process.platform === "win32" ? root.toUpperCase() : root.replace(/\/([^/]+)$/, "//$1");
+    expect(normalizePath(other)).toBe(norm);
+    expect(other < exact).toBe(true);
+    const text = `[projects.${quoted(other)}]\ntrust_level = "untrusted"\n[projects.${quoted(exact)}]\ntrust_level = "trusted"\n`;
+    expect(trustOf(doc(text), root)).toBe("trusted");
+    // 맞는 꼴이 없으면 사전순이다
+    expect(trustOf(doc(`[projects.${quoted(other)}]\ntrust_level = "untrusted"\n`), root)).toBe("untrusted");
   });
 });
 
 describe("safetyOf", () => {
   it("승인 값을 가른다. on-failure는 on-request의 옛 이름이고, 묶음은 granular다", () => {
-    expect(safetyOf(doc('approval_policy = "never"\n')).approval).toBe("never");
-    expect(safetyOf(doc('approval_policy = "on-request"\n')).approval).toBe("on-request");
-    expect(safetyOf(doc('approval_policy = "on-failure"\n')).approval).toBe("on-request");
-    expect(safetyOf(doc('approval_policy = "untrusted"\n')).approval).toBe("untrusted");
-    expect(safetyOf(doc("approval_policy = { granular = { sandbox_approval = false, rules = false, mcp_elicitations = false } }\n")).approval).toBe("granular");
-    expect(safetyOf(doc('approval_policy = "someday"\n')).approval).toBe("other");
-    expect(safetyOf(doc("")).approval).toBeNull();
+    expect(safetyOf([doc('approval_policy = "never"\n')]).approval).toBe("never");
+    expect(safetyOf([doc('approval_policy = "on-request"\n')]).approval).toBe("on-request");
+    expect(safetyOf([doc('approval_policy = "on-failure"\n')]).approval).toBe("on-request");
+    expect(safetyOf([doc('approval_policy = "untrusted"\n')]).approval).toBe("untrusted");
+    expect(safetyOf([doc("approval_policy = { granular = { sandbox_approval = false, rules = false, mcp_elicitations = false } }\n")]).approval).toBe("granular");
+    expect(safetyOf([doc('approval_policy = "someday"\n')]).approval).toBe("other");
+    expect(safetyOf([doc("")]).approval).toBeNull();
   });
 
   it("샌드박스 값과 권한 프로필의 전면 접근을 가른다", () => {
-    expect(safetyOf(doc('sandbox_mode = "danger-full-access"\n')).sandbox).toBe("danger-full-access");
-    expect(safetyOf(doc('sandbox_mode = "workspace-write"\n')).sandbox).toBe("workspace-write");
-    expect(safetyOf(doc('sandbox_mode = "read-only"\n')).sandbox).toBe("read-only");
-    expect(safetyOf(doc('sandbox_mode = "elsewhere"\n')).sandbox).toBe("other");
-    expect(safetyOf(doc("")).sandbox).toBeNull();
-    expect(safetyOf(doc('default_permissions = ":danger-full-access"\n')).permissions).toBe("danger-full-access");
-    expect(safetyOf(doc('default_permissions = ":workspace"\n')).permissions).toBe("other");
-    expect(safetyOf(doc("")).permissions).toBeNull();
+    expect(safetyOf([doc('sandbox_mode = "danger-full-access"\n')]).sandbox).toBe("danger-full-access");
+    expect(safetyOf([doc('sandbox_mode = "workspace-write"\n')]).sandbox).toBe("workspace-write");
+    expect(safetyOf([doc('sandbox_mode = "read-only"\n')]).sandbox).toBe("read-only");
+    expect(safetyOf([doc('sandbox_mode = "elsewhere"\n')]).sandbox).toBe("other");
+    expect(safetyOf([doc("")]).sandbox).toBeNull();
+    expect(safetyOf([doc('default_permissions = ":danger-full-access"\n')]).permissions).toBe("danger-full-access");
+    expect(safetyOf([doc('default_permissions = ":workspace"\n')]).permissions).toBe("other");
+    expect(safetyOf([doc("")]).permissions).toBeNull();
+  });
+
+  it("전면 해제는 마지막으로 sandbox_mode나 default_permissions를 적은 층의 방식으로 본다. 같은 층에 둘 다 있으면 default_permissions다(계획 리뷰 1차)", () => {
+    const full = (...layers: string[]): boolean => safetyOf(layers.map(doc)).fullAccess;
+    expect(full('sandbox_mode = "danger-full-access"\n')).toBe(true);
+    expect(full('default_permissions = ":danger-full-access"\n')).toBe(true);
+    expect(full("")).toBe(false);
+    // 사용자 층은 전면 해제인데 프로젝트 층이 다른 방식으로 읽기 전용을 고른다
+    expect(full('approval_policy = "never"\nsandbox_mode = "danger-full-access"\n', 'default_permissions = ":read-only"\n')).toBe(false);
+    expect(full('default_permissions = ":danger-full-access"\n', 'sandbox_mode = "read-only"\n')).toBe(false);
+    // 위 층이 방식을 적지 않으면 아래 층의 방식이 이어진다
+    expect(full('sandbox_mode = "danger-full-access"\n', 'approval_policy = "never"\n')).toBe(true);
+    // 같은 층에 둘 다 있으면 default_permissions의 방식이다
+    expect(full('sandbox_mode = "danger-full-access"\ndefault_permissions = ":workspace"\n')).toBe(false);
+    expect(full('sandbox_mode = "read-only"\ndefault_permissions = ":danger-full-access"\n')).toBe(true);
+    // 아래 층이 프로필 방식이어도 위 층이 sandbox_mode를 적으면 다시 그 방식이다
+    expect(full('sandbox_mode = "danger-full-access"\ndefault_permissions = ":workspace"\n', 'sandbox_mode = "danger-full-access"\n')).toBe(true);
+    const merged = safetyOf([doc('approval_policy = "never"\n'), doc('approval_policy = "on-request"\n')]);
+    expect(merged.approval).toBe("on-request");
   });
 });
 
@@ -653,20 +745,24 @@ Expected: FAIL. `test/scan/codex-settings.test.ts`가 `src/scan/codex-settings.t
 ```ts
 // Codex 설정 층에서 스캐너가 쓰는 값을 꺼낸다. 프로젝트의 신뢰, 승인과 샌드박스의 값, 플러그인 기능, 지침의 fallback 이름과 한도다. 값은 정해진 꼴로만 내고 원문은 내지 않는다(설계 「5단계 2부 계획 전 결정」 2·4·5·8번)
 import { normalizePath } from "../adapters/claude/locate.ts";
-import { isTable, type TomlTable } from "./codex-config.ts";
+import { isTable, mergeCodexLayers, type TomlTable } from "./codex-config.ts";
 
 /** trusted는 신뢰한 프로젝트, untrusted는 신뢰하지 않는다고 적힌 프로젝트, null은 신뢰 기록이 없는 프로젝트다 */
 export type CodexTrust = "trusted" | "untrusted" | null;
 
 /**
- * 사용자 층의 projects에서 그 프로젝트의 뿌리(정규화한 것)와 같은 경로의 trust_level을 찾는다. 열쇠는 구분 기호를 맞추고 Windows에서는 대소문자를 가리지 않고 견준다.
- * trusted와 untrusted만 기록이다. 맞는 열쇠가 여럿이면 원래 열쇠의 사전순으로 첫째인 것의 값이다(공개 소스 config/src/loader/mod.rs의 decision_for_dir)
+ * 사용자 층의 projects에서 그 프로젝트의 뿌리와 같은 경로의 trust_level을 찾는다. trusted와 untrusted만 기록이다. Codex처럼 먼저 뿌리 경로를 Codex의 꼴
+ * (Windows에서는 ASCII 글자를 소문자로)로 적은 것과 글자 그대로 같은 열쇠를 찾고, 없으면 구분 기호를 맞추고 Windows에서는 대소문자를 가리지 않고 견준 열쇠 가운데
+ * 원래 열쇠의 사전순으로 첫째인 것의 값이다(공개 소스 config/src/loader/mod.rs의 project_trust_for_lookup_key, 계획 리뷰 1차)
  */
-export function trustOf(user: TomlTable, normRoot: string, platform: NodeJS.Platform = process.platform): CodexTrust {
+export function trustOf(user: TomlTable, root: string, platform: NodeJS.Platform = process.platform): CodexTrust {
   const projects = isTable(user.projects) ? user.projects : {};
+  const normRoot = normalizePath(root, platform);
+  const exactKey = platform === "win32" ? root.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : root;
   const found: { key: string; trust: "trusted" | "untrusted" }[] = [];
   for (const [key, entry] of Object.entries(projects)) {
     if (!isTable(entry) || (entry.trust_level !== "trusted" && entry.trust_level !== "untrusted")) continue;
+    if (key === exactKey) return entry.trust_level;
     if (normalizePath(key, platform) === normRoot) found.push({ key, trust: entry.trust_level });
   }
   found.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
@@ -676,12 +772,17 @@ export function trustOf(user: TomlTable, normRoot: string, platform: NodeJS.Plat
 export type ApprovalFact = "never" | "on-request" | "untrusted" | "granular" | "other" | null;
 export type SandboxFact = "danger-full-access" | "workspace-write" | "read-only" | "other" | null;
 
-/** 한 맥락(합친 설정)의 승인과 샌드박스. 적히지 않은 값은 null이다(Codex의 기본은 묻는 승인과 샌드박스다) */
+/** 한 맥락(사용자 층 위에 얹은 층들)의 승인과 샌드박스. 적히지 않은 값은 null이다(Codex의 기본은 묻는 승인과 샌드박스다) */
 export interface CodexSafetyFact {
   approval: ApprovalFact;
   sandbox: SandboxFact;
   /** default_permissions가 전면 접근(":danger-full-access")인지 */
   permissions: "danger-full-access" | "other" | null;
+  /**
+   * 이 맥락에서 쓰이는 샌드박스가 전면 해제다. Codex는 층을 아래에서 위로 보아 마지막으로 sandbox_mode나 default_permissions를 적은 층의 방식을 쓰고(같은 층에 둘 다
+   * 있으면 default_permissions), 그 방식의 합친 값으로 샌드박스를 정한다(공개 소스 core/src/config/mod.rs의 resolve_permission_config_syntax, 계획 리뷰 1차)
+   */
+  fullAccess: boolean;
 }
 
 function approvalOf(value: unknown): ApprovalFact {
@@ -698,12 +799,20 @@ function sandboxOf(value: unknown): SandboxFact {
   return value === "danger-full-access" || value === "workspace-write" || value === "read-only" ? value : "other";
 }
 
-export function safetyOf(merged: TomlTable): CodexSafetyFact {
+/** 층(아래에서 위의 차례)으로 그 맥락의 승인과 샌드박스를 낸다 */
+export function safetyOf(layers: readonly TomlTable[]): CodexSafetyFact {
+  const merged = mergeCodexLayers(layers);
+  let syntax: "legacy" | "profiles" | null = null;
+  for (const layer of layers) {
+    if (layer.sandbox_mode !== undefined) syntax = "legacy";
+    if (layer.default_permissions !== undefined) syntax = "profiles";
+  }
   const permissions = merged.default_permissions;
   return {
     approval: approvalOf(merged.approval_policy),
     sandbox: sandboxOf(merged.sandbox_mode),
     permissions: permissions === undefined ? null : permissions === ":danger-full-access" ? "danger-full-access" : "other",
+    fullAccess: syntax === "legacy" ? merged.sandbox_mode === "danger-full-access" : syntax === "profiles" ? permissions === ":danger-full-access" : false,
   };
 }
 
@@ -736,7 +845,7 @@ export const projectDocDisabled = (merged: TomlTable): boolean => merged.project
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex-settings.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 11개. Windows에서만 도는 대소문자 시험이 있어 Windows 밖에서는 하나를 건너뛴다.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 13개. Windows에서만 도는 대소문자 시험이 있어 Windows 밖에서는 하나를 건너뛴다.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -1368,16 +1477,17 @@ git commit -m "feat: Codex 스킬을 찾는 곳을 Codex와 같이 훑음"
 - Test: `test/scan/codex-plugins.test.ts`
 
 **Interfaces:**
-- Consumes: 과제 4의 `CODEX_MANIFEST_PATHS`. 2단계의 `entryInfo`, `listDir`, `readText`, `isObject`, `FileStatus`.
-- Produces: `CodexPluginRead`(`id`, `idValid`, `root`, `install`, `manifest`, `namespace`, `skillRoots`, `mcpServers`, `mcpUnreadable`), `codexPluginIdValid(id)`, `compareCodexPluginVersions(a, b)`, `readCodexPlugin(codexHome, id)`(`src/scan/codex-plugins.ts`). 과제 7이 쓴다.
+- Consumes: 과제 1의 `codexServerShapeOk`, `exceedsLimits`. 과제 4의 `CODEX_MANIFEST_PATHS`. 2단계의 `entryInfo`, `listDir`, `readText`, `isObject`, `FileStatus`.
+- Produces: `CodexPluginRead`(`id`, `idValid`, `root`, `install`, `manifest`, `namespace`, `skillRoots`, `mcpServers`, `mcpUnreadable`, `compositionKnown`), `codexPluginIdValid(id)`, `compareCodexPluginVersions(a, b)`, `readCodexPlugin(codexHome, id)`(`src/scan/codex-plugins.ts`). 과제 7이 쓴다.
 
 「5단계 2부 계획 전 결정」 7·8번이다. Codex에는 설치 기록 파일이 없다. 설정의 항목이 출발점이고, 켜졌는지는 과제 7이 맥락마다 본다.
 
 - 설치 ID는 마지막 `@`로 나눈 이름(ASCII 글자·숫자·`_`·`-`·`.`, 점은 앞뒤와 연달아 금지)과 마켓(ASCII 글자·숫자·`_`·`-`)이다(공개 소스 `core-plugin-common/src/plugin_id.rs`). 꼴이 틀리면 Codex가 싣지 않고 놓인 곳도 찾지 않는다.
-- 놓인 곳은 `<Codex 홈>/plugins/cache/<마켓>/<이름>/` 아래의 버전 폴더(이름이 ASCII 글자·숫자·`.`·`+`·`_`·`-`인 일반 폴더. 링크는 버전으로 보지 않는다) 가운데 `local`이 있으면 그것, 없으면 가장 높은 버전이다. 둘 다 SemVer 꼴이면 SemVer의 차례(pre-release 포함)이고 아니면 글자의 차례다(공개 소스 `core-plugin-common/src/installed.rs`).
-- 매니페스트는 뿌리의 `plugin.json`(`$schema`가 `https://agent-plugins.org/schemas/`로 시작할 때만), `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`의 차례다. 자리가 링크이거나 일반 파일이 아니면, 또는 매니페스트 폴더 자리가 폴더가 아니면 그 뒤를 보지 않고 없다고 본다(공개 소스 `find_plugin_manifest_path`). 풀리지 않거나 `name`이 글자가 아니면 맞지 않는 매니페스트다. `name`이 비면 뿌리 폴더(버전 폴더)의 이름이다.
-- 스킬을 찾는 폴더는 매니페스트의 `skills`(글자나 글자의 목록) 가운데 맞는 경로(`./`로 시작하고 그것만이 아니며 `..`와 절대 경로가 없고 뿌리 안)이고, 없으면 `skills/`(폴더일 때)다. 매니페스트 폴더를 쓰는 형식이면 `.codex-plugin/migrated-command-skills`(폴더일 때)를 더한다(공개 소스 `core-plugins/src/loader.rs`의 `plugin_skill_roots`, `manifest.rs`의 `resolve_manifest_path`).
-- MCP 정의는 매니페스트의 `mcpServers`가 묶음이면 그것만이고, 아니면 그것이 가리키는 파일이나 기본 `.mcp.json`이다. 파일은 `{"mcpServers": {...}}`이거나 그 안쪽 꼴이고, 정의가 묶음이 아닌 서버는 버린다. 파일이 풀리지 않거나 읽지 못하면 MCP 정의를 읽지 못한 것이다. 선언한 파일이 없으면 서버가 없다(공개 소스 `load_plugin_mcp_servers_from_manifest_with_format`, `codex-mcp/src/plugin_config.rs`).
+- 놓인 곳은 `<Codex 홈>/plugins/cache/<마켓>/<이름>/` 아래의 버전 폴더(이름이 ASCII 글자·숫자·`.`·`+`·`_`·`-`인 일반 폴더. 링크는 버전으로 보지 않는다) 가운데 `local`이 있으면 그것, 없으면 가장 높은 버전이다. 둘 다 SemVer 꼴이면 SemVer의 차례(pre-release와 빌드 꼬리 포함)이고 아니면 글자의 차례다(공개 소스 `core-plugin-common/src/installed.rs`). 빌드 꼬리의 차례는 Codex가 쓰는 `semver` 1.0.27의 `BuildMetadata`와 같다. 없는 쪽이 낮고, 식별자마다 숫자끼리는 앞의 0을 뗀 수로 견주고 같으면 원래 길이가 긴 쪽이 높으며(`0 < 00 < 1 < 01`), 숫자는 글자보다 낮고, 앞이 같으면 짧은 쪽이 낮다(계획 리뷰 1차).
+- 매니페스트는 뿌리의 `plugin.json`(`$schema`가 `https://agent-plugins.org/schemas/`로 시작할 때만), `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`의 차례다. 자리가 링크이거나 일반 파일이 아니면, 또는 매니페스트 폴더 자리가 폴더가 아니면 그 뒤를 보지 않고 없다고 본다(공개 소스 `find_plugin_manifest_path`). 풀리지 않거나(128단보다 깊은 것도. Codex의 JSON 해석기가 거부한다) `name`이 글자가 아니면 맞지 않는 매니페스트다. 뿌리의 `plugin.json`이 아닌 기존 형식은 칸의 꼴도 Codex가 받는 꼴이어야 한다. `version`·`description`·`apps`는 글자나 `null`, `keywords`는 글자의 목록, `interface`는 묶음이나 `null`이다(공개 소스 `core-plugins/src/manifest.rs`의 `RawPluginManifest`. `interface` 안쪽 칸은 보지 않는다, 27절). `name`이 비면 뿌리 폴더(버전 폴더)의 이름이다.
+- 뿌리의 `plugin.json`을 쓰는 형식(Agent Plugins)은 이름만 읽고 구성을 모르는 플러그인(`compositionKnown` 거짓)으로 낸다. 그 형식은 MCP 정의를 다른 자리(`mcp.json`)와 다른 꼴로 두는데 첫 버전은 따라 하지 않는다(결정 8, 계획 리뷰 1차). 놓인 곳이나 매니페스트가 있는데 읽지 못한 것도 구성을 모른다. 없는 것은 구성을 아는 것이다(싣지 않는다는 것을 안다).
+- 스킬을 찾는 폴더는 매니페스트의 `skills`(글자나 글자의 목록. 글자 아닌 항목이 섞인 목록은 Codex처럼 통째로 버린다) 가운데 맞는 경로(`./`로 시작하고 그것만이 아니며 `..`와 절대 경로가 없고 뿌리 안)이고, 없으면 `skills/`(폴더일 때)다. 매니페스트 폴더를 쓰는 형식이면 `.codex-plugin/migrated-command-skills`(폴더일 때)를 더한다(공개 소스 `core-plugins/src/loader.rs`의 `plugin_skill_roots`, `manifest.rs`의 `resolve_manifest_path`).
+- MCP 정의는 매니페스트의 `mcpServers`가 묶음이면 그것만이고, 아니면 그것이 가리키는 파일이나 기본 `.mcp.json`이다. 파일과 인라인 묶음은 `{"mcpServers": {...}}`이거나 그 안쪽 꼴이다. Codex가 버리는 선언은 버린다. 묶음이 아닌 것과, `type` 열쇠와 묶음이 아니거나 빈 `oauth`를 지운 뒤 과제 1의 전송 검사(`codexServerShapeOk`)에 맞지 않거나 `auth = "ema_auth"`를 고른 것이다(공개 소스 `codex-mcp/src/plugin_config.rs`의 `normalize_plugin_mcp_server`, 계획 리뷰 1차). 버린 선언은 같은 이름의 다른 등록을 가리지 않는다. 파일이 풀리지 않거나(128단보다 깊은 것도) 읽지 못하면 MCP 정의를 읽지 못한 것이다. 선언한 파일이 없으면 서버가 없다(공개 소스 `load_plugin_mcp_servers_from_manifest_with_format`, `codex-mcp/src/plugin_config.rs`).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -1422,6 +1532,20 @@ describe("compareCodexPluginVersions", () => {
     expect(compareCodexPluginVersions("1.2.3", "1.2.3")).toBe(0);
     expect(compareCodexPluginVersions("v2", "v10")).toBeGreaterThan(0);
     expect(compareCodexPluginVersions("10.0.0", "1x")).toBeLessThan(0);
+  });
+
+  it("빌드 꼬리도 semver 1.0.27의 차례로 견준다(계획 리뷰 1차)", () => {
+    expect(compareCodexPluginVersions("1.0.0+2", "1.0.0+10")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.0", "1.0.0+1")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.0+1", "1.0.0+a")).toBeLessThan(0);
+    // 앞의 0을 뗀 값이 같으면 원래 길이가 긴 쪽이 높다(0 < 00 < 1 < 01)
+    expect(compareCodexPluginVersions("1.0.0+1", "1.0.0+01")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.0+0", "1.0.0+00")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.0+1", "1.0.0+1.a")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.0+b", "1.0.0+a.z")).toBeGreaterThan(0);
+    expect(compareCodexPluginVersions("1.0.0+x.1", "1.0.0+x.1")).toBe(0);
+    // pre-release가 먼저 견주어진다
+    expect(compareCodexPluginVersions("1.0.0-a+9", "1.0.0-b+1")).toBeLessThan(0);
   });
 });
 
@@ -1517,6 +1641,12 @@ describe("readCodexPlugin의 구성", () => {
     const d = cache("m", "d", "1.0.0");
     await manifest(d, { name: "d" });
     expect((await readCodexPlugin(home, "d@m")).skillRoots).toEqual([]);
+    // 글자 아닌 항목이 섞인 목록은 Codex가 통째로 버린다(계획 리뷰 1차)
+    const e = cache("m", "e", "1.0.0");
+    await manifest(e, { name: "e", skills: ["./custom", 3] });
+    await mkdir(join(e, "skills"), { recursive: true });
+    await mkdir(join(e, "custom"), { recursive: true });
+    expect((await readCodexPlugin(home, "e@m")).skillRoots).toEqual([join(e, "skills")]);
   });
 
   it("MCP 정의는 인라인 묶음이거나, 매니페스트가 가리키는 파일이거나, 기본 .mcp.json이다", async () => {
@@ -1564,6 +1694,82 @@ describe("readCodexPlugin의 구성", () => {
     const read = await readCodexPlugin(home, "p@m");
     expect([read.skillRoots, read.mcpServers, read.namespace]).toEqual([[], [], null]);
   });
+
+  it("Codex가 버리는 서버 선언(전송을 정할 수 없음, 전송과 맞지 않는 열쇠, ema_auth)은 서버가 아니다. type 열쇠, null 칸, 묶음이 아니거나 빈 oauth는 Codex처럼 보지 않는다(계획 리뷰 1차)", async () => {
+    const dir = cache("m", "p", "1.0.0");
+    await manifest(dir, {
+      name: "p",
+      mcpServers: {
+        empty: {},
+        both: { command: "x", url: "https://e.test" },
+        stdioWithHeaders: { command: "x", http_headers: { H: "v" } },
+        stdioWithOauth: { command: "x", oauth: { client_id: "a" } },
+        ema: { url: "https://e.test", auth: "ema_auth" },
+        typed: { type: "stdio", command: "x" },
+        nulls: { command: "x", url: null, enabled: null },
+        http: { type: "http", url: "https://e.test", args: null },
+        emptyOauth: { command: "x", oauth: {} },
+        textOauth: { command: "x", oauth: "x" },
+      },
+    });
+    expect((await readCodexPlugin(home, "p@m")).mcpServers.map((s) => s.name)).toEqual(["emptyOauth", "http", "nulls", "textOauth", "typed"]);
+  });
+
+  it("인라인 묶음도 파일처럼 그 안의 mcpServers 묶음을 푼다(계획 리뷰 1차)", async () => {
+    const dir = cache("m", "p", "1.0.0");
+    await manifest(dir, { name: "p", mcpServers: { mcpServers: { s: { command: "x" } }, t: { command: "y" } } });
+    expect((await readCodexPlugin(home, "p@m")).mcpServers).toEqual([{ name: "s", definition: { command: "x" } }]);
+  });
+
+  it("기존 형식 매니페스트의 필드 꼴이 Codex가 받지 않는 꼴이면 맞지 않는 매니페스트다(계획 리뷰 1차)", async () => {
+    const cases: [string, unknown, string][] = [
+      ["version", { name: "a", version: 3 }, "unparsable"],
+      ["name-null", { name: null }, "unparsable"],
+      ["keywords", { name: "a", keywords: "x" }, "unparsable"],
+      ["keywords-null", { name: "a", keywords: null }, "unparsable"],
+      ["interface", { name: "a", interface: 3 }, "unparsable"],
+      ["apps", { name: "a", apps: [] }, "unparsable"],
+      ["description-null", { name: "a", description: null, version: null, interface: null }, "ok"],
+      ["paths-any", { name: "a", skills: 3, mcpServers: [1], hooks: true, extensions: { any: 1 } }, "ok"],
+    ];
+    for (const [name, value, status] of cases) {
+      await manifest(cache("m", name, "1.0.0"), value);
+      expect([name, (await readCodexPlugin(home, `${name}@m`)).manifest]).toEqual([name, status]);
+    }
+  });
+
+  it("뿌리의 plugin.json을 쓰는 형식(Agent Plugins)은 구성을 모르는 플러그인이다. 스킬과 MCP 정의를 읽지 않는다(계획 리뷰 1차)", async () => {
+    const dir = cache("m", "p", "1.0.0");
+    await put(join(dir, "plugin.json"), JSON.stringify({ $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "agent" }));
+    await put(join(dir, "mcp.json"), JSON.stringify({ mcpServers: { server: { type: "stdio", command: "x" } } }));
+    await put(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { other: { command: "y" } } }));
+    await mkdir(join(dir, "skills", "s"), { recursive: true });
+    const read = await readCodexPlugin(home, "p@m");
+    expect([read.manifest, read.namespace, read.compositionKnown, read.skillRoots, read.mcpServers]).toEqual(["ok", "agent", false, [], []]);
+  });
+
+  it("128단보다 깊은 매니페스트와 MCP 파일은 Codex의 JSON 해석기처럼 풀리지 않는 것으로 본다(계획 리뷰 1차)", async () => {
+    const deep = (n: number): string => `${'{"x":'.repeat(n)}0${"}".repeat(n)}`;
+    const a = cache("m", "a", "1.0.0");
+    await manifest(a, `{"name":"a","note":${deep(200)}}`);
+    expect((await readCodexPlugin(home, "a@m")).manifest).toBe("unparsable");
+    const b = cache("m", "b", "1.0.0");
+    await manifest(b, { name: "b" });
+    await put(join(b, ".mcp.json"), `{"mcpServers":{"server":{"command":"x","note":${deep(200)}}}}`);
+    const read = await readCodexPlugin(home, "b@m");
+    expect([read.mcpUnreadable, read.mcpServers]).toEqual([true, []]);
+  });
+
+  it("놓인 곳이나 매니페스트를 읽지 못했을 때만 구성을 모른다. 없는 것은 구성을 아는 것이다", async () => {
+    expect((await readCodexPlugin(home, "none@m")).compositionKnown).toBe(true);
+    const dir = cache("m", "p", "1.0.0");
+    await manifest(dir, { name: "p" });
+    expect((await readCodexPlugin(home, "p@m")).compositionKnown).toBe(true);
+    const original = fsModule.readText;
+    vi.spyOn(fsModule, "readText").mockImplementation(async (path) => (path === join(dir, ".codex-plugin", "plugin.json") ? { status: "unreadable" } : original(path)));
+    const read = await readCodexPlugin(home, "p@m");
+    expect([read.manifest, read.compositionKnown]).toEqual(["unreadable", false]);
+  });
 });
 ```
 
@@ -1580,6 +1786,7 @@ Expected: FAIL. `test/scan/codex-plugins.test.ts`가 `src/scan/codex-plugins.ts`
 // Codex 플러그인 하나를 읽는다. 설치 ID의 꼴, 놓인 곳(버전 폴더), 매니페스트, 구성 요소의 이름, 스킬을 찾는 폴더, MCP 정의를 Codex와 같은 규칙으로 본다. 설정에서 켜졌는지는 스캐너가 따로 본다(설계 「5단계 2부 계획 전 결정」 7·8번)
 import { join, relative, resolve, sep } from "node:path";
 import { lstat } from "node:fs/promises";
+import { codexServerShapeOk, exceedsLimits } from "./codex-config.ts";
 import { CODEX_MANIFEST_PATHS } from "./codex-skills.ts";
 import { entryInfo, listDir, readText } from "./fs.ts";
 import { isObject } from "./json.ts";
@@ -1606,6 +1813,11 @@ export interface CodexPluginRead {
   mcpServers: { name: string; definition: Json }[];
   /** MCP 정의가 든 파일이 있는데 읽지 못했거나 풀리지 않았다 */
   mcpUnreadable: boolean;
+  /**
+   * 구성을 안다. 놓인 곳이나 매니페스트가 있는데 읽지 못했으면 거짓이다. 뿌리의 plugin.json을 쓰는 형식(Agent Plugins)도 거짓이다. 그 형식은 스킬과 MCP 정의를
+   * 다른 자리와 다른 꼴로 두고(mcp.json, 전용 스키마) 첫 버전은 따라 하지 않는다(계획 리뷰 1차)
+   */
+  compositionKnown: boolean;
 }
 
 const PLUGIN_NAME = /^[A-Za-z0-9_.-]+$/;
@@ -1647,7 +1859,33 @@ function cmpPre(a: string | undefined, b: string | undefined): number {
   return xs.length - ys.length;
 }
 
-/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer 꼴이면 SemVer의 차례이고(빌드 꼬리는 글자로), 아니면 글자의 차례다 */
+/**
+ * SemVer의 빌드 꼬리 차례(Codex가 쓰는 semver 1.0.27의 BuildMetadata). 없는 쪽이 낮고, 식별자마다 숫자끼리는 앞의 0을 뗀 길이와 글자로(같으면 원래 길이로),
+ * 숫자는 글자보다 낮고, 글자끼리는 글자로, 앞이 같으면 짧은 쪽이 낮다(계획 리뷰 1차)
+ */
+function cmpBuild(a: string, b: string): number {
+  if (a === b) return 0;
+  const xs = a.split(".");
+  const ys = b.split(".");
+  for (let i = 0; i < xs.length; i++) {
+    if (i >= ys.length) return 1;
+    const x = xs[i]!;
+    const y = ys[i]!;
+    const xn = /^[0-9]*$/.test(x);
+    const yn = /^[0-9]*$/.test(y);
+    if (xn !== yn) return xn ? -1 : 1;
+    let order: number;
+    if (xn) {
+      const xv = x.replace(/^0+/, "");
+      const yv = y.replace(/^0+/, "");
+      order = xv.length - yv.length || cmpText(xv, yv) || x.length - y.length;
+    } else order = cmpText(x, y);
+    if (order !== 0) return Math.sign(order);
+  }
+  return ys.length > xs.length ? -1 : 0;
+}
+
+/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer 꼴이면 SemVer의 차례(빌드 꼬리까지)이고, 아니면 글자의 차례다 */
 export function compareCodexPluginVersions(a: string, b: string): number {
   const x = SEMVER.exec(a);
   const y = SEMVER.exec(b);
@@ -1656,7 +1894,7 @@ export function compareCodexPluginVersions(a: string, b: string): number {
     const order = cmpBig(x[i]!, y[i]!);
     if (order !== 0) return order;
   }
-  return cmpPre(x[4], y[4]) || cmpText(x[5] ?? "", y[5] ?? "");
+  return cmpPre(x[4], y[4]) || cmpBuild(x[5] ?? "", y[5] ?? "");
 }
 
 /** 놓인 곳. 버전 폴더는 이름이 맞는 일반 폴더(링크 아님)이고, local이 있으면 그것, 없으면 가장 높은 버전이다(공개 소스 active_plugin_version) */
@@ -1728,61 +1966,100 @@ function manifestPath(root: string, raw: unknown): string | null {
   return inside !== "" && !inside.startsWith("..") && !inside.startsWith(sep) ? resolved : null;
 }
 
-/** MCP 정의 묶음에서 서버를 꺼낸다. mcpServers가 묶음이면 그 안이고, 아니면 묶음 전체가 서버 이름의 묶음이다. 정의가 묶음이 아닌 서버는 버린다 */
+/**
+ * 플러그인의 서버 선언이 Codex가 받는 꼴인지. type 열쇠와, 묶음이 아니거나 빈 oauth는 Codex가 지우고 보며, 전송을 정할 수 없거나 ema_auth를 고른 선언은 버린다
+ * (공개 소스 codex-mcp/src/plugin_config.rs의 normalize_plugin_mcp_server와 normalize_plugin_mcp_server_value, 계획 리뷰 1차)
+ */
+function pluginServerOk(definition: Json): boolean {
+  const copy: Json = { ...definition };
+  delete copy.type;
+  if (!isObject(copy.oauth) || Object.keys(copy.oauth).length === 0) delete copy.oauth;
+  return codexServerShapeOk(copy) && copy.auth !== "ema_auth";
+}
+
+/** MCP 정의 묶음에서 서버를 꺼낸다. mcpServers가 묶음이면 그 안이고, 아니면 묶음 전체가 서버 이름의 묶음이다. Codex가 버리는 선언(묶음이 아니거나 꼴이 맞지 않는 것)은 버린다 */
 function serversOf(value: Json): { name: string; definition: Json }[] {
   const map = isObject(value.mcpServers) ? value.mcpServers : value;
   return Object.entries(map)
-    .filter((entry): entry is [string, Json] => isObject(entry[1]))
+    .filter((entry): entry is [string, Json] => isObject(entry[1]) && pluginServerOk(entry[1]))
     .map(([name, definition]) => ({ name, definition }))
     .sort((a, b) => cmpText(a.name, b.name));
 }
 
+/**
+ * 기존 형식 매니페스트의 필드 꼴. Codex는 serde로 풀어 이 꼴이 아니면 그 플러그인을 싣지 않는다(공개 소스 core-plugins/src/manifest.rs의 RawPluginManifest, 계획 리뷰 1차).
+ * name은 글자, version·description·apps는 글자나 null, keywords는 글자의 목록, interface는 묶음이나 null이다. interface 안쪽 칸의 종류는 보지 않는다
+ */
+function legacyManifestOk(manifest: Json): boolean {
+  const text = (value: unknown): boolean => value === undefined || typeof value === "string";
+  const optionalText = (value: unknown): boolean => value === undefined || value === null || typeof value === "string";
+  const texts = (value: unknown): boolean => value === undefined || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+  return (
+    text(manifest.name) &&
+    optionalText(manifest.version) &&
+    optionalText(manifest.description) &&
+    optionalText(manifest.apps) &&
+    texts(manifest.keywords) &&
+    (manifest.interface === undefined || manifest.interface === null || isObject(manifest.interface))
+  );
+}
+
 export async function readCodexPlugin(codexHome: string, id: string): Promise<CodexPluginRead> {
-  const out: CodexPluginRead = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false };
+  const out: CodexPluginRead = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
   if (!out.idValid) return out;
   const at = id.lastIndexOf("@");
   const located = await installRoot(join(codexHome, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
   out.install = located.install;
   out.root = located.root;
+  out.compositionKnown = located.install !== "unreadable";
   if (located.root === null) return out;
   const root = located.root;
   const found = await findManifest(root);
   if (found.status !== "found") {
     out.manifest = found.status;
+    out.compositionKnown = found.status !== "unreadable";
     return out;
   }
   const read = await readText(found.path);
   if (read.status !== "ok") {
     out.manifest = read.status;
+    out.compositionKnown = read.status !== "unreadable";
     return out;
   }
   let manifest: Json;
   try {
     const value = JSON.parse(read.text) as unknown;
-    if (!isObject(value)) throw new Error("묶음이 아니다");
+    // Codex의 JSON 해석기(serde_json)는 128단보다 깊은 문서를 거부한다
+    if (!isObject(value) || exceedsLimits(value)) throw new Error("묶음이 아니거나 너무 깊다");
     manifest = value;
   } catch {
     out.manifest = "unparsable";
     return out;
   }
-  const rawName = manifest.name ?? "";
-  if (typeof rawName !== "string") {
+  if (!found.agent && !legacyManifestOk(manifest)) {
     out.manifest = "unparsable";
     return out;
   }
+  const rawName = typeof manifest.name === "string" ? manifest.name : "";
   out.manifest = "ok";
   out.namespace = rawName.trim() === "" ? (root.split(/[\\/]/).pop() ?? rawName) : rawName;
+  if (found.agent) {
+    out.compositionKnown = false;
+    return out;
+  }
 
   // 스킬을 찾는 폴더. 매니페스트의 skills 가운데 맞는 경로이고, 없으면 skills/(폴더일 때)다. 매니페스트 폴더를 쓰는 형식이면 옮겨 둔 명령 스킬 폴더를 더한다(공개 소스 loader.rs의 plugin_skill_roots)
-  const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) ? manifest.skills : [];
+  // skills가 글자도 글자의 목록도 아니면(글자 아닌 항목이 섞인 목록 포함) Codex는 통째로 버린다(공개 소스 manifest.rs의 resolve_manifest_paths, 계획 리뷰 1차)
+  const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item) => typeof item === "string") ? manifest.skills : [];
   const declared = listed.map((raw) => manifestPath(root, raw)).filter((path): path is string => path !== null);
   const roots = declared.length > 0 ? declared : (await entryInfo(join(root, "skills"))).isDir ? [join(root, "skills")] : [];
-  if (!found.agent && (await entryInfo(join(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join(root, ".codex-plugin", "migrated-command-skills"));
+  if ((await entryInfo(join(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join(root, ".codex-plugin", "migrated-command-skills"));
   out.skillRoots = [...new Set(roots)].sort();
 
   // MCP 정의. 인라인 묶음이면 그것만 쓰고, 아니면 매니페스트가 가리키는 파일이나 기본 .mcp.json이다(공개 소스 loader.rs의 load_plugin_mcp_servers_from_manifest_with_format)
+  // 인라인 묶음도 파일과 같은 해석기를 거쳐 그 안의 mcpServers 묶음을 푼다(공개 소스 plugin_config.rs의 PluginMcpFile, 계획 리뷰 1차)
   if (isObject(manifest.mcpServers)) {
-    out.mcpServers = serversOf({ mcpServers: manifest.mcpServers });
+    out.mcpServers = serversOf(manifest.mcpServers);
     return out;
   }
   const declaredFile = manifestPath(root, manifest.mcpServers);
@@ -1796,7 +2073,7 @@ export async function readCodexPlugin(codexHome: string, id: string): Promise<Co
   }
   try {
     const value = JSON.parse(text.text) as unknown;
-    if (!isObject(value)) throw new Error("묶음이 아니다");
+    if (!isObject(value) || exceedsLimits(value)) throw new Error("묶음이 아니거나 너무 깊다");
     out.mcpServers = serversOf(value);
   } catch {
     out.mcpUnreadable = true;
@@ -1808,7 +2085,7 @@ export async function readCodexPlugin(codexHome: string, id: string): Promise<Co
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex-plugins.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 14개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 21개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -1832,7 +2109,7 @@ git commit -m "feat: Codex 플러그인의 놓인 곳과 구성을 읽음"
 「5단계 2부 계획 전 결정」 7번이다.
 
 - 사용자 층에만 있는 이름은 사용자 범위이고, 신뢰한 프로젝트 층에 있는 이름은 그 프로젝트의 범위다(사용자 층의 같은 이름을 덮은 것도 든다). 프로젝트 범위의 정의는 그 프로젝트 맥락에서 합친 것이다.
-- 한 맥락에서 같은 이름의 서버는 하나만 쓰인다. 설정의 서버가 플러그인의 서버를 이기고(꺼져 있어도 이긴다), 플러그인끼리는 ID의 사전순으로 앞선 것이 이기며, 이긴 등록이 꺼져 있으면 그 이름이 꺼진다(공개 소스 `codex-mcp/src/catalog.rs`의 `RegistrationPrecedence`). 플러그인 서버는 그 맥락의 `[plugins."<ID>".mcp_servers.<서버>]` 묶음이 있으면 그 `enabled`(없으면 참)가 선언을 대신한다(공개 소스 `apply_plugin_mcp_server_policy`). 서버 사실 하나는 어느 맥락에서든 이기고 켜져 있으면 켜진 것이다.
+- 한 맥락에서 같은 이름의 서버는 하나만 쓰인다. 설정의 서버가 플러그인의 서버를 이기고(꺼져 있어도 이긴다), 플러그인끼리는 ID의 사전순으로 앞선 것이 이기며, 이긴 등록이 꺼져 있으면 그 이름이 꺼진다(공개 소스 `codex-mcp/src/catalog.rs`의 `RegistrationPrecedence`). 플러그인 서버는 그 맥락의 `[plugins."<ID>".mcp_servers.<서버>]` 묶음이 있으면 그 `enabled`(없으면 참)가 선언을 대신한다(공개 소스 `apply_plugin_mcp_server_policy`). 그 묶음에 `ema_auth` 열쇠가 있으면 값과 상관없이 꺼진다(공개 소스 `config/src/types.rs`의 `PluginMcpServerConfig`, 계획 리뷰 1차). 서버 사실 하나는 어느 맥락에서든 이기고 켜져 있으면 켜진 것이다.
 - 정의의 지문은 정의에서 `enabled`를 뺀 전부를 `tomlToJson`으로 바꿔 2단계의 `definitionHash`(이 PC의 무작위 값을 섞은 HMAC)로 만든다. 켜고 끈 것은 정의가 아니라서 서버 끄기를 되돌려도 같은 설치로 이어진다. 기록의 이름 꼴은 이름 하나다(`McpToolCall`의 `server`는 설정의 이름이나 플러그인의 선언 이름 그대로다).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -1958,6 +2235,23 @@ describe("codexMcpFacts의 플러그인 서버", () => {
     expect(a.definitionHash).toBe(b.definitionHash);
     expect(a.definitionHash).not.toBeNull();
   });
+
+  it("맥락의 서버 묶음에 ema_auth가 있으면 값과 enabled에 상관없이 그 서버가 꺼진다(계획 리뷰 1차)", () => {
+    const user = doc('[plugins."p@m".mcp_servers.a]\nema_auth = false\n[plugins."p@m".mcp_servers.b]\nenabled = true\nema_auth = {}\n');
+    const facts = codexMcpFacts(input(user, [], ["p@m"], { "p@m": [server("a"), server("b"), server("c")] }));
+    expect(view(facts)).toEqual([
+      ["plugin", "a", null, "p@m", false],
+      ["plugin", "b", null, "p@m", false],
+      ["plugin", "c", null, "p@m", true],
+    ]);
+  });
+
+  it("지문을 만들 수 없을 만큼 깊은 정의(Codex가 받는 128단 안)는 지문이 없고 멈추지 않는다", () => {
+    let note: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) note = { x: note };
+    const facts = codexMcpFacts(input(doc(""), [], ["p@m"], { "p@m": [server("s", { command: "x", note })] }));
+    expect([facts.length, facts[0]!.definitionHash, facts[0]!.enabled]).toEqual([1, null, true]);
+  });
 });
 ```
 
@@ -2018,7 +2312,8 @@ function pluginServerOn(context: CodexMcpContext, id: string, name: string, decl
   const entry = plugins[id];
   const policies = isTable(entry) && isTable(entry.mcp_servers) ? entry.mcp_servers : {};
   const policy = policies[name];
-  return isTable(policy) ? policy.enabled !== false : declared.enabled !== false;
+  // 그 묶음에 ema_auth가 있으면 값과 상관없이 서버를 끈다(폐기된 인증 정책이 사라지며 켜지지 않게 한다. 공개 소스 config/src/types.rs의 has_unsupported_ema_auth, 계획 리뷰 1차)
+  return isTable(policy) ? policy.enabled !== false && !Object.hasOwn(policy, "ema_auth") : declared.enabled !== false;
 }
 
 export function codexMcpFacts(input: CodexMcpInput): Omit<McpFact, "installKey">[] {
@@ -2053,7 +2348,7 @@ export function codexMcpFacts(input: CodexMcpInput): Omit<McpFact, "installKey">
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex-mcp.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 8개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 10개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2080,7 +2375,8 @@ git commit -m "feat: Codex MCP 서버를 맥락마다 합침"
 
 「5단계 2부 계획 전 결정」 1·2·5~9번이다.
 
-- 맥락은 전역(사용자 층)과, 신뢰한 프로젝트마다(사용자 층 위에 그 프로젝트의 `.codex/config.toml`)다. 프로젝트 층은 TOML로 풀리는지만 보고, 값의 종류와 전송은 사용자 층과 합친 것으로 본다. 프로젝트 층은 사용자 층의 서버를 일부만 다시 적을 수 있고(`args`만), Codex도 합친 설정을 검사하기 때문이다. 합친 것이 맞지 않으면 그 프로젝트의 설정을 풀리지 않는 것으로 본다. `.codex`가 Codex 홈과 같은 폴더면 프로젝트 층이 아니다.
+- 맥락은 전역(사용자 층)과, 신뢰한 프로젝트마다(사용자 층 위에 그 프로젝트의 `.codex/config.toml`)다. 프로젝트 층은 TOML로 풀리는지만 보고, 값의 종류와 전송은 사용자 층과 합친 것으로 본다. 프로젝트 층은 사용자 층의 서버를 일부만 다시 적을 수 있고(`args`만), Codex도 합친 설정을 검사하기 때문이다. 합친 것이 맞지 않으면 그 프로젝트의 설정을 풀리지 않는 것으로 본다. `.codex`가 Codex 홈과 같은 폴더면 프로젝트 층이 아니다. 신뢰는 정규화하기 전의 뿌리로 본다(과제 2). 승인과 샌드박스는 맥락의 층 목록(사용자 층, 신뢰한 프로젝트면 그 위에 프로젝트 층)을 과제 2의 `safetyOf`에 넘긴다(계획 리뷰 1차).
+- 플러그인의 구성을 모르는지(`compositionKnown`)는 과제 5가 낸 것을 그대로 쓴다.
 - 지침은 과제 3이고, 신뢰하지 않는다고 적힌 프로젝트와 합친 한도가 0인 프로젝트는 프로젝트 지침을 읽지 않는다. fallback 이름은 그 맥락의 합친 설정의 것이다.
 - 스킬을 찾는 곳은 사용자 범위가 `<Codex 홈>/skills`(옛 위치)와 `<홈>/.agents/skills`이고, 저장소 범위가 프로젝트 뿌리의 `.agents/skills`와 `.codex/skills`(신뢰와 상관없다)이며, 플러그인 범위가 켜진 플러그인의 스킬 폴더다. 플러그인의 스킬은 안쪽의 매니페스트를 보지 않고 그 플러그인의 이름을 붙인다(공개 소스 `loader/namespace.rs`의 `with_provided_namespace`). 켜짐은 사용자 층의 `[[skills.config]]`만 차례대로 보아 맞는 마지막 항목의 값이다(`path`는 `SKILL.md`의 실제 경로로, `name`은 최종 이름 그대로 견준다. 공개 소스 `config/src/skills_config.rs`).
 - 플러그인은 사용자 층과 신뢰한 프로젝트 층의 항목마다 낸다. 맥락마다 설정으로 켜져 있고(`enabled`, 없으면 `[plugins._default]`의 `enabled`, 그것도 없으면 참. `[features]`의 `plugins`가 거짓이면 모두 꺼짐) Codex가 싣는 것(과제 5)이 그 맥락의 켜진 플러그인이다.
@@ -2093,6 +2389,7 @@ git commit -m "feat: Codex MCP 서버를 맥락마다 합침"
 
 ```ts
 // Codex 셋팅 스캐너를 임시 홈 폴더로 처음부터 끝까지 시험한다. 사용자 설정과 신뢰한 프로젝트 층, 승인과 샌드박스, 지침, 스킬을 찾는 곳과 켜짐, 플러그인과 그 스킬과 서버, MCP 서버, 문제와 그 위치, 그리고 값과 글이 결과에 남지 않는지(설계 10, 「5단계 2부 계획 전 결정」)
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
@@ -2213,7 +2510,7 @@ describe("scanCodexSetup", () => {
     expect(facts.globalInstructions.files.map((f) => f.path)).toEqual([join(codex, "AGENTS.md")]);
     expect(facts.globalInstructions.bytes).toBeGreaterThanOrEqual(200);
     expect(Object.keys(facts.globalMentions)).toEqual([normalizePath(proj)]);
-    expect(facts.safety).toEqual({ approval: "on-request", sandbox: "workspace-write", permissions: null });
+    expect(facts.safety).toEqual({ approval: "on-request", sandbox: "workspace-write", permissions: null, fullAccess: false });
   });
 
   it("프로젝트마다 신뢰, 설정 파일의 상태, 지침, 그 맥락의 승인과 샌드박스를 낸다", async () => {
@@ -2221,12 +2518,37 @@ describe("scanCodexSetup", () => {
     const p = projectFact(facts, proj);
     expect([p.trust, p.configStatus]).toEqual(["trusted", "ok"]);
     expect(p.instructions.files.map((f) => f.path)).toEqual([join(proj, "AGENTS.md")]);
-    expect(p.safety).toEqual({ approval: "never", sandbox: "danger-full-access", permissions: null });
+    expect(p.safety).toEqual({ approval: "never", sandbox: "danger-full-access", permissions: null, fullAccess: true });
     const o = projectFact(facts, other);
     expect([o.trust, o.configStatus, o.safety, o.instructions.files]).toEqual(["untrusted", null, null, []]);
     // 홈 폴더와 없어진 폴더는 읽지 않는다
     expect(facts.projects.map((x) => x.normRoot).sort()).toEqual([normalizePath(home), normalizePath(other), normalizePath(proj), normalizePath(join(root, "work", "deleted"))].sort());
     for (const path of [home, join(root, "work", "deleted")]) expect(projectFact(facts, path).configStatus).toBeNull();
+  });
+
+  it("뿌리를 Codex의 꼴로 적은 신뢰 열쇠가 있으면 사전순으로 앞선 다른 표기보다 그것을 본다(계획 리뷰 1차)", async () => {
+    const exact = process.platform === "win32" ? proj.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : proj;
+    const variant = process.platform === "win32" ? proj.toUpperCase() : proj.replace(/\/([^/]+)$/, "//$1");
+    expect([normalizePath(variant) === normalizePath(proj), variant < exact]).toEqual([true, true]);
+    const config = join(codex, "config.toml");
+    const before = await readFile(config, "utf8");
+    const entry = `[projects.${quoted(proj)}]\ntrust_level = "trusted"`;
+    expect(before.includes(entry)).toBe(true);
+    await put(config, before.replace(entry, `[projects.${quoted(variant)}]\ntrust_level = "untrusted"\n[projects.${quoted(exact)}]\ntrust_level = "trusted"`));
+    const facts = await scan();
+    expect(projectFact(facts, proj).trust).toBe("trusted");
+    expect(facts.mcpServers.filter((s) => s.scope === "project").map((s) => s.name)).toEqual(["ctx"]);
+  });
+
+  it("전면 해제는 층마다 마지막으로 적은 권한 방식으로 본다. 합친 설정만으로 보지 않는다(계획 리뷰 1차)", async () => {
+    const config = join(codex, "config.toml");
+    const before = await readFile(config, "utf8");
+    expect(before.includes('sandbox_mode = "workspace-write"')).toBe(true);
+    await put(config, before.replace('sandbox_mode = "workspace-write"', 'default_permissions = ":danger-full-access"'));
+    await put(join(proj, ".codex", "config.toml"), 'approval_policy = "never"\nsandbox_mode = "read-only"\n');
+    const facts = await scan();
+    expect(facts.safety).toEqual({ approval: "on-request", sandbox: null, permissions: "danger-full-access", fullAccess: true });
+    expect(projectFact(facts, proj).safety).toEqual({ approval: "never", sandbox: "read-only", permissions: "danger-full-access", fullAccess: false });
   });
 
   it("스킬을 찾는 곳과 켜짐을 Codex와 같게 본다", async () => {
@@ -2297,7 +2619,7 @@ describe("scanCodexSetup", () => {
     const facts = await scan();
     expect(facts.config).toBe("unparsable");
     expect(facts.problems.map((p) => [p.kind, p.owner, p.place])).toContainEqual(["unparsable", "user", "~/.codex/config.toml"]);
-    expect(facts.safety).toEqual({ approval: null, sandbox: null, permissions: null });
+    expect(facts.safety).toEqual({ approval: null, sandbox: null, permissions: null, fullAccess: false });
     expect(projectFact(facts, proj).trust).toBeNull();
     expect(facts.mcpServers).toEqual([]);
     expect(facts.plugins).toEqual([]);
@@ -2524,7 +2846,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
   const trustedLayers: { normRoot: string; layer: TomlTable }[] = [];
   const perProject = new Map<string, { status: FileStatus | null; merged: TomlTable; safety: CodexSafetyFact | null }>();
   for (const ref of active) {
-    const trust = trustOf(user, ref.normRoot, input.platform);
+    const trust = trustOf(user, ref.root, input.platform);
     if (trust !== "trusted" || (await sameAsHome(join(ref.root, ".codex")))) {
       perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
       continue;
@@ -2545,7 +2867,8 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     }
     if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
     const readable = status === "ok" || status === "missing";
-    perProject.set(ref.normRoot, { status, merged, safety: readable ? safetyOf(merged) : null });
+    // 승인과 샌드박스는 층의 차례로 본다(어느 층이 샌드박스 방식을 정했는지가 판정을 바꾼다. 계획 리뷰 1차)
+    perProject.set(ref.normRoot, { status, merged, safety: readable ? safetyOf(status === "ok" && layer !== null ? [user, layer] : [user]) : null });
     if (!readable) continue;
     contexts.push({ projectRoot: ref.normRoot, merged, plugins: [] });
     if (status === "ok" && layer !== null) trustedLayers.push({ normRoot: ref.normRoot, layer });
@@ -2631,7 +2954,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     install: plugin.install,
     manifest: plugin.manifest,
     namespace: plugin.namespace,
-    compositionKnown: plugin.install !== "unreadable" && plugin.manifest !== "unreadable",
+    compositionKnown: plugin.compositionKnown,
     mcpUnreadable: plugin.mcpUnreadable,
     skills: (pluginSkillNames.get(plugin.id) ?? []).sort(),
   }));
@@ -2640,7 +2963,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
   const globalRead = await readCodexGlobalInstructions(home, active);
   const projects: CodexProjectFact[] = [];
   for (const ref of refs) {
-    const trust = trustOf(user, ref.normRoot, input.platform);
+    const trust = trustOf(user, ref.root, input.platform);
     const known = perProject.get(ref.normRoot);
     if (known === undefined) {
       projects.push({ normRoot: ref.normRoot, trust, configStatus: null, instructions: emptyInstructionSet(), safety: null });
@@ -2663,7 +2986,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     config: userRead.status,
     globalInstructions: globalRead.set,
     globalMentions: globalRead.mentions,
-    safety: safetyOf(user),
+    safety: safetyOf([user]),
     skills: skills.map((skill) => ({ ...skill, installKey: codexSkillInstallKey(skill) })),
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: codexMcpInstallKey(server) })),
     plugins,
@@ -2831,7 +3154,7 @@ export interface CodexSetupFacts {
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex.test.ts test/scan/identity.test.ts test/scan/claude.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 74개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 76개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2916,7 +3239,7 @@ function facts(extra: Partial<CodexSetupFacts> = {}): CodexSetupFacts {
     config: "ok",
     globalInstructions: emptyInstructionSet(),
     globalMentions: {},
-    safety: { approval: null, sandbox: null, permissions: null },
+    safety: { approval: null, sandbox: null, permissions: null, fullAccess: false },
     skills: [],
     mcpServers: [],
     plugins: [plugin("a@m"), plugin("b@m")],
@@ -3150,7 +3473,7 @@ export function codexUnseenInUnreadablePlace(facts: CodexSetupFacts): (key: stri
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex-identity.test.ts test/scan/codex.test.ts test/scan/identity.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 40개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 42개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -3264,7 +3587,7 @@ console.log(
 - [ ] **Step 2: 전체 검사가 통과하는지 확인한다**
 
 Run: `npm run build && npm run check`
-Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,707개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
+Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,724개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
 
 - [ ] **Step 3: 커밋한다**
 
@@ -3293,7 +3616,7 @@ Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공�
 
 Run: `npx -y -p node@22 -- node --version` → `v22.`로 시작하는지 본다.
 Run: `npx -y -p node@22 -- node node_modules/vitest/vitest.mjs run`
-Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,707개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
+Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,724개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
 
 - [ ] **Step 3: 이 PC의 Codex 셋팅으로 실제로 돌려 본다**
 
@@ -3306,7 +3629,7 @@ Run: `node scripts/run-ts.mjs scripts/dev-codex-setup.ts`
 | 끝까지 도는지 | 예외 없이 끝나고 JSON 하나를 낸다. 스캐너가 걸린 시간(`seconds`)이 몇 초 안이다 |
 | 사용자 설정 | `config`가 `ok`이고(작성자 PC), 문제(`problems`)에 사용자 설정이 없다 |
 | 따로 센 수와 견주기 | 저장소 밖의 작은 스크립트가 같은 `config.toml`을 smol-toml로 풀어 센 `[mcp_servers]`의 이름 수가 사용자 범위 서버 수와 같고, `[plugins]`의 열쇠 수(`_default` 빼고)가 플러그인 수와 같다. 두 사용자 찾는 곳에서 따로 센 `SKILL.md`(숨김 폴더와 일곱째 단을 빼고, 폴더 링크를 따라간 것)의 수가 사용자 범위 스킬 위치의 수와 같다 |
-| 값과 글이 나가지 않는지 | 개발용 스크립트의 출력에 이름, 경로, 설정의 값이 없다. 저장소 밖 스크립트로 `scanCodexSetup`의 결과 전체를 글로 바꿔 사용자 `config.toml`에 적힌 환경 변수와 머리말의 값이 들어 있지 않은지 본다 |
+| 값과 글이 나가지 않는지 | 개발용 스크립트의 출력에 이름, 경로, 설정의 값이 없다. 저장소 밖 스크립트로 `scanCodexSetup`의 결과 전체를 글로 바꿔, 사용자 `config.toml`에 적힌 환경 변수와 머리말의 값이 경로를 담는 칸(`home`, `path`, `realPath`, `installKey`) 밖에 들어 있지 않은지 본다. 경로인 환경 변수 값(스크립트의 위치 같은 것)은 그 칸에 스킬이나 플러그인의 경로로 나올 수 있어 값이 샌 것이 아니다 |
 | 쓰지 않는지 | 돌리기 앞뒤로 Codex 홈의 `config.toml`과 사용자 스킬 폴더의 수정 시각이 그대로다 |
 
 작성자 PC에서 계획을 쓰며 돌린 결과는 위와 같았다(개수는 저장소 밖 작업 기록에 적었다). 이 PC의 `[[skills.config]]` 항목 하나는 `SKILL.md`가 아니라 스킬 폴더의 경로를 적고 있어, Codex와 같이 어느 스킬에도 맞지 않았다.
@@ -3397,10 +3720,10 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e64ee41`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~8은 시험만 놓고 돌리면 실패하고(과제 1~7은 새 모듈을 찾지 못해 불러오기에서, 과제 8은 정체 열쇠 시험 일곱과 스캐너 시험 하나가), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 9의 `npm run build && npm run check`는 시험 파일 105개·시험 1,707개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,706개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 이 복제본은 의존성을 연습 작업 폴더의 것에 이었으므로 과제 1의 `npm ci`는 건너뛰었다(실제 적용에서는 돌린다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e64ee41`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~8은 시험만 놓고 돌리면 실패하고(과제 1~7은 새 모듈을 찾지 못해 불러오기에서, 과제 8은 정체 열쇠 시험 일곱과 스캐너 시험 하나가), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 9의 `npm run build && npm run check`는 시험 파일 105개·시험 1,724개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,723개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 이 복제본은 의존성을 연습 작업 폴더의 것에 이었으므로 과제 1의 `npm ci`는 건너뛰었다(실제 적용에서는 돌린다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 여덟을 하나씩 꺼내 그 커밋이 더하거나 고친 시험 파일만 돌리면 모두 실패했고, 구현 커밋 아홉을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 시험이 두 가지 결함을 먼저 잡았다. 정체 열쇠 함수에 도구 인자를 덧붙이자 `map(skillInstallKey)`처럼 넘긴 곳에서 배열 번호가 그 인자에 들어가 Claude Code 설치의 열쇠가 바뀌었다(타입 검사가 잡았다. 기존 함수는 그대로 두고 Codex용 함수를 따로 뒀다). 프로젝트 층마다 값의 종류와 전송을 검사하자 사용자 층의 서버를 `args`만 다시 적은 신뢰한 프로젝트의 설정을 풀리지 않는 것으로 봤다(Codex는 합친 설정을 검사한다. 프로젝트 층은 사용자 층과 합친 것으로 보게 고쳤다).
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 여덟을 하나씩 꺼내 그 커밋이 더하거나 고친 시험 파일만 돌리면 모두 실패했고, 구현 커밋 아홉을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 시험이 두 가지 결함을 먼저 잡았다. 정체 열쇠 함수에 도구 인자를 덧붙이자 `map(skillInstallKey)`처럼 넘긴 곳에서 배열 번호가 그 인자에 들어가 Claude Code 설치의 열쇠가 바뀌었다(타입 검사가 잡았다. 기존 함수는 그대로 두고 Codex용 함수를 따로 뒀다). 프로젝트 층마다 값의 종류와 전송을 검사하자 사용자 층의 서버를 `args`만 다시 적은 신뢰한 프로젝트의 설정을 풀리지 않는 것으로 봤다(Codex는 합친 설정을 검사한다. 프로젝트 층은 사용자 층과 합친 것으로 보게 고쳤다). 계획 리뷰 1차에서 짝이 찾은 결함 열 건(합성 자료로 Codex 0.166.0과 스캐너를 나란히 돌려 재현한 것)과 주 세션이 공개 소스에서 더 찾은 세 건을 그 과제의 커밋 안에서 고친 뒤, 위의 확인을 모두 다시 돌렸다. 고친 곳마다 더한 시험은 고치기 전 구현에서 실패했다(설계 「5단계 2부 계획 리뷰 1차에서 보완」).
 
-이 PC의 Codex 셋팅(읽기만)으로 Task 10 Step 3을 미리 돌렸다. 예외 없이 끝났고 스캐너가 걸린 시간은 1초 안이었다. 사용자 설정이 풀렸고 문제와 읽지 못한 곳이 없었으며, 사용자·저장소·플러그인 범위의 스킬, 세 범위의 MCP 서버, 설정의 플러그인 항목이 모두 사실로 나왔다(개수는 저장소 밖 작업 기록에 적었다). 이 PC의 `[[skills.config]]` 항목 하나는 `SKILL.md`가 아니라 스킬 폴더의 경로를 적고 있어, Codex와 같이 어느 스킬에도 맞지 않았다.
+이 PC의 Codex 셋팅(읽기만)으로 Task 10 Step 3을 미리 돌렸다. 예외 없이 끝났고 스캐너가 걸린 시간은 1초 안이었다. 사용자 설정이 풀렸고 문제와 읽지 못한 곳이 없었으며, 사용자·저장소·플러그인 범위의 스킬, 세 범위의 MCP 서버, 설정의 플러그인 항목이 모두 사실로 나왔다(개수는 저장소 밖 작업 기록에 적었다). 이 PC의 `[[skills.config]]` 항목 하나는 `SKILL.md`가 아니라 스킬 폴더의 경로를 적고 있어, Codex와 같이 어느 스킬에도 맞지 않았다. 리뷰 1차의 수정 뒤에 다시 돌려도 같았다.
 
-확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 10 Step 2에서 한다. Codex를 실제로 돌려 판정(신뢰, 스킬을 찾는 꼴, 플러그인과 서버의 켜짐)을 맞춰 보지 않았다. 모두 Codex 0.166.0의 공개 소스로 정했다. macOS와 Linux의 Codex 홈, 시스템 설정, 관리 요구는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.
+확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 10 Step 2에서 한다. 주 세션은 Codex를 실제로 돌려 판정(신뢰, 스킬을 찾는 꼴, 플러그인과 서버의 켜짐)을 맞춰 보지 않았다. 모두 Codex 0.166.0의 공개 소스로 정했고, Codex와 나란히 돌린 것은 리뷰 1차의 짝이 결함을 재현한 합성 자료뿐이다. macOS와 Linux의 Codex 홈, 시스템 설정, 관리 요구는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.

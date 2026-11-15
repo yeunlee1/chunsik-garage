@@ -130,7 +130,8 @@ export function recordNotices(input: EvaluationInput, evaluation: Evaluation, co
   for (const tool of input.tools) {
     const id = tool.tool;
     const found = collected.find((item) => item.tool === id);
-    if (found !== undefined) {
+    // 읽지 못한 기록과 관측이 빠진 것의 Codex 몫은 4부가 넣는다. Codex 스킬의 관측은 늘 빠짐없지 않아 지금의 문장이 맞지 않는다(설계 「5단계 3부 계획 전 결정」 13번)
+    if (found !== undefined && id === "claude-code") {
       const { unreadableFiles, unreadableDirs } = found.read;
       if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText), dirs: [...unreadableDirs].sort(byText) });
       for (const metric of ["skills", "mcp"] as const) {

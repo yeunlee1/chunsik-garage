@@ -133,7 +133,8 @@ describe("scanCodexSetup", () => {
     expect([o.trust, o.configStatus, o.safety, o.instructions.files]).toEqual(["untrusted", null, null, []]);
     // 홈 폴더와 없어진 폴더는 읽지 않는다
     expect(facts.projects.map((x) => x.normRoot).sort()).toEqual([normalizePath(home), normalizePath(other), normalizePath(proj), normalizePath(join(root, "work", "deleted"))].sort());
-    for (const path of [home, join(root, "work", "deleted")]) expect(projectFact(facts, path).configStatus).toBeNull();
+    for (const path of [home, join(root, "work", "deleted")]) expect([projectFact(facts, path).configStatus, projectFact(facts, path).scanned]).toEqual([null, false]);
+    expect([p.scanned, o.scanned]).toEqual([true, true]);
   });
 
   it("뿌리를 Codex의 꼴로 적은 신뢰 열쇠가 있으면 사전순으로 앞선 다른 표기보다 그것을 본다(계획 리뷰 1차)", async () => {

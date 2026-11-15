@@ -219,6 +219,8 @@ export interface CodexPluginFact {
 /** Codex 프로젝트마다의 셋팅 사실. 프로젝트 목록과 이름은 Claude Code의 ProjectFact와 같고 정규화한 뿌리로 잇는다 */
 export interface CodexProjectFact {
   normRoot: string;
+  /** 스캐너가 셋팅을 읽은 프로젝트다(지금 PC에 있고 프로젝트로 보지 않는 폴더가 아니다). 거짓이면 그 프로젝트의 설치는 없어진 것이다 */
+  scanned: boolean;
   /** 사용자 설정에 적힌 신뢰(「5단계 2부 계획 전 결정」 2번) */
   trust: CodexTrust;
   /** 신뢰한 프로젝트의 .codex/config.toml의 읽기 상태. 사용자 층과 합친 것이 Codex가 시작하지 못하는 꼴이어도 unparsable이다. 신뢰한 프로젝트가 아니거나 읽지 않는 폴더면 null */

@@ -222,12 +222,12 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     const trust = trustOf(user, ref.root, input.platform);
     const known = perProject.get(ref.normRoot);
     if (known === undefined) {
-      projects.push({ normRoot: ref.normRoot, trust, configStatus: null, instructions: emptyInstructionSet(), safety: null });
+      projects.push({ normRoot: ref.normRoot, scanned: false, trust, configStatus: null, instructions: emptyInstructionSet(), safety: null });
       continue;
     }
     const skip = trust === "untrusted" || projectDocDisabled(known.merged);
     const instructions = skip ? emptyInstructionSet() : await readCodexProjectInstructions(ref.root, fallbackNames(known.merged, input.platform));
-    projects.push({ normRoot: ref.normRoot, trust, configStatus: known.status, instructions, safety: known.safety });
+    projects.push({ normRoot: ref.normRoot, scanned: true, trust, configStatus: known.status, instructions, safety: known.safety });
   }
 
   skills.sort((a, b) => cmp(a.name, b.name) || SKILL_SCOPE_ORDER[a.scope] - SKILL_SCOPE_ORDER[b.scope] || cmp(normalizePath(a.path), normalizePath(b.path)) || cmp(a.pluginId, b.pluginId));

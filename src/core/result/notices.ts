@@ -2,7 +2,7 @@
 import type { ObservationReason } from "../../adapters/claude/observation.ts";
 import { compareVersions, parseVersion } from "../../adapters/common/version.ts";
 import type { ToolId } from "../../adapters/types.ts";
-import type { FileStatus, SetupProblem } from "../../scan/types.ts";
+import type { CodexSetupFacts, FileStatus, ProjectFact, SetupProblem } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { CollectedCodex, CollectedTool } from "./tools.ts";
@@ -12,8 +12,21 @@ export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = {
 /** 점수 구간의 사람 요청 가운데 근거가 약한 것의 몫이 이것을 넘으면 알린다(설계 9.5). 정확히 이 값은 넘지 않은 것이다 */
 export const WEAK_REQUEST_SHARE = 0.1;
 
-/** 있는데 읽지 못한 셋팅이 무엇인지. 이 차례로 싣는다 */
-export type UnreadableSetup = "claude_json" | "user_settings" | "managed_settings" | "project_settings" | "local_settings" | "mcp_json" | "plugins_file" | "skill_dirs" | "instructions" | "hook_settings" | "skill_files";
+/** 있는데 읽지 못한 셋팅이 무엇인지. 이 차례로 싣는다. codex_config와 codex_project_config는 Codex의 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이다 */
+export type UnreadableSetup =
+  | "claude_json"
+  | "user_settings"
+  | "managed_settings"
+  | "project_settings"
+  | "local_settings"
+  | "mcp_json"
+  | "plugins_file"
+  | "codex_config"
+  | "codex_project_config"
+  | "skill_dirs"
+  | "instructions"
+  | "hook_settings"
+  | "skill_files";
 /** 켜져 있는 플러그인을 세지 않은 까닭. 이 차례로 싣는다(설계 10 「구성을 모르는 플러그인」, 11.3 E5·E6, 16.2) */
 export type UncountedPlugin = "composition_unknown" | "not_installed" | "skills_unreadable" | "mcp_unreadable" | "hooks_unreadable";
 
@@ -85,6 +98,43 @@ export function sortNotices(notices: readonly Notice[]): Notice[] {
 const unread = (status: FileStatus | null): boolean => status === "unparsable" || status === "unreadable";
 const sortedUnique = (values: readonly string[]): string[] => [...new Set(values)].sort(byText);
 
+/** 도구가 쓰는 파일(.claude.json)의 문제는 읽지 못한 셋팅으로 이미 알린다. 사용자가 고치는 셋팅의 문제는 S3이 센다 */
+function unscoredProblems(tool: ToolId, problems: readonly SetupProblem[]): Notice[] {
+  const unscored = problems.filter((problem) => problem.owner === "plugin" || problem.owner === "managed").map((problem) => ({ kind: problem.kind, path: problem.path }));
+  return unscored.length > 0 ? [{ kind: "setup_problems_unscored", tool, problems: unscored.sort((a, b) => byText(a.path, b.path) || byText(a.kind, b.kind)) }] : [];
+}
+
+/**
+ * Codex의 셋팅 쪽 알림. 읽지 못한 사용자 config.toml과 신뢰한 프로젝트의 설정, 스킬 폴더, 지침, SKILL.md, 켜져 있는데 세지 않은 플러그인, 점수에 세지 않는 플러그인 안의 문제다.
+ * Codex에는 설치 기록 파일과 플러그인 훅이 없다. 프로젝트의 경로는 입력 묶음의 프로젝트 목록에서 얻는다(설계 「5단계 4부 계획 전 결정」 5번)
+ */
+function codexSetupNotices(setup: CodexSetupFacts, projects: readonly ProjectFact[]): Notice[] {
+  const notices: Notice[] = [];
+  const rootOf = new Map(projects.map((project) => [project.normRoot, project.root]));
+  const unreadable: [UnreadableSetup, boolean, string[]][] = [
+    ["codex_config", unread(setup.config), []],
+    ["codex_project_config", false, setup.projects.filter((project) => project.trust === "trusted" && unread(project.configStatus)).map((project) => rootOf.get(project.normRoot) ?? project.normRoot)],
+    ["skill_dirs", false, setup.unreadableDirs],
+    ["instructions", false, [setup.globalInstructions, ...setup.projects.map((project) => project.instructions)].flatMap((set) => [...set.unreadable, ...set.unreadableDirs])],
+    ["skill_files", false, setup.skills.filter((skill) => !skill.readable).map((skill) => skill.path)],
+  ];
+  for (const [what, whole, targets] of unreadable) {
+    if (whole || targets.length > 0) notices.push({ kind: "setup_unreadable", tool: "codex", what, targets: sortedUnique(targets) });
+  }
+  const enabledIds = new Set(setup.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
+  const uncounted: [UncountedPlugin, string[]][] = [
+    // 설정으로 켰는데 놓인 곳이나 매니페스트를 읽지 못했거나 Agent Plugins 형식이라 구성을 모르는 것(설계 「5단계 2부 계획 전 결정」 8번)
+    ["composition_unknown", setup.plugins.filter((plugin) => plugin.configured && !plugin.compositionKnown).map((plugin) => plugin.id)],
+    ["skills_unreadable", setup.unreadableSkillPlaces.plugins.filter((id) => enabledIds.has(id))],
+    ["mcp_unreadable", setup.plugins.filter((plugin) => plugin.enabled && plugin.mcpUnreadable).map((plugin) => plugin.id)],
+  ];
+  for (const [why, plugins] of uncounted) {
+    if (plugins.length > 0) notices.push({ kind: "plugins_uncounted", tool: "codex", why, plugins: sortedUnique(plugins) });
+  }
+  notices.push(...unscoredProblems("codex", setup.problems));
+  return notices;
+}
+
 /**
  * 셋팅 쪽 알림과 실행 입력 알림. 있는데 읽지 못한 셋팅, 켜져 있는데 세지 않은 플러그인, 점수에 세지 않는 플러그인 안의 문제,
  * 지금 PC에 없는 프로젝트, 상태 파일이 깨져 새로 시작한 것, AQ를 내지 않은 것이다
@@ -95,8 +145,10 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
   if (run.stateBroken) notices.push({ kind: "state_reset" });
 
   for (const tool of input.tools) {
-    // Codex의 셋팅 쪽 알림은 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)
-    if (tool.tool !== "claude-code") continue;
+    if (tool.tool === "codex") {
+      notices.push(...codexSetupNotices(tool.setup, input.projects));
+      continue;
+    }
     const id = tool.tool;
     const setup = tool.setup;
     const unreadable: [UnreadableSetup, boolean, string[]][] = [
@@ -132,9 +184,7 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
       if (plugins.length > 0) notices.push({ kind: "plugins_uncounted", tool: id, why, plugins: sortedUnique(plugins) });
     }
 
-    // 도구가 쓰는 파일(.claude.json)의 문제는 읽지 못한 셋팅으로 이미 알린다. 사용자가 고치는 셋팅의 문제는 S3이 센다
-    const problems = setup.problems.filter((problem) => problem.owner === "plugin" || problem.owner === "managed").map((problem) => ({ kind: problem.kind, path: problem.path }));
-    if (problems.length > 0) notices.push({ kind: "setup_problems_unscored", tool: id, problems: problems.sort((a, b) => byText(a.path, b.path) || byText(a.kind, b.kind)) });
+    notices.push(...unscoredProblems(id, setup.problems));
   }
 
   const gone = input.projects.filter((project) => !project.exists).map((project) => project.root);

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { NOTICE_KINDS, setupNotices } from "../../src/core/result/notices.ts";
-import { HOME, instructions, plugin, project, skill } from "../helpers/facts.ts";
+import { codexPlugin, codexProject, HOME, instructions, plugin, project, skill } from "../helpers/facts.ts";
 import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const enough = Array.from({ length: 3 }, (_, index) => ({ days: { [`2026-11-1${index}`]: { responses: 3, humanRequests: 10 } } }));
@@ -11,12 +11,65 @@ const noticesOf = (tool: ClaudeToolInput, run = { stateBroken: false }) => {
   return setupNotices(input, evaluate(input), run);
 };
 
-describe("셋팅 쪽 알림", () => {
-  it("Codex의 셋팅 쪽 알림은 아직 내지 않는다. 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)", () => {
-    const codex = codexTool({ sessions: enough, setup: { config: "unparsable", unreadableDirs: ["/home/u/.agents/skills"] } });
-    const input = evaluationInput([codex, claudeTool({ sessions: enough })]);
-    expect(setupNotices(input, evaluate(input), { stateBroken: false }).filter((notice) => "tool" in notice)).toEqual([]);
+describe("셋팅 쪽 알림의 Codex 몫(설계 「5단계 4부 계획 전 결정」 5번)", () => {
+  const codexNoticesOf = (setup: NonNullable<Parameters<typeof codexTool>[0]>["setup"], projects = [project("/work/a")]) => {
+    const input = evaluationInput([claudeTool({ sessions: enough, setup: { projects } }), codexTool({ sessions: enough, setup })]);
+    return setupNotices(input, evaluate(input), { stateBroken: false }).filter((notice) => "tool" in notice && notice.tool === "codex");
+  };
+
+  it("빠진 것이 없으면 알림이 없다", () => {
+    expect(codexNoticesOf({})).toEqual([]);
   });
+
+  it("읽지 못한 사용자 config.toml, 신뢰한 프로젝트의 설정, 스킬 폴더, 지침, SKILL.md를 나눠 알린다. 프로젝트의 대상은 그 프로젝트의 경로다", () => {
+    const notices = codexNoticesOf(
+      {
+        config: "unparsable",
+        projects: [codexProject("/work/a", { configStatus: "unreadable" }), codexProject("/work/b", { trust: "untrusted", configStatus: null })],
+        unreadableDirs: ["/h/.agents/skills/deep"],
+        globalInstructions: instructions({ unreadable: ["/h/.codex/AGENTS.md"] }),
+        skills: [skill("odd", { readable: false, path: "/h/.agents/skills/odd" })],
+      },
+      [project("/work/a"), project("/work/b")],
+    );
+    expect(notices).toEqual([
+      { kind: "setup_unreadable", tool: "codex", what: "codex_config", targets: [] },
+      { kind: "setup_unreadable", tool: "codex", what: "codex_project_config", targets: ["/work/a"] },
+      { kind: "setup_unreadable", tool: "codex", what: "skill_dirs", targets: ["/h/.agents/skills/deep"] },
+      { kind: "setup_unreadable", tool: "codex", what: "instructions", targets: ["/h/.codex/AGENTS.md"] },
+      { kind: "setup_unreadable", tool: "codex", what: "skill_files", targets: ["/h/.agents/skills/odd"] },
+    ]);
+  });
+
+  it("구성을 모르는 켜진 플러그인, 스킬 폴더를 읽지 못한 켜진 플러그인, MCP 정의를 읽지 못한 플러그인을 알린다. 설정으로 켜지 않은 것은 세지 않는다", () => {
+    const notices = codexNoticesOf({
+      plugins: [
+        codexPlugin("agent@m", { enabled: false, compositionKnown: false }),
+        codexPlugin("broken@m", { mcpUnreadable: true }),
+        codexPlugin("skills@m"),
+        codexPlugin("off@m", { configured: false, enabled: false, compositionKnown: false }),
+      ],
+      unreadableSkillPlaces: { user: false, projects: [], plugins: ["skills@m", "off@m"] },
+    });
+    expect(notices).toEqual([
+      { kind: "plugins_uncounted", tool: "codex", why: "composition_unknown", plugins: ["agent@m"] },
+      { kind: "plugins_uncounted", tool: "codex", why: "skills_unreadable", plugins: ["skills@m"] },
+      { kind: "plugins_uncounted", tool: "codex", why: "mcp_unreadable", plugins: ["broken@m"] },
+    ]);
+  });
+
+  it("Codex 플러그인 안의 문제는 점수에 세지 않는 문제로 알린다. 사용자가 고치는 문제는 S3이 센다", () => {
+    const notices = codexNoticesOf({
+      problems: [
+        { kind: "noFrontmatter", owner: "plugin", path: "/h/.codex/plugins/cache/m/p/1.0.0/skills/x", realPath: null, place: null },
+        { kind: "danglingLink", owner: "user", path: "/h/.agents/skills/y", realPath: null, place: "~/.agents/skills/y" },
+      ],
+    });
+    expect(notices).toEqual([{ kind: "setup_problems_unscored", tool: "codex", problems: [{ kind: "noFrontmatter", path: "/h/.codex/plugins/cache/m/p/1.0.0/skills/x" }] }]);
+  });
+});
+
+describe("셋팅 쪽 알림", () => {
   it("빠진 것이 없으면 알림이 없다", () => {
     expect(noticesOf({})).toEqual([]);
   });

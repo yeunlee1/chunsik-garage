@@ -53,6 +53,9 @@ describe("알림의 문장", () => {
     expect(noticeText(of("observation_incomplete"), "ko")).toBe("Claude Code의 스킬 사용 기록을 빠짐없이 읽지 못해(읽지 못한 파일, 너무 긴 줄) 안 쓰는 것을 판정하지 않았습니다.");
     expect(noticeText(of("setup_unreadable"), "ko")).toBe("Claude Code에서 읽지 못한 셋팅이 있습니다(프로젝트 설정 2곳). 읽은 것만으로 계산했습니다.");
     expect(noticeText({ kind: "setup_unreadable", tool: "claude-code", what: "claude_json", targets: [] }, "ko")).toBe("Claude Code에서 읽지 못한 셋팅이 있습니다(.claude.json). 읽은 것만으로 계산했습니다.");
+    expect(noticeText({ kind: "setup_unreadable", tool: "codex", what: "codex_config", targets: [] }, "ko")).toBe("Codex에서 읽지 못한 셋팅이 있습니다(config.toml). 읽은 것만으로 계산했습니다.");
+    expect(noticeText({ kind: "setup_unreadable", tool: "codex", what: "codex_project_config", targets: ["/secret/p"] }, "ko")).toBe("Codex에서 읽지 못한 셋팅이 있습니다(프로젝트의 config.toml 1곳). 읽은 것만으로 계산했습니다.");
+    expect(noticeText({ kind: "setup_unreadable", tool: "codex", what: "codex_project_config", targets: ["/secret/p"] }, "en")).toBe("Codex: some setup could not be read (project config.toml, 1 place). Only what was read is counted.");
     expect(noticeText(of("version_unverified"), "ko")).toBe("Claude Code 기록에 확인한 범위(2.1.220~2.1.322) 밖의 버전이 1개 있습니다. 읽을 수 있는 필드만으로 계산했습니다.");
     expect(noticeText(of("unclassified"), "ko")).toBe("Claude Code에 분류하지 못한 기록이 있습니다(압축 1개, 거절 표시 3개, 훅 첨부 4개).");
     expect(noticeText(of("unclassified"), "en")).toBe("Claude Code: some records could not be classified (1 compaction, 3 denial markers, 4 hook attachments).");

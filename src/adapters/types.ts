@@ -125,7 +125,7 @@ export interface SessionSummary {
   /** 알림에 쓰는 수. 모르는 종류의 훅 첨부는 세지 않고 종류별 수만 낸다(설계 9.5 「훅」) */
   notes: { syntheticResponses: number; responsesWithoutId: number; undatedLines: number; unknownHookKinds: Record<string, number> };
   /** Codex만. 기록 파일의 식별자, 정체 모름인 thread_source의 값(열쇠가 없으면 "(없음)"), 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭(대신 쓰지 않았으면 null)(설계 「5단계 계획 전 결정」 1·7번) */
-  codex?: { recordId: string; unknownThreadSource: string | null; idFallback: CodexIdFallback | null; unknownItemTypes: Record<string, number> };
+  codex?: { recordId: string; unknownThreadSource: string | null; idFallback: CodexIdFallback | null; unknownItemTypes: Record<string, number>; inheritedSkipped: { items: number; totals: number; responses: number }; baselineMissing: boolean };
 }
 
 export function emptyToolCounts(): ToolCounts {

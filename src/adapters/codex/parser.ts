@@ -1,6 +1,7 @@
 // Codex 세션 파일 하나를 줄마다 해석해 세션 요약을 만든다. 세션의 정체는 첫 줄 session_meta에서, 토큰은 옛 구간(token_count의 누적값 차분)과 새 구간(token_usage_record의 response_id)으로 가르고, 도구는 실행 층에서 이름별로 세되 턴마다 호출 층이 더 많으면 그 차이를 이름 모름으로 더한다. 사람 요청, 모델과 추론 강도, 압축, 끊은 턴, MCP 호출, 지침 크기도 센다(설계 9.2, 9.6, 9.7, 「5단계 계획 전 결정」 1·7번)
 import { UNKNOWN_TOOL } from "../claude/parser.ts";
 import { nameRecord } from "../common/canonical.ts";
+import { fnv1a64 } from "../common/hash.ts";
 import { localDateOfIso, type LocalDate } from "../common/dates.ts";
 import { maxVersion } from "../common/version.ts";
 import type { CodexIdFallback } from "../types.ts";
@@ -24,10 +25,20 @@ const CALL_TYPES: ReadonlySet<string> = new Set(["function_call", "custom_tool_c
 
 export const CODEX_PARSER_VERSION = 1;
 
+/** 기록 하나의 지문. 항목의 item.id, 호출 층의 call_id, 옛 구간의 누적값, 새 구간의 response_id를 해시로 둔다(원문은 되살릴 수 없다) */
+export interface CodexFingerprints {
+  itemIds: ReadonlySet<string>;
+  callIds: ReadonlySet<string>;
+  totals: ReadonlySet<string>;
+  responseIds: ReadonlySet<string>;
+}
+
 export interface CodexParserContext {
   /** 파일 이름 끝의 식별자. 첫 줄을 읽지 못하면 세션 ID로 대신 쓴다 */
   recordId: string;
   timeZone: string;
+  /** 뺄 지문. 이 기록이 앞부분을 이어받았을 수 있는 기록(하위 세션이면 부모 세션의 기록들, 같은 세션에 기록이 여럿이면 그보다 앞선 기록들)의 지문이다. 그 안에 있는 것은 이 기록의 것으로 세지 않는다. 없으면 다 센다(「5단계 계획 전 결정」 7번) */
+  inherited?: CodexFingerprints | null;
 }
 
 /** 사람이 연 것이 아니라고 Codex가 밝힌 thread_source(공개 소스의 ThreadSource). 하위 세션이다 */
@@ -62,6 +73,9 @@ function compareUsage(current: Usage, previous: Usage): Compare {
   if (KEYS.some((key) => current[key] < previous[key])) return "smaller";
   return KEYS.every((key) => current[key] === previous[key]) ? "equal" : "greater";
 }
+
+/** 누적값의 지문. 칸의 차례를 고정해 해시한다 */
+const totalPrint = (total: Usage): string => fnv1a64(KEYS.map((key) => total[key]).join("|"));
 
 /** 앞선 버전의 꼬리를 떼어 x.y.z로 맞춘다(0.140.0-alpha.19는 0.140.0). 꼴이 다르면 null이다 */
 function normalizeVersion(value: unknown): string | null {
@@ -105,6 +119,18 @@ export class CodexSessionParser {
   private readonly groupExec = new Map<LocalDate, number>();
   private readonly unknownItemTypes = nameRecord<number>();
   private instructionChars: { ascii: number; other: number } | null = null;
+  /** 자기 기록의 지문(이어받아 뺀 것도 넣는다. 손자 세션이 같은 앞부분을 다시 이어받을 수 있다) */
+  private readonly myItemIds = new Set<string>();
+  private readonly myCallIds = new Set<string>();
+  private readonly myTotals = new Set<string>();
+  private readonly myResponseIds = new Set<string>();
+  private readonly inheritedSkipped = { items: 0, totals: 0, responses: 0 };
+  /**
+   * 이어받아 뺀 강한 것(도구와 사람 요청의 항목, 호출, 누적값, 응답)의 마지막 줄 자리와, 뺄 지문을 받고 처음 센 옛 구간 누적값의 줄 자리. 뒤의 것이 앞의 것보다 앞이면
+   * 복사된 앞부분 안에서 뺄 지문에 없는 누적값을 센 것이라 기준을 찾지 못한 기록이다(「5단계 계획 전 결정」 7번)
+   */
+  private lastInheritedLine = -1;
+  private firstCountedOldLine = -1;
 
   constructor(private readonly ctx: CodexParserContext) {}
 
@@ -230,6 +256,15 @@ export class CodexSessionParser {
       return;
     }
     if (row.type === "response_item" && typeof payload.type === "string" && CALL_TYPES.has(payload.type)) {
+      const callId = str(payload.call_id);
+      if (callId !== null) {
+        const print = fnv1a64(callId);
+        this.myCallIds.add(print);
+        if (this.ctx.inherited?.callIds.has(print)) {
+          this.lastInheritedLine = this.lines;
+          return;
+        }
+      }
       const date = this.dateOf();
       if (date !== null) this.groupCalls.set(date, (this.groupCalls.get(date) ?? 0) + 1);
       return;
@@ -259,6 +294,16 @@ export class CodexSessionParser {
     if (item === null) return;
     const type = str(item.type);
     if (type === null) return;
+    const itemId = str(item.id);
+    if (itemId !== null) {
+      const print = fnv1a64(itemId);
+      this.myItemIds.add(print);
+      if (this.ctx.inherited?.itemIds.has(print)) {
+        this.inheritedSkipped.items++;
+        if (type === "UserMessage" || EXEC_TOOLS.has(type)) this.lastInheritedLine = this.lines;
+        return;
+      }
+    }
     if (type === "UserMessage") {
       const date = this.dateOf();
       if (date !== null) this.day(date).humanRequests++;
@@ -319,6 +364,14 @@ export class CodexSessionParser {
     if (total === null) return;
     const previous = this.lastOldTotal;
     this.lastOldTotal = total;
+    const print = totalPrint(total);
+    this.myTotals.add(print);
+    if (this.ctx.inherited?.totals.has(print)) {
+      this.inheritedSkipped.totals++;
+      this.lastInheritedLine = this.lines;
+      return;
+    }
+    if (this.ctx.inherited && this.firstCountedOldLine < 0 && (previous === null || compareUsage(total, previous) !== "equal")) this.firstCountedOldLine = this.lines;
     if (previous === null) return this.count(total);
     const relation = compareUsage(total, previous);
     if (relation === "equal") return;
@@ -336,6 +389,13 @@ export class CodexSessionParser {
     if (responseId !== null) {
       if (this.seenResponses.has(responseId)) return;
       this.seenResponses.add(responseId);
+      const print = fnv1a64(responseId);
+      this.myResponseIds.add(print);
+      if (this.ctx.inherited?.responseIds.has(print)) {
+        this.inheritedSkipped.responses++;
+        this.lastInheritedLine = this.lines;
+        return;
+      }
     }
     if (use === null) return;
     // 넘어가는 자리. 새 구간 첫 기록의 누적값이 옛 구간에서 마지막으로 센 것과 같으면 이미 센 응답이다(설계 9.6)
@@ -344,6 +404,11 @@ export class CodexSessionParser {
       if (thread !== null && compareUsage(thread, this.lastOldTotal) === "equal") return;
     }
     this.count(use);
+  }
+
+  /** 자기 기록의 지문. finish 뒤에 부른다 */
+  fingerprints(): CodexFingerprints {
+    return { itemIds: this.myItemIds, callIds: this.myCallIds, totals: this.myTotals, responseIds: this.myResponseIds };
   }
 
   /** 파일 끝의 줄바꿈 없는 조각을 받고 요약을 낸다. 조각이 풀리면 받아들이고, 안 풀리면 쓰는 중일 때만 끝 조각이고 아니면 깨진 줄이다(1단계와 같다) */
@@ -376,7 +441,7 @@ export class CodexSessionParser {
       missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: nameRecord<number>() },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord<number>() },
-      codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: this.unknownItemTypes },
+      codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: this.unknownItemTypes, inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine },
     };
   }
 }

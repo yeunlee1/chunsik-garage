@@ -1,5 +1,5 @@
 // 원본 파일이 없어진 캐시 항목을 점검 때 지우는 것을 시험한다. 원본이 있는 항목, 읽지 못한 항목, 이 도구가 쓰지 않은 것은 남기고 폴더 안으로 내려가지 않는다(설계 19.2, 20.1)
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
@@ -20,7 +20,8 @@ afterEach(async () => removeTemp(root));
 async function cached(name: string): Promise<{ log: string; entryName: string }> {
   const log = join(root, "logs", name);
   await put(log, "line\n");
-  const key = await cacheKeyFor({ path: log, normPath: normalizePath(log), size: 5, mtimeMs: 0 }, "claude-code@1", "UTC");
+  const info = await stat(log);
+  const key = (await cacheKeyFor({ path: log, normPath: normalizePath(log), size: info.size, mtimeMs: info.mtimeMs }, "claude-code@1", "UTC"))!;
   const toolDir = join(dir, "cache", "claude-code");
   const before = new Set(await readdir(toolDir).catch(() => [] as string[]));
   await storeCached(toolDir, { key, summary: parseLines([]), bytesRead: 5 });

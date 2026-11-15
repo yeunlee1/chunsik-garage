@@ -22,7 +22,8 @@ type SwapAttr = Exclude<(typeof SWAP_TARGETS)[number], "text" | "value">;
 
 /** 날짜별 응답 수의 진하기(적음에서 많음). 색각 이상 검증을 통과한 자료 색이다(설계 13.2) */
 const RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"] as const;
-const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6" };
+// Codex 색은 결과 화면에 Codex를 넣는 5단계 3부에서 색 검증과 함께 확정한다(파랑과 색각 이상에서도 구분되는 주황을 임시로 둔다)
+const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a" };
 const REPO = "chunsik-garage";
 
 /** 글과 속성 값을 HTML에 그대로 넣을 수 있게 바꾼다 */

@@ -17,8 +17,10 @@ export interface ReadOutcome {
   bytesRead: number;
   /** 파일 끝의 줄바꿈 없는 조각. 없거나 상한을 넘었으면 null이다. */
   tail: string | null;
-  /** 읽는 동안 크기나 수정 시각이 바뀌었거나, 수정 시각이 평가 시각에서 2초 안쪽이다. */
+  /** 읽는 동안 크기나 수정 시각이 바뀌었거나, 연 크기까지 다 읽기 전에 파일이 끝났거나(그 뒤 되돌아와도), 수정 시각이 평가 시각에서 2초 안쪽이다. */
   inProgress: boolean;
+  /** 연 크기까지 다 읽기 전에 파일이 끝났다(읽는 동안 줄었다). 그 뒤 크기와 수정 시각이 되돌아왔어도 참이고, 앞부분만 읽은 것이다. */
+  endedEarly: boolean;
 }
 
 export interface ReadOptions {
@@ -33,28 +35,20 @@ function decode(buffer: Buffer, start: number, end: number): string {
   return buffer.toString("utf8", start, end > start && buffer[end - 1] === 0x0d ? end - 1 : end);
 }
 
-export async function readLines(path: string, nowMs: number, sink: LineSink, options: ReadOptions = {}): Promise<ReadOutcome> {
-  const maxLine = options.maxLineBytes ?? MAX_LINE_BYTES;
-  const chunkSize = options.chunkBytes ?? 1024 * 1024;
-  const handle = await open(path, "r");
-  try {
-    const opened = await handle.stat();
-    const sizeAtOpen = opened.size;
-    const mtimeMsAtOpen = opened.mtimeMs;
-    if (options.afterOpen) await options.afterOpen();
+/** 조각을 차례로 받아 줄로 나눈다. 파일에서 읽은 조각과 압축을 푼 조각이 같이 쓴다 */
+export interface LineSplitter {
+  push(view: Buffer): void;
+  /** 끝의 줄바꿈 없는 조각. 없거나 상한을 넘었으면 null이다. 상한을 넘은 끝 줄은 여기서 센다 */
+  finish(): string | null;
+}
 
-    const buffer = Buffer.allocUnsafe(chunkSize);
-    // 읽은 조각을 넘는 줄만 여기에 모은다. 필요할 때 두 배씩, 상한까지만 키우고 파일 하나 동안 다시 쓴다.
-    let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
-    let carryBytes = 0;
-    let skipping = false; // 상한을 넘은 줄의 나머지를 줄바꿈까지 버리는 중이다
-    let position = 0;
-
-    while (position < sizeAtOpen) {
-      const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
-      if (bytesRead === 0) break;
-      position += bytesRead;
-      const view = buffer.subarray(0, bytesRead);
+export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES): LineSplitter {
+  // 읽은 조각을 넘는 줄만 여기에 모은다. 필요할 때 두 배씩, 상한까지만 키우고 파일 하나 동안 다시 쓴다.
+  let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
+  let carryBytes = 0;
+  let skipping = false; // 상한을 넘은 줄의 나머지를 줄바꿈까지 버리는 중이다
+  return {
+    push(view: Buffer): void {
       let start = 0;
       for (;;) {
         const newline = view.indexOf(0x0a, start);
@@ -88,16 +82,45 @@ export async function readLines(path: string, nowMs: number, sink: LineSink, opt
         carryBytes = 0;
         start = newline + 1;
       }
+    },
+    finish(): string | null {
+      if (skipping) {
+        sink.tooLong();
+        return null;
+      }
+      return carryBytes > 0 ? decode(carry, 0, carryBytes) : null;
+    },
+  };
+}
+
+export async function readLines(path: string, nowMs: number, sink: LineSink, options: ReadOptions = {}): Promise<ReadOutcome> {
+  const maxLine = options.maxLineBytes ?? MAX_LINE_BYTES;
+  const chunkSize = options.chunkBytes ?? 1024 * 1024;
+  const handle = await open(path, "r");
+  try {
+    const opened = await handle.stat();
+    const sizeAtOpen = opened.size;
+    const mtimeMsAtOpen = opened.mtimeMs;
+    if (options.afterOpen) await options.afterOpen();
+
+    const buffer = Buffer.allocUnsafe(chunkSize);
+    const splitter = lineSplitter(sink, maxLine);
+    let position = 0;
+
+    while (position < sizeAtOpen) {
+      const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
+      if (bytesRead === 0) break;
+      position += bytesRead;
+      splitter.push(buffer.subarray(0, bytesRead));
     }
 
-    let tail: string | null = null;
-    if (skipping) sink.tooLong();
-    else if (carryBytes > 0) tail = decode(carry, 0, carryBytes);
+    const tail = splitter.finish();
 
     const after = await stat(path);
     const inProgress =
       after.size !== sizeAtOpen || after.mtimeMs !== mtimeMsAtOpen || nowMs - mtimeMsAtOpen < IN_PROGRESS_WINDOW_MS;
-    return { sizeAtOpen, mtimeMsAtOpen, bytesRead: position, tail, inProgress };
+    // 연 크기까지 다 읽기 전에 파일이 끝났으면(읽는 동안 줄었으면) 그 뒤 크기와 수정 시각이 되돌아와도 진행 중이고, 앞부분만 읽은 것이다
+    return { sizeAtOpen, mtimeMsAtOpen, bytesRead: position, tail, inProgress: inProgress || position < sizeAtOpen, endedEarly: position < sizeAtOpen };
   } finally {
     await handle.close();
   }

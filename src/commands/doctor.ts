@@ -1,13 +1,16 @@
-// aq doctor. Node.js 버전, 압축 기록을 풀 수 있는지, Claude Code 기록 폴더, 상태 폴더에 쓸 수 있는지를 JSON으로 알린다(설계 6.3, 7.4)
+// aq doctor. Node.js 버전, 압축 기록을 풀 수 있는지, Claude Code와 Codex의 기록 폴더, 상태 폴더에 쓸 수 있는지를 JSON으로 알린다(설계 6.3, 7.4, 9.1, 9.2)
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as zlib from "node:zlib";
 import { claudeHome, listClaudeFiles } from "../adapters/claude/locate.ts";
+import { codexHome, groupCopies, listCodexFiles } from "../adapters/codex/locate.ts";
 
 export interface DoctorReport {
   node: { version: string; ok: boolean };
   zstd: boolean;
   claudeCode: { home: string; projectsFound: boolean; sessionFiles: number; unreadable: number };
+  /** 기록 파일은 같은 식별자의 사본을 하나로 센다. 압축본만 있는 기록은 zstd를 풀 수 있어야 읽는다. 읽지 못한 것은 목록을 읽지 못한 폴더와 크기를 보지 못한 파일이다(설계 9.1, 9.2, 「5단계 계획 전 결정」 2번) */
+  codex: { home: string; sessionsFound: boolean; recordFiles: number; compressedOnly: number; unreadable: number };
   state: { dir: string; writable: boolean };
 }
 
@@ -36,10 +39,20 @@ export async function doctor(input: {
 }): Promise<DoctorReport> {
   const home = claudeHome(input.env, input.homedir);
   const list = await listClaudeFiles(home, null);
+  const codex = codexHome(input.env, input.homedir);
+  const records = await listCodexFiles(codex, null);
+  const groups = groupCopies(records.files);
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),
     claudeCode: { home, projectsFound: list.projectsFound, sessionFiles: list.files.length, unreadable: list.unreadableDirs.length + list.unreadableFiles.length },
+    codex: {
+      home: codex,
+      sessionsFound: records.sessionsFound,
+      recordFiles: groups.length,
+      compressedOnly: groups.filter((group) => group.copies.every((copy) => copy.compressed)).length,
+      unreadable: records.unreadableDirs.length + records.files.filter((file) => file.size === null).length,
+    },
     state: { dir: input.stateDir, writable: await canWrite(input.stateDir) },
   };
 }

@@ -2,7 +2,7 @@
 import { nameRecord, sortedRecord } from "./common/canonical.ts";
 import type { LocalDate } from "./common/dates.ts";
 
-export type ToolId = "claude-code";
+export type ToolId = "claude-code" | "codex";
 export type SessionKind = "main" | "sub";
 
 /** measured는 봄, proxy는 대신 봄(가까운 값), unsupported는 못 봄이다. 못 봄은 0이 아니다(설계 9.7) */
@@ -101,6 +101,9 @@ export interface MissingCounts {
   unconfirmedTypes: Record<string, number>;
 }
 
+/** Codex 요약에서 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭. 첫 줄을 읽지 못함(깨짐, 너무 김), 첫 줄이 session_meta가 아님, session_meta에 id가 없음, 줄이 하나도 없음(「5단계 계획 전 결정」 7번) */
+export type CodexIdFallback = "first-line-unreadable" | "first-line-not-meta" | "meta-without-id" | "no-lines";
+
 export interface SessionSummary {
   tool: ToolId;
   sessionId: string;
@@ -121,6 +124,8 @@ export interface SessionSummary {
   firstResponseIdHashes: string[];
   /** 알림에 쓰는 수. 모르는 종류의 훅 첨부는 세지 않고 종류별 수만 낸다(설계 9.5 「훅」) */
   notes: { syntheticResponses: number; responsesWithoutId: number; undatedLines: number; unknownHookKinds: Record<string, number> };
+  /** Codex만. 기록 파일의 식별자, 정체 모름인 thread_source의 값(열쇠가 없으면 "(없음)"), 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭(대신 쓰지 않았으면 null)(설계 「5단계 계획 전 결정」 1·7번) */
+  codex?: { recordId: string; unknownThreadSource: string | null; idFallback: CodexIdFallback | null; unknownItemTypes: Record<string, number>; inheritedSkipped: { items: number; totals: number; responses: number }; baselineMissing: boolean };
 }
 
 export function emptyToolCounts(): ToolCounts {
@@ -217,8 +222,47 @@ const DAY_SHAPE: Record<keyof DayCell, Shape> = {
 };
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** 날짜 칸 from의 수를 into에 더한다. 수는 더하고, 참거짓은 하나라도 참이면 참이며, 이름 목록은 합쳐 사전순으로 세운다. 안쪽 묶음은 새로 만들어 from과 나누지 않는다(같은 세션의 기록 파일을 합칠 때 쓴다) */
+export function addDayInto(into: DayCell, from: DayCell): void {
+  const target = into as unknown as Record<string, unknown>;
+  const source = from as unknown as Record<string, unknown>;
+  const addNumbers = (a: Record<string, number>, b: Record<string, number>): void => {
+    for (const [key, value] of Object.entries(b)) a[key] = (Object.hasOwn(a, key) ? a[key]! : 0) + value;
+  };
+  for (const key of Object.keys(DAY_SHAPE) as (keyof DayCell)[]) {
+    const a = target[key];
+    const b = source[key];
+    switch (DAY_SHAPE[key]) {
+      case "number":
+        target[key] = (a as number) + (b as number);
+        break;
+      case "boolean":
+        target[key] = (a as boolean) || (b as boolean);
+        break;
+      case "names":
+        target[key] = [...new Set([...(a as string[]), ...(b as string[])])].sort();
+        break;
+      case "numbers":
+      case "tokens":
+        addNumbers(a as Record<string, number>, b as Record<string, number>);
+        break;
+      case "tools":
+      case "skills":
+      case "hooks": {
+        const outer = a as Record<string, Record<string, number>>;
+        for (const [name, counts] of Object.entries(b as Record<string, Record<string, number>>)) {
+          if (Object.hasOwn(outer, name)) addNumbers(outer[name]!, counts);
+          else outer[name] = { ...counts };
+        }
+        break;
+      }
+    }
+  }
+}
+
 const isObject = (v: unknown): v is Json => v !== null && typeof v === "object" && !Array.isArray(v);
-const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+/** 요약의 숫자 칸은 모두 개수다. 음수, 소수, 안전한 정수 밖의 수는 손으로 고쳤거나 깨진 캐시라 되살리지 않는다 */
+const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 const isNullableString = (v: unknown): v is string | null => v === null || typeof v === "string";
 
 /** 정해진 열쇠만 가진 숫자 묶음을 그 차례로 만든다. 하나라도 숫자가 아니면 null이다. */
@@ -281,11 +325,30 @@ function reviveDay(v: unknown): DayCell | null {
   return out as unknown as DayCell;
 }
 
-/** 캐시에서 꺼낸 값이 세션 요약의 모양이면 같은 모양(열쇠 차례와 원형 없는 기록까지)으로 되살린다. 모양이 다르면 null이다. */
+const ID_FALLBACKS: ReadonlySet<string> = new Set(["first-line-unreadable", "first-line-not-meta", "meta-without-id", "no-lines"]);
+
+/** Codex 요약의 codex 칸을 같은 모양으로 되살린다. 모양이 다르면 null이다 */
+function reviveCodex(v: unknown): NonNullable<SessionSummary["codex"]> | null {
+  if (!isObject(v) || typeof v.recordId !== "string" || !isNullableString(v.unknownThreadSource) || typeof v.baselineMissing !== "boolean") return null;
+  if (v.idFallback !== null && !ID_FALLBACKS.has(v.idFallback as string)) return null;
+  const unknownItemTypes = named(v.unknownItemTypes, (x) => (isNumber(x) ? x : null));
+  const skipped = fixed(v.inheritedSkipped, ["items", "totals", "responses"]);
+  if (unknownItemTypes === null || skipped === null) return null;
+  return {
+    recordId: v.recordId,
+    unknownThreadSource: v.unknownThreadSource,
+    idFallback: v.idFallback as CodexIdFallback | null,
+    unknownItemTypes,
+    inheritedSkipped: { items: skipped.items!, totals: skipped.totals!, responses: skipped.responses! },
+    baselineMissing: v.baselineMissing,
+  };
+}
+
+/** 캐시에서 꺼낸 값이 세션 요약의 모양이면 같은 모양(열쇠 차례와 원형 없는 기록까지)으로 되살린다. Codex 요약은 codex 칸이 있어야 하고 Claude Code 요약에는 없어야 한다. 모양이 다르면 null이다. */
 export function reviveSummary(value: unknown): SessionSummary | null {
   if (!isObject(value)) return null;
   const v = value;
-  if (v.tool !== "claude-code" || typeof v.sessionId !== "string" || (v.kind !== "main" && v.kind !== "sub")) return null;
+  if ((v.tool !== "claude-code" && v.tool !== "codex") || typeof v.sessionId !== "string" || (v.kind !== "main" && v.kind !== "sub")) return null;
   if (!isNullableString(v.parentSessionId) || !isNullableString(v.cwd) || !isNullableString(v.version)) return null;
   if (!isNullableString(v.firstDate) || (v.firstDate !== null && !DATE_KEY.test(v.firstDate))) return null;
   if (!isObject(v.days)) return null;
@@ -306,6 +369,8 @@ export function reviveSummary(value: unknown): SessionSummary | null {
   const initialMcpServers = v.initialMcpServers === null ? null : names(v.initialMcpServers);
   if (missing === null || unconfirmedTypes === null || notes === null || unknownHookKinds === null || hashes === null) return null;
   if ((v.initialSkills !== null && initialSkills === null) || (v.initialMcpServers !== null && initialMcpServers === null)) return null;
+  const codex = v.tool === "codex" ? reviveCodex(v.codex) : undefined;
+  if (codex === null || (v.tool !== "codex" && v.codex !== undefined)) return null;
   return {
     tool: v.tool,
     sessionId: v.sessionId,
@@ -332,5 +397,6 @@ export function reviveSummary(value: unknown): SessionSummary | null {
       undatedLines: notes.undatedLines!,
       unknownHookKinds,
     },
+    ...(codex === undefined ? {} : { codex }),
   };
 }

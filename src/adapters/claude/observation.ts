@@ -35,7 +35,8 @@ export const SKILL_NON_SIGNAL_TYPES: ReadonlySet<string> = new Set([
 ]);
 export const MCP_NON_SIGNAL_TYPES: ReadonlySet<string> = new Set([...SKILL_NON_SIGNAL_TYPES, "user", "attachment"]);
 
-export type ObservationReason = "unreadable-files" | "too-long-lines" | "unconfirmed-pieces";
+/** not-recorded는 그 지표를 기록하지 않는 형식이라 빠짐없지 않은 것이다(9.8 표의 셋째 줄. Codex의 스킬 사용, 「5단계 4부 계획 전 결정」 3번). 기록을 읽어 찾는 까닭이 아니라 기록 읽기는 내지 않는다 */
+export type ObservationReason = "unreadable-files" | "too-long-lines" | "unconfirmed-pieces" | "not-recorded";
 
 export interface Observation {
   complete: boolean;

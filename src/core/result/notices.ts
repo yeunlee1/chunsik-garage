@@ -5,7 +5,7 @@ import type { ToolId } from "../../adapters/types.ts";
 import type { FileStatus, SetupProblem } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Withheld } from "../scoreboard.ts";
-import type { CollectedTool } from "./tools.ts";
+import type { CollectedCodex, CollectedTool } from "./tools.ts";
 
 /** 도구마다 기록의 해석 규약을 확인한 버전의 범위(설계 9.5). 새 버전의 기록을 확인하면 넓힌다. 이 밖의 버전은 읽을 수 있는 필드로 계산하고 알린다(설계 20.1) */
 export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
@@ -21,6 +21,8 @@ export type Notice =
   | { kind: "score_withheld"; reasons: Withheld[] }
   | { kind: "state_reset" }
   | { kind: "record_unreadable"; tool: ToolId; files: string[]; dirs: string[] }
+  | { kind: "record_skipped"; tool: ToolId; files: string[] }
+  | { kind: "record_partial"; tool: ToolId; files: string[] }
   | { kind: "observation_incomplete"; tool: ToolId; metric: "skills" | "mcp"; reasons: ObservationReason[] }
   | { kind: "setup_unreadable"; tool: ToolId; what: UnreadableSetup; targets: string[] }
   | { kind: "plugins_uncounted"; tool: ToolId; why: UncountedPlugin; plugins: string[] }
@@ -29,8 +31,15 @@ export type Notice =
   | { kind: "version_unverified"; tool: ToolId; versions: string[]; verified: { from: string; to: string } }
   | { kind: "weak_human_requests"; tool: ToolId; weak: number; total: number }
   | { kind: "overlapping_responses"; tool: ToolId; sessions: number }
+  | { kind: "unverified_inheritance"; tool: ToolId; sessions: number }
+  | { kind: "id_fallbacks"; tool: ToolId; counts: { why: string; count: number }[] }
   | { kind: "unclassified"; tool: ToolId; counts: { what: string; count: number }[] }
-  | { kind: "orphan_subsessions"; tool: ToolId; sessions: number };
+  | { kind: "orphan_subsessions"; tool: ToolId; sessions: number }
+  | { kind: "parent_record_missing"; tool: ToolId; sessions: number }
+  | { kind: "merged_sessions"; tool: ToolId; sessions: number }
+  | { kind: "unknown_mtime_sessions"; tool: ToolId; sessions: number }
+  | { kind: "skipped_copies"; tool: ToolId; count: number }
+  | { kind: "unnamed_files"; tool: ToolId; count: number };
 
 /**
  * 알림의 차례. 점수에 닿는 것, 읽지 못한 것, 확인하지 못한 것이다. 같은 종류는 도구 식별자의 차례(도구를 합친 알림이 먼저)이고,
@@ -40,6 +49,8 @@ export const NOTICE_KINDS: readonly Notice["kind"][] = [
   "score_withheld",
   "state_reset",
   "record_unreadable",
+  "record_skipped",
+  "record_partial",
   "observation_incomplete",
   "setup_unreadable",
   "plugins_uncounted",
@@ -48,8 +59,15 @@ export const NOTICE_KINDS: readonly Notice["kind"][] = [
   "version_unverified",
   "weak_human_requests",
   "overlapping_responses",
+  "unverified_inheritance",
+  "id_fallbacks",
   "unclassified",
   "orphan_subsessions",
+  "parent_record_missing",
+  "merged_sessions",
+  "unknown_mtime_sessions",
+  "skipped_copies",
+  "unnamed_files",
 ];
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -124,21 +142,41 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
   return sortNotices(notices);
 }
 
+/** Codex만 내는 기록 쪽 알림. 건너뛴 압축 파일과 일부만 읽은 파일, 기록을 묶으며 센 것이다. 종류의 차례는 sortNotices가 맞춘다(설계 「5단계 4부 계획 전 결정」 3번) */
+function codexRecordNotices(tool: ToolId, codex: CollectedCodex): Notice[] {
+  const notices: Notice[] = [];
+  if (codex.skippedFiles.length > 0) notices.push({ kind: "record_skipped", tool, files: [...codex.skippedFiles].sort(byText) });
+  if (codex.partialFiles.length > 0) notices.push({ kind: "record_partial", tool, files: [...codex.partialFiles].sort(byText) });
+  if (codex.unverifiedInheritance > 0) notices.push({ kind: "unverified_inheritance", tool, sessions: codex.unverifiedInheritance });
+  const fallbacks = Object.entries(codex.idFallbacks)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => byText(a[0], b[0]))
+    .map(([why, count]) => ({ why, count }));
+  if (fallbacks.length > 0) notices.push({ kind: "id_fallbacks", tool, counts: fallbacks });
+  if (codex.parentRecordMissing > 0) notices.push({ kind: "parent_record_missing", tool, sessions: codex.parentRecordMissing });
+  if (codex.mergedSessions > 0) notices.push({ kind: "merged_sessions", tool, sessions: codex.mergedSessions });
+  if (codex.unknownMtimeSessions > 0) notices.push({ kind: "unknown_mtime_sessions", tool, sessions: codex.unknownMtimeSessions });
+  if (codex.skippedCopies > 0) notices.push({ kind: "skipped_copies", tool, count: codex.skippedCopies });
+  if (codex.unnamedFiles > 0) notices.push({ kind: "unnamed_files", tool, count: codex.unnamedFiles });
+  return notices;
+}
+
 /** 기록 쪽 알림. 읽은 양과 같은 범위(수집 구간에 걸려 읽은 기록)를 보고, 근거가 약한 사람 요청만 점수 구간의 주 세션으로 본다 */
 export function recordNotices(input: EvaluationInput, evaluation: Evaluation, collected: readonly CollectedTool[]): Notice[] {
   const notices: Notice[] = [];
   for (const tool of input.tools) {
     const id = tool.tool;
     const found = collected.find((item) => item.tool === id);
-    // 읽지 못한 기록과 관측이 빠진 것의 Codex 몫은 4부가 넣는다. Codex 스킬의 관측은 늘 빠짐없지 않아 지금의 문장이 맞지 않는다(설계 「5단계 3부 계획 전 결정」 13번)
-    if (found !== undefined && id === "claude-code") {
+    if (found !== undefined) {
       const { unreadableFiles, unreadableDirs } = found.read;
       if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText), dirs: [...unreadableDirs].sort(byText) });
       for (const metric of ["skills", "mcp"] as const) {
         const observation = found.observation[metric];
-        if (!observation.complete) notices.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
+        // 그 지표를 기록하지 않는 형식(Codex의 스킬 사용)은 늘 빠짐없지 않다. 읽은 것의 문제가 아니라 알리지 않고, 규칙의 못 잰 이유가 알린다(설계 「5단계 4부 계획 전 결정」 3번)
+        if (!observation.complete && !observation.reasons.includes("not-recorded")) notices.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
       }
       if (found.overlappingSessions > 0) notices.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
+      if (found.codex !== undefined) notices.push(...codexRecordNotices(id, found.codex));
     }
 
     const verified = VERIFIED_VERSIONS[id];
@@ -167,6 +205,9 @@ export function recordNotices(input: EvaluationInput, evaluation: Evaluation, co
       if (count > 0) counts.set(what, (counts.get(what) ?? 0) + count);
     };
     for (const summary of tool.summaries) {
+      // Codex의 정체 모를 thread_source(세션마다 하나)와 실행 층 종류(종류마다의 수). 그 세션은 주 세션으로 셌다(설계 9.2, 9.6)
+      if (summary.codex?.unknownThreadSource != null) add(`thread_source:${summary.codex.unknownThreadSource}`, 1);
+      for (const [kind, count] of Object.entries(summary.codex?.unknownItemTypes ?? {})) add(`item:${kind}`, count);
       for (const [kind, count] of Object.entries(summary.notes.unknownHookKinds)) add(`hook:${kind}`, count);
       for (const day of Object.values(summary.days)) {
         for (const [kind, count] of Object.entries(day.unknownDenialKinds)) add(`denial:${kind}`, count);

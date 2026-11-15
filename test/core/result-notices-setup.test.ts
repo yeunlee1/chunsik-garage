@@ -121,6 +121,8 @@ describe("실행 입력 알림과 차례", () => {
       "score_withheld",
       "state_reset",
       "record_unreadable",
+      "record_skipped",
+      "record_partial",
       "observation_incomplete",
       "setup_unreadable",
       "plugins_uncounted",
@@ -129,8 +131,15 @@ describe("실행 입력 알림과 차례", () => {
       "version_unverified",
       "weak_human_requests",
       "overlapping_responses",
+      "unverified_inheritance",
+      "id_fallbacks",
       "unclassified",
       "orphan_subsessions",
+      "parent_record_missing",
+      "merged_sessions",
+      "unknown_mtime_sessions",
+      "skipped_copies",
+      "unnamed_files",
     ]);
   });
 });

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { resultCoverage } from "../../src/core/result/coverage.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
-import { claudeTool, evaluationInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput } from "../helpers/evaluation.ts";
 import type { SummaryInput } from "../helpers/summaries.ts";
 
 const read = (input: Partial<CollectedTool["read"]> = {}): CollectedTool["read"] => ({ files: 10, listedBytes: 1000, bytes: 1000, inProgress: 0, olderThanWindow: 0, unreadableFiles: [], unreadableFileBytes: 0, unknownSizeFiles: 0, unreadableDirs: [], ...input });
@@ -80,5 +80,37 @@ describe("읽은 양", () => {
 
   it("크기를 아는 파일이 없으면 바이트 기준은 빼고 파일 수 기준만 쓴다", () => {
     expect(coverageOf(collected({ read: read({ files: 2, listedBytes: 0, bytes: 0, unreadableFiles: ["/x/a.jsonl", "/x/b.jsonl"], unknownSizeFiles: 2 }) })).unreadableShare).toBe(1);
+  });
+});
+
+describe("Codex의 건너뛴 압축 파일과 일부만 읽은 파일(설계 「5단계 4부 계획 전 결정」 2번)", () => {
+  const extra = (input: Partial<NonNullable<CollectedTool["codex"]>> = {}): NonNullable<CollectedTool["codex"]> => ({
+    skippedFiles: [],
+    skippedFileBytes: 0,
+    partialFiles: [],
+    skippedCopies: 0,
+    unnamedFiles: 0,
+    parentRecordMissing: 0,
+    mergedSessions: 0,
+    unknownMtimeSessions: 0,
+    unverifiedInheritance: 0,
+    idFallbacks: {},
+    ...input,
+  });
+  const codexCoverageOf = (tool: CollectedTool) => resultCoverage(evaluationInput([codexTool()]), [tool])[0]!;
+
+  it("건너뛴 압축 파일은 읽지 못한 파일과 함께 비율의 분자에 들고 그 수를 싣는다", () => {
+    const coverage = codexCoverageOf(collected({ tool: "codex", read: read({ files: 10, listedBytes: 1000, unreadableFiles: ["/c/a.jsonl"], unreadableFileBytes: 50 }), codex: extra({ skippedFiles: ["/c/b.jsonl.zst", "/c/c.jsonl.zst"], skippedFileBytes: 100 }) }));
+    expect(coverage).toMatchObject({ tool: "codex", unreadableFiles: 1, skippedFiles: 2, partialFiles: 0, unreadableShare: 0.3, lowerBound: false, partial: true });
+  });
+
+  it("바이트 기준에도 건너뛴 압축 파일의 바이트가 든다", () => {
+    const coverage = codexCoverageOf(collected({ tool: "codex", read: read({ files: 20, listedBytes: 1000 }), codex: extra({ skippedFiles: ["/c/big.jsonl.zst"], skippedFileBytes: 500 }) }));
+    expect(coverage.unreadableShare).toBe(0.5);
+  });
+
+  it("일부만 읽은 파일은 분자에 넣지 않고 비율을 아래 경계로 보아 띠를 띄운다", () => {
+    const coverage = codexCoverageOf(collected({ tool: "codex", read: read({ files: 10, listedBytes: 1000 }), codex: extra({ partialFiles: ["/c/p.jsonl.zst"] }) }));
+    expect(coverage).toMatchObject({ partialFiles: 1, skippedFiles: 0, unreadableShare: 0, lowerBound: true, partial: true });
   });
 });

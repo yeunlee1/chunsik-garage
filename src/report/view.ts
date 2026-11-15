@@ -90,7 +90,8 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     round: run.saved ? run.round : null,
     score: { aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: [...result.score.withheld] },
     withheldText: withheld,
-    unreadable: result.notices.some((notice) => notice.kind === "record_unreadable"),
+    // 건너뛴 압축 파일도 읽지 못한 기록이다(설계 「5단계 계획 전 결정」 2번, 「5단계 4부 계획 전 결정」 2번)
+    unreadable: result.notices.some((notice) => notice.kind === "record_unreadable" || notice.kind === "record_skipped"),
     text: result.text,
     axes: result.axes,
     findings: result.findings.map((finding) => ({

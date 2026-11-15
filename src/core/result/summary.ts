@@ -76,6 +76,9 @@ function summaryNotice(notice: Notice): SummaryNotice {
       return { kind: notice.kind, tool, detail: null, count: null };
     case "record_unreadable":
       return { kind: notice.kind, tool, detail: null, count: notice.files.length + notice.dirs.length };
+    case "record_skipped":
+    case "record_partial":
+      return { kind: notice.kind, tool, detail: null, count: notice.files.length };
     case "observation_incomplete":
       return { kind: notice.kind, tool, detail: notice.metric, count: null };
     case "setup_unreadable":
@@ -92,9 +95,17 @@ function summaryNotice(notice: Notice): SummaryNotice {
       return { kind: notice.kind, tool, detail: null, count: notice.weak };
     case "overlapping_responses":
     case "orphan_subsessions":
+    case "unverified_inheritance":
+    case "parent_record_missing":
+    case "merged_sessions":
+    case "unknown_mtime_sessions":
       return { kind: notice.kind, tool, detail: null, count: notice.sessions };
     case "unclassified":
+    case "id_fallbacks":
       return { kind: notice.kind, tool, detail: null, count: notice.counts.reduce((sum, item) => sum + item.count, 0) };
+    case "skipped_copies":
+    case "unnamed_files":
+      return { kind: notice.kind, tool, detail: null, count: notice.count };
   }
 }
 

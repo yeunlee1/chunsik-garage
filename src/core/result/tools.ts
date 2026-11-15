@@ -5,6 +5,28 @@ import type { ToolId } from "../../adapters/types.ts";
 import type { ClaudeReadStats } from "../../collect/claude.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 
+/**
+ * Codex만 내는 수집 결과. 건너뛴 압축 파일과 일부만 읽은 파일(읽은 양)과, 기록을 묶으며 센 것(알림)이다. Claude Code에는 없다
+ * (설계 9.2, 9.8, 「5단계 계획 전 결정」 2·3·7번, 「5단계 4부 계획 전 결정」 2·3번)
+ */
+export interface CollectedCodex {
+  /** 그 Node.js가 zstd를 풀지 못해 열지 않은 정본과 그 바이트. 읽지 못한 비율의 분자에 든다 */
+  skippedFiles: string[];
+  skippedFileBytes: number;
+  /** 앞부분만 읽은 파일. 있으면 읽지 못한 비율은 아래 경계다 */
+  partialFiles: string[];
+  /** 정본이 아니라 읽지 않은 사본, 이름에서 식별자를 읽지 못한 파일 */
+  skippedCopies: number;
+  unnamedFiles: number;
+  /** 부모 기록을 하나도 읽지 못한 하위 세션, 기록 파일이 둘 이상이라 합친 세션, 수정 시각을 모르는 사본이 있던 세션, 이어받은 것을 확인하지 못한 세션의 수 */
+  parentRecordMissing: number;
+  mergedSessions: number;
+  unknownMtimeSessions: number;
+  unverifiedInheritance: number;
+  /** 세션 ID를 기록 파일의 식별자로 대신 쓴 기록의 까닭별 수 */
+  idFallbacks: Record<string, number>;
+}
+
 /** 수집이 도구마다 낸 것 가운데 평가 결과에 싣는 것. 캐시를 쓴 파일 수처럼 실행마다 다른 것은 넣지 않는다(설계 12.2, 12.3) */
 export interface CollectedTool {
   tool: ToolId;
@@ -17,6 +39,8 @@ export interface CollectedTool {
   read: Omit<ClaudeReadStats, "fromCache">;
   /** 스킬 사용과 MCP 호출의 관측이 빠짐없는지와 까닭(설계 9.8) */
   observation: { skills: Observation; mcp: Observation };
+  /** Codex만 내는 것. Claude Code에는 없다 */
+  codex?: CollectedCodex;
 }
 
 export interface ResultTool {

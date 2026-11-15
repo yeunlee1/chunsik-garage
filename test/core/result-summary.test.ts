@@ -62,11 +62,13 @@ describe("요약", () => {
     ]);
   });
 
-  it("알림 열세 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {
+  it("알림 스물두 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {
     const notices: Notice[] = [
       { kind: "score_withheld", reasons: ["too_few_days"] },
       { kind: "state_reset" },
       { kind: "record_unreadable", tool: "claude-code", files: ["/secret/a.jsonl"], dirs: ["/secret/d"] },
+      { kind: "record_skipped", tool: "codex", files: ["/secret/a.jsonl.zst", "/secret/b.jsonl.zst"] },
+      { kind: "record_partial", tool: "codex", files: ["/secret/p.jsonl.zst"] },
       { kind: "observation_incomplete", tool: "claude-code", metric: "mcp", reasons: ["unreadable-files"] },
       { kind: "setup_unreadable", tool: "claude-code", what: "claude_json", targets: [] },
       { kind: "setup_unreadable", tool: "claude-code", what: "mcp_json", targets: ["/secret/proj"] },
@@ -76,14 +78,23 @@ describe("요약", () => {
       { kind: "version_unverified", tool: "claude-code", versions: ["2.1.400"], verified: { from: "2.1.220", to: "2.1.322" } },
       { kind: "weak_human_requests", tool: "claude-code", weak: 3, total: 10 },
       { kind: "overlapping_responses", tool: "claude-code", sessions: 2 },
+      { kind: "unverified_inheritance", tool: "codex", sessions: 5 },
+      { kind: "id_fallbacks", tool: "codex", counts: [{ why: "no-lines", count: 2 }, { why: "meta-without-id", count: 1 }] },
       { kind: "unclassified", tool: "claude-code", counts: [{ what: "compaction", count: 1 }, { what: "denial:secret-kind", count: 2 }] },
       { kind: "orphan_subsessions", tool: "claude-code", sessions: 4 },
+      { kind: "parent_record_missing", tool: "codex", sessions: 6 },
+      { kind: "merged_sessions", tool: "codex", sessions: 7 },
+      { kind: "unknown_mtime_sessions", tool: "codex", sessions: 8 },
+      { kind: "skipped_copies", tool: "codex", count: 9 },
+      { kind: "unnamed_files", tool: "codex", count: 10 },
     ];
     const summary = checkupSummary({ ...baseResult(), notices: notices.map((notice) => ({ ...notice, text: { en: noticeText(notice, "en"), ko: noticeText(notice, "ko") } })) }, null);
     expect(summary.notices).toEqual([
       { kind: "score_withheld", tool: null, detail: null, count: null },
       { kind: "state_reset", tool: null, detail: null, count: null },
       { kind: "record_unreadable", tool: "claude-code", detail: null, count: 2 },
+      { kind: "record_skipped", tool: "codex", detail: null, count: 2 },
+      { kind: "record_partial", tool: "codex", detail: null, count: 1 },
       { kind: "observation_incomplete", tool: "claude-code", detail: "mcp", count: null },
       { kind: "setup_unreadable", tool: "claude-code", detail: "claude_json", count: null },
       { kind: "setup_unreadable", tool: "claude-code", detail: "mcp_json", count: 1 },
@@ -93,8 +104,15 @@ describe("요약", () => {
       { kind: "version_unverified", tool: "claude-code", detail: null, count: 1 },
       { kind: "weak_human_requests", tool: "claude-code", detail: null, count: 3 },
       { kind: "overlapping_responses", tool: "claude-code", detail: null, count: 2 },
+      { kind: "unverified_inheritance", tool: "codex", detail: null, count: 5 },
+      { kind: "id_fallbacks", tool: "codex", detail: null, count: 3 },
       { kind: "unclassified", tool: "claude-code", detail: null, count: 3 },
       { kind: "orphan_subsessions", tool: "claude-code", detail: null, count: 4 },
+      { kind: "parent_record_missing", tool: "codex", detail: null, count: 6 },
+      { kind: "merged_sessions", tool: "codex", detail: null, count: 7 },
+      { kind: "unknown_mtime_sessions", tool: "codex", detail: null, count: 8 },
+      { kind: "skipped_copies", tool: "codex", detail: null, count: 9 },
+      { kind: "unnamed_files", tool: "codex", detail: null, count: 10 },
     ]);
     expect(JSON.stringify(summary.notices)).not.toContain("secret");
   });

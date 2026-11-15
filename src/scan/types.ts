@@ -1,4 +1,5 @@
-// 셋팅 스캐너가 내는 Claude Code의 셋팅 사실. 숫자, 이름, 경로, 참거짓, 지문만 담고 설정의 값·지침의 글·훅 명령·권한 규칙의 글은 담지 않는다(설계 10, 12.1, 19.1)
+// 셋팅 스캐너가 내는 Claude Code와 Codex의 셋팅 사실. 숫자, 이름, 경로, 참거짓, 지문만 담고 설정의 값·지침의 글·훅 명령·권한 규칙의 글은 담지 않는다(설계 10, 12.1, 19.1, 「5단계 2부 계획 전 결정」 9번)
+import type { CodexSafetyFact, CodexTrust } from "./codex-settings.ts";
 import type { ShellGuard } from "./hooks.ts";
 import type { InstructionSet } from "./instructions.ts";
 import type { ComponentKind } from "./plugins.ts";
@@ -191,5 +192,62 @@ export interface ClaudeSetupFacts {
    * unreadableDirs의 폴더가 누구의 것인지. 사용자 스킬 폴더인지, 어느 프로젝트의 스킬 폴더인지(정규화한 뿌리), 어느 플러그인의 스킬을 찾는 폴더인지(ID)다.
    * 사용자와 프로젝트의 것은 F5와 E5를 못 재게 하고, 플러그인의 것은 그 플러그인의 스킬만 세지 않게 한다(설계 11.3)
    */
+  unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };
+}
+
+/** Codex 플러그인 하나. 설정(사용자 층과 신뢰한 프로젝트 층)에 항목이 있는 것마다 낸다(「5단계 2부 계획 전 결정」 8번) */
+export interface CodexPluginFact {
+  /** '<이름>@<마켓>' */
+  id: string;
+  /** 어느 맥락에서든 설정으로 켜져 있다(놓인 곳이나 매니페스트가 없어 Codex가 싣지 않아도) */
+  configured: boolean;
+  /** 어느 맥락에서든 설정으로 켜져 있고 Codex가 싣는다(설치 ID가 맞고, 놓인 곳과 맞는 매니페스트가 있다) */
+  enabled: boolean;
+  idValid: boolean;
+  install: "ok" | "missing" | "unreadable";
+  manifest: FileStatus;
+  /** 구성 요소의 이름. 매니페스트가 맞지 않으면 null */
+  namespace: string | null;
+  /** 놓인 곳과 매니페스트를 읽었다(없는 것을 확인한 것도 든다). 거짓이고 configured이면 구성을 모르는 켜진 플러그인이다 */
+  compositionKnown: boolean;
+  /** MCP 정의가 든 파일이 있는데 읽지 못했거나 풀리지 않았다. 그 플러그인의 서버는 세지 않았다 */
+  mcpUnreadable: boolean;
+  /** 이 플러그인의 스킬 위치의 이름(이름 차례). 켜진 플러그인만 훑는다 */
+  skills: string[];
+}
+
+/** Codex 프로젝트마다의 셋팅 사실. 프로젝트 목록과 이름은 Claude Code의 ProjectFact와 같고 정규화한 뿌리로 잇는다 */
+export interface CodexProjectFact {
+  normRoot: string;
+  /** 스캐너가 셋팅을 읽은 프로젝트다(지금 PC에 있고 프로젝트로 보지 않는 폴더가 아니다). 거짓이면 그 프로젝트의 설치는 없어진 것이다 */
+  scanned: boolean;
+  /** 사용자 설정에 적힌 신뢰(「5단계 2부 계획 전 결정」 2번) */
+  trust: CodexTrust;
+  /** 신뢰한 프로젝트의 .codex/config.toml의 읽기 상태. 사용자 층과 합친 것이 Codex가 시작하지 못하는 꼴이어도 unparsable이다. 신뢰한 프로젝트가 아니거나 읽지 않는 폴더면 null */
+  configStatus: FileStatus | null;
+  /** Codex의 프로젝트 지침. 신뢰하지 않는다고 적혔거나, 합친 한도가 0이거나, 읽지 않는 폴더면 빈 묶음이다 */
+  instructions: InstructionSet;
+  /** 신뢰한 프로젝트 맥락(사용자 층 위에 그 프로젝트 층)의 승인과 샌드박스. 신뢰한 프로젝트가 아니거나 그 설정을 읽지 못했으면 null */
+  safety: CodexSafetyFact | null;
+}
+
+/** 셋팅 스캐너가 내는 Codex의 셋팅 사실(「5단계 2부 계획 전 결정」 9번). 스킬·서버·문제·지침의 꼴은 Claude Code와 같다 */
+export interface CodexSetupFacts {
+  tool: "codex";
+  home: string;
+  /** 사용자 config.toml의 읽기 상태 */
+  config: FileStatus;
+  globalInstructions: InstructionSet;
+  /** 전역 지침에 목록의 프로젝트 경로나 이름이 나온 횟수(정규화한 뿌리 → 횟수) */
+  globalMentions: Record<string, number>;
+  /** 전역 맥락(사용자 층)의 승인과 샌드박스. 사용자 설정을 읽지 못했으면 모두 null이다 */
+  safety: CodexSafetyFact;
+  skills: SkillFact[];
+  mcpServers: McpFact[];
+  plugins: CodexPluginFact[];
+  projects: CodexProjectFact[];
+  problems: SetupProblem[];
+  /** 목록을 읽지 못했거나 상한에 닿아 다 보지 못한 스킬 폴더 */
+  unreadableDirs: string[];
   unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };
 }

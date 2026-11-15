@@ -31,7 +31,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `A4CBD780A89A8D50F2B41EC40D1D726C2FB3B1606B09ADC4C6F294130DE7E6C8`, 4,319줄)이다. 설계 끝에 「5단계 2부 계획 전 결정」(열 가지)을 더하고, 9.6과 9.7의 Codex 스킬 관측 문장(0.166.0은 실린 목록과 명시적으로 부른 스킬을 남기지만 빠짐없이 보지 못한다), 10절 표의 Codex 칸(`AGENTS.override.md`, 신뢰, `.codex/skills`, 사용자 층만 듣는 `[[skills.config]]`, 플러그인의 놓인 곳)과 TOML 문단, 11.3·16.2·18.1의 "Codex의 스캐너를 만들 때 정한다"는 문장(16.2의 "이름으로 다른 곳의 서버를 막지 않는다"는 틀려 고쳤다), 「5단계 계획 전 결정」 6번(`.codex/skills`), 25절과 27절(「Codex 셋팅 읽기의 한계」)을 고쳤다. 근거는 Codex 0.166.0의 공개 소스(`openai/codex`의 태그 `rust-v0.166.0`, 커밋 `6ff1e1c`)이고, 결정마다 소스의 파일을 적었다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `D31BDE1241D3686A330FB122A4C8E76C2DCBB57FFC013A3DAB40E4FFA8439F51`, 4,326줄)이다. 설계 끝에 「5단계 2부 계획 전 결정」(열 가지)을 더하고, 9.6과 9.7의 Codex 스킬 관측 문장(0.166.0은 실린 목록과 명시적으로 부른 스킬을 남기지만 빠짐없이 보지 못한다), 10절 표의 Codex 칸(`AGENTS.override.md`, 신뢰, `.codex/skills`, 사용자 층만 듣는 `[[skills.config]]`, 플러그인의 놓인 곳)과 TOML 문단, 11.3·16.2·18.1의 "Codex의 스캐너를 만들 때 정한다"는 문장(16.2의 "이름으로 다른 곳의 서버를 막지 않는다"는 틀려 고쳤다), 「5단계 계획 전 결정」 6번(`.codex/skills`), 25절과 27절(「Codex 셋팅 읽기의 한계」)을 고쳤다. 근거는 Codex 0.166.0의 공개 소스(`openai/codex`의 태그 `rust-v0.166.0`, 커밋 `6ff1e1c`)이고, 결정마다 소스의 파일을 적었다.
 
 ## 파일 구조
 
@@ -1496,7 +1496,7 @@ git commit -m "feat: Codex 스킬을 찾는 곳을 Codex와 같이 훑음"
 「5단계 2부 계획 전 결정」 7·8번이다. Codex에는 설치 기록 파일이 없다. 설정의 항목이 출발점이고, 켜졌는지는 과제 7이 맥락마다 본다.
 
 - 설치 ID는 마지막 `@`로 나눈 이름(ASCII 글자·숫자·`_`·`-`·`.`, 점은 앞뒤와 연달아 금지)과 마켓(ASCII 글자·숫자·`_`·`-`)이다(공개 소스 `core-plugin-common/src/plugin_id.rs`). 꼴이 틀리면 Codex가 싣지 않고 놓인 곳도 찾지 않는다.
-- 놓인 곳은 `<Codex 홈>/plugins/cache/<마켓>/<이름>/` 아래의 버전 폴더(이름이 ASCII 글자·숫자·`.`·`+`·`_`·`-`인 일반 폴더. 링크는 버전으로 보지 않는다) 가운데 `local`이 있으면 그것, 없으면 가장 높은 버전이다. 둘 다 SemVer 꼴이면 SemVer의 차례(pre-release와 빌드 꼬리 포함)이고 아니면 글자의 차례다(공개 소스 `core-plugin-common/src/installed.rs`). 빌드 꼬리의 차례는 Codex가 쓰는 `semver` 1.0.27의 `BuildMetadata`와 같다. 없는 쪽이 낮고, 식별자마다 숫자끼리는 앞의 0을 뗀 수로 견주고 같으면 원래 길이가 긴 쪽이 높으며(`0 < 00 < 1 < 01`), 숫자는 글자보다 낮고, 앞이 같으면 짧은 쪽이 낮다(계획 리뷰 1차).
+- 놓인 곳은 `<Codex 홈>/plugins/cache/<마켓>/<이름>/` 아래의 버전 폴더(이름이 ASCII 글자·숫자·`.`·`+`·`_`·`-`인 일반 폴더. 링크는 버전으로 보지 않는다) 가운데 `local`이 있으면 그것, 없으면 가장 높은 버전이다. 둘 다 SemVer 꼴이면 SemVer의 차례(pre-release와 빌드 꼬리 포함)이고 아니면 글자의 차례다(공개 소스 `core-plugin-common/src/installed.rs`). 빌드 꼬리의 차례는 Codex가 쓰는 `semver` 1.0.27의 `BuildMetadata`와 같다. 없는 쪽이 낮고, 식별자마다 숫자끼리는 앞의 0을 뗀 수로 견주고 같으면 원래 길이가 긴 쪽이 높으며(`0 < 00 < 1 < 01`), 숫자는 글자보다 낮고, 앞이 같으면 짧은 쪽이 낮다(계획 리뷰 1차). SemVer 꼴이어도 주·부·패치 가운데 u64를 넘는 수가 있으면 Codex의 `semver`가 풀지 못하므로(`parse.rs`의 `numeric_identifier`) SemVer가 아니라 글자로 견준다(구현 검증).
 - 매니페스트는 뿌리의 `plugin.json`(`$schema`가 `https://agent-plugins.org/schemas/`로 시작할 때만. 풀리지 않거나 아래의 깊이를 넘으면 다른 도구의 파일로 보고 다음 자리를 본다. 공개 소스 `utils/plugins/src/plugin_namespace.rs`의 `agent_plugin_schema_status`), `.codex-plugin/plugin.json`, `.claude-plugin/plugin.json`, `.cursor-plugin/plugin.json`의 차례다. 자리가 링크이거나 일반 파일이 아니면, 또는 매니페스트 폴더 자리가 폴더가 아니면 그 뒤를 보지 않고 없다고 본다(공개 소스 `find_plugin_manifest_path`). 풀리지 않거나 `name`이 글자가 아니면 맞지 않는 매니페스트다. 뿌리의 `plugin.json`이 아닌 기존 형식은 칸의 꼴도 Codex가 받는 꼴이어야 한다. `version`·`description`·`apps`는 글자나 `null`, `keywords`는 글자의 목록, `interface`는 묶음이나 `null`이다(공개 소스 `core-plugins/src/manifest.rs`의 `RawPluginManifest`. `interface` 안쪽 칸의 꼴과 깊이는 보지 않는다, 27절). `name`이 비면 뿌리 폴더(버전 폴더)의 이름이다.
 - JSON의 깊이는 Codex의 해석기(`serde_json` 1.0.149)에 맞춘다. 묶음과 목록이 128단 겹치면(맨 바깥을 첫 단으로 센다) 풀지 않고, Codex가 모르는 칸은 깊이를 보지 않고 건너뛴다(`ignore_value`). 그래서 MCP 파일과 뿌리의 `plugin.json`은 문서 전체로 세고, 기존 형식 매니페스트는 Codex가 푸는 칸(`keywords`, `skills`, `mcpServers`, `hooks`, `extensions`)만 맨 바깥과 함께 센다. 깊이는 과제 1의 `exceedsLimits`로 잰다(계획 리뷰 1차의 재확인).
 - 뿌리의 `plugin.json`을 쓰는 형식(Agent Plugins)은 이름만 읽고 구성을 모르는 플러그인(`compositionKnown` 거짓)으로 낸다. 그 형식은 MCP 정의를 다른 자리(`mcp.json`)와 다른 꼴로 두는데 첫 버전은 따라 하지 않는다(결정 8, 계획 리뷰 1차). 놓인 곳이나 매니페스트가 있는데 읽지 못한 것도 구성을 모른다. 없는 것은 구성을 아는 것이다(싣지 않는다는 것을 안다).
@@ -1561,6 +1561,14 @@ describe("compareCodexPluginVersions", () => {
     // pre-release가 먼저 견주어진다
     expect(compareCodexPluginVersions("1.0.0-a+9", "1.0.0-b+1")).toBeLessThan(0);
   });
+
+  it("주·부·패치가 u64를 넘으면 SemVer로 풀리지 않아 글자로 견준다(Codex의 semver는 넘치면 실패한다, 구현 검증)", () => {
+    // 18446744073709551615는 u64의 최댓값이다
+    expect(compareCodexPluginVersions("18446744073709551615.0.0", "999.0.0")).toBeGreaterThan(0);
+    expect(compareCodexPluginVersions("18446744073709551616.0.0", "999.0.0")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.18446744073709551616.0", "1.2.0")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.18446744073709551616", "1.0.2")).toBeLessThan(0);
+  });
 });
 
 describe("readCodexPlugin의 놓인 곳", () => {
@@ -1569,6 +1577,9 @@ describe("readCodexPlugin의 놓인 곳", () => {
     expect((await readCodexPlugin(home, "p@m")).root).toBe(cache("m", "p", "local"));
     for (const version of ["2.0.0", "10.0.0", "9.9.9"]) await manifest(cache("m", "q", version), { name: "q" });
     expect((await readCodexPlugin(home, "q@m")).root).toBe(cache("m", "q", "10.0.0"));
+    // u64를 넘는 주 버전은 SemVer가 아니라 글자로 견주어 999.0.0이 높다(구현 검증)
+    for (const version of ["18446744073709551616.0.0", "999.0.0"]) await manifest(cache("m", "r", version), { name: "r" });
+    expect((await readCodexPlugin(home, "r@m")).root).toBe(cache("m", "r", "999.0.0"));
   });
 
   it("이름이 맞지 않는 폴더, 파일, 폴더 링크는 버전으로 보지 않는다", async () => {
@@ -1930,10 +1941,18 @@ function cmpBuild(a: string, b: string): number {
   return ys.length > xs.length ? -1 : 0;
 }
 
-/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer 꼴이면 SemVer의 차례(빌드 꼬리까지)이고, 아니면 글자의 차례다 */
+const U64_MAX = 2n ** 64n - 1n;
+
+/** SemVer로 풀리는지. Codex가 쓰는 semver 1.0.27은 주·부·패치를 u64로 풀어 넘치면 실패한다(parse.rs의 numeric_identifier. 구현 검증) */
+function semverOf(text: string): RegExpExecArray | null {
+  const match = SEMVER.exec(text);
+  return match !== null && [match[1], match[2], match[3]].every((part) => BigInt(part!) <= U64_MAX) ? match : null;
+}
+
+/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer로 풀리면 SemVer의 차례(빌드 꼬리까지)이고, 아니면 글자의 차례다 */
 export function compareCodexPluginVersions(a: string, b: string): number {
-  const x = SEMVER.exec(a);
-  const y = SEMVER.exec(b);
+  const x = semverOf(a);
+  const y = semverOf(b);
   if (x === null || y === null) return cmpText(a, b);
   for (let i = 1; i <= 3; i++) {
     const order = cmpBig(x[i]!, y[i]!);
@@ -2137,7 +2156,7 @@ export async function readCodexPlugin(codexHome: string, id: string): Promise<Co
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/scan/codex-plugins.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 21개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 22개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -3639,7 +3658,7 @@ console.log(
 - [ ] **Step 2: 전체 검사가 통과하는지 확인한다**
 
 Run: `npm run build && npm run check`
-Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,724개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
+Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,725개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
 
 - [ ] **Step 3: 커밋한다**
 
@@ -3668,7 +3687,7 @@ Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공�
 
 Run: `npx -y -p node@22 -- node --version` → `v22.`로 시작하는지 본다.
 Run: `npx -y -p node@22 -- node node_modules/vitest/vitest.mjs run`
-Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,724개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
+Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,725개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
 
 - [ ] **Step 3: 이 PC의 Codex 셋팅으로 실제로 돌려 본다**
 
@@ -3772,9 +3791,9 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e64ee41`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~8은 시험만 놓고 돌리면 실패하고(과제 1~7은 새 모듈을 찾지 못해 불러오기에서, 과제 8은 정체 열쇠 시험 일곱과 스캐너 시험 하나가), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 9의 `npm run build && npm run check`는 시험 파일 105개·시험 1,724개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,723개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 이 복제본은 의존성을 연습 작업 폴더의 것에 이었으므로 과제 1의 `npm ci`는 건너뛰었다(실제 적용에서는 돌린다).
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`e64ee41`)에서 과제 1부터 9까지 차례대로 만들었다(Windows 11, Node.js 24.18). 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1~8은 시험만 놓고 돌리면 실패하고(과제 1~7은 새 모듈을 찾지 못해 불러오기에서, 과제 8은 정체 열쇠 시험 일곱과 스캐너 시험 하나가), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 9의 `npm run build && npm run check`는 시험 파일 105개·시험 1,725개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,724개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다. 이 복제본은 의존성을 연습 작업 폴더의 것에 이었으므로 과제 1의 `npm ci`는 건너뛰었다(실제 적용에서는 돌린다).
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 여덟을 하나씩 꺼내 그 커밋이 더하거나 고친 시험 파일만 돌리면 모두 실패했고, 구현 커밋 아홉을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 시험이 두 가지 결함을 먼저 잡았다. 정체 열쇠 함수에 도구 인자를 덧붙이자 `map(skillInstallKey)`처럼 넘긴 곳에서 배열 번호가 그 인자에 들어가 Claude Code 설치의 열쇠가 바뀌었다(타입 검사가 잡았다. 기존 함수는 그대로 두고 Codex용 함수를 따로 뒀다). 프로젝트 층마다 값의 종류와 전송을 검사하자 사용자 층의 서버를 `args`만 다시 적은 신뢰한 프로젝트의 설정을 풀리지 않는 것으로 봤다(Codex는 합친 설정을 검사한다. 프로젝트 층은 사용자 층과 합친 것으로 보게 고쳤다). 계획 리뷰 1차에서 짝이 찾은 결함 열 건(합성 자료로 Codex 0.166.0과 스캐너를 나란히 돌려 재현한 것)과 주 세션이 공개 소스에서 더 찾은 세 건을 그 과제의 커밋 안에서 고친 뒤, 위의 확인을 모두 다시 돌렸다. 고친 곳마다 더한 시험은 고치기 전 구현에서 실패했다(설계 「5단계 2부 계획 리뷰 1차에서 보완」). 같은 짝의 재확인에서 찾은 두 건(ASCII 밖 글자의 신뢰 열쇠, JSON 깊이의 경계)과 주 세션이 그 소스에서 더 찾은 하나(Codex가 모르는 칸은 깊이를 보지 않는다)도 같은 방법으로 고치고 다시 돌렸다(설계 「…리뷰 1차 재확인에서 보완」).
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 여덟을 하나씩 꺼내 그 커밋이 더하거나 고친 시험 파일만 돌리면 모두 실패했고, 구현 커밋 아홉을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 시험이 두 가지 결함을 먼저 잡았다. 정체 열쇠 함수에 도구 인자를 덧붙이자 `map(skillInstallKey)`처럼 넘긴 곳에서 배열 번호가 그 인자에 들어가 Claude Code 설치의 열쇠가 바뀌었다(타입 검사가 잡았다. 기존 함수는 그대로 두고 Codex용 함수를 따로 뒀다). 프로젝트 층마다 값의 종류와 전송을 검사하자 사용자 층의 서버를 `args`만 다시 적은 신뢰한 프로젝트의 설정을 풀리지 않는 것으로 봤다(Codex는 합친 설정을 검사한다. 프로젝트 층은 사용자 층과 합친 것으로 보게 고쳤다). 계획 리뷰 1차에서 짝이 찾은 결함 열 건(합성 자료로 Codex 0.166.0과 스캐너를 나란히 돌려 재현한 것)과 주 세션이 공개 소스에서 더 찾은 세 건을 그 과제의 커밋 안에서 고친 뒤, 위의 확인을 모두 다시 돌렸다. 고친 곳마다 더한 시험은 고치기 전 구현에서 실패했다(설계 「5단계 2부 계획 리뷰 1차에서 보완」). 같은 짝의 재확인에서 찾은 두 건(ASCII 밖 글자의 신뢰 열쇠, JSON 깊이의 경계)과 주 세션이 그 소스에서 더 찾은 하나(Codex가 모르는 칸은 깊이를 보지 않는다)도 같은 방법으로 고치고 다시 돌렸다(설계 「…리뷰 1차 재확인에서 보완」). 구현 브랜치의 짝 검증에서 찾은 한 건(u64를 넘는 버전 폴더)도 과제 5 안에서 고치고 다시 돌렸다(설계 「5단계 2부 구현 검증에서 보완」).
 
 이 PC의 Codex 셋팅(읽기만)으로 Task 10 Step 3을 미리 돌렸다. 예외 없이 끝났고 스캐너가 걸린 시간은 1초 안이었다. 사용자 설정이 풀렸고 문제와 읽지 못한 곳이 없었으며, 사용자·저장소·플러그인 범위의 스킬, 세 범위의 MCP 서버, 설정의 플러그인 항목이 모두 사실로 나왔다(개수는 저장소 밖 작업 기록에 적었다). 이 PC의 `[[skills.config]]` 항목 하나는 `SKILL.md`가 아니라 스킬 폴더의 경로를 적고 있어, Codex와 같이 어느 스킬에도 맞지 않았다. 리뷰 1차의 수정 뒤에 다시 돌려도 같았다.
 

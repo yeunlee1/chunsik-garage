@@ -1,18 +1,33 @@
-// 셋팅 사실에서 설치마다의 정체 열쇠를 만든다. 스킬은 (도구, 범위, 프로젝트, 이름, 링크를 푼 실제 경로), MCP 서버는 (도구, 범위, 프로젝트, 플러그인, 이름, 정의의 지문)이다. 정의의 지문이 없는 서버는 정체를 만들 수 없어 넣지 않는다(설계 11.3, 18.1)
+// 셋팅 사실에서 설치마다의 정체 열쇠를 만든다. 스킬은 (도구, 범위, 프로젝트, 이름, 링크를 푼 실제 경로), MCP 서버는 (도구, 범위, 프로젝트, 플러그인, 이름, 정의의 지문)이다. 정의의 지문이 없는 서버는 정체를 만들 수 없어 넣지 않는다(설계 11.3, 18.1, 「5단계 2부 계획 전 결정」 9번)
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { installKey } from "../state/observations.ts";
-import type { ClaudeSetupFacts, FileStatus, McpFact, SkillFact } from "./types.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, FileStatus, McpFact, SkillFact } from "./types.ts";
+
+type Tool = "claude-code" | "codex";
+
+// 범위가 프로젝트이면 어느 프로젝트의 것인지도 정체다. 두 프로젝트가 같은 원본을 같은 이름의 링크로 걸면 설치는 둘이다(설계 11.3 「설치의 정체」)
+const skillKey = (skill: Omit<SkillFact, "installKey">, tool: Tool): string => installKey(["skill", tool, skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+const mcpKey = (server: Omit<McpFact, "installKey">, tool: Tool): string | null =>
+  server.definitionHash === null ? null : installKey(["mcp", tool, server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
 
 export function skillInstallKey(skill: Omit<SkillFact, "installKey">): string {
-  // 범위가 프로젝트이면 어느 프로젝트의 것인지도 정체다. 두 프로젝트가 같은 원본을 같은 이름의 링크로 걸면 설치는 둘이다(설계 11.3 「설치의 정체」)
-  return installKey(["skill", "claude-code", skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+  return skillKey(skill, "claude-code");
 }
 
 /** 정의를 읽지 못했거나 PC에 없는 서버(claude.ai에 연결한 서버 포함)는 null이다. */
 export function mcpInstallKey(server: Omit<McpFact, "installKey">): string | null {
-  if (server.definitionHash === null) return null;
-  return installKey(["mcp", "claude-code", server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
+  return mcpKey(server, "claude-code");
+}
+
+/** Codex 스킬의 정체 열쇠. 도구 칸이 codex다 */
+export function codexSkillInstallKey(skill: Omit<SkillFact, "installKey">): string {
+  return skillKey(skill, "codex");
+}
+
+/** Codex MCP 서버의 정체 열쇠. 정의의 지문이 없으면 null이다 */
+export function codexMcpInstallKey(server: Omit<McpFact, "installKey">): string | null {
+  return mcpKey(server, "codex");
 }
 
 /** 이번 점검에서 본 모든 스킬과 MCP 서버의 설치 열쇠(켜졌는지와 상관없다). */
@@ -83,6 +98,53 @@ export function unseenInUnreadablePlace(facts: ClaudeSetupFacts): (key: string) 
       if (scope === "local") return scanned.has(projectRoot) && claudeJsonUnread;
       if (scope === "project") return unread(scanned.get(projectRoot)?.mcpJsonStatus);
       if (scope === "plugin") return pluginsFileUnread || mcpUnreadPlugins.has(parsed[4] ?? "");
+      return false;
+    }
+    return false;
+  };
+}
+
+/** 이번 점검에서 본 Codex의 모든 스킬과 MCP 서버의 설치 열쇠(켜졌는지와 상관없다). 정의의 지문이 없는 서버는 뺀다 */
+export function codexInstallKeysOf(facts: CodexSetupFacts): string[] {
+  const keys: string[] = facts.skills.map((skill) => skill.installKey);
+  for (const server of facts.mcpServers) if (server.installKey !== null) keys.push(server.installKey);
+  return [...new Set(keys)].sort();
+}
+
+/**
+ * 관측 기록에만 있고 이번 점검에 보이지 않는 Codex 설치가 "읽지 못한 곳에 든 것"인지 가르는 함수를 만든다(설계 18.1, 「5단계 2부 계획 전 결정」 9번).
+ * - 서버: 사용자 config.toml을 읽지 못했으면 모두다(신뢰와 플러그인 항목도 그 파일에서 얻는다). 그 밖에는 프로젝트 범위는 그 프로젝트의 .codex/config.toml을 읽지 못했을 때,
+ *   플러그인 범위는 그 플러그인의 구성을 모르거나 MCP 정의를 읽지 못했을 때다.
+ * - 스킬: 사용자와 프로젝트 범위는 그 찾는 곳의 목록을 다 읽지 못했을 때다. 플러그인 범위는 사용자 config.toml을 읽지 못했거나, 구성을 모르는 켜진 플러그인이 있거나,
+ *   스킬을 찾는 폴더를 다 읽지 못한 플러그인이 있을 때다(스킬의 열쇠에는 플러그인이 적히지 않아 넓게 본다).
+ * 스캐너가 셋팅을 읽지 않는 프로젝트의 것은 없어진 것이라 거짓이다. 읽지 못했다고 확인되지 않으면 거짓이다
+ */
+export function codexUnseenInUnreadablePlace(facts: CodexSetupFacts): (key: string) => boolean {
+  const configUnread = unread(facts.config);
+  const scanned = new Map(facts.projects.filter((project) => project.scanned).map((project) => [project.normRoot, project]));
+  const unknownPlugins = new Set(facts.plugins.filter((plugin) => !plugin.compositionKnown || plugin.mcpUnreadable).map((plugin) => plugin.id));
+  const pluginSkillsUnseen = configUnread || facts.plugins.some((plugin) => plugin.configured && !plugin.compositionKnown) || facts.unreadableSkillPlaces.plugins.length > 0;
+  return (key) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(parsed) || !parsed.every((part): part is string => typeof part === "string") || parsed[1] !== "codex") return false;
+    const scope = parsed[2] ?? "";
+    const projectRoot = parsed[3] ?? "";
+    if (parsed[0] === "skill" && parsed.length === 6) {
+      if (scope === "user") return facts.unreadableSkillPlaces.user;
+      if (scope === "project") return scanned.has(projectRoot) && facts.unreadableSkillPlaces.projects.includes(projectRoot);
+      if (scope === "plugin") return pluginSkillsUnseen;
+      return false;
+    }
+    if (parsed[0] === "mcp" && parsed.length === 7) {
+      if (scope === "project" && !scanned.has(projectRoot)) return false;
+      if (configUnread) return scope === "user" || scope === "project" || scope === "plugin";
+      if (scope === "project") return unread(scanned.get(projectRoot)?.configStatus);
+      if (scope === "plugin") return unknownPlugins.has(parsed[4] ?? "");
       return false;
     }
     return false;

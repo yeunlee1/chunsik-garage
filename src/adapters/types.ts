@@ -2,7 +2,7 @@
 import { nameRecord, sortedRecord } from "./common/canonical.ts";
 import type { LocalDate } from "./common/dates.ts";
 
-export type ToolId = "claude-code";
+export type ToolId = "claude-code" | "codex";
 export type SessionKind = "main" | "sub";
 
 /** measured는 봄, proxy는 대신 봄(가까운 값), unsupported는 못 봄이다. 못 봄은 0이 아니다(설계 9.7) */
@@ -101,6 +101,9 @@ export interface MissingCounts {
   unconfirmedTypes: Record<string, number>;
 }
 
+/** Codex 요약에서 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭. 첫 줄을 읽지 못함(깨짐, 너무 김), 첫 줄이 session_meta가 아님, session_meta에 id가 없음, 줄이 하나도 없음(「5단계 계획 전 결정」 7번) */
+export type CodexIdFallback = "first-line-unreadable" | "first-line-not-meta" | "meta-without-id" | "no-lines";
+
 export interface SessionSummary {
   tool: ToolId;
   sessionId: string;
@@ -121,6 +124,8 @@ export interface SessionSummary {
   firstResponseIdHashes: string[];
   /** 알림에 쓰는 수. 모르는 종류의 훅 첨부는 세지 않고 종류별 수만 낸다(설계 9.5 「훅」) */
   notes: { syntheticResponses: number; responsesWithoutId: number; undatedLines: number; unknownHookKinds: Record<string, number> };
+  /** Codex만. 기록 파일의 식별자, 정체 모름인 thread_source의 값(열쇠가 없으면 "(없음)"), 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭(대신 쓰지 않았으면 null)(설계 「5단계 계획 전 결정」 1·7번) */
+  codex?: { recordId: string; unknownThreadSource: string | null; idFallback: CodexIdFallback | null };
 }
 
 export function emptyToolCounts(): ToolCounts {

@@ -8,6 +8,7 @@ import type { ReasonCopy } from "./types.ts";
 
 export const TOOL_NAMES: Record<ToolId, Texts<string>> = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
+  codex: { en: "Codex", ko: "Codex" },
 };
 
 export const AXIS_NAMES: Record<Axis, Texts<string>> = {

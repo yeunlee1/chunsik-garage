@@ -38,8 +38,8 @@ export interface ResultTool {
   visible: { from: LocalDate; to: LocalDate } | null;
 }
 
-/** 도구마다의 기록 형식. Claude Code는 한 형식이다 */
-const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"] };
+/** 도구마다의 기록 형식. Claude Code는 한 형식이다. Codex는 새 형식과 옛 형식이 한 파일에 이어질 수 있어 하나로 본다(설계 9.6) */
+const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"] };
 
 const inRange = (date: string, range: { from: LocalDate; to: LocalDate }): boolean => date >= range.from && date <= range.to;
 

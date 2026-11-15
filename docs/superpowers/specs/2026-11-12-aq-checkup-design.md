@@ -2478,7 +2478,7 @@ Codex의 기본 설정(작업 공간 쓰기 샌드박스, 필요할 때 승인 �
 ### 확인하지 못한 것
 
 - `systemMessage`가 세션 시작 훅에서 화면에 어떻게 보이는지, 훅이 도는 데 걸리는 시간, 깃 배시가 없는 Windows에서 감싸개가 도는지
-- Codex 플러그인의 훅이 0.166.0에서 실제로 도는지(공식 문서로는 플러그인이 훅을 묶을 수 있다. 돌려 보지는 않았다), 매니페스트의 `hooks`에 빈 값을 적었을 때 함께 든 `hooks/hooks.json`이 정말 돌지 않는지, Codex 마켓 파일의 정확한 필드, 저장소 뿌리가 곧 플러그인일 때 마켓의 `source` 값
+- Codex 플러그인의 훅이 0.166.0에서 실제로 도는지(공식 문서로는 플러그인이 훅을 묶을 수 있다. 돌려 보지는 않았다), 매니페스트의 `hooks`에 빈 값을 적었을 때 함께 든 `hooks/hooks.json`이 정말 돌지 않는지(소스로는 빈 묶음이 기본 훅 파일을 대신한다. 「5단계 5부 계획 전 결정」 2번). Codex 마켓 파일의 필드와 저장소 뿌리를 가리키는 `source`(`"./"`)는 5단계 5부에서 임시 Codex 홈에 설치해 확인했다(같은 결정 3번)
 - 브랜치를 적지 않은 마켓 추가와 설치가 저장소의 어느 브랜치를 받는지, 브랜치를 가리키는 방법이 두 도구에서 실제로 듣는지, 업데이트가 같은 브랜치를 따라가는지(공식 문서와 명령 도움말만 봤다)
 - 관리 정책에 권한 우회를 기본 모드로 적었을 때 실제로 듣는지(프로젝트 설정과 로컬 설정에서 듣지 않는다는 것만 문서로 봤다), 권한 우회가 아닌 모드들에서 셸 명령의 확인이 실제로 어떻게 도는지(문서의 표만 봤다)
 - 훅을 제한하는 설정과 `asyncRewake`, 매처와 `if`의 조합을 실제로 돌려 본 것이 아니다(문서만 봤다). 관리 정책의 `disableAllHooks`가 관리 정책이 강제로 켠 플러그인의 훅까지 끄는지(문서는 설정된 훅을 모두 끈다고만 적었다), 플러그인을 받은 방법을 PC의 어디에서 읽는지, 2.1.257 전의 버전에서 프로젝트 설정의 권한 우회가 실제로 어떻게 들었는지
@@ -4426,3 +4426,24 @@ core(`src/core/`)는 경로를 풀지 않고 파일을 읽지 않는다(7.2절).
 - S2의 잘함 문장(6번). 승인 없음이라도 샌드박스가 전면 해제가 아니어서 안전장치가 있다고 본 Codex를 "권한 확인이나 셸 명령 확인 훅을 둠"이라고 설명했다. Codex에는 그 확인 기능이 없다. 잘함 제목과 설명, 할 일의 제목을 두 도구에 맞는 말로 고쳤다. 점수의 판정은 그대로다.
 - 세션 ID를 대신 쓴 기록의 문장(3번). 까닭이 "세션 ID가 없음"(첫 줄은 읽혔다)이어도 "첫 줄을 읽지 못해"라고 알렸다. 모든 까닭에 맞게 "첫 줄에서 세션 ID를 얻지 못해"로 고쳤다.
 - 고친 곳은 계획의 과제 1(알림 문장)과 과제 3(S2 문장, 합침 규칙의 줄)에 그 자리에 넣었다. 과제 3은 결과 조립(`src/core/result/assemble.ts`)과 관측 범위(`src/core/result/observed.ts`)도 고친다. 고친 곳의 시험이 고치기 전 구현에서 실패하는 것을 확인했다.
+
+### 5단계 5부 계획 전 결정(2026-11-16, 주 세션)
+
+5단계 5부(Codex 플러그인)의 계획 앞에 정한 것이다. 설계 7.1의 Codex 매니페스트 자리, 18.3, 23절, 27절이 "구현 때 실제로 설치해 보고 확정한다"고 남긴 것을 모았다. Codex 0.166.0의 공개 소스(`core-plugins/src/marketplace.rs`, `core-plugins/src/manifest.rs`, `cli/src/plugin_cmd.rs`, 스킬 머리말 해석)를 읽고, 지금 산출물에 두 매니페스트 초안을 더해 빈 임시 Codex 홈(`CODEX_HOME`)에 실제로 설치해 보고 정했다. 그 확인은 모델을 부르지 않았고 사용자의 Codex 홈을 건드리지 않았다. 2026-11-15 사용자 지시("끝까지 진행해 멈추지말고")와 2026-11-16 사용자 지시("추천방식으로 진행해줘")로 추천안으로 정했다.
+
+1. **나눔.** 한 계획으로 쓴다. 코드 과제는 하나(매니페스트 둘, 버전 검사, 산출물 목록)이고, 묶은 실행 파일은 바뀌지 않는다(바뀌는 스크립트는 묶음에 들지 않는다). 마지막 과제에서 설치와 스킬 목록을 확인한다.
+
+2. **Codex 매니페스트(`.codex-plugin/plugin.json`, 7.1).** 칸은 `name`(`chunsik-garage`), `version`, `description`(Claude Code 매니페스트와 같은 글), `keywords`(같은 것), `skills`(`./skills/`), `hooks`(`{}`), `interface`다. `interface`에는 `displayName`(`Chunsik's Garage`), `shortDescription`, `developerName`(`yeunlee1`), `websiteURL`(저장소 주소)을 둔다. `author`, `repository`, `license`는 Codex 매니페스트의 칸이 아니어서 넣지 않는다(Codex는 모르는 칸을 건너뛴다).
+   - `hooks`의 빈 묶음은 0.166.0에서 인라인 훅 묶음(`RawPluginManifestHooks::Inline`)으로 풀려 매니페스트가 훅을 정한 것이 되고, 그러면 기본 자리의 `hooks/hooks.json`을 읽지 않는다(소스로 확인). 지금 저장소에는 훅 파일이 없어 돌려 볼 것은 없다. 7단계가 Claude Code용 세션 시작 훅을 더할 때 Codex에서 돌지 않는 것을 실제로 본다(27절).
+
+3. **Codex 마켓(`.agents/plugins/marketplace.json`, 7.1).** 칸은 `name`(`chunsik-garage`), `interface.displayName`(`Chunsik's Garage`), `plugins[]` 하나(`name`, `source`, `version`, `description`)다. `source`는 `"./"`이고 0.166.0은 이것을 마켓의 뿌리, 곧 저장소 뿌리로 푼다(`resolve_local_plugin_source_path`의 `"." | "./"`). Codex는 마켓 파일을 `.agents/plugins/marketplace.json`, `.agents/plugins/api_marketplace.json`, `.claude-plugin/marketplace.json`, `.cursor-plugin/marketplace.json`의 차례로 찾으므로 이 파일을 Claude Code의 마켓 파일보다 먼저 쓴다. 설치는 `chunsik-garage@chunsik-garage`다(5절).
+
+4. **버전 검사(7.1).** 버전을 읽는 곳에 두 파일을 더한다. `package.json`, 프로그램 안의 버전, 두 도구의 매니페스트와 마켓 목록, 여섯 곳이 모두 같아야 한다. 마켓 목록은 이름이 `chunsik-garage`인 플러그인 항목 하나의 `version`을 읽는다.
+
+5. **산출물(「4단계 계획에서 보완」 4번).** 산출물 목록에 두 파일을 더한다. 산출물로 Claude Code의 공식 검증(`claude plugin validate`)이 그대로 통과하는 것을 확인했다(Codex 파일은 Claude Code가 건너뛴다).
+
+6. **스킬 본문(5, 15).** 바꾸지 않는다. Codex의 스킬 머리말 해석은 `name`, `description`, `metadata.short-description`만 읽고 그 밖의 열쇠(`allowed-tools`)를 건너뛴다. Codex는 모델 앞의 스킬 목록에 `chunsik-garage:aq`와 스킬 파일의 경로(플러그인 캐시를 가리키는 뿌리 약칭과 그 아래 경로)를 싣는다(임시 홈에서 `codex debug prompt-input`으로 확인). 본문의 "`${CLAUDE_SKILL_DIR}`가 실제 경로로 바뀌지 않았으면 이 SKILL.md가 든 폴더의 `scripts/aq.mjs`를 쓴다"는 문장이 Codex의 길이다.
+
+7. **확인(21.1, 21.2).** 마지막 과제에서 산출물을 공백과 한글이 든 경로에 만들어, Claude Code 공식 검증과 함께 빈 임시 Codex 홈에서 `codex plugin marketplace add <산출물>`, `codex plugin add chunsik-garage@chunsik-garage`, `codex plugin list --json`(설치와 켜짐), `codex debug prompt-input`(모델 앞 스킬 목록)을 본다. 이 확인은 모델을 부르지 않는다. Codex로 "AQ 점검해 줘"를 실제로 돌리는 것은 사용자 계정의 사용량을 쓰고 임시 홈에 로그인 정보가 있어야 해서, 사용자에게 묻고 승인을 받은 뒤에만 한다. 승인이 없으면 하지 않고 확인하지 못한 것으로 적는다.
+
+8. **남는 것.** 사용자가 설치로 받는 브랜치(`main`)를 가리키는 법은 8단계다(23절). 27절의 "Codex 마켓 파일의 정확한 필드, 저장소 뿌리가 곧 플러그인일 때 마켓의 `source` 값"은 위 3번으로 확인했고, 빈 `hooks`가 기본 훅 파일을 대신하는 것은 소스로만 확인했다.

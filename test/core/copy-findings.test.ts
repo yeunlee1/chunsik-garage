@@ -1,6 +1,7 @@
 // 평가 결과의 규칙 하나에서 문장을 만드는 것을 본다. 분류와 상태에 따라 제목·설명·처방을 고르고, 잰 값과 단위, 못 잰 이유, 어떻게 쟀나, E6의 정보를 만든다(설계 11.5, 12.2, 13.1)
 import { describe, expect, it } from "vitest";
 import { findingText, joinValue, RULE_COPY, type FindingInput } from "../../src/core/copy/findings.ts";
+import type { ToolSafeguard } from "../../src/core/metrics/setup.ts";
 import type { ResultToolValue, UnjudgedServer } from "../../src/core/result/assemble.ts";
 import { RULES } from "../../src/core/rules.ts";
 
@@ -130,7 +131,65 @@ describe("규칙마다 덧붙는 것", () => {
     expect(line(false, true)).toBe("Claude Code: 기본 모드가 권한 우회가 아님");
     expect(line(true, true)).toBe("Claude Code: 기본 모드가 권한 우회가 아니고 셸 명령을 덮는 확인 훅도 있음");
     expect(line(false, false)).toBe("Claude Code: 안전장치 없음(권한 우회 모드이고 셸 명령을 덮는 확인 훅이 없음)");
-    expect(line(null, true)).toBe("Claude Code: 설정 파일을 읽지 못해 가리지 못함");
+    expect(line(null, true)).toBe("Claude Code: 안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음");
+  });
+
+  it("Codex의 안전장치 줄은 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있는지로 적는다(설계 「5단계 4부 계획 전 결정」 6번)", () => {
+    const s2 = finding("S2", { axis: "setup", value: 0.5, score: 0.5, category: "repair", evidence: { guarded: 1, tools: 2, unreadTools: 0 } });
+    const line = (permissionChecks: boolean | null) => findingText(s2, { safeguards: [{ tool: "codex", guardHook: permissionChecks === null ? null : false, permissionChecks }], unjudgedServers: [] }, "ko").method.at(-1);
+    expect(line(true)).toBe("Codex: 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없음");
+    expect(line(false)).toBe("Codex: 안전장치 없음(승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있음)");
+    expect(line(null)).toBe("Codex: 안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음");
+  });
+
+  it("S2의 처방은 안전장치가 없는 도구마다의 문장을 도구의 차례로 잇는다", () => {
+    const s2 = finding("S2", { axis: "setup", value: 0, score: 0, category: "repair", evidence: { guarded: 0, tools: 2, unreadTools: 0 } });
+    const prescription = (safeguards: ToolSafeguard[]) => findingText(s2, { safeguards, unjudgedServers: [] }, "ko").prescription;
+    const byTool = RULE_COPY.S2.ko.prescriptionByTool!;
+    const none = (tool: ToolSafeguard["tool"]): ToolSafeguard => ({ tool, guardHook: false, permissionChecks: false });
+    expect(prescription([none("claude-code"), { tool: "codex", guardHook: false, permissionChecks: true }])).toBe(byTool["claude-code"]);
+    expect(prescription([{ tool: "claude-code", guardHook: true, permissionChecks: false }, none("codex")])).toBe(byTool.codex);
+    expect(prescription([none("codex"), none("claude-code")])).toBe(`${byTool["claude-code"]} ${byTool.codex}`);
+    // 읽지 못해 뺀 도구는 처방에 넣지 않는다
+    expect(prescription([none("claude-code"), { tool: "codex", guardHook: null, permissionChecks: null }])).toBe(byTool["claude-code"]);
+    expect(byTool.codex).toBe("Codex에서 승인 정책을 never로 두려면 샌드박스를 전면 해제(danger-full-access)하지 마세요. 전면 해제가 필요하면 승인 정책을 on-request로 두세요. 사용자 config.toml과 신뢰한 프로젝트의 설정을 모두 봅니다.");
+    for (const lang of ["en", "ko"] as const) {
+      const texts = RULE_COPY.S2[lang].prescriptionByTool!;
+      expect(Object.keys(texts).sort()).toEqual(["claude-code", "codex"]);
+      for (const text of Object.values(texts)) expect(text, `${lang}: ${text}`).toMatch(/[.!?]$/);
+    }
+  });
+
+  it("도구별 값을 대신 본 것으로 쟀으면 그 도구마다 어떻게 쟀나에 가까운 값이라는 줄을 더한다. 못 잰 도구에는 더하지 않는다(설계 9.7, 「5단계 4부 계획 전 결정」 7번)", () => {
+    const tools = [toolValue({ tool: "claude-code" }), toolValue({ tool: "codex", observed: "proxy" })];
+    const e3 = finding("E3", { kind: "rate", tools });
+    expect(findingText(e3, NONE, "ko").method.at(-1)).toBe("Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.");
+    expect(findingText(e3, NONE, "en").method.at(-1)).toBe("Codex: the records do not show this directly, so the value is approximate.");
+    const measuredOnly = findingText({ ...e3, tools: [toolValue({ tool: "claude-code" })] }, NONE, "ko").method;
+    expect(measuredOnly.some((line) => line.includes("가까운 값"))).toBe(false);
+    const unmeasured = findingText({ ...e3, tools: [toolValue({ tool: "codex", status: "unmeasured", reason: "no_data", value: null, score: null, observed: "proxy" })] }, NONE, "ko").method;
+    expect(unmeasured.some((line) => line.includes("가까운 값"))).toBe(false);
+  });
+
+  it("합침 규칙은 결과 조립이 넘긴 그 규칙을 잰 도구로 본다. I3을 두 도구로 쟀으면 도구 호출을 세는 굵기의 줄을 더한다(4부 계획 리뷰 1차)", () => {
+    const i3 = finding("I3", { axis: "intensity", kind: "rate", evidence: { humanRequests: 42, toolCalls: 42 } });
+    const both = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "codex" as const, observed: "proxy" as const }] } };
+    const line = "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.";
+    expect(findingText(i3, both, "ko").method.slice(-2)).toEqual(["Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.", line]);
+    expect(findingText(i3, both, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.");
+    const codexOnly = { ...NONE, mergedTools: { I3: [{ tool: "codex" as const, observed: "proxy" as const }] } };
+    expect(findingText(i3, codexOnly, "ko").method).not.toContain(line);
+    expect(findingText(i3, NONE, "ko").method).not.toContain(line);
+    expect(findingText({ ...i3, status: "unmeasured", reason: "too_little", value: null, score: null, category: "unmeasured" }, both, "ko").method).not.toContain(line);
+  });
+
+  it("S2의 잘함 제목과 설명, 할 일의 제목은 두 도구에 맞는 말이다. Codex는 승인 요청이나 샌드박스 제한으로 인정된다(4부 계획 리뷰 1차)", () => {
+    const s2 = finding("S2", { axis: "setup", value: 1, score: 1, category: "strength", evidence: { guarded: 1, tools: 1, unreadTools: 0 } });
+    const text = findingText(s2, { safeguards: [{ tool: "codex", guardHook: false, permissionChecks: true }], unjudgedServers: [] }, "ko");
+    expect(text.title).toBe("셸 명령에 안전장치를 둠");
+    expect(text.description).toBe("도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.");
+    expect(RULE_COPY.S2.en.good).toBe("Has a safeguard on shell commands");
+    expect(RULE_COPY.S2.ko.fix).toBe("셸 명령에 안전장치 두기");
   });
 
   it("E6에는 판정에서 뺀 서버를 까닭마다 세어 적고, claude.ai에 연결한 서버가 있으면 직접 막는 방법을 적는다. 이름은 넣지 않는다", () => {

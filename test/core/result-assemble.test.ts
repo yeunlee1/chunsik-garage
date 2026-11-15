@@ -9,7 +9,7 @@ import { checkupResult, RESULT_SCHEMA, type ResultInput } from "../../src/core/r
 import type { CollectedTool } from "../../src/core/result/tools.ts";
 import type { SetupProblem } from "../../src/scan/types.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -25,6 +25,26 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   const input = evaluationInput([claudeTool({ sessions: enough, ...tool })]);
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
+
+describe("합침 규칙의 어떻게 쟀나(설계 9.7, 「5단계 4부 계획 전 결정」 7번, 4부 계획 리뷰 1차)", () => {
+  it("두 도구로 잰 I3과 I2에는 Codex의 가까운 값 줄이, I3에는 도구 호출을 세는 굵기의 줄이 붙는다. 한 도구만이면 굵기의 줄이 없다", () => {
+    const days = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`2026-11-1${index}`, { responses: 3, humanRequests: 10, tools: { Bash: { calls: 10 } } }]));
+    const sessions = [{ days: days(3) }];
+    const both = evaluationInput([claudeTool({ sessions }), codexTool({ sessions })]);
+    const result = checkupResult({ input: both, evaluation: evaluate(both), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    const method = (ruleId: string) => result.findings.find((finding) => finding.ruleId === ruleId)!.text.ko.method;
+    const proxy = "Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.";
+    const grain = "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.";
+    expect(result.findings.find((finding) => finding.ruleId === "I3")).toMatchObject({ status: "scored", tools: [] });
+    expect(method("I3").slice(-2)).toEqual([proxy, grain]);
+    expect(method("I2").at(-1)).toBe(proxy);
+    const claudeOnly = evaluationInput([claudeTool({ sessions })]);
+    const single = checkupResult({ input: claudeOnly, evaluation: evaluate(claudeOnly), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    const singleMethod = single.findings.find((finding) => finding.ruleId === "I3")!.text.ko.method;
+    expect(singleMethod).not.toContain(grain);
+    expect(singleMethod.some((line) => line.includes("가까운 값"))).toBe(false);
+  });
+});
 
 describe("평가 결과의 조립", () => {
   it("필드를 정해진 차례로 싣고 형식 버전, 규칙 버전, 프로그램 버전, 평가 시계, 시간대, 구간을 담는다", () => {

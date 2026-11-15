@@ -1,4 +1,4 @@
-// 규칙 문장과 요약에 함께 쓰는 문구. 도구와 기준의 이름, 못 잰 이유의 낱말과 설명, 도구별 값의 줄, 다른 도구로 쟀을 때의 덧붙임, 안전장치의 조건, E6 항목의 정보, 요약의 덧붙이는 말이다(설계 11.4, 11.5, 12.2, 13.1, 15)
+// 규칙 문장과 요약에 함께 쓰는 문구. 도구와 기준의 이름, 못 잰 이유의 낱말과 설명, 도구별 값의 줄, 다른 도구로 쟀을 때의 덧붙임, 안전장치의 조건, 대신 본 값과 도구 호출의 굵기, E6 항목의 정보, 요약의 덧붙이는 말이다(설계 9.7, 11.4, 11.5, 12.2, 13.1, 15)
 import type { ToolId } from "../../adapters/types.ts";
 import type { Reason } from "../reasons.ts";
 import type { Axis } from "../rules.ts";
@@ -77,15 +77,20 @@ export const OTHER_TOOL_COPY: Record<"too_little" | "watching", Texts<string>> =
   },
 };
 
-/** 안전장치(S2)가 도구마다 어느 조건으로 인정됐는지(설계 11.3 S2의 근거와 처방). 훅의 명령은 싣지 않는다 */
-export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; unknown: string }> = {
+/**
+ * 안전장치(S2)가 도구마다 어느 조건으로 인정됐는지(설계 11.3 S2의 근거와 처방). 훅의 명령은 싣지 않는다. codexGuarded와 codexNone은 Codex의 조건이고,
+ * unknown은 안전장치를 정하는 설정을 읽지 못해 뺀 도구다(「5단계 계획 전 결정」 4번, 「5단계 4부 계획 전 결정」 6번)
+ */
+export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; codexGuarded: string; codexNone: string; unknown: string }> = {
   en: {
     line: "{tool}: {condition}",
     hook: "a PreToolUse hook that can block covers shell commands",
     permissions: "the default mode does not bypass permissions",
     both: "the default mode does not bypass permissions, and a confirming hook covers shell commands too",
     none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
-    unknown: "could not tell, because a settings file could not be read",
+    codexGuarded: "no place combines no approval with full sandbox access",
+    codexNone: "no safeguard (a place combines no approval with full sandbox access)",
+    unknown: "left out, because a settings file that decides the safeguard could not be read",
   },
   ko: {
     line: "{tool}: {condition}",
@@ -93,8 +98,22 @@ export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: st
     permissions: "기본 모드가 권한 우회가 아님",
     both: "기본 모드가 권한 우회가 아니고 셸 명령을 덮는 확인 훅도 있음",
     none: "안전장치 없음(권한 우회 모드이고 셸 명령을 덮는 확인 훅이 없음)",
-    unknown: "설정 파일을 읽지 못해 가리지 못함",
+    codexGuarded: "승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없음",
+    codexNone: "안전장치 없음(승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있음)",
+    unknown: "안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음",
   },
+};
+
+/** 도구별 값을 대신 본 것(9.7의 대신 봄)으로 쟀을 때 어떻게 쟀나에 더하는 줄(설계 「5단계 4부 계획 전 결정」 7번) */
+export const PROXY_LINE: Texts<string> = {
+  en: "{tool}: the records do not show this directly, so the value is approximate.",
+  ko: "{tool}: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.",
+};
+
+/** 요청당 도구 호출(I3)을 두 도구에서 쟀을 때 어떻게 쟀나에 더하는 줄. 도구 호출을 세는 굵기가 도구마다 다르다(설계 9.7) */
+export const TOOL_CALL_GRAIN: Texts<string> = {
+  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.",
 };
 
 /** E6 항목의 정보. 판정에서 뺀 켜진 서버 가운데 부른 기록이 없는 것을 까닭마다 센다. 이름은 결과 화면이 따로 그린다(설계 13.1, 16.1) */

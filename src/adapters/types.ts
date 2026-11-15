@@ -222,6 +222,44 @@ const DAY_SHAPE: Record<keyof DayCell, Shape> = {
 };
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** 날짜 칸 from의 수를 into에 더한다. 수는 더하고, 참거짓은 하나라도 참이면 참이며, 이름 목록은 합쳐 사전순으로 세운다. 안쪽 묶음은 새로 만들어 from과 나누지 않는다(같은 세션의 기록 파일을 합칠 때 쓴다) */
+export function addDayInto(into: DayCell, from: DayCell): void {
+  const target = into as unknown as Record<string, unknown>;
+  const source = from as unknown as Record<string, unknown>;
+  const addNumbers = (a: Record<string, number>, b: Record<string, number>): void => {
+    for (const [key, value] of Object.entries(b)) a[key] = (Object.hasOwn(a, key) ? a[key]! : 0) + value;
+  };
+  for (const key of Object.keys(DAY_SHAPE) as (keyof DayCell)[]) {
+    const a = target[key];
+    const b = source[key];
+    switch (DAY_SHAPE[key]) {
+      case "number":
+        target[key] = (a as number) + (b as number);
+        break;
+      case "boolean":
+        target[key] = (a as boolean) || (b as boolean);
+        break;
+      case "names":
+        target[key] = [...new Set([...(a as string[]), ...(b as string[])])].sort();
+        break;
+      case "numbers":
+      case "tokens":
+        addNumbers(a as Record<string, number>, b as Record<string, number>);
+        break;
+      case "tools":
+      case "skills":
+      case "hooks": {
+        const outer = a as Record<string, Record<string, number>>;
+        for (const [name, counts] of Object.entries(b as Record<string, Record<string, number>>)) {
+          if (Object.hasOwn(outer, name)) addNumbers(outer[name]!, counts);
+          else outer[name] = { ...counts };
+        }
+        break;
+      }
+    }
+  }
+}
+
 const isObject = (v: unknown): v is Json => v !== null && typeof v === "object" && !Array.isArray(v);
 /** 요약의 숫자 칸은 모두 개수다. 음수, 소수, 안전한 정수 밖의 수는 손으로 고쳤거나 깨진 캐시라 되살리지 않는다 */
 const isNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;

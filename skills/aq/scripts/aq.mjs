@@ -4,7 +4,7 @@
 import { homedir, tmpdir } from "node:os";
 
 // src/commands/checkup.ts
-import { join as join17 } from "node:path";
+import { join as join23 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -78,6 +78,7 @@ function msOlderThan(day, epochMs, days) {
 // src/core/installs/candidates.ts
 var byText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function candidatesOf(tool, skills, servers, day, self) {
+  if (tool.tool === "codex") return [];
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   const unknownPlugin = enabledPlugins.some((plugin) => !plugin.compositionKnown) || setup.pluginsWithoutInstall.length > 0;
@@ -252,6 +253,9 @@ function byContent(a, b) {
 
 // src/core/readability.ts
 var unread = (status) => status === "unparsable" || status === "unreadable";
+function codexSettingsUnread(facts) {
+  return unread(facts.config) || facts.projects.some((project) => project.trust === "trusted" && unread(project.configStatus));
+}
 function globalSettingsUnread(facts) {
   return unread(facts.settings.user) || facts.settings.managedParts.some((part) => unread(part.status));
 }
@@ -364,6 +368,7 @@ var byText2 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var byServer = (a, b) => byText2(a.name, b.name) || SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope] || byText2(a.projectRoot ?? "", b.projectRoot ?? "") || byText2(a.pluginId ?? "", b.pluginId ?? "") || byText2(a.definitionHash ?? "", b.definitionHash ?? "") || // 같은 플러그인을 두 길로 찾으면 켜짐만 다른 서버 사실 둘이 온다. 내용까지 견줘 차례를 끝까지 정한다
 byContent(a, b);
 function serversUnread(tool) {
+  if (tool.tool === "codex") return codexSettingsUnread(tool.setup);
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
   return unread(setup.claudeJson) || places.user || places.projects.length > 0 || setup.projects.some((project) => unread(project.mcpJsonStatus)) || unread(setup.pluginsFile) || enablementUnread(setup);
@@ -398,8 +403,8 @@ function skillsUnread(tool) {
   return setup.claudeJson !== "ok" || places.user || places.projects.length > 0 || unread(setup.pluginsFile) || enablementUnread(setup);
 }
 function judgeSkills(tool, context) {
+  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const { setup } = tool;
-  if (tool.coverage.skillUsage === "unsupported") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   if (skillsUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const uncounted = new Set(setup.unreadableSkillPlaces.plugins);
   const grouped = /* @__PURE__ */ new Map();
@@ -425,25 +430,29 @@ function judgeSkills(tool, context) {
 var FREQUENT_SESSIONS = 3;
 var byText4 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var scanned = (project) => project.exists && !project.excluded;
-var scannedProjects = (tool) => tool.setup.projects.filter(scanned).sort((a, b) => byText4(a.normRoot, b.normRoot));
-var projectIn = (tool, normRoot) => tool?.setup.projects.find((project) => project.normRoot === normRoot);
-var hasInstructionFiles = (set) => set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
-var treatedAsProject = (project) => project !== void 0 && (hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings);
+function toolProjects(tool) {
+  const projects = tool.tool === "codex" ? tool.setup.projects.filter((project) => project.scanned).map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.configStatus !== null && project.configStatus !== "missing" })) : tool.setup.projects.filter(scanned).map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
+  return projects.sort((a, b) => byText4(a.normRoot, b.normRoot));
+}
+function hasInstructionFiles(set) {
+  return set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
+}
+var treatedAsProject = (project) => hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings;
 var hasInstructions = (project) => project?.instructions.files.some((file) => file.hasContent) ?? false;
 function mainTools(use) {
   const most = Math.max(...Object.values(use.sessions));
   return Object.keys(use.sessions).filter((tool) => use.sessions[tool] >= FREQUENT_SESSIONS || use.sessions[tool] === most);
 }
 function f3(tools2, usage2) {
-  const byId = new Map(tools2.map((tool) => [tool.tool, tool]));
+  const byId = new Map(tools2.map((tool) => [tool.tool, new Map(toolProjects(tool).map((project) => [project.normRoot, project]))]));
   const missing = [];
   let targets = 0;
   for (const use of usage2.projects) {
     const { project } = use;
     if (use.total < FREQUENT_SESSIONS || !scanned(project)) continue;
-    if (project.kind !== "git" && !treatedAsProject(project) && !tools2.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
+    if (project.kind !== "git" && !treatedAsProject(project) && ![...byId.values()].some((projects) => projects.get(project.normRoot)?.treated === true)) continue;
     targets++;
-    const without = mainTools(use).filter((tool) => !hasInstructions(projectIn(byId.get(tool), project.normRoot)));
+    const without = mainTools(use).filter((tool) => !hasInstructions(byId.get(tool)?.get(project.normRoot)));
     if (without.length > 0) missing.push({ normRoot: project.normRoot, name: project.name, tools: without });
   }
   const withInstructions = targets - missing.length;
@@ -451,14 +460,14 @@ function f3(tools2, usage2) {
   return { measurement: targets === 0 ? unmeasured("not_applicable", evidence) : scored(withInstructions / targets, evidence), missing };
 }
 var instructionsUnread = (set) => set.unreadable.length > 0 || set.unreadableDirs.length > 0;
-function f4(tools2) {
+function f4(tools2, names2) {
   let unreadable = false;
   let globalLines = 0;
   let comparedProjects = 0;
   let worst = null;
   for (const tool of [...tools2].sort((a, b) => byText4(a.tool, b.tool))) {
     const global = tool.setup.globalInstructions;
-    const projects = scannedProjects(tool);
+    const projects = toolProjects(tool);
     if (instructionsUnread(global) || projects.some((project) => instructionsUnread(project.instructions))) unreadable = true;
     const lines = new Set(global.lineHashes);
     globalLines += lines.size;
@@ -467,7 +476,8 @@ function f4(tools2) {
       if (!project.instructions.files.some((file) => !file.sameAsGlobal)) continue;
       comparedProjects++;
       const overlapping = new Set(project.instructions.lineHashes.filter((hash) => lines.has(hash))).size;
-      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name: project.name, overlapping, globalLines: lines.size };
+      const name = project.name ?? names2.get(project.normRoot) ?? project.normRoot;
+      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name, overlapping, globalLines: lines.size };
     }
   }
   if (unreadable) return { measurement: unmeasured("unreadable", { comparedProjects: null, globalLines: null, overlappingLines: null }), worst: null };
@@ -503,8 +513,9 @@ function f6(tools2) {
   let conflicts = 0;
   let projectsWithSettings = 0;
   for (const tool of tools2) {
+    if (tool.tool !== "claude-code") continue;
     if (unread(tool.setup.settings.user) || projectSettingsUnread(tool.setup)) unreadable = true;
-    for (const project of scannedProjects(tool)) {
+    for (const project of tool.setup.projects.filter(scanned)) {
       if (!project.hasSettings && !project.hasLocalSettings) continue;
       projectsWithSettings++;
       conflicts += project.permissionConflicts;
@@ -514,9 +525,9 @@ function f6(tools2) {
   const evidence = { conflicts, projectsWithSettings };
   return projectsWithSettings === 0 ? unmeasured("not_applicable", evidence) : scored(conflicts, evidence);
 }
-function mergedFitRules(tools2, usage2) {
+function mergedFitRules(tools2, usage2, projects) {
   const guides = f3(tools2, usage2);
-  const overlap = f4(tools2);
+  const overlap = f4(tools2, new Map(projects.map((project) => [project.normRoot, project.name])));
   return { F3: guides.measurement, F4: overlap.measurement, F6: f6(tools2), missingInstructions: guides.missing, worstOverlap: overlap.worst };
 }
 function fitToolRules(tool) {
@@ -542,9 +553,9 @@ function s4(totals, coverage) {
   const evidence = { failures: totals.hookFailures, runs: totals.hookRuns, unclassifiedBlocks: totals.hookUnclassified };
   return countGate(sees(coverage, "mcpFailuresAndHooks"), totals.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals.hookFailures / totals.hookRuns, evidence);
 }
-function e1(totals, coverage) {
+function e1(totals, coverage, tool) {
   const { input, cacheRead, cacheWrite } = totals.tokens;
-  const all = input + cacheRead + cacheWrite;
+  const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }
@@ -588,10 +599,10 @@ function f2(totals, coverage) {
   const evidence = { compactedSessions: compacted.length, delegatedSessions };
   return countGate(sees(coverage, "subagents", "autoCompaction"), compacted.length, MIN_COMPACTED_SESSIONS, evidence) ?? scored(delegatedSessions / compacted.length, evidence);
 }
-function usageRules(totals, coverage) {
+function usageRules(totals, coverage, tool) {
   return {
     S4: s4(totals, coverage),
-    E1: e1(totals, coverage),
+    E1: e1(totals, coverage, tool),
     E2: e2(totals, coverage),
     E3: e3(totals, coverage),
     E4: e4(totals, coverage),
@@ -675,7 +686,14 @@ function seesProjectBypass(highestVersion) {
   const version = parseVersion(highestVersion);
   return version === null || compareVersions(version, PROJECT_BYPASS_IGNORED_FROM) < 0;
 }
+function codexSafeguard(setup) {
+  if (codexSettingsUnread(setup)) return { tool: "codex", guardHook: null, permissionChecks: null };
+  const contexts = [setup.safety, ...setup.projects.flatMap((project) => project.trust === "trusted" && project.safety !== null ? [project.safety] : [])];
+  const unsafe = contexts.some((context) => context.approval === "never" && context.fullAccess);
+  return { tool: "codex", guardHook: false, permissionChecks: !unsafe };
+}
 function safeguardOf(tool) {
+  if (tool.tool === "codex") return codexSafeguard(tool.setup);
   const { setup } = tool;
   const old = seesProjectBypass(tool.highestVersion);
   if (globalSettingsUnread(setup) || old && projectSettingsUnread(setup)) return { tool: tool.tool, guardHook: null, permissionChecks: null };
@@ -689,11 +707,13 @@ function s1(tools2) {
   const evidence = { tools: tools2.length, withInstructions };
   return countGate(true, tools2.length, 1, evidence) ?? scored(withInstructions / tools2.length, evidence);
 }
-function s2(tools2, safeguards) {
-  if (safeguards.some((safeguard) => safeguard.guardHook === null)) return unmeasured("unreadable", { guarded: null, tools: tools2.length });
-  const guarded = safeguards.filter((safeguard) => safeguard.guardHook === true || safeguard.permissionChecks === true).length;
-  const evidence = { guarded, tools: tools2.length };
-  return countGate(true, tools2.length, 1, evidence) ?? scored(guarded / tools2.length, evidence);
+function s2(safeguards) {
+  const readable = safeguards.filter((safeguard) => safeguard.permissionChecks !== null);
+  const unreadTools = safeguards.length - readable.length;
+  if (readable.length === 0 && unreadTools > 0) return unmeasured("unreadable", { guarded: null, tools: 0, unreadTools });
+  const guarded = readable.filter((safeguard) => safeguard.guardHook === true || safeguard.permissionChecks === true).length;
+  const evidence = { guarded, tools: readable.length, unreadTools };
+  return countGate(true, readable.length, 1, evidence) ?? scored(guarded / readable.length, evidence);
 }
 var PROBLEM_COUNTERS = { danglingLink: "danglingLinks", noFrontmatter: "noFrontmatter", unparsable: "unparsable" };
 function countedProblems(tools2) {
@@ -716,19 +736,21 @@ function s3(problems) {
   return scored(problems.length, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: problems.length, unparsable: counts.unparsable });
 }
 function s5(tool) {
-  const { setup, totals } = tool;
-  const enabledServers = sameInstall(setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
+  const { totals } = tool;
+  const enabledServers = sameInstall(tool.setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
   const failedSessions = totals.mainSessions.filter((session) => session.mcpConnectionFailure).length;
   const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
-  if (enablementUnread(setup)) return unmeasured("unreadable", { ...evidence, enabledServers: null });
-  if (enabledServers === 0) return mcpPlacesUnread(setup) ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
+  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
+  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
+  if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
+  if (enabledServers === 0) return placesUnknown ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
   return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
 }
 function mergedSetupRules(tools2) {
   const safeguards = tools2.map(safeguardOf);
   const setupProblems = countedProblems(tools2);
-  return { S1: s1(tools2), S2: s2(tools2, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
+  return { S1: s1(tools2), S2: s2(safeguards), S3: s3(setupProblems), safeguards, setupProblems };
 }
 function setupToolRules(tool) {
   return { S5: s5(tool) };
@@ -1018,7 +1040,10 @@ function evaluate(input) {
   const records = recordMap(input.installs);
   const all = [...input.tools].sort((a, b) => byText7(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
-  const setups = scored2.map((tool) => ({ tool: tool.input.tool, totals: tool.totals, coverage: tool.input.coverage, setup: tool.input.setup, highestVersion: highestMainVersion(tool.input.summaries) }));
+  const setups = scored2.map(({ input: tool, totals }) => {
+    const common = { totals, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
+    return tool.tool === "codex" ? { ...common, tool: "codex", setup: tool.setup } : { ...common, tool: "claude-code", setup: tool.setup };
+  });
   const usage2 = projectUsage(setups, lookup);
   const judged = scored2.map((tool, index) => {
     const setup = setups[index];
@@ -1030,13 +1055,13 @@ function evaluate(input) {
     const measured2 = {
       tool: setup.tool,
       responses: setup.totals.responses,
-      rules: { ...usageRules(setup.totals, setup.coverage), ...setupToolRules(setup), ...fitToolRules(setup), E5: skills.measurement, E6: servers.measurement },
+      rules: { ...usageRules(setup.totals, setup.coverage, setup.tool), ...setupToolRules(setup), ...fitToolRules(setup), E5: skills.measurement, E6: servers.measurement },
       candidates
     };
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured: measured2 };
   });
   const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
-  const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage2);
+  const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage2, input.projects);
   const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage2) }, tools: judged.map((tool) => tool.measured) });
   const humanRequests = scored2.reduce((sum2, tool) => sum2 + tool.totals.humanRequests, 0);
   const activeDays2 = new Set(scored2.flatMap((tool) => tool.totals.activeDates)).size;
@@ -1802,7 +1827,7 @@ var SETUP_COPY = {
       problem: "{value} of the tools you use have a safeguard. A tool runs with permission checks bypassed and no confirming hook covers shell commands.",
       prescription: "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
       method: "Share of the tools you use that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands.",
-      evidence: "Tools with a safeguard {guarded} \xB7 tools in use {tools}",
+      evidence: "Tools with a safeguard {guarded} \xB7 tools measured {tools} \xB7 tools left out with unreadable settings {unreadTools}",
       unit: "%",
       reasons: {
         no_data: NO_TOOL.en,
@@ -1817,7 +1842,7 @@ var SETUP_COPY = {
       problem: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4. \uAD8C\uD55C \uD655\uC778\uC744 \uAC74\uB108\uB6F0\uB294\uB370 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uB294 \uB3C4\uAD6C\uAC00 \uC788\uC2B5\uB2C8\uB2E4.",
       prescription: "Claude Code\uC5D0\uC11C \uC178 \uBA85\uB839(Bash \uB610\uB294 PowerShell)\uC758 \uC2E4\uD589 \uC804\uC5D0 \uACB0\uACFC\uB97C \uAE30\uB2E4\uB9AC\uBA70 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 PreToolUse \uD6C5\uC744 \uC0AC\uC6A9\uC790 \uC124\uC815\uC5D0 \uB450\uACE0 \uCF1C\uAC70\uB098, \uAE30\uBCF8 \uBAA8\uB4DC\uB97C \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2CC \uAC83\uC73C\uB85C \uBC14\uAFB8\uC138\uC694. \uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uB97C \uACC4\uC18D \uC4F0\uB824\uBA74 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC744 \uB450\uC138\uC694.",
       method: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4.",
-      evidence: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C {guarded} \xB7 \uC4F0\uB294 \uB3C4\uAD6C {tools}",
+      evidence: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C {guarded} \xB7 \uC7B0 \uB3C4\uAD6C {tools} \xB7 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD574 \uBE80 \uB3C4\uAD6C {unreadTools}",
       unit: "%",
       reasons: {
         no_data: NO_TOOL.ko,
@@ -2200,6 +2225,7 @@ var byText8 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function deepHints(input) {
   const hints = [];
   for (const tool of [...input.tools].sort((a, b) => byText8(a.tool, b.tool))) {
+    if (tool.tool !== "claude-code") continue;
     const setup = tool.setup;
     const rootOf = new Map(setup.projects.map((project) => [project.normRoot, project.root]));
     const mentioned = Object.entries(setup.globalMentions).filter(([, count]) => count >= MENTION_HINT_MIN).map(([normRoot, count]) => ({ root: rootOf.get(normRoot) ?? normRoot, mentions: count })).sort((a, b) => byText8(a.root, b.root));
@@ -2252,6 +2278,7 @@ function setupNotices(input, evaluation, run2) {
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run2.stateBroken) notices2.push({ kind: "state_reset" });
   for (const tool of input.tools) {
+    if (tool.tool !== "claude-code") continue;
     const id = tool.tool;
     const setup = tool.setup;
     const unreadable = [
@@ -2295,7 +2322,7 @@ function recordNotices(input, evaluation, collected) {
   for (const tool of input.tools) {
     const id = tool.tool;
     const found = collected.find((item2) => item2.tool === id);
-    if (found !== void 0) {
+    if (found !== void 0 && id === "claude-code") {
       const { unreadableFiles, unreadableDirs } = found.read;
       if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices2.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText9), dirs: [...unreadableDirs].sort(byText9) });
       for (const metric of ["skills", "mcp"]) {
@@ -3613,7 +3640,7 @@ function reportView(result, run2) {
 }
 
 // src/state/cache.ts
-import { createHash as createHash2 } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 import { lstat as lstat2, mkdir, open, readdir as readdir3, readFile as readFile2, realpath as realpath2, rename, writeFile } from "node:fs/promises";
 import { join as join4 } from "node:path";
 
@@ -3692,6 +3719,7 @@ async function listClaudeFiles(home, minMtimeMs) {
 }
 
 // src/adapters/codex/fingerprints.ts
+import { createHash as createHash2 } from "node:crypto";
 var KINDS = ["itemIds", "callIds", "totals", "responseIds"];
 var PRINT = /^[0-9a-f]{16}$/;
 var DIGEST = /^[0-9a-f]{64}$/;
@@ -3708,6 +3736,18 @@ function fromLists(value) {
     out[kind] = new Set(list);
   }
   return { itemIds: out.itemIds, callIds: out.callIds, totals: out.totals, responseIds: out.responseIds };
+}
+function unionOf(list) {
+  const merge = (kind) => new Set(list.flatMap((prints) => [...prints[kind]]));
+  return { itemIds: merge("itemIds"), callIds: merge("callIds"), totals: merge("totals"), responseIds: merge("responseIds") };
+}
+function sharedDigest(own, inherited) {
+  const hash = createHash2("sha256");
+  for (const kind of KINDS) {
+    const shared = inherited === null ? [] : [...own[kind]].filter((print) => inherited[kind].has(print)).sort();
+    hash.update(`${kind}:${shared.join(",")};`);
+  }
+  return hash.digest("hex");
 }
 function reviveCodexExtra(value) {
   if (!isObject(value) || typeof value.sharedDigest !== "string" || !DIGEST.test(value.sharedDigest)) return null;
@@ -3807,6 +3847,42 @@ var DAY_SHAPE = {
   reloadedMcpServers: "names"
 };
 var DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+function addDayInto(into, from) {
+  const target = into;
+  const source = from;
+  const addNumbers2 = (a, b) => {
+    for (const [key, value] of Object.entries(b)) a[key] = (Object.hasOwn(a, key) ? a[key] : 0) + value;
+  };
+  for (const key of Object.keys(DAY_SHAPE)) {
+    const a = target[key];
+    const b = source[key];
+    switch (DAY_SHAPE[key]) {
+      case "number":
+        target[key] = a + b;
+        break;
+      case "boolean":
+        target[key] = a || b;
+        break;
+      case "names":
+        target[key] = [.../* @__PURE__ */ new Set([...a, ...b])].sort();
+        break;
+      case "numbers":
+      case "tokens":
+        addNumbers2(a, b);
+        break;
+      case "tools":
+      case "skills":
+      case "hooks": {
+        const outer = a;
+        for (const [name, counts] of Object.entries(b)) {
+          if (Object.hasOwn(outer, name)) addNumbers2(outer[name], counts);
+          else outer[name] = { ...counts };
+        }
+        break;
+      }
+    }
+  }
+}
 var isObject2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 var isNumber = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 var isNullableString = (v) => v === null || typeof v === "string";
@@ -4053,7 +4129,7 @@ async function removeTree(path, boundary) {
 // src/state/cache.ts
 var CACHE_FORMAT_VERSION = 1;
 var EDGE_BYTES = 4096;
-var sha256 = (data) => createHash2("sha256").update(data).digest("hex");
+var sha256 = (data) => createHash3("sha256").update(data).digest("hex");
 async function cacheKeyFor(file, parser, timeZone) {
   const handle = await open(file.path, "r");
   try {
@@ -4254,6 +4330,12 @@ function skillInstallKey(skill) {
 function mcpInstallKey(server) {
   return mcpKey(server, "claude-code");
 }
+function codexSkillInstallKey(skill) {
+  return skillKey(skill, "codex");
+}
+function codexMcpInstallKey(server) {
+  return mcpKey(server, "codex");
+}
 function installKeysOf(facts) {
   const keys = facts.skills.map(skillInstallKey);
   for (const server of facts.mcpServers) {
@@ -4302,6 +4384,42 @@ function unseenInUnreadablePlace(facts) {
       if (scope === "local") return scanned2.has(projectRoot) && claudeJsonUnread;
       if (scope === "project") return unread3(scanned2.get(projectRoot)?.mcpJsonStatus);
       if (scope === "plugin") return pluginsFileUnread || mcpUnreadPlugins.has(parsed[4] ?? "");
+      return false;
+    }
+    return false;
+  };
+}
+function codexInstallKeysOf(facts) {
+  const keys = facts.skills.map((skill) => skill.installKey);
+  for (const server of facts.mcpServers) if (server.installKey !== null) keys.push(server.installKey);
+  return [...new Set(keys)].sort();
+}
+function codexUnseenInUnreadablePlace(facts) {
+  const configUnread = unread3(facts.config);
+  const scanned2 = new Map(facts.projects.filter((project) => project.scanned).map((project) => [project.normRoot, project]));
+  const unknownPlugins = new Set(facts.plugins.filter((plugin) => !plugin.compositionKnown || plugin.mcpUnreadable).map((plugin) => plugin.id));
+  const pluginSkillsUnseen = configUnread || facts.plugins.some((plugin) => plugin.configured && !plugin.compositionKnown) || facts.unreadableSkillPlaces.plugins.length > 0;
+  return (key) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(key);
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(parsed) || !parsed.every((part) => typeof part === "string") || parsed[1] !== "codex") return false;
+    const scope = parsed[2] ?? "";
+    const projectRoot = parsed[3] ?? "";
+    if (parsed[0] === "skill" && parsed.length === 6) {
+      if (scope === "user") return facts.unreadableSkillPlaces.user;
+      if (scope === "project") return scanned2.has(projectRoot) && facts.unreadableSkillPlaces.projects.includes(projectRoot);
+      if (scope === "plugin") return pluginSkillsUnseen;
+      return false;
+    }
+    if (parsed[0] === "mcp" && parsed.length === 7) {
+      if (scope === "project" && !scanned2.has(projectRoot)) return false;
+      if (configUnread) return scope === "user" || scope === "project" || scope === "plugin";
+      if (scope === "project") return unread3(scanned2.get(projectRoot)?.configStatus);
+      if (scope === "plugin") return unknownPlugins.has(parsed[4] ?? "");
       return false;
     }
     return false;
@@ -4379,8 +4497,20 @@ async function openState(stateDir2) {
   if (loaded.status === "ok") return { state: loaded.state, fresh: false, broken: false };
   return { state: newState(), fresh: loaded.status === "missing", broken: loaded.status === "broken" };
 }
+function toolOfKey(key) {
+  try {
+    const parts = JSON.parse(key);
+    return Array.isArray(parts) && typeof parts[1] === "string" ? parts[1] : null;
+  } catch {
+    return null;
+  }
+}
 function nextState(state, facts, today, startedAt) {
-  return { ...state, lastCheckupAt: startedAt, installs: updateInstalls(state.installs, installKeysOf(facts), today, unseenInUnreadablePlace(facts)) };
+  const claudeUnseen = unseenInUnreadablePlace(facts.claude);
+  const codexUnseen = codexUnseenInUnreadablePlace(facts.codex);
+  const keys = [...installKeysOf(facts.claude), ...codexInstallKeysOf(facts.codex)];
+  const keepUnseen = (key) => toolOfKey(key) === "codex" ? codexUnseen(key) : claudeUnseen(key);
+  return { ...state, lastCheckupAt: startedAt, installs: updateInstalls(state.installs, keys, today, keepUnseen) };
 }
 
 // src/state/reports.ts
@@ -5274,6 +5404,420 @@ var ClaudeSessionParser = class {
   }
 };
 
+// src/adapters/codex/observation.ts
+var CODEX_COVERAGE = {
+  responsesAndTokens: "measured",
+  humanRequests: "proxy",
+  toolCalls: "proxy",
+  toolErrors: "measured",
+  shellExitCodes: "measured",
+  deniedAndLengthStops: "unsupported",
+  interruptedTurns: "measured",
+  autoCompaction: "proxy",
+  effort: "measured",
+  loadedNames: "unsupported",
+  skillUsage: "unsupported",
+  mcpCalls: "measured",
+  mcpFailuresAndHooks: "unsupported",
+  instructionSize: "measured",
+  subagents: "unsupported"
+};
+var CODEX_MCP_NON_SIGNAL_TYPES = /* @__PURE__ */ new Set(["session_meta", "turn_context", "token_usage_record", "world_state", "compacted"]);
+function codexMcpObservation(summaries, unreadableCount2) {
+  return observeRecords(summaries, unreadableCount2, CODEX_MCP_NON_SIGNAL_TYPES);
+}
+
+// src/adapters/codex/parser.ts
+var EXEC_TOOLS = /* @__PURE__ */ new Map([
+  ["CommandExecution", { name: "shell", status: true }],
+  ["FileChange", { name: "file_change", status: true }],
+  ["McpToolCall", { name: "mcp", status: true }],
+  ["ImageView", { name: "image_view", status: false }],
+  ["Extension", { name: "extension", status: false }],
+  ["WebSearch", { name: "web_search", status: false }]
+]);
+var CODEX_SHELL_TOOLS = ["shell"];
+var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
+var CALL_TYPES = /* @__PURE__ */ new Set(["function_call", "custom_tool_call", "web_search_call"]);
+var CODEX_PARSER_VERSION = 1;
+var SUB_THREAD_SOURCES = /* @__PURE__ */ new Set(["subagent", "guardian_review", "memory_consolidation"]);
+var obj2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+var num2 = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
+var str2 = (value) => typeof value === "string" && value !== "" ? value : null;
+function parseObject2(text) {
+  try {
+    return obj2(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+function usageOf(value) {
+  const raw = obj2(value);
+  if (raw === null) return null;
+  return { input: num2(raw.input_tokens), cacheRead: num2(raw.cached_input_tokens), cacheWrite: num2(raw.cache_write_input_tokens), output: num2(raw.output_tokens), thinking: num2(raw.reasoning_output_tokens) };
+}
+var KEYS = ["input", "cacheRead", "cacheWrite", "output", "thinking"];
+function compareUsage(current, previous) {
+  if (KEYS.some((key) => current[key] < previous[key])) return "smaller";
+  return KEYS.every((key) => current[key] === previous[key]) ? "equal" : "greater";
+}
+var totalPrint = (total) => fnv1a64(KEYS.map((key) => total[key]).join("|"));
+function normalizeVersion(value) {
+  const text = str2(value);
+  const match = text === null ? null : /^(\d+\.\d+\.\d+)(?:[-+].*)?$/.exec(text.trim());
+  return match === null ? null : match[1];
+}
+var CodexSessionParser = class {
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
+  ctx;
+  days = /* @__PURE__ */ new Map();
+  firstDate = null;
+  /** 시각이 있는 마지막 줄(종류와 상관없이)의 날짜 */
+  lastDate = null;
+  sessionId = null;
+  kind = "main";
+  parentSessionId = null;
+  cwd = null;
+  version = null;
+  unknownThreadSource = null;
+  /** 빈 줄이 아닌 첫 물리적 줄을 받았는지, 그 줄이 session_meta라서 그 줄로 정체를 정하는 중인지, 세션 ID를 기록 파일의 식별자로 대신 쓴 까닭(「5단계 계획 전 결정」 7번) */
+  firstLineSeen = false;
+  identityPending = false;
+  idFallback = null;
+  lines = 0;
+  brokenLines = 0;
+  tailFragments = 0;
+  tooLongLines = 0;
+  undatedLines = 0;
+  /** 깨진 줄과 끝 조각의 맨 바깥 종류(온전히 읽히지 않으면 ?)별 수. MCP 호출의 관측이 빠짐없는지 가른다(설계 9.8) */
+  unconfirmedTypes = nameRecord();
+  /** 새 구간에 들어섰는지(token_usage_record를 한 번이라도 봤는지) */
+  inNew = false;
+  /** 옛 구간에서 마지막으로 본 누적값. 새 구간의 첫 기록과 견준다 */
+  lastOldTotal = null;
+  seenResponses = /* @__PURE__ */ new Set();
+  /** 지금 창(앞 턴이 끝난 뒤부터 이 턴이 끝날 때까지)의 turn_context의 모델과 추론 강도, 그 창에서 문맥을 봤는지, 문맥보다 앞에 와서 아직 문맥을 붙이지 못한 응답의 칸 */
+  model = null;
+  effort = null;
+  contextSeen = false;
+  pendingCells = [];
+  /** 지금 묶음(턴, 또는 턴 밖)에서 날짜마다 센 호출 층과 실행 층의 도구 수. 날짜를 몰라 세지 못한 줄은 넣지 않는다 */
+  groupCalls = /* @__PURE__ */ new Map();
+  groupExec = /* @__PURE__ */ new Map();
+  unknownItemTypes = nameRecord();
+  instructionChars = null;
+  /** 자기 기록의 지문(이어받아 뺀 것도 넣는다. 손자 세션이 같은 앞부분을 다시 이어받을 수 있다) */
+  myItemIds = /* @__PURE__ */ new Set();
+  myCallIds = /* @__PURE__ */ new Set();
+  myTotals = /* @__PURE__ */ new Set();
+  myResponseIds = /* @__PURE__ */ new Set();
+  inheritedSkipped = { items: 0, totals: 0, responses: 0 };
+  /**
+   * 이어받아 뺀 강한 것(도구와 사람 요청의 항목, 호출, 누적값, 응답)의 마지막 줄 자리와, 뺄 지문을 받고 처음 센 옛 구간 누적값의 줄 자리. 뒤의 것이 앞의 것보다 앞이면
+   * 복사된 앞부분 안에서 뺄 지문에 없는 누적값을 센 것이라 기준을 찾지 못한 기록이다(「5단계 계획 전 결정」 7번)
+   */
+  lastInheritedLine = -1;
+  firstCountedOldLine = -1;
+  tool(cell, name) {
+    let counts = cell.tools[name];
+    if (!counts) {
+      counts = emptyToolCounts();
+      cell.tools[name] = counts;
+    }
+    return counts;
+  }
+  /**
+   * 묶음을 닫는다. 호출 층이 실행 층보다 많으면 그 차이를 이름 모름의 호출로 더한다(설계 9.6). 차이는 날짜 차례로, 그날 호출 층이 실행 층보다 많은 만큼까지
+   * 그날에 나눈다. 날짜를 몰라 세지 못한 줄은 어느 층에도 넣지 않았다(「5단계 1부 계획에서 보완」)
+   */
+  closeGroup() {
+    const sum2 = (counts) => [...counts.values()].reduce((total, n) => total + n, 0);
+    let extra = sum2(this.groupCalls) - sum2(this.groupExec);
+    for (const date of [...this.groupCalls.keys()].sort()) {
+      if (extra <= 0) break;
+      const give = Math.min(extra, this.groupCalls.get(date) - (this.groupExec.get(date) ?? 0));
+      if (give <= 0) continue;
+      this.tool(this.day(date), UNKNOWN_TOOL).calls += give;
+      extra -= give;
+    }
+    this.groupCalls.clear();
+    this.groupExec.clear();
+  }
+  /** 문맥의 창을 닫는다. 창에서 문맥을 보지 못한 응답은 모델을 모르고 추론 강도를 모르는 것으로 센다(설계 9.6 「그 턴의 응답들에 적용」) */
+  closeContext() {
+    for (const cell of this.pendingCells.splice(0)) cell.unknownEffort++;
+    this.model = null;
+    this.effort = null;
+    this.contextSeen = false;
+  }
+  /** 응답 하나의 칸에 지금 창의 모델과 추론 강도를 붙인다 */
+  attribute(cell) {
+    if (this.model !== null) cell.models[this.model] = (Object.hasOwn(cell.models, this.model) ? cell.models[this.model] : 0) + 1;
+    if (this.effort !== null) cell.efforts[this.effort] = (Object.hasOwn(cell.efforts, this.effort) ? cell.efforts[this.effort] : 0) + 1;
+    else cell.unknownEffort++;
+  }
+  /** 줄바꿈으로 끝난 줄 하나를 받는다. 빈 줄(공백만 있는 줄)은 세지 않는다 */
+  line(text) {
+    if (text.trim() === "") return;
+    this.lines++;
+    const parsed = parseObject2(text);
+    this.firstLine(parsed);
+    if (parsed === null) this.missing(text, "broken");
+    else this.accept(parsed);
+  }
+  /** 풀리지 않는 줄이나 끝 조각 하나. 맨 바깥 종류를 센다(1단계와 같다) */
+  missing(text, kind) {
+    if (kind === "broken") this.brokenLines++;
+    else this.tailFragments++;
+    const type = outerTypeOf(text) ?? "?";
+    this.unconfirmedTypes[type] = (Object.hasOwn(this.unconfirmedTypes, type) ? this.unconfirmedTypes[type] : 0) + 1;
+  }
+  /** 빈 줄이 아닌 첫 물리적 줄 하나만 본다. 풀리지 않거나 너무 길면 첫 줄을 읽지 못한 것이고, 풀렸는데 session_meta가 아니면 정체를 모르는 것이다. 그 뒤의 session_meta로 정체를 정하지 않는다(「5단계 계획 전 결정」 7번) */
+  firstLine(parsed) {
+    if (this.firstLineSeen) return;
+    this.firstLineSeen = true;
+    if (parsed === null) this.idFallback = "first-line-unreadable";
+    else if (parsed.type !== "session_meta") this.idFallback = "first-line-not-meta";
+    else this.identityPending = true;
+  }
+  /** 상한을 넘은 줄 하나를 받는다 */
+  tooLong() {
+    this.lines++;
+    this.tooLongLines++;
+    this.firstLine(null);
+  }
+  day(date) {
+    let cell = this.days.get(date);
+    if (!cell) {
+      cell = emptyDay();
+      this.days.set(date, cell);
+    }
+    return cell;
+  }
+  /** 세는 줄의 날짜. 시각이 없으면 앞 줄(종류와 상관없이)의 날짜를 쓰고, 앞 줄도 없으면 날짜 없는 줄로 센다(1단계와 같다). 세는 줄마다 한 번만 부른다 */
+  dateOf() {
+    if (this.lastDate === null) this.undatedLines++;
+    return this.lastDate;
+  }
+  /** 풀린 줄 하나. 종류와 상관없이 그 줄의 시각을 앞 줄의 날짜와 가장 이른 날짜에 쓰고, 종류에 따라 해석한다 */
+  accept(row) {
+    const own = localDateOfIso(row.timestamp, this.ctx.timeZone);
+    if (own !== null) {
+      this.lastDate = own;
+      if (this.firstDate === null || own < this.firstDate) this.firstDate = own;
+    }
+    const payload = obj2(row.payload) ?? {};
+    if (row.type === "session_meta") {
+      this.meta(payload, this.identityPending);
+      this.identityPending = false;
+      return;
+    }
+    if (row.type === "event_msg" && payload.type === "token_count") {
+      if (!this.inNew) this.oldCount(usageOf(obj2(payload.info)?.total_token_usage));
+      return;
+    }
+    if (row.type === "token_usage_record") return this.newRecord(payload);
+    if (row.type === "turn_context") {
+      this.model = str2(payload.model);
+      this.effort = str2(payload.effort);
+      if (!this.contextSeen) {
+        this.contextSeen = true;
+        for (const cell of this.pendingCells.splice(0)) this.attribute(cell);
+      }
+      return;
+    }
+    if (row.type === "event_msg" && (payload.type === "task_started" || payload.type === "task_complete" || payload.type === "turn_aborted")) {
+      this.closeGroup();
+      if (payload.type !== "task_started") this.closeContext();
+      if (payload.type === "turn_aborted") {
+        const date = this.dateOf();
+        if (date !== null) this.day(date).interruptedTurns++;
+      }
+      return;
+    }
+    if (row.type === "response_item" && typeof payload.type === "string" && CALL_TYPES.has(payload.type)) {
+      const callId = str2(payload.call_id);
+      if (callId !== null) {
+        const print = fnv1a64(callId);
+        this.myCallIds.add(print);
+        if (this.ctx.inherited?.callIds.has(print)) {
+          this.lastInheritedLine = this.lines;
+          return;
+        }
+      }
+      const date = this.dateOf();
+      if (date !== null) this.groupCalls.set(date, (this.groupCalls.get(date) ?? 0) + 1);
+      return;
+    }
+    if (row.type === "event_msg" && payload.type === "item_completed") return this.item(obj2(payload.item));
+    if (row.type === "compacted") {
+      const date = this.dateOf();
+      if (date !== null) this.day(date).autoCompactions++;
+      return;
+    }
+    if (row.type === "world_state" && this.instructionChars === null) {
+      const text = obj2(obj2(obj2(payload.state)?.agents_md))?.text;
+      if (typeof text === "string") {
+        let ascii = 0;
+        let other = 0;
+        for (const char of text) {
+          if (char.codePointAt(0) < 128) ascii++;
+          else other++;
+        }
+        this.instructionChars = { ascii, other };
+      }
+    }
+  }
+  /** 실행 층의 사건 하나. 도구면 이름별로 세고, 사람 요청이면 세고, 도구가 아닌 종류는 넘기며, 모르는 종류는 따로 센다 */
+  item(item2) {
+    if (item2 === null) return;
+    const type = str2(item2.type);
+    if (type === null) return;
+    const itemId = str2(item2.id);
+    if (itemId !== null) {
+      const print = fnv1a64(itemId);
+      this.myItemIds.add(print);
+      if (this.ctx.inherited?.itemIds.has(print)) {
+        this.inheritedSkipped.items++;
+        if (type === "UserMessage" || EXEC_TOOLS.has(type)) this.lastInheritedLine = this.lines;
+        return;
+      }
+    }
+    if (type === "UserMessage") {
+      const date2 = this.dateOf();
+      if (date2 !== null) this.day(date2).humanRequests++;
+      return;
+    }
+    if (NON_TOOL_ITEMS.has(type)) return;
+    const kind = EXEC_TOOLS.get(type);
+    if (kind === void 0) {
+      this.unknownItemTypes[type] = (Object.hasOwn(this.unknownItemTypes, type) ? this.unknownItemTypes[type] : 0) + 1;
+      return;
+    }
+    const date = this.dateOf();
+    if (date === null) return;
+    this.groupExec.set(date, (this.groupExec.get(date) ?? 0) + 1);
+    const cell = this.day(date);
+    const server = type === "McpToolCall" ? str2(item2.server) : null;
+    const name = type === "McpToolCall" ? `mcp__${server ?? UNKNOWN_TOOL}` : kind.name;
+    const counts = this.tool(cell, name);
+    counts.calls++;
+    if (type === "McpToolCall" && server !== null) cell.mcpCalls[server] = (Object.hasOwn(cell.mcpCalls, server) ? cell.mcpCalls[server] : 0) + 1;
+    if (!kind.status) return;
+    counts.results++;
+    const failed = type === "CommandExecution" ? typeof item2.exit_code === "number" && item2.exit_code !== 0 : item2.status === "failed";
+    if (failed) counts.errors++;
+  }
+  /** session_meta 하나. 버전은 모든 session_meta에서 가장 높은 것을 남기고(설계 9.3), 정체(세션 ID, 작업 폴더, 주·하위, 부모)는 첫 줄의 것에서만 정한다 */
+  meta(payload, first) {
+    this.version = maxVersion([this.version, normalizeVersion(payload.cli_version)]);
+    if (!first) return;
+    this.sessionId = str2(payload.id);
+    if (this.sessionId === null) this.idFallback = "meta-without-id";
+    this.cwd = str2(payload.cwd);
+    const source = payload.thread_source;
+    if (source === "user") this.kind = "main";
+    else if (typeof source === "string" && SUB_THREAD_SOURCES.has(source)) {
+      this.kind = "sub";
+      this.parentSessionId = str2(payload.parent_thread_id);
+    } else {
+      this.kind = "main";
+      this.unknownThreadSource = typeof source === "string" ? source : "(\uC5C6\uC74C)";
+    }
+  }
+  /** 응답 하나를 그 날의 칸에 더한다. 날짜를 얻지 못하면 세지 않는다(날짜 없는 줄로는 dateOf가 센다) */
+  count(add) {
+    const date = this.dateOf();
+    if (date === null) return;
+    const cell = this.day(date);
+    cell.responses++;
+    for (const key of KEYS) cell.tokens[key] += add[key];
+    if (this.contextSeen) this.attribute(cell);
+    else this.pendingCells.push(cell);
+  }
+  oldCount(total) {
+    if (total === null) return;
+    const previous = this.lastOldTotal;
+    this.lastOldTotal = total;
+    const print = totalPrint(total);
+    this.myTotals.add(print);
+    if (this.ctx.inherited?.totals.has(print)) {
+      this.inheritedSkipped.totals++;
+      this.lastInheritedLine = this.lines;
+      return;
+    }
+    if (this.ctx.inherited && this.firstCountedOldLine < 0 && (previous === null || compareUsage(total, previous) !== "equal")) this.firstCountedOldLine = this.lines;
+    if (previous === null) return this.count(total);
+    const relation = compareUsage(total, previous);
+    if (relation === "equal") return;
+    if (relation === "smaller") return this.count(total);
+    const diff = { ...total };
+    for (const key of KEYS) diff[key] = total[key] - previous[key];
+    this.count(diff);
+  }
+  newRecord(payload) {
+    const responseId = str2(payload.response_id);
+    const use = usageOf(payload.usage);
+    const first = !this.inNew;
+    this.inNew = true;
+    if (responseId !== null) {
+      if (this.seenResponses.has(responseId)) return;
+      this.seenResponses.add(responseId);
+      const print = fnv1a64(responseId);
+      this.myResponseIds.add(print);
+      if (this.ctx.inherited?.responseIds.has(print)) {
+        this.inheritedSkipped.responses++;
+        this.lastInheritedLine = this.lines;
+        return;
+      }
+    }
+    if (use === null) return;
+    if (first && this.lastOldTotal !== null) {
+      const thread = usageOf(payload.thread_token_usage);
+      if (thread !== null && compareUsage(thread, this.lastOldTotal) === "equal") return;
+    }
+    this.count(use);
+  }
+  /** 자기 기록의 지문. finish 뒤에 부른다 */
+  fingerprints() {
+    return { itemIds: this.myItemIds, callIds: this.myCallIds, totals: this.myTotals, responseIds: this.myResponseIds };
+  }
+  /** 파일 끝의 줄바꿈 없는 조각을 받고 요약을 낸다. 조각이 풀리면 받아들이고, 안 풀리면 쓰는 중일 때만 끝 조각이고 아니면 깨진 줄이다(1단계와 같다) */
+  finish(tail, inProgress) {
+    if (tail !== null && tail.trim() !== "") {
+      this.lines++;
+      const parsed = parseObject2(tail);
+      this.firstLine(parsed);
+      if (parsed !== null) this.accept(parsed);
+      else this.missing(tail, inProgress ? "tail" : "broken");
+    }
+    this.closeGroup();
+    this.closeContext();
+    if (!this.firstLineSeen) this.idFallback = "no-lines";
+    const days = {};
+    for (const date of [...this.days.keys()].sort()) days[date] = canonicalDay(this.days.get(date));
+    return {
+      tool: "codex",
+      sessionId: this.sessionId ?? this.ctx.recordId,
+      kind: this.kind,
+      parentSessionId: this.kind === "sub" ? this.parentSessionId : null,
+      cwd: this.cwd,
+      version: this.version,
+      firstDate: this.firstDate,
+      days,
+      instructionChars: this.instructionChars,
+      initialSkills: null,
+      initialMcpServers: null,
+      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
+      firstResponseIdHashes: [],
+      notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord() },
+      codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: sortedRecord(this.unknownItemTypes), inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine }
+    };
+  }
+};
+
 // src/collect/claude.ts
 import { join as join9 } from "node:path";
 
@@ -5479,15 +6023,592 @@ function overlappingSessions(summaries) {
   return overlapping.size;
 }
 
+// src/collect/codex.ts
+import { join as join11 } from "node:path";
+
+// src/adapters/codex/locate.ts
+import { readdir as readdir5, stat as stat3 } from "node:fs/promises";
+import { join as join10, resolve as resolve2 } from "node:path";
+function codexHome(env, homedir2) {
+  const fromEnv = env.CODEX_HOME?.trim();
+  return fromEnv ? resolve2(fromEnv) : join10(homedir2, ".codex");
+}
+var isMissing3 = (error) => error?.code === "ENOENT";
+var DIGITS = /^\d+$/;
+var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
+async function listCodexFiles(home, minChangedMs, statFile = stat3) {
+  const sessions = join10(home, "sessions");
+  const files = [];
+  const unreadableDirs = [];
+  let olderThanWindow = 0;
+  let unnamedFiles = 0;
+  const walk = async (dir, depth) => {
+    let entries;
+    try {
+      entries = await readdir5(dir, { withFileTypes: true });
+    } catch (error) {
+      if (depth === 0 && isMissing3(error)) return false;
+      if (!isMissing3(error)) unreadableDirs.push(dir);
+      return true;
+    }
+    for (const entry of entries) {
+      const path = join10(dir, entry.name);
+      if (depth < 3) {
+        if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
+        else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
+        continue;
+      }
+      if (!entry.isFile() || !/^rollout-.*\.jsonl(\.zst)?$/i.test(entry.name)) continue;
+      const match = ROLLOUT.exec(entry.name);
+      if (match === null) {
+        unnamedFiles++;
+        continue;
+      }
+      const baseId = match[1]?.toLowerCase() ?? null;
+      const recordId = match[2].toLowerCase();
+      const compressed = match[3] !== void 0;
+      try {
+        const info = await statFile(path);
+        const changedMs = Math.max(info.mtimeMs, info.ctimeMs);
+        if (minChangedMs !== null && changedMs < minChangedMs) {
+          olderThanWindow++;
+          continue;
+        }
+        files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, changedMs, recordId, baseId, compressed });
+      } catch {
+        files.push({ path, normPath: normalizePath(path), size: null, mtimeMs: null, changedMs: null, recordId, baseId, compressed });
+      }
+    }
+    return true;
+  };
+  const found = await walk(sessions, 0);
+  if (!found) return { sessionsFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unnamedFiles: 0 };
+  files.sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
+  unreadableDirs.sort();
+  return { sessionsFound: true, files, olderThanWindow, unreadableDirs, unnamedFiles };
+}
+function canonicalOrder(a, b) {
+  if (a.compressed !== b.compressed) return a.compressed ? 1 : -1;
+  if (a.changedMs !== b.changedMs) {
+    if (a.changedMs === null) return 1;
+    if (b.changedMs === null) return -1;
+    return b.changedMs - a.changedMs;
+  }
+  return a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0;
+}
+function groupCopies(files) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const list = groups.get(file.recordId);
+    if (list) list.push(file);
+    else groups.set(file.recordId, [file]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([recordId, copies]) => ({ recordId, copies: [...copies].sort(canonicalOrder) }));
+}
+
+// src/adapters/codex/merge.ts
+var recordIdOf = (summary) => summary.codex?.recordId ?? summary.sessionId;
+var byRecordId = (a, b) => recordIdOf(a) < recordIdOf(b) ? -1 : recordIdOf(a) > recordIdOf(b) ? 1 : 0;
+function addNumbers(into, from) {
+  for (const [key, value] of Object.entries(from)) into[key] = (Object.hasOwn(into, key) ? into[key] : 0) + value;
+}
+function mergeRecords(records, outside2 = []) {
+  if (records.length === 1 && outside2.length === 0) return records[0];
+  const sorted = [...records].sort(byRecordId);
+  const all = [...records, ...outside2].sort(byRecordId);
+  const base = all.find((summary) => recordIdOf(summary) === summary.sessionId) ?? all[0];
+  const first = (pick) => pick(base) ?? all.map(pick).find((value) => value !== null) ?? null;
+  const cells = /* @__PURE__ */ new Map();
+  const unconfirmedTypes = nameRecord();
+  const unknownHookKinds = nameRecord();
+  const unknownItemTypes = nameRecord();
+  const missing = { lines: 0, brokenLines: 0, tailFragments: 0, tooLongLines: 0 };
+  const notes = { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: 0 };
+  const inheritedSkipped = { items: 0, totals: 0, responses: 0 };
+  let firstDate = null;
+  for (const summary of sorted) {
+    for (const [date, cell] of Object.entries(summary.days)) {
+      let into = cells.get(date);
+      if (into === void 0) {
+        into = emptyDay();
+        cells.set(date, into);
+      }
+      addDayInto(into, cell);
+    }
+    missing.lines += summary.missing.lines;
+    missing.brokenLines += summary.missing.brokenLines;
+    missing.tailFragments += summary.missing.tailFragments;
+    missing.tooLongLines += summary.missing.tooLongLines;
+    addNumbers(unconfirmedTypes, summary.missing.unconfirmedTypes);
+    notes.syntheticResponses += summary.notes.syntheticResponses;
+    notes.responsesWithoutId += summary.notes.responsesWithoutId;
+    notes.undatedLines += summary.notes.undatedLines;
+    addNumbers(unknownHookKinds, summary.notes.unknownHookKinds);
+    if (summary.codex !== void 0) {
+      addNumbers(unknownItemTypes, summary.codex.unknownItemTypes);
+      inheritedSkipped.items += summary.codex.inheritedSkipped.items;
+      inheritedSkipped.totals += summary.codex.inheritedSkipped.totals;
+      inheritedSkipped.responses += summary.codex.inheritedSkipped.responses;
+    }
+  }
+  for (const summary of all) {
+    if (summary.firstDate !== null && (firstDate === null || summary.firstDate < firstDate)) firstDate = summary.firstDate;
+  }
+  const days = {};
+  for (const date of [...cells.keys()].sort()) days[date] = canonicalDay(cells.get(date));
+  const instructionChars = first((summary) => summary.instructionChars);
+  const codex = base.codex;
+  return {
+    tool: base.tool,
+    sessionId: base.sessionId,
+    kind: base.kind,
+    parentSessionId: base.parentSessionId,
+    cwd: first((summary) => summary.cwd),
+    version: maxVersion(all.map((summary) => summary.version)),
+    firstDate,
+    days,
+    instructionChars: instructionChars === null ? null : { ascii: instructionChars.ascii, other: instructionChars.other },
+    initialSkills: base.initialSkills === null ? null : [...base.initialSkills],
+    initialMcpServers: base.initialMcpServers === null ? null : [...base.initialMcpServers],
+    missing: { ...missing, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
+    firstResponseIdHashes: [...base.firstResponseIdHashes],
+    notes: { ...notes, unknownHookKinds: sortedRecord(unknownHookKinds) },
+    ...codex === void 0 ? {} : {
+      codex: {
+        recordId: codex.recordId,
+        unknownThreadSource: first((summary) => summary.codex?.unknownThreadSource ?? null),
+        idFallback: codex.idFallback,
+        unknownItemTypes: sortedRecord(unknownItemTypes),
+        inheritedSkipped,
+        baselineMissing: sorted.some((summary) => summary.codex?.baselineMissing === true)
+      }
+    }
+  };
+}
+
+// src/adapters/codex/zstd.ts
+import { createReadStream } from "node:fs";
+import { open as open4, stat as stat4 } from "node:fs/promises";
+import * as zlib from "node:zlib";
+var ZSTD_MAGIC = 4247762216;
+var SKIPPABLE_MASK = 4294967280;
+var SKIPPABLE_MAGIC = 407710288;
+var MAGIC_BYTES = [40, 181, 47, 253];
+var SKIPPABLE_BYTES = [80, 42, 77, 24];
+function magicPrefix(bytes) {
+  const data = bytes.every((byte, index) => byte === MAGIC_BYTES[index]);
+  const skippable = bytes.every((byte, index) => index === 0 ? (byte & 240) === SKIPPABLE_BYTES[0] : byte === SKIPPABLE_BYTES[index]);
+  return data || skippable;
+}
+function zstdAvailable() {
+  return typeof zlib.createZstdDecompress === "function";
+}
+async function scanZstdFrames(path, maxBytes = Infinity, seen = { endedEarly: false }) {
+  const handle = await open4(path, "r");
+  try {
+    const size = Math.min((await handle.stat()).size, maxBytes);
+    if (Number.isFinite(maxBytes) && size < maxBytes) seen.endedEarly = true;
+    const small = Buffer.alloc(18);
+    const readAt = async (position2, length) => {
+      let offset = 0;
+      while (offset < length) {
+        const { bytesRead } = await handle.read(small, offset, length - offset, position2 + offset);
+        if (bytesRead === 0) break;
+        offset += bytesRead;
+      }
+      if (offset < length) seen.endedEarly = true;
+      return small.subarray(0, offset);
+    };
+    let position = 0;
+    let frames = 0;
+    const ranges = [];
+    let frameStart = null;
+    if (size === 0) return { status: "invalid", frames: 0, ranges, brokenFrameStart: null };
+    while (position < size) {
+      const left = size - position;
+      const lead = await readAt(position, Math.min(4, left));
+      if (lead.length < 4) return { status: magicPrefix(lead) ? "truncated" : "invalid", frames, ranges, brokenFrameStart: null };
+      const magic = lead.readUInt32LE(0);
+      frameStart = null;
+      if ((magic & SKIPPABLE_MASK) >>> 0 === SKIPPABLE_MAGIC) {
+        if (left < 8) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        const field = await readAt(position + 4, 4);
+        if (field.length < 4) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        const length = field.readUInt32LE(0);
+        position += 8 + length;
+        if (position > size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        continue;
+      }
+      if (magic !== ZSTD_MAGIC) return { status: "invalid", frames, ranges, brokenFrameStart: null };
+      frameStart = position;
+      position += 4;
+      if (position >= size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+      const descriptorByte = await readAt(position, 1);
+      if (descriptorByte.length < 1) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+      const descriptor = descriptorByte[0];
+      const fcsFlag = descriptor >> 6;
+      const singleSegment = descriptor >> 5 & 1;
+      const reserved = descriptor >> 3 & 1;
+      const checksum = descriptor >> 2 & 1;
+      const dictFlag = descriptor & 3;
+      if (reserved !== 0) return { status: "invalid", frames, ranges, brokenFrameStart: frameStart };
+      const headerBytes = 1 + (singleSegment ? 0 : 1) + [0, 1, 2, 4][dictFlag] + [singleSegment ? 1 : 0, 2, 4, 8][fcsFlag];
+      position += headerBytes;
+      if (position > size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+      for (; ; ) {
+        if (size - position < 3) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        const head = await readAt(position, 3);
+        if (head.length < 3) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        const value = head[0] | head[1] << 8 | head[2] << 16;
+        const last = value & 1;
+        const type = value >> 1 & 3;
+        const blockSize = value >>> 3;
+        if (type === 3) return { status: "invalid", frames, ranges, brokenFrameStart: frameStart };
+        position += 3 + (type === 1 ? 1 : blockSize);
+        if (position > size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+        if (last) break;
+      }
+      if (checksum) {
+        position += 4;
+        if (position > size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
+      }
+      frames++;
+      ranges.push([frameStart, position]);
+      frameStart = null;
+    }
+    return { status: frames > 0 ? "complete" : "invalid", frames, ranges, brokenFrameStart: null };
+  } finally {
+    await handle.close();
+  }
+}
+async function decodeRange(path, start, end, push) {
+  const source = createReadStream(path, { start, end: end - 1 });
+  let bytesRead = 0;
+  let decodedBytes = 0;
+  source.on("data", (chunk) => {
+    bytesRead += typeof chunk === "string" ? Buffer.byteLength(chunk) : chunk.length;
+  });
+  const decoder = zlib.createZstdDecompress();
+  source.on("error", (error) => decoder.destroy(error));
+  source.pipe(decoder);
+  try {
+    for await (const chunk of decoder) {
+      decodedBytes += chunk.length;
+      push(chunk);
+    }
+    return { bytesRead, decodedBytes, error: bytesRead === end - start ? null : "SHORT_INPUT" };
+  } catch (error) {
+    source.destroy();
+    return { bytesRead, decodedBytes, error: error.code ?? String(error.message ?? error) };
+  }
+}
+async function readZstdLines(path, nowMs, sink, options = {}) {
+  const opened = await stat4(path);
+  const sizeAtOpen = opened.size;
+  const mtimeMsAtOpen = opened.mtimeMs;
+  if (options.afterOpen) await options.afterOpen();
+  const seen = { endedEarly: false };
+  const frames = await scanZstdFrames(path, sizeAtOpen, seen);
+  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES);
+  let bytesRead = 0;
+  let decodedBytes = 0;
+  let decodeError = sizeAtOpen === 0 ? "EMPTY" : null;
+  const targets = [...frames.ranges];
+  if (frames.brokenFrameStart !== null) targets.push([frames.brokenFrameStart, sizeAtOpen]);
+  for (const [start, end] of targets) {
+    const result = await decodeRange(path, start, end, (chunk) => splitter.push(chunk));
+    bytesRead += result.bytesRead;
+    decodedBytes += result.decodedBytes;
+    if (result.error !== null) {
+      decodeError = result.error;
+      break;
+    }
+  }
+  if (decodeError === null && frames.status === "invalid" && targets.length === 0) decodeError = "INVALID";
+  const tail = splitter.finish();
+  const after = await stat4(path);
+  const inProgress = after.size !== sizeAtOpen || after.mtimeMs !== mtimeMsAtOpen || nowMs - mtimeMsAtOpen < IN_PROGRESS_WINDOW_MS;
+  return { sizeAtOpen, mtimeMsAtOpen, bytesRead, decodedBytes, tail, inProgress: inProgress || seen.endedEarly || decodeError === "SHORT_INPUT", endedEarly: seen.endedEarly || decodeError === "SHORT_INPUT", decodeError, frames };
+}
+
+// src/collect/codex.ts
+var CODEX_PARSER_ID = `codex@${CODEX_PARSER_VERSION}`;
+function codexUnreadableCount(read) {
+  return read.unreadableFiles.length + read.unreadableDirs.length + read.skippedFiles.length + read.partialFiles.length;
+}
+var byPath = (a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0;
+var baseName = (path) => path.slice(Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\")) + 1);
+var siblingOrder = (a, b) => {
+  const original = (record) => record.canonical.recordId === record.summary.sessionId ? 0 : 1;
+  if (original(a) !== original(b)) return original(a) - original(b);
+  const an = baseName(a.canonical.path);
+  const bn = baseName(b.canonical.path);
+  return an < bn ? -1 : an > bn ? 1 : byPath(a.canonical, b.canonical);
+};
+var keysOf = (group) => [.../* @__PURE__ */ new Set([group.recordId, ...group.copies.flatMap((copy2) => copy2.baseId === null ? [] : [copy2.baseId])])];
+var recentlyChanged = (file, options) => file.changedMs !== null && options.clock.nowMs - file.changedMs < IN_PROGRESS_WINDOW_MS;
+async function parseCopy(file, inherited, options) {
+  const parser = new CodexSessionParser({ recordId: file.recordId, timeZone: options.clock.timeZone, inherited });
+  const sink = { line: (text) => parser.line(text), tooLong: () => parser.tooLong() };
+  if (!file.compressed) {
+    const outcome2 = await readLines(file.path, options.clock.nowMs, sink);
+    const stable2 = outcome2.sizeAtOpen === file.size && outcome2.mtimeMsAtOpen === file.mtimeMs;
+    const inProgress2 = outcome2.inProgress || !stable2 || recentlyChanged(file, options);
+    const summary2 = parser.finish(outcome2.tail, inProgress2);
+    return { summary: summary2, prints: parser.fingerprints(), bytesRead: outcome2.bytesRead, inProgress: inProgress2, partial: outcome2.endedEarly, storable: !inProgress2 };
+  }
+  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink);
+  const incomplete = outcome.frames.status !== "complete" || outcome.decodeError !== null || outcome.endedEarly;
+  if (incomplete && outcome.decodedBytes === 0) throw new Error(outcome.decodeError ?? outcome.frames.status);
+  const stable = outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs;
+  const inProgress = outcome.inProgress || !stable || recentlyChanged(file, options);
+  const summary = parser.finish(outcome.tail, inProgress);
+  return { summary, prints: parser.fingerprints(), bytesRead: outcome.bytesRead, inProgress, partial: incomplete, storable: !inProgress && !incomplete };
+}
+async function readGroup(group, options, zstd, cacheDir) {
+  const canonical = group.copies[0];
+  let failure = null;
+  for (const file of group.copies) {
+    if (file.size === null || file.mtimeMs === null) {
+      failure ??= "unknown-size";
+      continue;
+    }
+    if (file.compressed && !zstd) {
+      failure ??= "skipped";
+      continue;
+    }
+    try {
+      let key = null;
+      if (cacheDir !== null) {
+        key = await cacheKeyFor({ path: file.path, normPath: file.normPath, size: file.size, mtimeMs: file.mtimeMs }, CODEX_PARSER_ID, options.clock.timeZone);
+        if (key !== null && !options.rescan && !recentlyChanged(file, options)) {
+          const hit = await loadCached(cacheDir, key);
+          const prints = hit?.codex === void 0 ? null : fromLists(hit.codex.fingerprints);
+          if (hit !== null && hit.codex !== void 0 && prints !== null) {
+            return { canonical, file, key, summary: hit.summary, prints, digest: hit.codex.sharedDigest, bytesRead: hit.bytesRead, fromCache: true, storable: false, inProgress: false, partial: false, failed: false };
+          }
+        }
+      }
+      const parsed = await parseCopy(file, null, options);
+      return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
+    } catch {
+      failure ??= "failed";
+    }
+  }
+  return failure ?? "failed";
+}
+async function collectCodex(options) {
+  const home = codexHome(options.env, options.homedir);
+  return collectCodexFromList(home, await listCodexFiles(home, null, options.statFile), options);
+}
+async function collectCodexFromList(home, list, options) {
+  const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
+  const lowerBound = options.rescan ? null : windows.collectStartLowerBoundMs;
+  const cacheDir = options.cacheDir === null ? null : join11(options.cacheDir, "codex");
+  const zstd = options.zstd ?? zstdAvailable();
+  const groups = groupCopies(list.files).map((group) => ({ ...group, copies: [...group.copies] })).sort((a, b) => byPath(a.copies[0], b.copies[0]));
+  const inWindow = groups.filter((group) => lowerBound === null || group.copies[0].changedMs === null || group.copies[0].changedMs >= lowerBound);
+  const inside2 = new Set(inWindow);
+  const outside2 = /* @__PURE__ */ new Map();
+  for (const group of groups) {
+    if (inside2.has(group)) continue;
+    for (const key of keysOf(group)) {
+      const found = outside2.get(key);
+      if (found === void 0) outside2.set(key, [group]);
+      else found.push(group);
+    }
+  }
+  const read = {
+    files: inWindow.length,
+    listedBytes: 0,
+    bytes: 0,
+    fromCache: 0,
+    inProgress: 0,
+    olderThanWindow: list.olderThanWindow + groups.length - inWindow.length,
+    unreadableFiles: [],
+    unreadableFileBytes: 0,
+    unknownSizeFiles: 0,
+    unreadableDirs: [...list.unreadableDirs].sort(),
+    skippedFiles: [],
+    skippedFileBytes: 0,
+    partialFiles: [],
+    skippedCopies: inWindow.reduce((sum2, group) => sum2 + group.copies.length - 1, 0),
+    unnamedFiles: list.unnamedFiles
+  };
+  const reads = [];
+  const failedGroups = [];
+  const readOf = /* @__PURE__ */ new Map();
+  for (const group of inWindow) {
+    const result = await readGroup(group, options, zstd, cacheDir);
+    read.unknownSizeFiles += group.copies.filter((copy2) => copy2.size === null).length;
+    if (typeof result !== "string") {
+      reads.push(result);
+      readOf.set(group, result);
+      read.listedBytes += result.file.size ?? 0;
+      continue;
+    }
+    failedGroups.push(group);
+    const canonical = group.copies[0];
+    read.listedBytes += canonical.size ?? 0;
+    if (result === "skipped") {
+      read.skippedFiles.push(canonical.path);
+      read.skippedFileBytes += canonical.size ?? 0;
+      continue;
+    }
+    read.unreadableFiles.push(canonical.path);
+    read.unreadableFileBytes += canonical.size ?? 0;
+  }
+  const unknownMtime = /* @__PURE__ */ new Set();
+  for (const group of inWindow) {
+    if (!group.copies.some((copy2) => copy2.mtimeMs === null)) continue;
+    const record = readOf.get(group);
+    unknownMtime.add(record === void 0 ? `record:${group.recordId}` : `session:${record.summary.sessionId}`);
+  }
+  const failedKeys = new Set(failedGroups.flatMap(keysOf));
+  const damaged = new Set(reads.filter((record) => record.partial || mostlyBroken(record.summary)).map((record) => record.summary.sessionId));
+  const extra = /* @__PURE__ */ new Map();
+  const parentPrints = /* @__PURE__ */ new Map();
+  const parentOriginal = /* @__PURE__ */ new Map();
+  const printsOf = async (parentId) => {
+    if (parentPrints.has(parentId)) return parentPrints.get(parentId);
+    const found = reads.filter((record) => record.summary.sessionId === parentId);
+    for (const old of outside2.get(parentId) ?? []) {
+      if (!extra.has(old)) extra.set(old, await readGroup(old, options, zstd, cacheDir));
+      const result = extra.get(old);
+      if (typeof result === "string") failedKeys.add(parentId);
+      else if (result.summary.sessionId === parentId) {
+        found.push(result);
+        if (result.partial || mostlyBroken(result.summary)) damaged.add(parentId);
+      }
+    }
+    const prints = found.length === 0 ? null : unionOf(found.map((record) => record.prints));
+    parentPrints.set(parentId, prints);
+    parentOriginal.set(parentId, found.some((record) => record.canonical.recordId === parentId));
+    return prints;
+  };
+  const siblings = /* @__PURE__ */ new Map();
+  for (const record of reads) {
+    const list2 = siblings.get(record.summary.sessionId);
+    if (list2 === void 0) siblings.set(record.summary.sessionId, [record]);
+    else list2.push(record);
+  }
+  const outsideOf = /* @__PURE__ */ new Map();
+  for (const [sessionId, list2] of siblings) {
+    for (const old of outside2.get(sessionId) ?? []) {
+      if (!extra.has(old)) extra.set(old, await readGroup(old, options, zstd, cacheDir));
+      const result = extra.get(old);
+      if (typeof result === "string") failedKeys.add(sessionId);
+      else if (result.summary.sessionId === sessionId) {
+        list2.push(result);
+        outsideOf.set(sessionId, [...outsideOf.get(sessionId) ?? [], result.summary]);
+        if (result.partial || mostlyBroken(result.summary)) damaged.add(sessionId);
+      }
+    }
+  }
+  for (const list2 of siblings.values()) list2.sort(siblingOrder);
+  const parentOf = (record) => record.summary.kind === "sub" && record.summary.parentSessionId !== null && record.summary.parentSessionId !== record.summary.sessionId ? record.summary.parentSessionId : null;
+  const plans = [];
+  for (const record of reads) {
+    const parentId = parentOf(record);
+    const parent = parentId === null ? null : await printsOf(parentId);
+    const list2 = siblings.get(record.summary.sessionId);
+    const sources = [...parent === null ? [] : [parent], ...list2.slice(0, list2.indexOf(record)).map((sibling) => sibling.prints)];
+    plans.push({ record, inherited: sources.length === 0 ? null : unionOf(sources) });
+  }
+  for (const { record, inherited } of plans) {
+    const digest = sharedDigest(record.prints, inherited);
+    if (digest === record.digest) continue;
+    try {
+      const parsed = await parseCopy(record.file, inherited, options);
+      if (parsed.summary.sessionId !== record.summary.sessionId) throw new Error("\uB2E4\uC2DC \uC77D\uC740 \uAE30\uB85D\uC758 \uC138\uC158 ID\uAC00 \uCC98\uC74C\uACFC \uB2E4\uB974\uB2E4");
+      Object.assign(record, parsed, { digest: sharedDigest(parsed.prints, inherited), fromCache: false });
+    } catch {
+      record.failed = true;
+    }
+  }
+  for (const record of reads) {
+    if (record.failed) failedKeys.add(record.summary.sessionId);
+    else if (record.partial || mostlyBroken(record.summary)) damaged.add(record.summary.sessionId);
+  }
+  const orphans = /* @__PURE__ */ new Set();
+  const unverified = /* @__PURE__ */ new Set();
+  for (const record of reads) {
+    if (record.failed) continue;
+    const { sessionId } = record.summary;
+    const parentId = parentOf(record);
+    const parent = parentId === null ? null : await printsOf(parentId);
+    if (parentId !== null && parent === null) orphans.add(sessionId);
+    if (record.summary.kind === "sub" && parentId === null) unverified.add(sessionId);
+    if (parentId !== null && (parent === null || parentOriginal.get(parentId) !== true || failedKeys.has(parentId) || damaged.has(parentId))) unverified.add(sessionId);
+    const list2 = siblings.get(sessionId);
+    if (failedKeys.has(sessionId) || list2.length > 1 && damaged.has(sessionId) || !list2.some((sibling) => sibling.canonical.recordId === sessionId)) unverified.add(sessionId);
+    if (record.summary.codex?.baselineMissing === true) unverified.add(sessionId);
+  }
+  const kept = [];
+  const idFallbacks = nameRecord();
+  const unreadable = (record) => {
+    read.unreadableFiles.push(record.file.path);
+    read.unreadableFileBytes += record.file.size ?? 0;
+  };
+  for (const record of reads) {
+    if (record.failed) {
+      unreadable(record);
+      continue;
+    }
+    kept.push(record);
+    const fallback = record.summary.codex?.idFallback ?? null;
+    if (fallback !== null) idFallbacks[fallback] = (Object.hasOwn(idFallbacks, fallback) ? idFallbacks[fallback] : 0) + 1;
+    read.bytes += record.bytesRead;
+    if (record.fromCache) read.fromCache++;
+    if (record.inProgress) read.inProgress++;
+    if (mostlyBroken(record.summary)) unreadable(record);
+    else if (record.partial) read.partialFiles.push(record.file.path);
+  }
+  if (cacheDir !== null) {
+    for (const record of [...kept, ...[...extra.values()].filter((result) => typeof result !== "string")]) {
+      if (record.fromCache || !record.storable || record.key === null) continue;
+      try {
+        if (await keyStillMatches(record.file.path, record.key)) await storeCached(cacheDir, { key: record.key, summary: record.summary, bytesRead: record.bytesRead, codex: { fingerprints: toLists(record.prints), sharedDigest: record.digest } });
+      } catch {
+      }
+    }
+  }
+  const sessions = /* @__PURE__ */ new Map();
+  for (const record of kept) {
+    const list2 = sessions.get(record.summary.sessionId);
+    if (list2 === void 0) sessions.set(record.summary.sessionId, [record]);
+    else list2.push(record);
+  }
+  const ordered = [...sessions.values()].sort((a, b) => byPath(a[0].canonical, b[0].canonical));
+  const outsideFor = (records) => outsideOf.get(records[0].summary.sessionId) ?? [];
+  const summaries = ordered.map((records) => mergeRecords(records.map((record) => record.summary), outsideFor(records)));
+  read.unreadableFiles.sort();
+  read.skippedFiles.sort();
+  read.partialFiles.sort();
+  return {
+    tool: "codex",
+    home,
+    detected: list.sessionsFound,
+    summaries,
+    read,
+    visibleFrom: visibleFrom(summaries, read.olderThanWindow, windows.collectDates[0]),
+    parentRecordMissing: orphans.size,
+    mergedSessions: ordered.filter((records) => records.length + outsideFor(records).length > 1).length,
+    unknownMtimeSessions: unknownMtime.size,
+    unverifiedInheritance: unverified.size,
+    idFallbacks: sortedRecord(idFallbacks)
+  };
+}
+
 // src/scan/claude.ts
-import { basename as basename6, join as join16, relative as relative3 } from "node:path";
+import { basename as basename6, join as join18, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join11, resolve as resolve3 } from "node:path";
+import { join as join13, resolve as resolve4 } from "node:path";
 
 // src/scan/fs.ts
-import { lstat as lstat4, readdir as readdir5, readFile as readFile5, realpath as realpath4, stat as stat3 } from "node:fs/promises";
-var isMissing3 = (error) => {
+import { lstat as lstat4, readdir as readdir6, readFile as readFile5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
+var isMissing4 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
 };
@@ -5496,7 +6617,7 @@ async function readText(path) {
   try {
     return { status: "ok", text: stripBom(await readFile5(path, "utf8")) };
   } catch (error) {
-    return isMissing3(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing4(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 async function readJson(path) {
@@ -5510,9 +6631,9 @@ async function readJson(path) {
 }
 async function listDir(path) {
   try {
-    return { status: "ok", names: (await readdir5(path)).sort() };
+    return { status: "ok", names: (await readdir6(path)).sort() };
   } catch (error) {
-    return isMissing3(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing4(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 function createdMsOf(info) {
@@ -5531,7 +6652,7 @@ async function entryInfo(path) {
   let target = own;
   if (isLink) {
     try {
-      target = await stat3(path);
+      target = await stat5(path);
     } catch {
       target = null;
     }
@@ -5555,7 +6676,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename3, join as join10, resolve as resolve2 } from "node:path";
+import { basename as basename3, join as join12, resolve as resolve3 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -5710,7 +6831,7 @@ function declarationsOf(value) {
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join10(root, name));
+  const info = await entryInfo(join12(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -5732,7 +6853,7 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known = await readJson(join10(claudeHome2, "plugins", "known_marketplaces.json"));
+  const known = await readJson(join12(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known.status === "missing") return { file: "missing", markets };
   if (known.status !== "ok" || !isObject5(known.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known.value)) {
@@ -5741,7 +6862,7 @@ async function readMarketplaceEntries(claudeHome2) {
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join10(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join12(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -5810,7 +6931,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join10(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join12(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -5883,7 +7004,7 @@ async function readPluginInstall(group, markets) {
   };
   const declaredPath = async (declared2) => {
     if (!wellFormedPath(declared2)) return null;
-    const path = resolve2(installPath, declared2);
+    const path = resolve3(installPath, declared2);
     return await insideRoot(path) ? path : null;
   };
   const hookSources = [];
@@ -5905,7 +7026,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join10(installPath, "hooks", "hooks.json");
+  const defaultHooks = join12(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -5937,7 +7058,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join10(installPath, ".mcp.json"), false);
+  await addMcpFile(join12(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -5955,7 +7076,7 @@ async function readPluginInstall(group, markets) {
   const declared = [...pathsOf(base.skills).map((path) => ({ path, from: prefix })), ...pathsOf(appended.skills).map((path) => ({ path, from: "entry" }))];
   const skillRoots = [];
   for (const { path, from } of declared) {
-    if (await isPluginRoot(resolve2(installPath, path))) {
+    if (await isPluginRoot(resolve3(installPath, path))) {
       plugin.unknownEntries.push(`${from}:skills=.`);
       continue;
     }
@@ -5963,7 +7084,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join10(installPath, "skills");
+  const defaultSkills = join12(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -5974,7 +7095,7 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join10(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join12(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
     const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
@@ -5983,7 +7104,7 @@ async function readSkillsDirPlugins(refs) {
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join10(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join12(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -6012,7 +7133,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join11(resolve3(fromEnv), ".claude.json") : join11(homedir2, ".claude.json");
+  return fromEnv ? join13(resolve4(fromEnv), ".claude.json") : join13(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -6068,16 +7189,16 @@ async function readClaudeJson(path) {
 }
 
 // src/scan/instructions.ts
-import { createHash as createHash3 } from "node:crypto";
+import { createHash as createHash4 } from "node:crypto";
 import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, join as join12 } from "node:path";
+import { basename as basename4, join as join14 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
 function lineHash(line) {
-  return createHash3("sha256").update(line).digest("hex").slice(0, 32);
+  return createHash4("sha256").update(line).digest("hex").slice(0, 32);
 }
 function countChars(text) {
   let ascii = 0;
@@ -6104,7 +7225,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join12(current, name);
+      const path = join14(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -6164,15 +7285,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join12(claudeHome2, "rules"));
-  return { paths: [join12(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join14(claudeHome2, "rules"));
+  return { paths: [join14(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join12(root, "CLAUDE.md"), join12(root, ".claude", "CLAUDE.md"), join12(root, "CLAUDE.local.md")];
+  const claudeFiles = [join14(root, "CLAUDE.md"), join14(root, ".claude", "CLAUDE.md"), join14(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join12(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join12(root, "AGENTS.md"), join12(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join14(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join14(root, "AGENTS.md"), join14(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets) {
@@ -6254,22 +7375,22 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname3, isAbsolute, join as join13, parse, resolve as resolve4 } from "node:path";
+import { dirname as dirname3, isAbsolute, join as join15, parse, resolve as resolve5 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
-  const gitDir = isAbsolute(match[1]) ? match[1] : resolve4(dir, match[1]);
-  const common = await readText(join13(gitDir, "commondir"));
+  const gitDir = isAbsolute(match[1]) ? match[1] : resolve5(dir, match[1]);
+  const common = await readText(join15(gitDir, "commondir"));
   if (common.status !== "ok") return null;
-  const commonDir = resolve4(gitDir, common.text.trim());
+  const commonDir = resolve5(gitDir, common.text.trim());
   return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join13(dir, ".git");
+    const dotGit = join15(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
@@ -6281,13 +7402,13 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join13(context.homedir, "Desktop"), join13(context.homedir, "Documents"), join13(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join15(context.homedir, "Desktop"), join15(context.homedir, "Documents"), join15(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
 }
 async function resolveProject(cwd, context) {
-  const absolute = resolve4(cwd);
+  const absolute = resolve5(cwd);
   const info = await entryInfo(absolute);
   const exists = info.exists && info.isDir;
   const gitRoot = exists ? await gitRootFrom(absolute) : null;
@@ -6322,7 +7443,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join14 } from "node:path";
+import { join as join16 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -6424,12 +7545,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join14(dir, "managed-settings.json"));
-  const dropIns = await listDir(join14(dir, "managed-settings.d"));
+  await take(join16(dir, "managed-settings.json"));
+  const dropIns = await listDir(join16(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join14(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join16(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join14(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join16(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -6479,9 +7600,9 @@ function viewOf(value) {
 }
 
 // src/scan/skills.ts
-import { createHash as createHash4 } from "node:crypto";
-import { lstat as lstat6, readdir as readdir6, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename5, join as join15, relative as relative2 } from "node:path";
+import { createHash as createHash5 } from "node:crypto";
+import { lstat as lstat6, readdir as readdir7, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
+import { basename as basename5, join as join17, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -6619,12 +7740,12 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
   const walk = async (current) => {
     let names2;
     try {
-      names2 = (await readdir6(current)).sort();
+      names2 = (await readdir7(current)).sort();
     } catch {
       return false;
     }
     for (const name of names2) {
-      const path = join15(current, name);
+      const path = join17(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -6646,17 +7767,17 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
         return false;
       }
       const rel = relative2(base, path).replace(/\\/g, "/");
-      entries.push(`${rel}\0${createHash4("sha256").update(data).digest("hex")}`);
+      entries.push(`${rel}\0${createHash5("sha256").update(data).digest("hex")}`);
     }
     return true;
   };
   if (!await walk(base)) return null;
-  return createHash4("sha256").update(entries.sort().join("\n")).digest("hex");
+  return createHash5("sha256").update(entries.sort().join("\n")).digest("hex");
 }
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join15(path, "SKILL.md"));
+  const skillMd = await readText(join17(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -6683,13 +7804,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join15(dir, name);
+    const path = join17(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join15(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join17(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -6699,7 +7820,7 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join15(path, "SKILL.md"))).isFile) {
+  if ((await entryInfo(join17(path, "SKILL.md"))).isFile) {
     const single = await readSkillFolder(path, basename5(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
@@ -6741,7 +7862,7 @@ function managedHits(managed, names2, definition) {
   return !mcpAllowed({ layers: [managed], managed: { ...managed, allowedMcpServers: null }, project: null }, names2, definition);
 }
 var normalizedCommand = (text) => text.replace(/\\/g, "/").toLowerCase();
-function usageOf(times) {
+function usageOf2(times) {
   let usageLastUsedMs = null;
   let usageUndated = false;
   for (const at of times) {
@@ -6777,7 +7898,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join16(home, "settings.json"));
+  const userLayer = await readLayer(join18(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -6800,8 +7921,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join16(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join16(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join18(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join18(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -6816,9 +7937,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active);
-  const userSkillScan = await scanSkillRoot(join16(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join18(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join16(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join18(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -6858,7 +7979,7 @@ async function scanClaudeSetup(input) {
       targetCreatedMs: folder.targetCreatedMs,
       readable: folder.readable,
       nameUnreadable: folder.nameUnreadable,
-      ...usageOf(fields.recordNames.map((name) => claudeJson.skillUsage[name]))
+      ...usageOf2(fields.recordNames.map((name) => claudeJson.skillUsage[name]))
     });
   };
   const addOwnSkills = (scan, scope, projectRoot, scopeContexts, placeOf) => {
@@ -6890,7 +8011,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join16(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join18(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -6961,7 +8082,7 @@ async function scanClaudeSetup(input) {
       mcpUnreadable: plugin.mcpUnreadable,
       skills: skillNames.sort(),
       // 집계의 열쇠가 어느 이름인지 확인하지 못해 두 이름으로 모두 찾는다(설계 10 「~/.claude.json」)
-      ...usageOf(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`]))
+      ...usageOf2(pluginNames.map((pluginName) => claudeJson.pluginUsage[`${pluginName}@${plugin.marketplace}`]))
     });
   }
   const installedIds = new Set(allPlugins.map((p) => p.id));
@@ -6995,7 +8116,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join16(ref.root, ".mcp.json");
+    const file = join18(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -7095,55 +8216,1833 @@ async function scanClaudeSetup(input) {
   };
 }
 
+// src/scan/codex.ts
+import { isAbsolute as isAbsolute2, join as join22, relative as relative5, resolve as resolve8 } from "node:path";
+
+// node_modules/smol-toml/dist/error.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function getLineColFromPtr(string, ptr) {
+  let lines = string.slice(0, ptr).split(/\r?\n/);
+  return [lines.length, lines.pop().length + 1];
+}
+function makeCodeBlock(string, line, column) {
+  let lines = string.split(/\r?\n/);
+  let codeblock = "";
+  let numberLen = (Math.log10(line + 1) | 0) + 1;
+  for (let i = line - 1; i <= line + 1; i++) {
+    let l = lines[i - 1];
+    if (!l)
+      continue;
+    codeblock += i.toString().padEnd(numberLen, " ");
+    codeblock += ":  ";
+    codeblock += l;
+    codeblock += "\n";
+    if (i === line) {
+      codeblock += " ".repeat(numberLen + column + 2);
+      codeblock += "^\n";
+    }
+  }
+  return codeblock;
+}
+var TomlError = class _TomlError extends Error {
+  line;
+  column;
+  codeblock;
+  constructor(message, options) {
+    const [line, column] = getLineColFromPtr(options.toml, options.ptr);
+    const codeblock = makeCodeBlock(options.toml, line, column);
+    super(`Invalid TOML document: ${message}
+
+${codeblock}`, options);
+    this.line = line;
+    this.column = column;
+    this.codeblock = codeblock;
+  }
+  /** @internal */
+  static x(message, ctx, ptr) {
+    throw new _TomlError(message, { toml: ctx.s, ptr: ptr ?? ctx.p });
+  }
+};
+
+// node_modules/smol-toml/dist/primitive.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function parseString(ctx) {
+  let startPtr = ctx.p;
+  let c = ctx.s.charCodeAt(ctx.p++);
+  let first = c;
+  let isLiteral = c === 39;
+  let isMultiline = c === ctx.s.charCodeAt(ctx.p) && c === ctx.s.charCodeAt(ctx.p + 1);
+  if (isMultiline) {
+    if ((c = ctx.s.charCodeAt(ctx.p += 2)) === 10)
+      ctx.p++;
+    else if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)
+      ctx.p += 2;
+  }
+  let parsed = "";
+  let sliceStart = ctx.p;
+  let state = 0;
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    c = ctx.s.charCodeAt(ctx.p);
+    if (isMultiline && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)) {
+      state = state && 3;
+    } else if (c < 32 && c !== 9 || c === 127) {
+      TomlError.x("control characters are not allowed in strings", ctx);
+    } else if ((!state || state === 3) && c === first && (!isMultiline || ctx.s.charCodeAt(ctx.p + 1) === first && ctx.s.charCodeAt(ctx.p + 2) === first)) {
+      if (isMultiline) {
+        if (ctx.s.charCodeAt(ctx.p + 3) === first)
+          ctx.p++;
+        if (ctx.s.charCodeAt(ctx.p + 3) === first)
+          ctx.p++;
+      }
+      if (!state) {
+        let s = ctx.s.slice(sliceStart, ctx.p);
+        parsed = parsed ? parsed + s : s;
+      }
+      ctx.p += isMultiline ? 3 : 1;
+      return parsed;
+    } else if (!state) {
+      if (!isLiteral && c === 92) {
+        parsed += ctx.s.slice(sliceStart, sliceStart = ctx.p);
+        state = 1;
+      }
+    } else if (state === 1) {
+      if (c === 120 || c === 117 || c === 85) {
+        let errPtr = ctx.p++ - 1;
+        let value = 0;
+        let len = c === 120 ? 2 : c === 117 ? 4 : 8;
+        for (let j = 0; j < len; j++, ctx.p++) {
+          let hex = ctx.s.charCodeAt(ctx.p);
+          let digit = (
+            /* 0-9 */
+            hex >= 48 && hex <= 57 ? hex - 48 : (
+              /* A-F */
+              hex >= 65 && hex <= 70 ? hex - 65 + 10 : (
+                /* a-f */
+                hex >= 97 && hex <= 102 ? hex - 97 + 10 : -1
+              )
+            )
+          );
+          if (digit < 0)
+            TomlError.x("invalid non-hex character in unicode escape", ctx);
+          value = value << 4 | digit;
+        }
+        if (value < 0 || value > 1114111 || value >= 55296 && value <= 57343) {
+          TomlError.x("invalid unicode escape", ctx, errPtr);
+        }
+        parsed += String.fromCodePoint(value);
+        sliceStart = ctx.p--;
+        state = 0;
+      } else if (isMultiline && (c === 32 || c === 9)) {
+        state = 2;
+      } else {
+        if (c === 98)
+          parsed += "\b";
+        else if (c === 116)
+          parsed += "	";
+        else if (c === 110)
+          parsed += "\n";
+        else if (c === 102)
+          parsed += "\f";
+        else if (c === 114)
+          parsed += "\r";
+        else if (c === 101)
+          parsed += "\x1B";
+        else if (c === 34)
+          parsed += '"';
+        else if (c === 92)
+          parsed += "\\";
+        else
+          TomlError.x("unrecognised escape sequence", ctx);
+        sliceStart = ctx.p + 1;
+        state = 0;
+      }
+    } else if (c !== 32 && c !== 9) {
+      if (state === 2)
+        TomlError.x("invalid escape: only line-ending whitespace may be escaped", ctx, sliceStart);
+      state = !isLiteral && c === 92 ? 1 : 0;
+      sliceStart = ctx.p;
+    }
+  }
+  TomlError.x("unfinished string", ctx, startPtr);
+}
+
+// node_modules/smol-toml/dist/date.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+var DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})?[Tt ]?(?:(\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?)?(Z|z|[-+]\d{2}:\d{2})?$/i;
+var TomlDate = class _TomlDate extends Date {
+  #hasDate = false;
+  #hasTime = false;
+  #offset = null;
+  constructor(date, fasttype, unsafeDelim) {
+    let hasDate = true;
+    let hasTime = true;
+    let offset = "Z";
+    let c;
+    if (typeof date === "string") {
+      if (fasttype)
+        prep: {
+          if (fasttype < 3) {
+            if (+date.slice(11, 13) > 23) {
+              date = "";
+              break prep;
+            }
+            if (fasttype === 2) {
+              offset = null;
+              date += "Z";
+            } else if ((c = date.charCodeAt(date.length - 1)) !== 90 && c !== 122) {
+              offset = date.slice(date.length - 6);
+            }
+            if (unsafeDelim)
+              date = date.slice(0, 10) + "T" + date.slice(11);
+          } else if (fasttype === 4) {
+            date = +date.slice(0, 2) > 23 ? "" : `0000-01-01T${date}Z`;
+          }
+          hasDate = fasttype !== 4;
+          hasTime = fasttype !== 3;
+        }
+      else {
+        let match = date.match(DATE_TIME_RE);
+        if (match) {
+          if (!match[1]) {
+            hasDate = false;
+            date = `0000-01-01T${date}`;
+          }
+          hasTime = !!match[2];
+          hasTime && date[10] === " " && (date = date.replace(" ", "T"));
+          if (match[2] && +match[2] > 23) {
+            date = "";
+          } else {
+            offset = match[3] || null;
+            if (!offset && hasTime)
+              date += "Z";
+          }
+        } else {
+          date = "";
+        }
+      }
+    }
+    super(date);
+    if (!isNaN(this.getTime())) {
+      this.#hasDate = hasDate;
+      this.#hasTime = hasTime;
+      this.#offset = offset;
+    }
+  }
+  isDateTime() {
+    return this.#hasDate && this.#hasTime;
+  }
+  isLocal() {
+    return !this.#hasDate || !this.#hasTime || !this.#offset;
+  }
+  isDate() {
+    return this.#hasDate && !this.#hasTime;
+  }
+  isTime() {
+    return this.#hasTime && !this.#hasDate;
+  }
+  isValid() {
+    return this.#hasDate || this.#hasTime;
+  }
+  toISOString() {
+    let iso = super.toISOString();
+    if (this.isDate())
+      return iso.slice(0, 10);
+    if (this.isTime())
+      return iso.slice(11, 23);
+    if (this.#offset === null)
+      return iso.slice(0, -1);
+    if (this.#offset === "Z" || this.#offset === "z")
+      return iso;
+    let offset = +this.#offset.slice(1, 3) * 60 + +this.#offset.slice(4, 6);
+    offset = this.#offset[0] === "-" ? offset : -offset;
+    let offsetDate = new Date(this.getTime() - offset * 6e4);
+    return offsetDate.toISOString().slice(0, -1) + this.#offset;
+  }
+  static wrapAsOffsetDateTime(jsDate, offset = "Z") {
+    let date = new _TomlDate(jsDate);
+    date.#offset = offset;
+    return date;
+  }
+  static wrapAsLocalDateTime(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#offset = null;
+    return date;
+  }
+  static wrapAsLocalDate(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#hasTime = false;
+    date.#offset = null;
+    return date;
+  }
+  static wrapAsLocalTime(jsDate) {
+    let date = new _TomlDate(jsDate);
+    date.#hasDate = false;
+    date.#offset = null;
+    return date;
+  }
+};
+
+// node_modules/smol-toml/dist/extract.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function isDigit(char, base = 10) {
+  return base === 16 ? char > 47 && char < 58 || char > 64 && char < 71 || char > 96 && char < 103 : char > 47 && char < 48 + base;
+}
+function isEndOfValue(char, delim) {
+  return char === 32 || char === 9 || char === 10 || char === 13 || // Structure end or next value delimiter
+  delim && (char === delim || char === 44) || // Comment
+  char === 35;
+}
+function extractValue(ctx, end) {
+  let errPtr = ctx.p;
+  let c = ctx.s.charCodeAt(ctx.p);
+  if (c === 91 || c === 123) {
+    ctx.d-- || TomlError.x("document contains excessively nested structures. aborting.", ctx);
+    let value = c === 91 ? parseArray(ctx) : parseInlineTable(ctx);
+    ctx.d++;
+    return value;
+  }
+  if (c === 34 || c === 39) {
+    return parseString(ctx);
+  }
+  if (c === 116) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 114 || ctx.s.charCodeAt(++ctx.p) !== 117 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      TomlError.x("invalid value", ctx, errPtr);
+    return ctx.p++, true;
+  }
+  if (c === 102) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 108 || ctx.s.charCodeAt(++ctx.p) !== 115 || ctx.s.charCodeAt(++ctx.p) !== 101)
+      TomlError.x("invalid value", ctx, errPtr);
+    return ctx.p++, false;
+  }
+  if (c === 43 || c === 45) {
+    return parseNumber(ctx, ctx.p, ctx.s.charCodeAt(++ctx.p), 44 - c, end);
+  }
+  if (ctx.s.charCodeAt(ctx.p + 4) === 45 && ctx.s.charCodeAt(ctx.p + 7) === 45) {
+    return parseDate(ctx, c, end);
+  }
+  if (ctx.s.charCodeAt(ctx.p + 2) === 58) {
+    return parseTime(ctx, c, end);
+  }
+  return parseNumber(ctx, ctx.p, c, 0, end);
+}
+function parseNumber(ctx, startPtr, startChr, sign, endChr) {
+  let c = startChr;
+  let state = 0;
+  let hasUnderscores = false;
+  if (c === 105) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 110 || ctx.s.charCodeAt(++ctx.p) !== 102)
+      TomlError.x("invalid value", ctx, startPtr);
+    return ctx.p++, (sign || 1) / 0;
+  }
+  if (c === 110) {
+    if (ctx.s.charCodeAt(++ctx.p) !== 97 || ctx.s.charCodeAt(++ctx.p) !== 110)
+      TomlError.x("invalid value", ctx, startPtr);
+    return ctx.p++, NaN;
+  }
+  if (c === 48) {
+    if (++ctx.p >= ctx.s.length || isEndOfValue(c = ctx.s.charCodeAt(ctx.p), endChr))
+      return ctx.bi === true ? 0n : 0;
+    if (!sign) {
+      if (c === 120)
+        return parseIntegerBaseN(ctx, startPtr, 16, endChr);
+      else if (c === 98)
+        return parseIntegerBaseN(ctx, startPtr, 2, endChr);
+      else if (c === 111)
+        return parseIntegerBaseN(ctx, startPtr, 8, endChr);
+    }
+    if (c === 46)
+      state = 2;
+    else if (c === 101 || c === 69)
+      state = 4;
+    else
+      TomlError.x("illegal leading zero", ctx, startPtr);
+  } else if (!isDigit(c))
+    TomlError.x("invalid value", ctx, startPtr);
+  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
+    if (!state)
+      state = 1;
+    if (c === 95) {
+      if (!(state & 1))
+        TomlError.x("illegal underscore", ctx);
+      state += 11;
+      hasUnderscores = true;
+    } else if (state === 1 && c === 46)
+      state = 2;
+    else if ((state === 1 || state === 3) && (c === 101 || c === 69))
+      state = 4;
+    else if (state === 4 && (c === 43 || c === 45)) {
+      state = 6;
+    } else if (!isDigit(c))
+      TomlError.x(`illegal character in numeric literal`, ctx);
+    else if (state > 9)
+      state -= 11;
+    else if (!(state & 1))
+      state++;
+  }
+  if (!state) {
+    let val = (startChr - 48) * (sign || 1);
+    return ctx.bi === true ? BigInt(val) : val;
+  }
+  if (!(state & 1))
+    TomlError.x("unfinished numeric value", ctx, startPtr);
+  let str3 = ctx.s.slice(startPtr, ctx.p);
+  if (hasUnderscores)
+    str3 = str3.replaceAll("_", "");
+  return state > 1 ? parseFloat(str3) : parseInteger(ctx, str3, 10, startPtr);
+}
+function parseIntegerBaseN(ctx, startPtr, base, endChr) {
+  let c, underscore = 1;
+  while (++ctx.p < ctx.s.length && (c = ctx.s.charCodeAt(ctx.p), !isEndOfValue(c, endChr))) {
+    if (c === 95) {
+      if (underscore & 1)
+        TomlError.x("illegal underscore", ctx);
+      underscore = 3;
+    } else if (!isDigit(c, base))
+      TomlError.x(`illegal character in numeric literal`, ctx);
+    else if (underscore & 1)
+      underscore--;
+  }
+  if (underscore & 1)
+    TomlError.x("unfinished numeric value", ctx);
+  let str3 = ctx.s.slice(startPtr + 2, ctx.p);
+  if (underscore)
+    str3 = str3.replaceAll("_", "");
+  return parseInteger(ctx, str3, base, startPtr);
+}
+function parseInteger(ctx, str3, base, startPtr) {
+  if (ctx.bi !== true)
+    int: {
+      let val = parseInt(str3, base);
+      if (!Number.isSafeInteger(val)) {
+        if (ctx.bi)
+          break int;
+        TomlError.x("integer value cannot be represented losslessly", ctx, startPtr);
+      }
+      return val;
+    }
+  return base === 10 ? BigInt(str3) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str3);
+}
+function parseDate(ctx, c, endChr) {
+  let startPtr = ctx.p++, unsafeSeparator;
+  if (!isDigit(c) || !isDigit(ctx.s.charCodeAt(ctx.p++)) || !isDigit(ctx.s.charCodeAt(ctx.p++)) || !isDigit(ctx.s.charCodeAt(ctx.p++))) {
+    return parseNumber(ctx, ctx.p = startPtr, c, 0, endChr);
+  }
+  ctx.p += 5;
+  if (!isDigit(ctx.s.charCodeAt(ctx.p++)))
+    TomlError.x("invalid date-time: date part is malformed", ctx, startPtr);
+  if (ctx.p >= ctx.s.length || ((c = ctx.s.charCodeAt(ctx.p)) !== 32 || (unsafeSeparator = true, !isDigit(ctx.s.charCodeAt(ctx.p + 1)))) && c !== 84 && c !== 116) {
+    let t2 = ctx.s.slice(startPtr, ctx.p);
+    return readDate(ctx, t2, 3, false, startPtr);
+  }
+  if (ctx.s.charCodeAt(ctx.p += 3) !== 58)
+    TomlError.x("invalid date-time: time part is malformed", ctx, startPtr);
+  if (ctx.s.charCodeAt(ctx.p += 3) === 58)
+    ctx.p += 3;
+  if (ctx.s.charCodeAt(ctx.p) === 46)
+    while (isDigit(ctx.s.charCodeAt(++ctx.p)))
+      ;
+  if (c = ctx.s.charCodeAt(ctx.p)) {
+    if (c === 90 || c === 122) {
+      let t2 = ctx.s.slice(startPtr, ++ctx.p);
+      return readDate(ctx, t2, 1, unsafeSeparator, startPtr, "[+00:00]");
+    }
+    if (c === 43 || c === 45) {
+      let t2 = ctx.s.slice(startPtr, ctx.p += 6);
+      return readDate(ctx, t2, 1, unsafeSeparator, startPtr, !ctx.ld && "[" + ctx.s.slice(ctx.p - 6, ctx.p) + "]");
+    }
+  }
+  let t = ctx.s.slice(startPtr, ctx.p);
+  return readDate(ctx, t, 2, unsafeSeparator, startPtr);
+}
+function parseTime(ctx, c, endChr) {
+  let start = ctx.p;
+  if (!isDigit(c) || !isDigit(ctx.s.charCodeAt(++ctx.p))) {
+    return parseNumber(ctx, --ctx.p, c, 0, endChr);
+  }
+  if (ctx.s.charCodeAt(ctx.p += 4) === 58)
+    ctx.p += 3;
+  if (ctx.s.charCodeAt(ctx.p) === 46)
+    while (isDigit(ctx.s.charCodeAt(++ctx.p)))
+      ;
+  let t = ctx.s.slice(start, ctx.p);
+  return readDate(ctx, t, 4, false, start);
+}
+function readDate(ctx, str3, type, unsafeDelim, errPtr, temporalSuffix) {
+  if (ctx.ld) {
+    let date = new TomlDate(str3, type, unsafeDelim);
+    if (!date.isValid())
+      TomlError.x("invalid date", ctx, errPtr);
+    return date;
+  }
+  try {
+    if (temporalSuffix)
+      str3 += temporalSuffix;
+    switch (type) {
+      case 1:
+        return Temporal.ZonedDateTime.from(str3);
+      case 2:
+        return Temporal.PlainDateTime.from(str3);
+      case 3:
+        return Temporal.PlainDate.from(str3);
+      case 4:
+        return Temporal.PlainTime.from(str3);
+    }
+  } catch (e) {
+    TomlError.x(e instanceof Error ? e.message : "" + e, ctx, errPtr);
+  }
+}
+
+// node_modules/smol-toml/dist/util.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function skipComment(ctx) {
+  for (; ctx.p < ctx.s.length; ctx.p++) {
+    let c = ctx.s.charCodeAt(ctx.p);
+    if (c === 10)
+      break;
+    if (c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10) {
+      ctx.p++;
+      break;
+    }
+    if (c < 32 && c !== 9 || c === 127) {
+      TomlError.x("control characters are not allowed in comments", ctx);
+    }
+  }
+}
+function skipVoid(ctx, banNewLines, banComments) {
+  let c;
+  while (ctx.p < ctx.s.length) {
+    while (ctx.p < ctx.s.length && ((c = ctx.s.charCodeAt(ctx.p)) === 32 || c === 9 || !banNewLines && (c === 10 || c === 13 && ctx.s.charCodeAt(ctx.p + 1) === 10)))
+      ctx.p++;
+    if (banComments || c !== 35)
+      break;
+    skipComment(ctx);
+  }
+}
+
+// node_modules/smol-toml/dist/struct.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function parseKey(ctx, end = 61) {
+  let startPtr;
+  let state = 0;
+  let parsed = [];
+  let sliceStart;
+  let c = ctx.s.charCodeAt(startPtr = ctx.p);
+  do {
+    if (c === end) {
+      if (!state)
+        TomlError.x("unexpected end of key", ctx);
+      if (state === 1)
+        parsed.push(ctx.s.slice(sliceStart, ctx.p));
+      return ctx.p++, parsed;
+    } else if (c === 46) {
+      if (!state)
+        TomlError.x("illegal empty bare key", ctx);
+      if (state === 1)
+        parsed.push(ctx.s.slice(sliceStart, ctx.p));
+      state = 0;
+    } else if (!state && (c === 34 || c === 39)) {
+      if (c === ctx.s.charCodeAt(ctx.p + 1) && c === ctx.s.charCodeAt(ctx.p + 2))
+        TomlError.x("illegal quoted key: multiline strings are not allowed", ctx);
+      parsed.push(parseString(ctx));
+      state = 2;
+      ctx.p--;
+    } else if (c === 32 || c === 9) {
+      if (state === 1) {
+        parsed.push(ctx.s.slice(sliceStart, ctx.p));
+        state = 2;
+      }
+    } else if (state === 2 || c < 48 && c !== 45 || c > 57 && c < 65 || c > 90 && c < 97 && c !== 95 || c > 122) {
+      TomlError.x("illegal character in key", ctx);
+    } else if (!state) {
+      state = 1;
+      sliceStart = ctx.p;
+    }
+  } while (c = ctx.s.charCodeAt(++ctx.p));
+  TomlError.x("incomplete key-value: cannot find end of key", ctx, startPtr);
+}
+function parseInlineTable(ctx) {
+  let startPtr = ctx.p++;
+  let res = /* @__PURE__ */ Object.create(null);
+  let seen = /* @__PURE__ */ new Set();
+  let c;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 125) {
+      ctx.p++;
+      return res;
+    }
+    let k;
+    let t = res;
+    let hasOwn = false;
+    let errPtr = ctx.p;
+    let key = parseKey(ctx);
+    for (let i = 0; i < key.length; i++) {
+      if (i)
+        t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+      k = key[i];
+      if ((hasOwn = Object.hasOwn(t, k)) && (typeof t[k] !== "object" || seen.has(t[k]))) {
+        TomlError.x("trying to redefine an already defined value", ctx, errPtr);
+      }
+      let unsafe = k === "__proto__";
+      if (ctx.uk && (unsafe || k === "constructor")) {
+        t = ctx.uk !== 1 && TomlError.x("document contains an unsafe property", ctx, errPtr);
+        break;
+      }
+      if (!hasOwn && unsafe) {
+        Object.defineProperty(t, k, { enumerable: true, configurable: true, writable: true });
+      }
+    }
+    if (hasOwn) {
+      TomlError.x("trying to redefine an already defined value", ctx, errPtr);
+    }
+    skipVoid(ctx, true, true);
+    let value = extractValue(
+      ctx,
+      125
+      /* } */
+    );
+    if (t && typeof (t[k] = value) === "object")
+      seen.add(value);
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 125) {
+      return res;
+    }
+    if (c !== 44)
+      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
+  }
+  TomlError.x("unfinished table", ctx, startPtr);
+}
+function parseArray(ctx) {
+  let startPtr = ctx.p++;
+  let res = [];
+  let c;
+  while (ctx.p < ctx.s.length) {
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p)) === 93) {
+      ctx.p++;
+      return res;
+    }
+    res.push(extractValue(
+      ctx,
+      93
+      /* ] */
+    ));
+    skipVoid(ctx);
+    if ((c = ctx.s.charCodeAt(ctx.p++)) === 93) {
+      return res;
+    }
+    if (c !== 44)
+      TomlError.x("expected comma or end of structure", ctx, ctx.p - 1);
+  }
+  TomlError.x("unfinished array", ctx, startPtr);
+}
+
+// node_modules/smol-toml/dist/parse.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+function peekTable(ctx, key, table, meta, type) {
+  let t = table;
+  let m = meta;
+  let k;
+  let hasOwn = false;
+  let state;
+  for (let i = 0; i < key.length; i++) {
+    if (i) {
+      t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+      m = (state = m[k]).c;
+      if (type === 0 && (state.t === 1 || state.t === 2)) {
+        return null;
+      }
+      if (state.t === 2) {
+        let l = t.length - 1;
+        t = t[l];
+        m = m[l].c;
+      }
+    }
+    k = key[i];
+    if ((hasOwn = Object.hasOwn(t, k)) && m[k]?.t === 0 && m[k]?.d) {
+      return null;
+    }
+    if (!hasOwn) {
+      let unsafe = k === "__proto__";
+      if (ctx.uk && (unsafe || k === "constructor"))
+        return false;
+      if (unsafe) {
+        Object.defineProperty(t, k, { enumerable: true, configurable: true, writable: true });
+        Object.defineProperty(m, k, { enumerable: true, configurable: true, writable: true });
+      }
+      m[k] = {
+        t: i < key.length - 1 && type === 2 ? 3 : type,
+        d: false,
+        i: 0,
+        c: /* @__PURE__ */ Object.create(null)
+      };
+    }
+  }
+  state = m[k];
+  if (state.t !== type && !(type === 1 && state.t === 3)) {
+    return null;
+  }
+  if (type === 2) {
+    if (!state.d) {
+      state.d = true;
+      t[k] = [];
+    }
+    t[k].push(t = /* @__PURE__ */ Object.create(null));
+    state.c[state.i++] = state = { t: 1, d: false, i: 0, c: /* @__PURE__ */ Object.create(null) };
+  }
+  if (state.d) {
+    return null;
+  }
+  state.d = true;
+  if (type === 1) {
+    t = hasOwn ? t[k] : t[k] = /* @__PURE__ */ Object.create(null);
+  } else if (type === 0 && hasOwn) {
+    return null;
+  }
+  return [k, t, state.c];
+}
+function validateTablePeek(ctx, peek, ptr) {
+  if (peek === null || ctx.uk === 2)
+    TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
+}
+function parse2(toml, options = {}) {
+  let ctx = {
+    s: toml,
+    p: 0,
+    d: options.maxDepth ?? 1e3,
+    bi: options.integersAsBigInt ?? false,
+    ld: options.useLegacyDate ?? true,
+    uk: options.unsafeKeyBehaviour === "throw" ? 2 : options.unsafeKeyBehaviour === "drop" ? 1 : 0
+  };
+  let res = /* @__PURE__ */ Object.create(null);
+  let meta = /* @__PURE__ */ Object.create(null);
+  let tmp;
+  let skipping = false;
+  let tbl = res;
+  let m = meta;
+  if (toml.charCodeAt(0) === 65279)
+    ctx.p++;
+  skipVoid(ctx);
+  while (ctx.p < toml.length) {
+    if (toml.charCodeAt(ctx.p) === 91) {
+      let isTableArray = toml.charCodeAt(++ctx.p) === 91;
+      tmp = ctx.p += +isTableArray;
+      skipping = false;
+      let k = parseKey(
+        ctx,
+        93
+        /* ] */
+      );
+      if (isTableArray) {
+        if (toml.charCodeAt(ctx.p) !== 93) {
+          TomlError.x("expected end of table array declaration", ctx);
+        }
+        ctx.p++;
+      }
+      let p = peekTable(
+        ctx,
+        k,
+        res,
+        meta,
+        isTableArray ? 2 : 1
+        /* Type.EXPLICIT */
+      );
+      if (!p) {
+        validateTablePeek(ctx, p, tmp);
+        skipping = true;
+      } else {
+        m = p[2];
+        tbl = p[1];
+      }
+    } else {
+      tmp = ctx.p;
+      let k = parseKey(ctx);
+      let p = peekTable(
+        ctx,
+        k,
+        tbl,
+        m,
+        0
+        /* Type.DOTTED */
+      );
+      if (!p && !skipping)
+        validateTablePeek(ctx, p, tmp);
+      skipVoid(ctx, true, true);
+      let v = extractValue(ctx, void 0);
+      if (p && !skipping)
+        p[1][p[0]] = v;
+    }
+    skipVoid(ctx, true);
+    if (ctx.p < toml.length && (tmp = toml.charCodeAt(ctx.p)) !== 10 && (tmp !== 13 || toml.charCodeAt(ctx.p + 1) !== 10)) {
+      TomlError.x("each key-value declaration must be followed by an end-of-line", ctx);
+    }
+    skipVoid(ctx);
+  }
+  return res;
+}
+
+// node_modules/smol-toml/dist/stringify.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+var HAS_WELLFORMED = !!"".isWellFormed;
+
+// node_modules/smol-toml/dist/index.js
+/*!
+ * Copyright (c) Squirrel Chat et al., All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software without
+ *    specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// src/scan/codex-config.ts
+var isTable = (value) => isObject5(value) && !(value instanceof Date);
+var isBool = (value) => typeof value === "boolean";
+var isText = (value) => typeof value === "string";
+var optional = (value, check) => value === void 0 || value === null || check(value);
+var tableOf = (value, each) => isTable(value) && Object.values(value).every(each);
+var isNonNegativeInteger = (value) => typeof value === "number" && Number.isInteger(value) && value >= 0 || typeof value === "bigint" && value >= 0n;
+var MAX_CONFIG_DEPTH = 128;
+var I64_MIN = -(2n ** 63n);
+var I64_MAX = 2n ** 63n - 1n;
+function exceedsLimits(value, maxDepth = MAX_CONFIG_DEPTH) {
+  const stack = [[value, 0]];
+  while (stack.length > 0) {
+    const [item2, depth] = stack.pop();
+    if (typeof item2 === "bigint") {
+      if (item2 < I64_MIN || item2 > I64_MAX) return true;
+      continue;
+    }
+    const children = Array.isArray(item2) ? item2 : isTable(item2) ? Object.values(item2) : null;
+    if (children === null) continue;
+    if (depth >= maxDepth) return true;
+    for (const child of children) stack.push([child, depth + 1]);
+  }
+  return false;
+}
+function parseCodexConfig(text) {
+  let value;
+  try {
+    value = parse2(text, { integersAsBigInt: "asNeeded" });
+  } catch {
+    return null;
+  }
+  return exceedsLimits(value) ? null : value;
+}
+var HTTP_KEYS = ["url", "bearer_token_env_var", "bearer_token", "http_headers_helper", "http_headers", "env_http_headers", "oauth", "oauth_resource", "auth"];
+var STDIO_KEYS = ["args", "env", "env_vars", "cwd", "bearer_token"];
+function codexServerShapeOk(server) {
+  if (!isTable(server) || !optional(server.enabled, isBool)) return false;
+  const has = (key) => server[key] !== void 0 && server[key] !== null;
+  if (has("command")) return isText(server.command) && !HTTP_KEYS.some(has);
+  if (has("url")) return isText(server.url) && !STDIO_KEYS.some(has);
+  return false;
+}
+var approvalShapeOk = (value) => value === void 0 || isText(value) && value !== "untrusted" || isTable(value) && Object.keys(value).length === 1 && isTable(value.granular);
+var pluginShapeOk = (plugin) => isTable(plugin) && optional(plugin.enabled, isBool) && optional(plugin.mcp_servers, (servers) => tableOf(servers, (server) => isTable(server) && optional(server.enabled, isBool)));
+var skillsShapeOk = (skills) => optional(skills, (value) => isTable(value) && optional(value.config, (list) => Array.isArray(list) && list.every((entry) => isTable(entry) && isBool(entry.enabled) && optional(entry.path, isText) && optional(entry.name, isText))));
+function codexConfigShapeOk(doc) {
+  return approvalShapeOk(doc.approval_policy) && optional(doc.sandbox_mode, isText) && optional(doc.default_permissions, isText) && optional(doc.mcp_servers, (servers) => tableOf(servers, codexServerShapeOk)) && optional(doc.plugins, (plugins) => tableOf(plugins, pluginShapeOk)) && skillsShapeOk(doc.skills) && optional(doc.features, (features) => isTable(features) && optional(features.plugins, isBool)) && optional(doc.projects, (projects) => tableOf(projects, (project) => isTable(project) && optional(project.trust_level, isText))) && optional(doc.project_doc_fallback_filenames, (names2) => Array.isArray(names2) && names2.every(isText)) && optional(doc.project_doc_max_bytes, isNonNegativeInteger);
+}
+async function readCodexConfig(path) {
+  const read = await readText(path);
+  if (read.status !== "ok") return read;
+  const value = parseCodexConfig(read.text);
+  return value !== null && codexConfigShapeOk(value) ? { status: "ok", value } : { status: "unparsable" };
+}
+function mergeInto(base, top) {
+  const out = /* @__PURE__ */ Object.create(null);
+  for (const [key, value] of Object.entries(base)) out[key] = value;
+  for (const [key, value] of Object.entries(top)) {
+    const below = out[key];
+    out[key] = isTable(below) && isTable(value) ? mergeInto(below, value) : value;
+  }
+  return out;
+}
+function mergeCodexLayers(layers) {
+  return layers.reduce((merged, layer) => mergeInto(merged, layer), /* @__PURE__ */ Object.create(null));
+}
+function tomlToJson(value) {
+  if (typeof value === "bigint") return { $bigint: value.toString() };
+  if (typeof value === "number" && !Number.isFinite(value)) return { $float: Number.isNaN(value) ? "nan" : value > 0 ? "inf" : "-inf" };
+  if (value instanceof Date) return { $datetime: value.toISOString() };
+  if (Array.isArray(value)) return value.map(tomlToJson);
+  if (isTable(value)) {
+    const out = /* @__PURE__ */ Object.create(null);
+    for (const [key, item2] of Object.entries(value)) out[key] = tomlToJson(item2);
+    return out;
+  }
+  return value;
+}
+
+// src/scan/codex-instructions.ts
+import { join as join19 } from "node:path";
+var NAMES = ["AGENTS.override.md", "AGENTS.md"];
+async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
+  const unreadable = [];
+  for (const name of NAMES) {
+    const path = join19(codexHome2, name);
+    if (!(await entryInfo(path)).isFile) continue;
+    const read = await readText(path);
+    if (read.status === "unreadable") unreadable.push(path);
+    if (read.status !== "ok" || !/\S/u.test(read.text)) continue;
+    const found = await readInstructionSet([path], mentionTargets);
+    found.set.unreadable.unshift(...unreadable);
+    return found;
+  }
+  const set = emptyInstructionSet();
+  set.unreadable.push(...unreadable);
+  return { set, mentions: /* @__PURE__ */ Object.create(null) };
+}
+async function readCodexProjectInstructions(root, fallback) {
+  for (const name of [...NAMES, ...fallback]) {
+    const path = join19(root, name);
+    if ((await entryInfo(path)).isFile) return (await readInstructionSet([path])).set;
+  }
+  return emptyInstructionSet();
+}
+
+// src/scan/codex-mcp.ts
+var serversOf = (layer) => isTable(layer.mcp_servers) ? layer.mcp_servers : {};
+var cmp3 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
+var SCOPE_ORDER4 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
+function hashOf(salt, definition) {
+  if (!isTable(definition)) return null;
+  const copy2 = /* @__PURE__ */ Object.create(null);
+  for (const [key, value] of Object.entries(definition)) if (key !== "enabled") copy2[key] = value;
+  return definitionHash(salt, tomlToJson(copy2));
+}
+function pluginServerOn(context, id, name, declared) {
+  const plugins = isTable(context.merged.plugins) ? context.merged.plugins : {};
+  const entry = plugins[id];
+  const policies = isTable(entry) && isTable(entry.mcp_servers) ? entry.mcp_servers : {};
+  const policy = policies[name];
+  return isTable(policy) ? policy.enabled !== false && !Object.hasOwn(policy, "ema_auth") : declared.enabled !== false;
+}
+function codexMcpFacts(input) {
+  const facts = [];
+  const base = { managedFixed: false };
+  for (const [name, definition] of Object.entries(serversOf(input.user))) {
+    facts.push({ ...base, scope: "user", name, recordNames: [name], projectRoot: null, pluginId: null, definitionHash: hashOf(input.salt, definition), enabled: isTable(definition) && definition.enabled !== false });
+  }
+  for (const project of input.projects) {
+    const context = input.contexts.find((c) => c.projectRoot === project.normRoot);
+    const merged = context === void 0 ? {} : serversOf(context.merged);
+    for (const name of Object.keys(serversOf(project.layer))) {
+      const definition = merged[name];
+      facts.push({ ...base, scope: "project", name, recordNames: [name], projectRoot: project.normRoot, pluginId: null, definitionHash: hashOf(input.salt, definition), enabled: isTable(definition) && definition.enabled !== false });
+    }
+  }
+  for (const [id, servers] of input.pluginServers) {
+    for (const server of servers) {
+      const enabled = input.contexts.some((context) => {
+        if (!context.plugins.includes(id) || Object.hasOwn(serversOf(context.merged), server.name)) return false;
+        const winner = [...context.plugins].sort().find((other) => (input.pluginServers.get(other) ?? []).some((s) => s.name === server.name));
+        return winner === id && pluginServerOn(context, id, server.name, server.definition);
+      });
+      facts.push({ ...base, scope: "plugin", name: server.name, recordNames: [server.name], projectRoot: null, pluginId: id, definitionHash: hashOf(input.salt, server.definition), enabled });
+    }
+  }
+  return facts.sort((a, b) => cmp3(a.name, b.name) || SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || cmp3(a.projectRoot, b.projectRoot) || cmp3(a.pluginId, b.pluginId) || cmp3(a.definitionHash, b.definitionHash));
+}
+
+// src/scan/codex-plugins.ts
+import { join as join21, relative as relative4, resolve as resolve6, sep } from "node:path";
+import { lstat as lstat7 } from "node:fs/promises";
+
+// src/scan/codex-skills.ts
+import { readFile as readFile7 } from "node:fs/promises";
+import { basename as basename7, dirname as dirname4, join as join20 } from "node:path";
+var MAX_DEPTH = 6;
+var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
+var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
+var MANIFEST_DIRS = CODEX_MANIFEST_PATHS.map((path) => path.split("/")[0]);
+function codexFrontmatterOk(bytes) {
+  if (bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191) return false;
+  const front = parseFrontmatter(bytes.toString("utf8"));
+  if (!front.present) return false;
+  const description2 = front.fields.description;
+  if (description2 !== void 0) return description2.split(/\s+/u).some((part) => part !== "");
+  return front.unreadable.includes("description") || front.unreadable.includes("name");
+}
+async function manifestNamespace(pluginRoot) {
+  for (const relative6 of CODEX_MANIFEST_PATHS) {
+    const path = join20(pluginRoot, ...relative6.split("/"));
+    if (!(await entryInfo(path)).isFile) continue;
+    const read = await readText(path);
+    if (read.status !== "ok") return null;
+    try {
+      const value = JSON.parse(read.text);
+      const name = value?.name === void 0 ? "" : value.name;
+      if (typeof name !== "string") return null;
+      return name.trim() === "" ? basename7(pluginRoot) : name;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+var squash = (text) => text.split(/\s+/u).filter((part) => part !== "").join(" ");
+async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
+  const out = { skills: [], danglingLinks: [], unreadableDirs: [], truncated: false };
+  const rootInfo = await entryInfo(root);
+  if (!rootInfo.isDir) return out;
+  const visited = /* @__PURE__ */ new Set([rootInfo.realPath ?? normalizePath(root)]);
+  const queue = [{ dir: root, depth: 0, viaLink: false }];
+  const found = [];
+  const pluginRoots = /* @__PURE__ */ new Set();
+  let directories = 1;
+  let entries = 0;
+  walk: while (queue.length > 0) {
+    const { dir, depth, viaLink } = queue.shift();
+    const listing = await listDir(dir);
+    if (listing.status === "unreadable") out.unreadableDirs.push(dir);
+    if (listing.status !== "ok") continue;
+    for (const name of listing.names) {
+      if (entries === limits.maxEntries) {
+        out.truncated = true;
+        break walk;
+      }
+      entries++;
+      const path = join20(dir, name);
+      const info = await entryInfo(path);
+      if (info.dangling) {
+        out.danglingLinks.push(path);
+        continue;
+      }
+      if (!info.exists || info.isLink && !info.isDir) continue;
+      if (info.isDir) {
+        if (MANIFEST_DIRS.includes(name)) pluginRoots.add(dir);
+        if (depth >= MAX_DEPTH || name.startsWith(".")) continue;
+        const identity = info.realPath ?? normalizePath(path);
+        if (visited.has(identity)) continue;
+        visited.add(identity);
+        if (directories === limits.maxDirectories) {
+          out.truncated = true;
+          continue;
+        }
+        directories++;
+        queue.push({ dir: path, depth: depth + 1, viaLink: viaLink || info.isLink });
+        continue;
+      }
+      if (info.isFile && name === "SKILL.md") found.push({ dir, viaLink });
+    }
+  }
+  const namespaces = /* @__PURE__ */ new Map();
+  const namespaceOf = async (dir) => {
+    for (let current = dir; ; current = dirname4(current)) {
+      if (pluginRoots.has(current)) {
+        if (!namespaces.has(current)) namespaces.set(current, await manifestNamespace(current));
+        const namespace2 = namespaces.get(current);
+        if (namespace2 !== null) return namespace2;
+      }
+      if (current === root || dirname4(current) === current) return null;
+    }
+  };
+  for (const { dir, viaLink } of found) {
+    const folder = await readSkillFolder(dir, basename7(dir));
+    if (folder === null) continue;
+    const skillFile = join20(dir, "SKILL.md");
+    let bytes = null;
+    try {
+      bytes = await readFile7(skillFile);
+    } catch {
+      bytes = null;
+    }
+    const prefix = namespace ?? await namespaceOf(dir);
+    const own = folder.declaredName === null ? "" : squash(folder.declaredName);
+    const base = own === "" ? folder.dirName : own;
+    out.skills.push({
+      folder,
+      viaLink: viaLink || folder.isLink,
+      frontmatterOk: folder.readable && bytes !== null && codexFrontmatterOk(bytes),
+      name: prefix === null ? base : `${prefix}:${base}`,
+      skillFileRealPath: (await entryInfo(skillFile)).realPath
+    });
+  }
+  return out;
+}
+
+// src/scan/codex-plugins.ts
+var JSON_MAX_NESTING = 127;
+var PLUGIN_NAME = /^[A-Za-z0-9_.-]+$/;
+var MARKET_NAME = /^[A-Za-z0-9_-]+$/;
+function codexPluginIdValid(id) {
+  const at = id.lastIndexOf("@");
+  if (at <= 0 || at === id.length - 1) return false;
+  const name = id.slice(0, at);
+  const market = id.slice(at + 1);
+  if (!PLUGIN_NAME.test(name) || name.startsWith(".") || name.endsWith(".") || name.includes("..")) return false;
+  return MARKET_NAME.test(market);
+}
+var VERSION_SEGMENT = /^[A-Za-z0-9_.+-]+$/;
+var SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+var cmpText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var cmpBig = (a, b) => {
+  const x = BigInt(a);
+  const y = BigInt(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+function cmpPre(a, b) {
+  if (a === void 0 || b === void 0) return a === b ? 0 : a === void 0 ? 1 : -1;
+  const xs = a.split(".");
+  const ys = b.split(".");
+  for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+    const x = xs[i];
+    const y = ys[i];
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    const order = xn && yn ? cmpBig(x, y) : xn ? -1 : yn ? 1 : cmpText(x, y);
+    if (order !== 0) return order;
+  }
+  return xs.length - ys.length;
+}
+function cmpBuild(a, b) {
+  if (a === b) return 0;
+  const xs = a.split(".");
+  const ys = b.split(".");
+  for (let i = 0; i < xs.length; i++) {
+    if (i >= ys.length) return 1;
+    const x = xs[i];
+    const y = ys[i];
+    const xn = /^[0-9]*$/.test(x);
+    const yn = /^[0-9]*$/.test(y);
+    if (xn !== yn) return xn ? -1 : 1;
+    let order;
+    if (xn) {
+      const xv = x.replace(/^0+/, "");
+      const yv = y.replace(/^0+/, "");
+      order = xv.length - yv.length || cmpText(xv, yv) || x.length - y.length;
+    } else order = cmpText(x, y);
+    if (order !== 0) return Math.sign(order);
+  }
+  return ys.length > xs.length ? -1 : 0;
+}
+var U64_MAX = 2n ** 64n - 1n;
+function semverOf(text) {
+  const match = SEMVER.exec(text);
+  return match !== null && [match[1], match[2], match[3]].every((part) => BigInt(part) <= U64_MAX) ? match : null;
+}
+function compareCodexPluginVersions(a, b) {
+  const x = semverOf(a);
+  const y = semverOf(b);
+  if (x === null || y === null) return cmpText(a, b);
+  for (let i = 1; i <= 3; i++) {
+    const order = cmpBig(x[i], y[i]);
+    if (order !== 0) return order;
+  }
+  return cmpPre(x[4], y[4]) || cmpBuild(x[5] ?? "", y[5] ?? "");
+}
+async function installRoot(base) {
+  const listing = await listDir(base);
+  if (listing.status === "unreadable") return { install: "unreadable", root: null };
+  if (listing.status !== "ok") return { install: "missing", root: null };
+  const versions = [];
+  for (const name of listing.names) {
+    if (name === "." || name === ".." || !VERSION_SEGMENT.test(name)) continue;
+    const info = await entryInfo(join21(base, name));
+    if (info.isDir && !info.isLink) versions.push(name);
+  }
+  if (versions.length === 0) return { install: "missing", root: null };
+  const chosen = versions.includes("local") ? "local" : versions.reduce((best, version) => compareCodexPluginVersions(version, best) > 0 ? version : best);
+  return { install: "ok", root: join21(base, chosen) };
+}
+async function findManifest(root) {
+  const own = async (path) => {
+    try {
+      const info = await lstat7(path);
+      return { kind: info.isSymbolicLink() ? "other" : info.isFile() ? "file" : info.isDirectory() ? "dir" : "other" };
+    } catch (error) {
+      return error.code === "ENOENT" ? { kind: "none" } : null;
+    }
+  };
+  const agentPath = join21(root, "plugin.json");
+  const agent = await own(agentPath);
+  if (agent === null) return { status: "unreadable" };
+  if (agent.kind === "dir" || agent.kind === "other") return { status: "missing" };
+  if (agent.kind === "file") {
+    const read = await readText(agentPath);
+    if (read.status === "unreadable") return { status: "unreadable" };
+    if (read.status === "ok") {
+      try {
+        const value = JSON.parse(read.text);
+        if (isObject5(value) && !exceedsLimits(value, JSON_MAX_NESTING) && typeof value.$schema === "string" && value.$schema.startsWith("https://agent-plugins.org/schemas/")) return { status: "found", path: agentPath, agent: true };
+      } catch {
+      }
+    }
+  }
+  for (const relativePath of CODEX_MANIFEST_PATHS) {
+    const [dir, file] = relativePath.split("/");
+    const parent = await own(join21(root, dir));
+    if (parent === null) return { status: "unreadable" };
+    if (parent.kind === "none") continue;
+    if (parent.kind !== "dir") return { status: "missing" };
+    const path = join21(root, dir, file);
+    const manifest = await own(path);
+    if (manifest === null) return { status: "unreadable" };
+    if (manifest.kind === "none") continue;
+    return manifest.kind === "file" ? { status: "found", path, agent: false } : { status: "missing" };
+  }
+  return { status: "missing" };
+}
+function manifestPath(root, raw) {
+  if (typeof raw !== "string" || !raw.startsWith("./")) return null;
+  const rest = raw.slice(2);
+  if (rest === "" || rest.split(/[\\/]/).includes("..") || rest.startsWith("/") || rest.startsWith("\\") || /^[A-Za-z]:/.test(rest)) return null;
+  const resolved = resolve6(root, rest);
+  const inside2 = relative4(root, resolved);
+  return inside2 !== "" && !inside2.startsWith("..") && !inside2.startsWith(sep) ? resolved : null;
+}
+function pluginServerOk(definition) {
+  const copy2 = { ...definition };
+  delete copy2.type;
+  if (!isObject5(copy2.oauth) || Object.keys(copy2.oauth).length === 0) delete copy2.oauth;
+  return codexServerShapeOk(copy2) && copy2.auth !== "ema_auth";
+}
+function serversOf2(value) {
+  const map = isObject5(value.mcpServers) ? value.mcpServers : value;
+  return Object.entries(map).filter((entry) => isObject5(entry[1]) && pluginServerOk(entry[1])).map(([name, definition]) => ({ name, definition })).sort((a, b) => cmpText(a.name, b.name));
+}
+var LEGACY_NESTED_FIELDS = ["keywords", "skills", "mcpServers", "hooks", "extensions"];
+function legacyManifestOk(manifest) {
+  const text = (value) => value === void 0 || typeof value === "string";
+  const optionalText = (value) => value === void 0 || value === null || typeof value === "string";
+  const texts = (value) => value === void 0 || Array.isArray(value) && value.every((item2) => typeof item2 === "string");
+  return text(manifest.name) && optionalText(manifest.version) && optionalText(manifest.description) && optionalText(manifest.apps) && texts(manifest.keywords) && (manifest.interface === void 0 || manifest.interface === null || isObject5(manifest.interface)) && !LEGACY_NESTED_FIELDS.some((key) => exceedsLimits(manifest[key], JSON_MAX_NESTING - 1));
+}
+async function readCodexPlugin(codexHome2, id) {
+  const out = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
+  if (!out.idValid) return out;
+  const at = id.lastIndexOf("@");
+  const located = await installRoot(join21(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
+  out.install = located.install;
+  out.root = located.root;
+  out.compositionKnown = located.install !== "unreadable";
+  if (located.root === null) return out;
+  const root = located.root;
+  const found = await findManifest(root);
+  if (found.status !== "found") {
+    out.manifest = found.status;
+    out.compositionKnown = found.status !== "unreadable";
+    return out;
+  }
+  const read = await readText(found.path);
+  if (read.status !== "ok") {
+    out.manifest = read.status;
+    out.compositionKnown = read.status !== "unreadable";
+    return out;
+  }
+  let manifest;
+  try {
+    const value = JSON.parse(read.text);
+    if (!isObject5(value)) throw new Error("\uBB36\uC74C\uC774 \uC544\uB2C8\uB2E4");
+    manifest = value;
+  } catch {
+    out.manifest = "unparsable";
+    return out;
+  }
+  if (found.agent ? exceedsLimits(manifest, JSON_MAX_NESTING) : !legacyManifestOk(manifest)) {
+    out.manifest = "unparsable";
+    return out;
+  }
+  const rawName = typeof manifest.name === "string" ? manifest.name : "";
+  out.manifest = "ok";
+  out.namespace = rawName.trim() === "" ? root.split(/[\\/]/).pop() ?? rawName : rawName;
+  if (found.agent) {
+    out.compositionKnown = false;
+    return out;
+  }
+  const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item2) => typeof item2 === "string") ? manifest.skills : [];
+  const declared = listed.map((raw) => manifestPath(root, raw)).filter((path) => path !== null);
+  const roots = declared.length > 0 ? declared : (await entryInfo(join21(root, "skills"))).isDir ? [join21(root, "skills")] : [];
+  if ((await entryInfo(join21(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join21(root, ".codex-plugin", "migrated-command-skills"));
+  out.skillRoots = [...new Set(roots)].sort();
+  if (isObject5(manifest.mcpServers)) {
+    out.mcpServers = serversOf2(manifest.mcpServers);
+    return out;
+  }
+  const declaredFile = manifestPath(root, manifest.mcpServers);
+  const file = declaredFile ?? ((await entryInfo(join21(root, ".mcp.json"))).isFile ? join21(root, ".mcp.json") : null);
+  if (file === null) return out;
+  const text = await readText(file);
+  if (text.status === "missing") return out;
+  if (text.status === "unreadable") {
+    out.mcpUnreadable = true;
+    return out;
+  }
+  try {
+    const value = JSON.parse(text.text);
+    if (!isObject5(value) || exceedsLimits(value, JSON_MAX_NESTING)) throw new Error("\uBB36\uC74C\uC774 \uC544\uB2C8\uAC70\uB098 \uB108\uBB34 \uAE4A\uB2E4");
+    out.mcpServers = serversOf2(value);
+  } catch {
+    out.mcpUnreadable = true;
+  }
+  return out;
+}
+
+// src/scan/codex-settings.ts
+import { resolve as resolve7 } from "node:path";
+var asciiLower = (text, platform) => platform === "win32" ? text.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : text;
+var trustKeyForm = (path, platform) => asciiLower(resolve7(path).replace(/\\/g, "/"), platform);
+function trustOf(user, root, platform = process.platform) {
+  const projects = isTable(user.projects) ? user.projects : {};
+  const rootForm = trustKeyForm(root, platform);
+  const exactKey = asciiLower(root, platform);
+  const found = [];
+  for (const [key, entry] of Object.entries(projects)) {
+    if (!isTable(entry) || entry.trust_level !== "trusted" && entry.trust_level !== "untrusted") continue;
+    if (key === exactKey) return entry.trust_level;
+    if (trustKeyForm(key, platform) === rootForm) found.push({ key, trust: entry.trust_level });
+  }
+  found.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  return found[0]?.trust ?? null;
+}
+function approvalOf(value) {
+  if (value === void 0) return null;
+  if (isTable(value)) return "granular";
+  if (value === "never") return value;
+  if (value === "on-request" || value === "on-failure") return "on-request";
+  return "other";
+}
+function sandboxOf(value) {
+  if (value === void 0) return null;
+  return value === "danger-full-access" || value === "workspace-write" || value === "read-only" ? value : "other";
+}
+function safetyOf(layers) {
+  const merged = mergeCodexLayers(layers);
+  let syntax = null;
+  for (const layer of layers) {
+    if (layer.sandbox_mode !== void 0) syntax = "legacy";
+    if (layer.default_permissions !== void 0) syntax = "profiles";
+  }
+  const permissions = merged.default_permissions;
+  return {
+    approval: approvalOf(merged.approval_policy),
+    sandbox: sandboxOf(merged.sandbox_mode),
+    permissions: permissions === void 0 ? null : permissions === ":danger-full-access" ? "danger-full-access" : "other",
+    fullAccess: syntax === "legacy" ? merged.sandbox_mode === "danger-full-access" : syntax === "profiles" ? permissions === ":danger-full-access" : false
+  };
+}
+var pluginsFeatureOn = (merged) => !(isTable(merged.features) && merged.features.plugins === false);
+var DEFAULT_NAMES = ["AGENTS.override.md", "AGENTS.md"];
+function fallbackNames(merged, platform = process.platform) {
+  const listed = Array.isArray(merged.project_doc_fallback_filenames) ? merged.project_doc_fallback_filenames : [];
+  const names2 = [];
+  for (const raw of listed) {
+    if (typeof raw !== "string") continue;
+    const name = raw.trim();
+    if (name === "" || name === "." || name === ".." || name.includes("/") || name.includes("\0")) continue;
+    if (platform === "win32" && (name.includes("\\") || name.includes(":"))) continue;
+    if (!DEFAULT_NAMES.includes(name) && !names2.includes(name)) names2.push(name);
+  }
+  return names2;
+}
+var projectDocDisabled = (merged) => merged.project_doc_max_bytes === 0 || merged.project_doc_max_bytes === 0n;
+
+// src/scan/codex.ts
+var slashed2 = (path) => path.replace(/\\/g, "/");
+var cmp4 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
+var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
+var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
+async function rulePath(raw, home, homedir2) {
+  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join22(homedir2, raw.slice(2)) : raw;
+  const absolute = isAbsolute2(expanded) ? expanded : resolve8(home, expanded);
+  return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
+}
+async function skillRules(user, home, homedir2) {
+  const skills = isTable(user.skills) ? user.skills : {};
+  const list = Array.isArray(skills.config) ? skills.config : [];
+  const rules = [];
+  for (const entry of list) {
+    if (!isTable(entry) || typeof entry.enabled !== "boolean") continue;
+    const path = typeof entry.path === "string" ? entry.path : null;
+    const name = typeof entry.name === "string" ? entry.name.trim() : null;
+    if (path === null === (name === null) || name === "") continue;
+    rules.push({ path: path === null ? null : await rulePath(path, home, homedir2), name, enabled: entry.enabled });
+  }
+  return rules;
+}
+function enabledByRules(rules, skillFile, name) {
+  let enabled = true;
+  for (const rule2 of rules) if (rule2.path !== null && rule2.path === skillFile || rule2.name !== null && rule2.name === name) enabled = rule2.enabled;
+  return enabled;
+}
+function configuredIn(merged, id) {
+  if (!pluginsFeatureOn(merged)) return false;
+  const plugins = isTable(merged.plugins) ? merged.plugins : {};
+  const entry = plugins[id];
+  if (!isTable(entry) || entry.enabled === false) return false;
+  const fallback = plugins._default;
+  return entry.enabled !== void 0 || !isTable(fallback) || fallback.enabled !== false;
+}
+var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
+async function scanCodexSetup(input) {
+  const home = codexHome(input.env, input.homedir);
+  const userFile = join22(home, "config.toml");
+  const userRead = await readCodexConfig(userFile);
+  const user = userRead.status === "ok" ? userRead.value : {};
+  const problems = [];
+  const codexPlace = (path) => `${input.env.CODEX_HOME?.trim() ? "$CODEX_HOME" : "~/.codex"}/${slashed2(relative5(home, path))}`;
+  const homePlace = (path) => `~/${slashed2(relative5(input.homedir, path))}`;
+  if (userRead.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: userFile, place: codexPlace(userFile) });
+  const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
+  const active = refs.filter((ref) => ref.exists && !ref.excluded);
+  const projectNames = projectNamesOf(refs);
+  const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed2(relative5(ref.root, path))}`;
+  const homeReal = (await entryInfo(home)).realPath ?? normalizePath(home);
+  const sameAsHome = async (dir) => normalizePath(dir) === normalizePath(home) || (await entryInfo(dir)).realPath === homeReal;
+  const contexts = [{ projectRoot: null, merged: user, plugins: [] }];
+  const trustedLayers = [];
+  const perProject = /* @__PURE__ */ new Map();
+  for (const ref of active) {
+    const trust = trustOf(user, ref.root, input.platform);
+    if (trust !== "trusted" || await sameAsHome(join22(ref.root, ".codex"))) {
+      perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
+      continue;
+    }
+    const file = join22(ref.root, ".codex", "config.toml");
+    const text = await readText(file);
+    const layer = text.status === "ok" ? parseCodexConfig(text.text) : null;
+    let status = text.status === "ok" ? layer === null ? "unparsable" : "ok" : text.status;
+    let merged = user;
+    if (layer !== null) {
+      merged = mergeCodexLayers([user, layer]);
+      if (!codexConfigShapeOk(merged)) {
+        status = "unparsable";
+        merged = user;
+      }
+    }
+    if (status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
+    const readable = status === "ok" || status === "missing";
+    perProject.set(ref.normRoot, { status, merged, safety: readable ? safetyOf(status === "ok" && layer !== null ? [user, layer] : [user]) : null });
+    if (!readable) continue;
+    contexts.push({ projectRoot: ref.normRoot, merged, plugins: [] });
+    if (status === "ok" && layer !== null) trustedLayers.push({ normRoot: ref.normRoot, layer });
+  }
+  const ids = /* @__PURE__ */ new Set();
+  for (const layer of [user, ...trustedLayers.map((p) => p.layer)]) if (isTable(layer.plugins)) {
+    for (const id of Object.keys(layer.plugins)) if (id !== "_default") ids.add(id);
+  }
+  const reads = [];
+  for (const id of [...ids].sort()) reads.push(await readCodexPlugin(home, id));
+  for (const context of contexts) context.plugins = reads.filter((plugin) => loadable(plugin) && configuredIn(context.merged, plugin.id)).map((plugin) => plugin.id);
+  const enabledIds = new Set(contexts.flatMap((context) => context.plugins));
+  const rules = await skillRules(user, home, input.homedir);
+  const skills = [];
+  const unreadableDirs = [];
+  const unreadableSkillPlaces = { user: false, projects: [], plugins: [] };
+  const pluginSkillNames = /* @__PURE__ */ new Map();
+  const addScan = (where2, scan, place, owner) => {
+    const blocked = [...scan.unreadableDirs, ...scan.truncated ? [where2] : []];
+    unreadableDirs.push(...blocked);
+    if (blocked.length > 0) {
+      if (owner.scope === "user") unreadableSkillPlaces.user = true;
+      else if (owner.scope === "project") unreadableSkillPlaces.projects.push(owner.projectRoot);
+      else unreadableSkillPlaces.plugins.push(owner.pluginId);
+    }
+    const problem = (kind, path) => {
+      problems.push(place === null ? { kind, owner: "plugin", path, place: null } : { kind, owner: "user", path, place: place(path) });
+    };
+    for (const path of scan.danglingLinks) problem("danglingLink", path);
+    for (const found of scan.skills) {
+      if (found.folder.readable && !found.frontmatterOk) problem("noFrontmatter", found.folder.path);
+      const enabled = enabledByRules(rules, found.skillFileRealPath, found.name);
+      skills.push({
+        scope: owner.scope,
+        name: found.name,
+        recordNames: [found.name],
+        path: found.folder.path,
+        realPath: found.folder.realPath,
+        isLink: found.viaLink,
+        contentHash: found.folder.contentHash,
+        createdMs: found.folder.createdMs,
+        targetCreatedMs: found.folder.targetCreatedMs,
+        projectRoot: owner.scope === "project" ? owner.projectRoot : null,
+        pluginId: owner.scope === "plugin" ? owner.pluginId : null,
+        enabled,
+        listed: enabled,
+        readable: found.folder.readable,
+        nameUnreadable: found.folder.nameUnreadable,
+        managedFixed: false,
+        hookProvided: false,
+        usageLastUsedMs: null,
+        usageUndated: false
+      });
+      if (owner.scope === "plugin") pluginSkillNames.set(owner.pluginId, [...pluginSkillNames.get(owner.pluginId) ?? [], found.name]);
+    }
+  };
+  const userRoots = [
+    { dir: join22(home, "skills"), place: codexPlace },
+    { dir: join22(input.homedir, ".agents", "skills"), place: homePlace }
+  ].filter((root, index, all) => all.findIndex((other) => normalizePath(other.dir) === normalizePath(root.dir)) === index);
+  for (const root of userRoots) addScan(root.dir, await scanCodexSkillRoot(root.dir), root.place, { scope: "user" });
+  for (const ref of active) {
+    const dirs = [join22(ref.root, ".agents", "skills")];
+    if (!await sameAsHome(join22(ref.root, ".codex"))) dirs.push(join22(ref.root, ".codex", "skills"));
+    for (const dir of dirs) addScan(dir, await scanCodexSkillRoot(dir), (path) => projectPlace(ref, path), { scope: "project", projectRoot: ref.normRoot });
+  }
+  for (const plugin of reads) {
+    if (!enabledIds.has(plugin.id)) continue;
+    for (const dir of plugin.skillRoots) addScan(dir, await scanCodexSkillRoot(dir, void 0, plugin.namespace), null, { scope: "plugin", pluginId: plugin.id });
+  }
+  const pluginServers = new Map(reads.filter((plugin) => enabledIds.has(plugin.id) && !plugin.mcpUnreadable).map((plugin) => [plugin.id, plugin.mcpServers]));
+  const mcpServers = codexMcpFacts({ user, projects: trustedLayers, contexts, pluginServers, salt: input.salt });
+  const plugins = reads.map((plugin) => ({
+    id: plugin.id,
+    configured: contexts.some((context) => configuredIn(context.merged, plugin.id)),
+    enabled: enabledIds.has(plugin.id),
+    idValid: plugin.idValid,
+    install: plugin.install,
+    manifest: plugin.manifest,
+    namespace: plugin.namespace,
+    compositionKnown: plugin.compositionKnown,
+    mcpUnreadable: plugin.mcpUnreadable,
+    skills: (pluginSkillNames.get(plugin.id) ?? []).sort()
+  }));
+  const globalRead = await readCodexGlobalInstructions(home, active);
+  const projects = [];
+  for (const ref of refs) {
+    const trust = trustOf(user, ref.root, input.platform);
+    const known = perProject.get(ref.normRoot);
+    if (known === void 0) {
+      projects.push({ normRoot: ref.normRoot, scanned: false, trust, configStatus: null, instructions: emptyInstructionSet(), safety: null });
+      continue;
+    }
+    const skip = trust === "untrusted" || projectDocDisabled(known.merged);
+    const instructions = skip ? emptyInstructionSet() : await readCodexProjectInstructions(ref.root, fallbackNames(known.merged, input.platform));
+    projects.push({ normRoot: ref.normRoot, scanned: true, trust, configStatus: known.status, instructions, safety: known.safety });
+  }
+  skills.sort((a, b) => cmp4(a.name, b.name) || SKILL_SCOPE_ORDER2[a.scope] - SKILL_SCOPE_ORDER2[b.scope] || cmp4(normalizePath(a.path), normalizePath(b.path)) || cmp4(a.pluginId, b.pluginId));
+  const uniqueProblems = [];
+  for (const problem of new Map(problems.map((p) => [`${p.kind}\0${p.owner}\0${p.path}`, p])).values()) {
+    uniqueProblems.push({ ...problem, realPath: (await entryInfo(problem.path)).realPath });
+  }
+  uniqueProblems.sort((a, b) => cmp4(a.path, b.path) || cmp4(a.kind, b.kind) || OWNER_ORDER2[a.owner] - OWNER_ORDER2[b.owner]);
+  return {
+    tool: "codex",
+    home,
+    config: userRead.status,
+    globalInstructions: globalRead.set,
+    globalMentions: globalRead.mentions,
+    safety: safetyOf([user]),
+    skills: skills.map((skill) => ({ ...skill, installKey: codexSkillInstallKey(skill) })),
+    mcpServers: mcpServers.map((server) => ({ ...server, installKey: codexMcpInstallKey(server) })),
+    plugins,
+    projects,
+    problems: uniqueProblems,
+    unreadableDirs: [...new Set(unreadableDirs)].sort(),
+    unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
+  };
+}
+
 // src/commands/checkup-input.ts
 var CLAUDE_AI_PREFIX = "claude.ai ";
+var CODEX_SKILL_OBSERVATION = { complete: false, reasons: [] };
+function codexSharedRead(read) {
+  return {
+    files: read.files,
+    listedBytes: read.listedBytes,
+    bytes: read.bytes,
+    inProgress: read.inProgress,
+    olderThanWindow: read.olderThanWindow,
+    unreadableFiles: read.unreadableFiles,
+    unreadableFileBytes: read.unreadableFileBytes,
+    unknownSizeFiles: read.unknownSizeFiles,
+    unreadableDirs: read.unreadableDirs
+  };
+}
 async function gatherCheckupInput(options) {
-  const collected = await collectClaude({ env: options.env, homedir: options.homedir, clock: options.clock, cacheDir: options.cacheDir, rescan: options.rescan });
-  const { summaries } = collected;
+  const collectOptions = { env: options.env, homedir: options.homedir, clock: options.clock, cacheDir: options.cacheDir, rescan: options.rescan };
+  const claude = await collectClaude(collectOptions);
+  const codex = await collectCodex(collectOptions);
   const collectDates = new Set(makeWindows(options.clock.nowMs, options.clock.timeZone).collectDates);
   const cwds = /* @__PURE__ */ new Set();
-  const claudeAiNames = /* @__PURE__ */ new Set();
   const normalizedCwds = /* @__PURE__ */ Object.create(null);
-  for (const summary of summaries) {
+  for (const summary of [...claude.summaries, ...codex.summaries]) {
     if (summary.cwd !== null) normalizedCwds[summary.cwd] = normalizePath(summary.cwd, options.platform);
-    const days = Object.entries(summary.days);
-    if (summary.kind === "main" && summary.cwd !== null && days.some(([date, day]) => collectDates.has(date) && day.responses > 0)) cwds.add(summary.cwd);
-    for (const [, day] of days) {
+    if (summary.kind === "main" && summary.cwd !== null && Object.entries(summary.days).some(([date, day]) => collectDates.has(date) && day.responses > 0)) cwds.add(summary.cwd);
+  }
+  const claudeAiNames = /* @__PURE__ */ new Set();
+  for (const summary of claude.summaries) {
+    for (const day of Object.values(summary.days)) {
       for (const name of [...day.loadedMcpServers, ...Object.keys(day.mcpAttributions)]) if (name.startsWith(CLAUDE_AI_PREFIX)) claudeAiNames.add(name);
     }
   }
-  const facts = await scanClaudeSetup({
+  const sortedCwds = [...cwds].sort();
+  const claudeFacts = await scanClaudeSetup({
     env: options.env,
     homedir: options.homedir,
     tmpdir: options.tmpdir,
     platform: options.platform,
-    cwds: [...cwds].sort(),
+    cwds: sortedCwds,
     claudeAiNames: [...claudeAiNames].sort(),
     salt: options.state.salt,
     ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
   });
-  const unreadable = unreadableCount(collected.read);
-  const observation = { skills: claudeObservation(summaries, unreadable, "skill"), mcp: claudeObservation(summaries, unreadable, "mcp") };
+  const codexFacts = await scanCodexSetup({ env: options.env, homedir: options.homedir, tmpdir: options.tmpdir, platform: options.platform, cwds: sortedCwds, salt: options.state.salt });
+  const claudeUnreadable = unreadableCount(claude.read);
+  const claudeObserved = { skills: claudeObservation(claude.summaries, claudeUnreadable, "skill"), mcp: claudeObservation(claude.summaries, claudeUnreadable, "mcp") };
+  const codexObserved = { skills: CODEX_SKILL_OBSERVATION, mcp: codexMcpObservation(codex.summaries, codexUnreadableCount(codex.read)) };
   const input = {
     clock: options.clock,
     tools: [
       {
         tool: "claude-code",
-        summaries,
+        summaries: claude.summaries,
         coverage: CLAUDE_COVERAGE,
         shellTools: [...SHELL_TOOLS].sort(),
-        complete: { skills: observation.skills.complete, mcp: observation.mcp.complete },
-        setup: facts
+        complete: { skills: claudeObserved.skills.complete, mcp: claudeObserved.mcp.complete },
+        setup: claudeFacts
+      },
+      {
+        tool: "codex",
+        summaries: codex.summaries,
+        coverage: CODEX_COVERAGE,
+        shellTools: [...CODEX_SHELL_TOOLS].sort(),
+        complete: { skills: codexObserved.skills.complete, mcp: codexObserved.mcp.complete },
+        setup: codexFacts
       }
     ],
-    projects: facts.projects,
+    // Codex의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
+    projects: claudeFacts.projects,
     normalizedCwds: { ...normalizedCwds },
     installs: options.state.installs,
     self: options.self
   };
-  const { fromCache: _fromCache, ...read } = collected.read;
-  const tools2 = [{ tool: "claude-code", detected: collected.detected, visibleFrom: collected.visibleFrom, overlappingSessions: collected.overlappingSessions, read, observation }];
-  return { input, collected, facts, tools: tools2 };
+  const { fromCache: _fromCache, ...claudeRead } = claude.read;
+  const tools2 = [
+    { tool: "claude-code", detected: claude.detected, visibleFrom: claude.visibleFrom, overlappingSessions: claude.overlappingSessions, read: claudeRead, observation: claudeObserved },
+    // Codex는 다른 기록에서 이어받은 앞부분을 빼고 세므로 다른 세션과 겹쳐 세는 응답이 없다(설계 「5단계 계획 전 결정」 7번)
+    { tool: "codex", detected: codex.detected, visibleFrom: codex.visibleFrom, overlappingSessions: 0, read: codexSharedRead(codex.read), observation: codexObserved }
+  ];
+  return { input, collected: { claude, codex }, facts: { claude: claudeFacts, codex: codexFacts }, tools: tools2 };
 }
 
 // src/commands/run-notices.ts
@@ -7208,15 +10107,15 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname4 } from "node:path";
+import { basename as basename8, dirname as dirname5 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename7(entryFile) === BUNDLE_FILE && basename7(dirname4(entryFile)) === "scripts") {
+  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname5(entryFile)) === "scripts") {
     try {
-      skillRealPaths.push(normalizePath(await realpath6(dirname4(dirname4(entryFile)))));
+      skillRealPaths.push(normalizePath(await realpath6(dirname5(dirname5(entryFile)))));
     } catch {
     }
   }
@@ -7235,7 +10134,7 @@ async function runCheckup(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join17(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join23(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -7299,7 +10198,7 @@ async function runCheckup(options) {
     }
   }
   if (reportPath !== null && options.open !== void 0 && !await options.open(reportPath)) notices2.push({ kind: "report_unopened" });
-  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
+  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run: run2, result };
 }
 
@@ -7314,45 +10213,45 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve6) => {
+  return new Promise((resolve9) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve6(false));
+      child.once("error", () => resolve9(false));
       child.once("spawn", () => {
         child.unref();
-        resolve6(true);
+        resolve9(true);
       });
     } catch {
-      resolve6(false);
+      resolve9(false);
     }
   });
 }
 
 // src/commands/clean.ts
-import { lstat as lstat7, readdir as readdir7, realpath as realpath7 } from "node:fs/promises";
-import { join as join18 } from "node:path";
-var isMissing4 = (error) => error?.code === "ENOENT";
+import { lstat as lstat8, readdir as readdir8, realpath as realpath7 } from "node:fs/promises";
+import { join as join24 } from "node:path";
+var isMissing5 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
-    return await lstat7(path);
+    return await lstat8(path);
   } catch (error) {
-    if (isMissing4(error)) return null;
+    if (isMissing5(error)) return null;
     throw error;
   }
 }
 async function cleanReports(path, boundary) {
-  const names2 = (await readdir7(path)).sort();
+  const names2 = (await readdir8(path)).sort();
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat7(join18(path, name));
+    const info = await lstat8(join24(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join18(path, name);
-    const info = await lstat7(full);
+    const full = join24(path, name);
+    const info = await lstat8(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
       kept.bytes += info.size;
@@ -7365,7 +10264,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join18(dir, spec.name);
+  const path = join24(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -7408,95 +10307,13 @@ async function clean(dir, level) {
 
 // src/commands/doctor.ts
 import { mkdir as mkdir5, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join20 } from "node:path";
-import * as zlib from "node:zlib";
-
-// src/adapters/codex/locate.ts
-import { readdir as readdir8, stat as stat4 } from "node:fs/promises";
-import { join as join19, resolve as resolve5 } from "node:path";
-function codexHome(env, homedir2) {
-  const fromEnv = env.CODEX_HOME?.trim();
-  return fromEnv ? resolve5(fromEnv) : join19(homedir2, ".codex");
-}
-var isMissing5 = (error) => error?.code === "ENOENT";
-var DIGITS = /^\d+$/;
-var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
-async function listCodexFiles(home, minChangedMs, statFile = stat4) {
-  const sessions = join19(home, "sessions");
-  const files = [];
-  const unreadableDirs = [];
-  let olderThanWindow = 0;
-  let unnamedFiles = 0;
-  const walk = async (dir, depth) => {
-    let entries;
-    try {
-      entries = await readdir8(dir, { withFileTypes: true });
-    } catch (error) {
-      if (depth === 0 && isMissing5(error)) return false;
-      if (!isMissing5(error)) unreadableDirs.push(dir);
-      return true;
-    }
-    for (const entry of entries) {
-      const path = join19(dir, entry.name);
-      if (depth < 3) {
-        if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
-        else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
-        continue;
-      }
-      if (!entry.isFile() || !/^rollout-.*\.jsonl(\.zst)?$/i.test(entry.name)) continue;
-      const match = ROLLOUT.exec(entry.name);
-      if (match === null) {
-        unnamedFiles++;
-        continue;
-      }
-      const baseId = match[1]?.toLowerCase() ?? null;
-      const recordId = match[2].toLowerCase();
-      const compressed = match[3] !== void 0;
-      try {
-        const info = await statFile(path);
-        const changedMs = Math.max(info.mtimeMs, info.ctimeMs);
-        if (minChangedMs !== null && changedMs < minChangedMs) {
-          olderThanWindow++;
-          continue;
-        }
-        files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, changedMs, recordId, baseId, compressed });
-      } catch {
-        files.push({ path, normPath: normalizePath(path), size: null, mtimeMs: null, changedMs: null, recordId, baseId, compressed });
-      }
-    }
-    return true;
-  };
-  const found = await walk(sessions, 0);
-  if (!found) return { sessionsFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unnamedFiles: 0 };
-  files.sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
-  unreadableDirs.sort();
-  return { sessionsFound: true, files, olderThanWindow, unreadableDirs, unnamedFiles };
-}
-function canonicalOrder(a, b) {
-  if (a.compressed !== b.compressed) return a.compressed ? 1 : -1;
-  if (a.changedMs !== b.changedMs) {
-    if (a.changedMs === null) return 1;
-    if (b.changedMs === null) return -1;
-    return b.changedMs - a.changedMs;
-  }
-  return a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0;
-}
-function groupCopies(files) {
-  const groups = /* @__PURE__ */ new Map();
-  for (const file of files) {
-    const list = groups.get(file.recordId);
-    if (list) list.push(file);
-    else groups.set(file.recordId, [file]);
-  }
-  return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([recordId, copies]) => ({ recordId, copies: [...copies].sort(canonicalOrder) }));
-}
-
-// src/commands/doctor.ts
+import { join as join25 } from "node:path";
+import * as zlib2 from "node:zlib";
 function hasZstd() {
-  return typeof zlib.createZstdDecompress === "function";
+  return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join20(dir, `.write-probe-${process.pid}`);
+  const probe = join25(dir, `.write-probe-${process.pid}`);
   try {
     await mkdir5(dir, { recursive: true });
     await writeFile4(probe, "ok");
@@ -7528,14 +10345,14 @@ async function doctor(input) {
 }
 
 // src/commands/where.ts
-import { lstat as lstat8, readdir as readdir9 } from "node:fs/promises";
-import { join as join21 } from "node:path";
+import { lstat as lstat9, readdir as readdir9 } from "node:fs/promises";
+import { join as join26 } from "node:path";
 var isMissing6 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
-    dirInfo = await lstat8(dir);
+    dirInfo = await lstat9(dir);
   } catch (error) {
     if (!isMissing6(error)) throw error;
   }
@@ -7546,11 +10363,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat8(join21(dir, spec.name));
+        const info = await lstat9(join26(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join21(dir, spec.name));
+          const size = await treeSize(join26(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -7621,7 +10438,7 @@ async function run(command, rest, context) {
   const args = command === "checkup" ? checkupArgs(rest) : null;
   if (args !== null) {
     const platform = context.platform ?? process.platform;
-    const open4 = context.open ?? ((path) => openInBrowser(path, platform));
+    const open5 = context.open ?? ((path) => openInBrowser(path, platform));
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
@@ -7634,7 +10451,7 @@ async function run(command, rest, context) {
       rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir },
-      ...args.flags.has("--no-open") ? {} : { open: open4 }
+      ...args.flags.has("--no-open") ? {} : { open: open5 }
     });
     printJson({ summary: outcome.summary, run: outcome.run });
     return 0;

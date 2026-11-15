@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { NOTICE_KINDS, setupNotices } from "../../src/core/result/notices.ts";
 import { HOME, instructions, plugin, project, skill } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const enough = Array.from({ length: 3 }, (_, index) => ({ days: { [`2026-11-1${index}`]: { responses: 3, humanRequests: 10 } } }));
 const noticesOf = (tool: ClaudeToolInput, run = { stateBroken: false }) => {
@@ -12,6 +12,11 @@ const noticesOf = (tool: ClaudeToolInput, run = { stateBroken: false }) => {
 };
 
 describe("셋팅 쪽 알림", () => {
+  it("Codex의 셋팅 쪽 알림은 아직 내지 않는다. 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)", () => {
+    const codex = codexTool({ sessions: enough, setup: { config: "unparsable", unreadableDirs: ["/home/u/.agents/skills"] } });
+    const input = evaluationInput([codex, claudeTool({ sessions: enough })]);
+    expect(setupNotices(input, evaluate(input), { stateBroken: false }).filter((notice) => "tool" in notice)).toEqual([]);
+  });
   it("빠진 것이 없으면 알림이 없다", () => {
     expect(noticesOf({})).toEqual([]);
   });

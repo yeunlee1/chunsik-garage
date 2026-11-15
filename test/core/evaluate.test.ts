@@ -1,10 +1,9 @@
 // 입력 묶음에서 평가까지를 시험한다. 규칙 스물둘이 제 입력에 이어졌는지, 점수에 넣는 도구에서만 재는지, 같은 입력이면 글자 하나 다르지 않은지(설계 9.3, 12.1, 12.2, 21.1 「결정성」)
 import { describe, expect, it } from "vitest";
-import type { ToolId } from "../../src/adapters/types.ts";
 import { evaluate, type EvaluationInput } from "../../src/core/evaluate.ts";
 import { RULES } from "../../src/core/rules.ts";
-import { instructionFile, instructions, mcpServer, plugin, project, skill } from "../helpers/facts.ts";
-import { CLOCK, claudeTool, evaluationInput, watched } from "../helpers/evaluation.ts";
+import { codexSafety, instructionFile, instructions, mcpServer, plugin, project, skill } from "../helpers/facts.ts";
+import { CLOCK, claudeTool, codexTool, evaluationInput, watched } from "../helpers/evaluation.ts";
 import type { SummaryInput } from "../helpers/summaries.ts";
 
 const APP = "/work/app";
@@ -174,11 +173,30 @@ describe("점수에 넣는 도구", () => {
     expect(later.tools.map((tool) => [tool.scored, tool.inCalendar])).toEqual([[false, false]]);
   });
   it("도구는 식별자의 차례로 낸다. 점수에 넣는 도구만 도구별 값에 싣는다", () => {
-    const codex = { ...claudeTool({ sessions: [before] }), tool: "codex" as ToolId };
+    const codex = codexTool({ sessions: [before] });
     const result = evaluate(evaluationInput([codex, claudeTool({ sessions: SESSIONS, setup: SETUP })], { projects: SETUP.projects }));
     expect(result.tools.map((tool) => [tool.tool, tool.scored])).toEqual([["claude-code", true], ["codex", false]]);
     expect(finding(result, "E1").tools.map((value) => value.tool)).toEqual(["claude-code"]);
     expect(finding(result, "S1")).toMatchObject({ evidence: { tools: 1 } });
+  });
+  it("Codex를 함께 넣으면 Codex의 규칙을 그 도구의 셋팅 사실로 잰다(설계 「5단계 3부 계획 전 결정」 2~11번)", () => {
+    const codexSessions: SummaryInput[] = [{ sessionId: "x", cwd: APP, days: { "2026-11-10": { responses: 10, humanRequests: 5, tokens: { input: 1000, cacheRead: 600, output: 10 } } } }];
+    const unsafe = codexSafety({ approval: "never", sandbox: "danger-full-access", fullAccess: true });
+    const codex = codexTool({ sessions: codexSessions, setup: { safety: unsafe, skills: [skill("c-skill", { path: "/home/u/.agents/skills/c-skill" })] } });
+    const result = evaluate(evaluationInput([codex, claudeTool({ sessions: SESSIONS, setup: SETUP })], { installs: watched(IDLE_SKILL, DB) }));
+    expect(result.tools.map((tool) => [tool.tool, tool.scored])).toEqual([["claude-code", true], ["codex", true]]);
+    // E1은 도구마다의 식이다. Codex는 입력 칸에 캐시가 들어 있다
+    expect(finding(result, "E1").tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
+    // S2는 두 도구로 잰다. Codex는 승인 없음과 전면 해제를 함께 써 안전장치가 없다
+    expect(result.safeguards).toEqual([
+      { tool: "claude-code", guardHook: false, permissionChecks: true },
+      { tool: "codex", guardHook: false, permissionChecks: false },
+    ]);
+    expect(finding(result, "S2")).toMatchObject({ evidence: { guarded: 1, tools: 2, unreadTools: 0 } });
+    // Codex 스킬은 판정하지 않고 Codex의 정비 후보는 없다
+    expect(finding(result, "E5").tools.find((value) => value.tool === "codex")).toMatchObject({ status: "unmeasured", reason: "unsupported" });
+    expect(result.tools.find((tool) => tool.tool === "codex")?.skills).toEqual([]);
+    expect(result.candidates.filter((candidate) => candidate.tool === "codex")).toEqual([]);
   });
 });
 

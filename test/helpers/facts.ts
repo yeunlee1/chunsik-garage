@@ -1,6 +1,7 @@
 // 시험에서 셋팅 사실을 손으로 짓는 도구. 적지 않은 것은 "다 읽었고 아무것도 없다"의 값이다
 import { emptyInstructionSet, type InstructionFile, type InstructionSet } from "../../src/scan/instructions.ts";
-import type { ClaudeSetupFacts, McpFact, PluginFact, ProjectFact, SkillFact } from "../../src/scan/types.ts";
+import type { CodexSafetyFact } from "../../src/scan/codex-settings.ts";
+import type { ClaudeSetupFacts, CodexPluginFact, CodexProjectFact, CodexSetupFacts, McpFact, PluginFact, ProjectFact, SkillFact } from "../../src/scan/types.ts";
 
 export const HOME = "/home/u/.claude";
 
@@ -121,6 +122,43 @@ export function facts(input: Partial<ClaudeSetupFacts> = {}): ClaudeSetupFacts {
     pluginsWithoutInstall: [],
     skills: [],
     mcpServers: [],
+    projects: [],
+    problems: [],
+    unreadableDirs: [],
+    unreadableSkillPlaces: { user: false, projects: [], plugins: [] },
+    ...input,
+  };
+}
+
+export const CODEX_HOME = "/home/u/.codex";
+
+/** 승인과 샌드박스를 적지 않은 맥락(Codex의 기본, 묻는 승인과 샌드박스) */
+export function codexSafety(input: Partial<CodexSafetyFact> = {}): CodexSafetyFact {
+  return { approval: null, sandbox: null, permissions: null, fullAccess: false, ...input };
+}
+
+/** 신뢰한 Codex 프로젝트. 설정 파일이 없고 지침이 없으며 그 맥락의 승인과 샌드박스는 기본이다 */
+export function codexProject(normRoot: string, input: Partial<CodexProjectFact> = {}): CodexProjectFact {
+  return { normRoot, scanned: true, trust: "trusted", configStatus: "missing", instructions: emptyInstructionSet(), safety: codexSafety(), ...input };
+}
+
+/** 설정에서 켜 두었고 Codex가 싣는 플러그인. 구성을 알고 MCP 정의를 읽었다 */
+export function codexPlugin(id: string, input: Partial<CodexPluginFact> = {}): CodexPluginFact {
+  return { id, configured: true, enabled: true, idValid: true, install: "ok", manifest: "ok", namespace: id.split("@")[0] ?? id, compositionKnown: true, mcpUnreadable: false, skills: [], ...input };
+}
+
+/** Codex의 셋팅 사실. 모든 파일을 읽었고 설치, 프로젝트, 지침이 하나도 없으며 전역 맥락은 기본이다 */
+export function codexFacts(input: Partial<CodexSetupFacts> = {}): CodexSetupFacts {
+  return {
+    tool: "codex",
+    home: CODEX_HOME,
+    config: "ok",
+    globalInstructions: emptyInstructionSet(),
+    globalMentions: {},
+    safety: codexSafety(),
+    skills: [],
+    mcpServers: [],
+    plugins: [],
     projects: [],
     problems: [],
     unreadableDirs: [],

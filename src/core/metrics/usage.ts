@@ -1,5 +1,5 @@
 // 기록으로 재는 도구별 규칙 여덟을 도구 하나의 구간 합계에서 잰다. S4, E1, E2, E3, E4, E7, F1, F2(순수 함수, 설계 11.3, 11.4 「규칙마다의 이유」)
-import type { CoverageKey, ToolCoverage } from "../../adapters/types.ts";
+import type { CoverageKey, ToolCoverage, ToolId } from "../../adapters/types.ts";
 import { countGate, scored, type Measurement } from "../measure.ts";
 import type { ToolTotals } from "../totals.ts";
 
@@ -30,9 +30,10 @@ function s4(totals: ToolTotals, coverage: ToolCoverage): Measurement {
   return countGate(sees(coverage, "mcpFailuresAndHooks"), totals.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals.hookFailures / totals.hookRuns, evidence);
 }
 
-function e1(totals: ToolTotals, coverage: ToolCoverage): Measurement {
+function e1(totals: ToolTotals, coverage: ToolCoverage, tool: ToolId): Measurement {
   const { input, cacheRead, cacheWrite } = totals.tokens;
-  const all = input + cacheRead + cacheWrite;
+  // Claude Code는 입력 칸에 캐시가 들지 않고, Codex는 입력 칸에 캐시가 든다(설계 11.3 「E1의 식」, 「5단계 3부 계획 전 결정」 6번)
+  const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }
@@ -84,10 +85,10 @@ function f2(totals: ToolTotals, coverage: ToolCoverage): Measurement {
   return countGate(sees(coverage, "subagents", "autoCompaction"), compacted.length, MIN_COMPACTED_SESSIONS, evidence) ?? scored(delegatedSessions / compacted.length, evidence);
 }
 
-export function usageRules(totals: ToolTotals, coverage: ToolCoverage): Record<UsageRuleId, Measurement> {
+export function usageRules(totals: ToolTotals, coverage: ToolCoverage, tool: ToolId): Record<UsageRuleId, Measurement> {
   return {
     S4: s4(totals, coverage),
-    E1: e1(totals, coverage),
+    E1: e1(totals, coverage, tool),
     E2: e2(totals, coverage),
     E3: e3(totals, coverage),
     E4: e4(totals, coverage),

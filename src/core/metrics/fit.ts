@@ -14,8 +14,33 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 /** 스캐너가 셋팅을 읽은 프로젝트. 지금 PC에 없는 작업 폴더와 프로젝트로 보지 않는 폴더는 읽지 않았다(설계 10) */
 const scanned = (project: ProjectFact): boolean => project.exists && !project.excluded;
-const scannedProjects = (tool: ToolSetup): ProjectFact[] => tool.setup.projects.filter(scanned).sort((a, b) => byText(a.normRoot, b.normRoot));
-const projectIn = (tool: ToolSetup | undefined, normRoot: string): ProjectFact | undefined => tool?.setup.projects.find((project) => project.normRoot === normRoot);
+
+/** 도구가 프로젝트 하나에서 본 것. 스캐너가 셋팅을 읽은 프로젝트만 든다 */
+interface ToolProject {
+  normRoot: string;
+  /** 프로젝트 폴더의 이름. Codex의 프로젝트 사실에는 없어 프로젝트 목록에서 얻는다 */
+  name: string | null;
+  /** 그 도구가 읽는 프로젝트 지침 */
+  instructions: InstructionSet;
+  /** 깃 저장소가 아니어도 그 도구의 지침 파일이나 프로젝트 쪽 설정이 이미 있어 프로젝트로 다루는 폴더다 */
+  treated: boolean;
+}
+
+/**
+ * 도구의 프로젝트 사실을 같은 꼴로 본다. Codex는 Codex가 읽는 프로젝트 지침(신뢰하지 않은 프로젝트와 한도가 0인 프로젝트에는 없다)이고,
+ * 프로젝트 쪽 설정은 신뢰한 프로젝트의 .codex/config.toml이 있는 것이다(설계 「5단계 3부 계획 전 결정」 7번)
+ */
+function toolProjects(tool: ToolSetup): ToolProject[] {
+  const projects: ToolProject[] =
+    tool.tool === "codex"
+      ? tool.setup.projects
+          .filter((project) => project.scanned)
+          .map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || (project.configStatus !== null && project.configStatus !== "missing") }))
+      : tool.setup.projects
+          .filter(scanned)
+          .map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
+  return projects.sort((a, b) => byText(a.normRoot, b.normRoot));
+}
 
 /** 지침이 없다고 센 프로젝트와, 주로 쓴 도구 가운데 그 도구가 읽는 지침이 없는 도구(도구 식별자 차례) */
 export interface MissingInstructions {
@@ -33,11 +58,13 @@ export interface WorstOverlap {
   name: string;
 }
 
-const hasInstructionFiles = (set: InstructionSet): boolean => set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
+function hasInstructionFiles(set: InstructionSet): boolean {
+  return set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
+}
 /** 깃 저장소가 아니어도 프로젝트 지침이나 프로젝트 쪽 설정이 이미 있는 폴더는 프로젝트로 다루는 폴더다 */
-const treatedAsProject = (project: ProjectFact | undefined): boolean => project !== undefined && (hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings);
+const treatedAsProject = (project: ProjectFact): boolean => hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings;
 /** 내용이 있는 지침 파일이 하나라도 있다. 빈 파일과 읽지 못한 파일은 세지 않는다 */
-const hasInstructions = (project: ProjectFact | undefined): boolean => project?.instructions.files.some((file) => file.hasContent) ?? false;
+const hasInstructions = (project: ToolProject | undefined): boolean => project?.instructions.files.some((file) => file.hasContent) ?? false;
 
 /** 그 프로젝트에서 주 세션이 3개 이상인 도구와, 주 세션이 가장 많은 도구(수가 같으면 그 도구들 모두) */
 function mainTools(use: ProjectUse): string[] {
@@ -46,15 +73,15 @@ function mainTools(use: ProjectUse): string[] {
 }
 
 function f3(tools: readonly ToolSetup[], usage: ProjectUsage): { measurement: Measurement; missing: MissingInstructions[] } {
-  const byId = new Map<string, ToolSetup>(tools.map((tool) => [tool.tool, tool]));
+  const byId = new Map<string, Map<string, ToolProject>>(tools.map((tool) => [tool.tool, new Map(toolProjects(tool).map((project) => [project.normRoot, project]))]));
   const missing: MissingInstructions[] = [];
   let targets = 0;
   for (const use of usage.projects) {
     const { project } = use;
     if (use.total < FREQUENT_SESSIONS || !scanned(project)) continue;
-    if (project.kind !== "git" && !treatedAsProject(project) && !tools.some((tool) => treatedAsProject(projectIn(tool, project.normRoot)))) continue;
+    if (project.kind !== "git" && !treatedAsProject(project) && ![...byId.values()].some((projects) => projects.get(project.normRoot)?.treated === true)) continue;
     targets++;
-    const without = mainTools(use).filter((tool) => !hasInstructions(projectIn(byId.get(tool), project.normRoot)));
+    const without = mainTools(use).filter((tool) => !hasInstructions(byId.get(tool)?.get(project.normRoot)));
     if (without.length > 0) missing.push({ normRoot: project.normRoot, name: project.name, tools: without });
   }
   const withInstructions = targets - missing.length;
@@ -65,25 +92,26 @@ function f3(tools: readonly ToolSetup[], usage: ProjectUsage): { measurement: Me
 
 const instructionsUnread = (set: InstructionSet): boolean => set.unreadable.length > 0 || set.unreadableDirs.length > 0;
 
-function f4(tools: readonly ToolSetup[]): { measurement: Measurement; worst: WorstOverlap | null } {
+function f4(tools: readonly ToolSetup[], names: ReadonlyMap<string, string>): { measurement: Measurement; worst: WorstOverlap | null } {
   let unreadable = false;
   let globalLines = 0;
   let comparedProjects = 0;
   let worst: (WorstOverlap & { overlapping: number; globalLines: number }) | null = null;
   for (const tool of [...tools].sort((a, b) => byText(a.tool, b.tool))) {
     const global = tool.setup.globalInstructions;
-    const projects = scannedProjects(tool);
+    const projects = toolProjects(tool);
     if (instructionsUnread(global) || projects.some((project) => instructionsUnread(project.instructions))) unreadable = true;
     const lines = new Set(global.lineHashes);
     globalLines += lines.size;
     // 전역 지침이 없거나 견줄 줄(20자 이상)이 없으면 이 도구에서는 견줄 것이 없다
     if (global.files.length === 0 || lines.size === 0) continue;
     for (const project of projects) {
-      // 프로젝트 지침이 없거나 전역 지침과 같은 파일뿐이면 견주지 않는다
+      // 프로젝트 지침이 없거나 전역 지침과 같은 파일뿐이면 견주지 않는다. Codex의 프로젝트 지침에는 같은 파일 표시가 없어 같은 파일도 견준다(설계 「5단계 2부 계획 전 결정」 5번)
       if (!project.instructions.files.some((file) => !file.sameAsGlobal)) continue;
       comparedProjects++;
       const overlapping = new Set(project.instructions.lineHashes.filter((hash) => lines.has(hash))).size;
-      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name: project.name, overlapping, globalLines: lines.size };
+      const name = project.name ?? names.get(project.normRoot) ?? project.normRoot;
+      if (worst === null || overlapping * worst.globalLines > worst.overlapping * lines.size) worst = { tool: tool.tool, normRoot: project.normRoot, name, overlapping, globalLines: lines.size };
     }
   }
   // 읽지 못한 곳에 겹치는 줄이 있을 수 있다. 보이는 것만으로 재면 좋게 틀린다(설계 11.3)
@@ -124,9 +152,11 @@ function f6(tools: readonly ToolSetup[]): Measurement {
   let conflicts = 0;
   let projectsWithSettings = 0;
   for (const tool of tools) {
+    // Codex는 견줄 권한 규칙이 없어 Claude Code만 센다(설계 「5단계 계획 전 결정」 5번)
+    if (tool.tool !== "claude-code") continue;
     // 전역 쪽은 사용자 설정만이다. 관리 정책 파일은 처음부터 견주지 않는다
     if (unread(tool.setup.settings.user) || projectSettingsUnread(tool.setup)) unreadable = true;
-    for (const project of scannedProjects(tool)) {
+    for (const project of tool.setup.projects.filter(scanned)) {
       if (!project.hasSettings && !project.hasLocalSettings) continue;
       projectsWithSettings++;
       conflicts += project.permissionConflicts;
@@ -137,10 +167,14 @@ function f6(tools: readonly ToolSetup[]): Measurement {
   return projectsWithSettings === 0 ? unmeasured("not_applicable", evidence) : scored(conflicts, evidence);
 }
 
-/** 도구를 합쳐서 재는 상황 적합 규칙. tools는 점수에 넣는 도구이고 usage는 같은 도구들로 만든 것이다. */
-export function mergedFitRules(tools: readonly ToolSetup[], usage: ProjectUsage): Record<"F3" | "F4" | "F6", Measurement> & { missingInstructions: MissingInstructions[]; worstOverlap: WorstOverlap | null } {
+/** 도구를 합쳐서 재는 상황 적합 규칙. tools는 점수에 넣는 도구이고 usage는 같은 도구들로 만든 것이다. projects는 입력 묶음의 프로젝트 목록이다(Codex 프로젝트의 이름을 얻는다) */
+export function mergedFitRules(
+  tools: readonly ToolSetup[],
+  usage: ProjectUsage,
+  projects: readonly ProjectFact[],
+): Record<"F3" | "F4" | "F6", Measurement> & { missingInstructions: MissingInstructions[]; worstOverlap: WorstOverlap | null } {
   const guides = f3(tools, usage);
-  const overlap = f4(tools);
+  const overlap = f4(tools, new Map(projects.map((project) => [project.normRoot, project.name])));
   return { F3: guides.measurement, F4: overlap.measurement, F6: f6(tools), missingInstructions: guides.missing, worstOverlap: overlap.worst };
 }
 

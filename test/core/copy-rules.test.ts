@@ -14,7 +14,7 @@ import { PERSONAS, personaInput } from "../helpers/personas.ts";
 /** 규칙마다의 근거 숫자 이름. 아래 시험이 실제 평가와 맞춘다 */
 const EVIDENCE_KEYS: Record<RuleId, string[]> = {
   S1: ["tools", "withInstructions"],
-  S2: ["guarded", "tools"],
+  S2: ["guarded", "tools", "unreadTools"],
   S3: ["danglingLinks", "noFrontmatter", "problems", "unparsable"],
   S4: ["failures", "runs", "unclassifiedBlocks"],
   S5: ["enabledServers", "failedSessions", "mainSessions"],

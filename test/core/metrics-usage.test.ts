@@ -1,8 +1,9 @@
 // 기록으로 재는 도구별 규칙 여덟(S4, E1, E2, E3, E4, E7, F1, F2)을 시험한다. 기준이 되는 개수의 경계, 분모 0, 못 보는 도구(설계 11.3, 11.4 「규칙마다의 이유」)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
-import type { CoverageKey, ToolCoverage } from "../../src/adapters/types.ts";
+import type { CoverageKey, ToolCoverage, ToolId } from "../../src/adapters/types.ts";
 import { usageRules } from "../../src/core/metrics/usage.ts";
 import { toolTotals } from "../../src/core/totals.ts";
 import { summary, type DayInput, type SummaryInput } from "../helpers/summaries.ts";
@@ -12,7 +13,7 @@ const D = "2026-11-10";
 const totalsOf = (...sessions: SummaryInput[]) => toolTotals(sessions.map((s) => summary(s)), windows, ["Bash"]);
 const one = (cell: DayInput) => totalsOf({ days: { [D]: { responses: 1, ...cell } } });
 const without = (...keys: CoverageKey[]): ToolCoverage => ({ ...CLAUDE_COVERAGE, ...Object.fromEntries(keys.map((key) => [key, "unsupported"])) });
-const rules = (totals: ReturnType<typeof totalsOf>, coverage: ToolCoverage = CLAUDE_COVERAGE) => usageRules(totals, coverage);
+const rules = (totals: ReturnType<typeof totalsOf>, coverage: ToolCoverage = CLAUDE_COVERAGE, tool: ToolId = "claude-code") => usageRules(totals, coverage, tool);
 
 describe("S4 훅이 안정적으로 돈다", () => {
   it("훅 실패를 훅 실행으로 나눈다. 가릴 수 없는 막음은 양쪽에 넣지 않고 수만 싣는다", () => {
@@ -46,6 +47,11 @@ describe("E1 캐시 적중", () => {
   });
   it("전체 입력이 0이면 no_data다", () => {
     expect(rules(one({ tokens: { output: 5 } })).E1).toMatchObject({ status: "unmeasured", reason: "no_data" });
+  });
+  it("Codex는 입력 칸에 캐시가 들어 있어 캐시 입력을 입력으로 나눈다(설계 11.3 「E1의 식」, 「5단계 3부 계획 전 결정」 6번)", () => {
+    const tokens = one({ tokens: { input: 1000, cacheRead: 700, cacheWrite: 50, output: 9 } });
+    expect(rules(tokens, CODEX_COVERAGE, "codex").E1).toEqual({ status: "scored", value: 0.7, evidence: { cacheRead: 700, cacheWrite: 50, input: 1000 } });
+    expect(rules(one({ tokens: { cacheRead: 3, output: 5 } }), CODEX_COVERAGE, "codex").E1).toMatchObject({ status: "unmeasured", reason: "no_data" });
   });
 });
 

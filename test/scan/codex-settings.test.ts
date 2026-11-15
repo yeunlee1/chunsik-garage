@@ -65,11 +65,12 @@ describe("trustOf", () => {
 });
 
 describe("safetyOf", () => {
-  it("승인 값을 가른다. on-failure는 on-request의 옛 이름이고, 묶음은 granular다", () => {
+  it("승인 값을 가른다. on-failure는 on-request의 옛 이름이고, 묶음은 granular다. untrusted는 따로 가르지 않는다(3부 계획 리뷰 1차)", () => {
     expect(safetyOf([doc('approval_policy = "never"\n')]).approval).toBe("never");
     expect(safetyOf([doc('approval_policy = "on-request"\n')]).approval).toBe("on-request");
     expect(safetyOf([doc('approval_policy = "on-failure"\n')]).approval).toBe("on-request");
-    expect(safetyOf([doc('approval_policy = "untrusted"\n')]).approval).toBe("untrusted");
+    // Codex가 거부하는 값이라 그 설정 파일은 풀리지 않는 것이 되어(codexConfigShapeOk) 스캐너에서는 여기까지 오지 않는다
+    expect(safetyOf([doc('approval_policy = "untrusted"\n')]).approval).toBe("other");
     expect(safetyOf([doc("approval_policy = { granular = { sandbox_approval = false, rules = false, mcp_elicitations = false } }\n")]).approval).toBe("granular");
     expect(safetyOf([doc('approval_policy = "someday"\n')]).approval).toBe("other");
     expect(safetyOf([doc("")]).approval).toBeNull();

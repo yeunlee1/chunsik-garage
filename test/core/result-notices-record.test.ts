@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { recordNotices, VERIFIED_VERSIONS } from "../../src/core/result/notices.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const base = (): CollectedTool => ({
   tool: "claude-code",
@@ -20,6 +20,12 @@ const noticesOf = (tool: ClaudeToolInput, collected: Partial<CollectedTool> = {}
 const fine = { days: { "2026-11-10": { responses: 3, humanRequests: 10 } } };
 
 describe("기록 쪽 알림", () => {
+  it("Codex의 읽지 못한 기록과 관측이 빠진 것은 아직 알리지 않는다. 확인한 범위 밖 버전은 같은 꼴로 알린다(설계 「5단계 3부 계획 전 결정」 13번)", () => {
+    const codex = codexTool({ sessions: [{ ...fine, version: "0.120.0" }] });
+    const input = evaluationInput([codex]);
+    const collected: CollectedTool = { ...base(), tool: "codex", read: { ...base().read, unreadableFiles: ["/h/.codex/sessions/x.jsonl"] }, observation: { skills: { complete: false, reasons: [] }, mcp: { complete: false, reasons: ["unreadable-files"] } } };
+    expect(recordNotices(input, evaluate(input), [collected])).toEqual([{ kind: "version_unverified", tool: "codex", versions: ["0.120.0"], verified: { ...VERIFIED_VERSIONS.codex } }]);
+  });
   it("빠진 것이 없으면 알림이 없다", () => {
     expect(noticesOf({ sessions: [fine] })).toEqual([]);
   });

@@ -1,6 +1,7 @@
 // E6(안 쓰는 MCP 서버)을 시험한다. 켜진 서버만 세기, 정의를 읽지 못하는 서버, 읽지 못했을 때, 못 재는 까닭의 차례(설계 11.3 E6, 11.4, 21.1)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
 import type { ToolCoverage } from "../../src/adapters/types.ts";
 import { sessionListings } from "../../src/core/installs/listing.ts";
@@ -10,9 +11,9 @@ import { recordMap, type VerdictContext } from "../../src/core/installs/verdict.
 import type { ToolSetup } from "../../src/core/metrics/setup.ts";
 import { projectLookup } from "../../src/core/projects.ts";
 import { toolTotals } from "../../src/core/totals.ts";
-import type { ClaudeSetupFacts, McpFact } from "../../src/scan/types.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, McpFact } from "../../src/scan/types.ts";
 import type { InstallRecord } from "../../src/state/state.ts";
-import { facts, mcpServer, plugin, project } from "../helpers/facts.ts";
+import { codexFacts, codexPlugin, codexProject, facts, mcpServer, plugin, project } from "../helpers/facts.ts";
 import { summary } from "../helpers/summaries.ts";
 
 const windows = makeWindows(Date.UTC(2026, 10, 13, 3, 0), "Asia/Seoul");
@@ -26,6 +27,22 @@ interface Options {
   complete?: boolean;
   coverage?: ToolCoverage;
 }
+/** 주는 도구(구간 합계와 관측 범위를 받아 셋팅 사실을 붙인다)로 판정한다. 관측 범위를 주지 않으면 Codex의 것이다 */
+const judgeWith = (tool: (totals: ToolSetup["totals"], coverage: ToolCoverage) => ToolSetup, options: Options = {}) => {
+  const summaries = [summary({ days: { "2026-11-10": { responses: 1, mcpCalls: Object.fromEntries((options.called ?? []).map((name) => [name, 1])) } } })];
+  const records: InstallRecord[] | null = options.watched === null ? null : (options.watched ?? []).flatMap((fact) => (fact.installKey === null ? [] : [{ key: fact.installKey, firstSeen: "2026-09-01", appeared: false }]));
+  const context: VerdictContext = {
+    day: { today: windows.today, timeZone: "Asia/Seoul" },
+    windows,
+    records: recordMap(records),
+    used: calledMcpNames(summaries, windows),
+    listings: sessionListings(summaries, "mcp", {}, lookup),
+    complete: options.complete ?? true,
+  };
+  return judgeServers(tool(toolTotals(summaries, windows, []), options.coverage ?? CODEX_COVERAGE), context);
+};
+const judgeCodex = (setup: Partial<CodexSetupFacts>, options: Options = {}) =>
+  judgeWith((totals, coverage) => ({ tool: "codex", totals, coverage, setup: codexFacts(setup), highestVersion: "0.166.0" }), options);
 const judge = (setup: Partial<ClaudeSetupFacts>, options: Options = {}) => {
   const summaries = [summary({ days: { "2026-11-10": { responses: 1, mcpCalls: Object.fromEntries((options.called ?? []).map((name) => [name, 1])) } } })];
   const records: InstallRecord[] | null = options.watched === null ? null : (options.watched ?? []).flatMap((fact) => (fact.installKey === null ? [] : [{ key: fact.installKey, firstSeen: "2026-09-01", appeared: false }]));
@@ -42,6 +59,40 @@ const judge = (setup: Partial<ClaudeSetupFacts>, options: Options = {}) => {
 };
 const many = (prefix: string, count: number, input: Partial<McpFact> = {}): McpFact[] => Array.from({ length: count }, (_, i) => mcpServer(`${prefix}${i + 1}`, input));
 const remote = (name: string) => mcpServer(name, { scope: "claude-ai", definitionHash: null });
+
+describe("E6의 Codex 서버(설계 「5단계 3부 계획 전 결정」 10번)", () => {
+  it("Claude Code와 같은 규칙으로 판정한다. 부른 것은 쓴 것이고 지켜봤는데 부르지 않은 것은 안 쓴 것이다", () => {
+    const servers = [mcpServer("db"), mcpServer("search"), mcpServer("idle")];
+    const result = judgeCodex({ mcpServers: servers }, { called: ["db"], watched: servers });
+    expect(result.servers.map((judged) => [judged.server.name, judged.verdict])).toEqual([
+      ["db", "used"],
+      ["idle", "unused"],
+      ["search", "unused"],
+    ]);
+    expect(result.measurement).toMatchObject({ status: "scored", value: 2 / 3 });
+  });
+  it("사용자 config.toml이나 신뢰한 프로젝트의 .codex/config.toml을 읽지 못했으면(풀리지 않는 것도) 판정하지 않는다", () => {
+    const db = [mcpServer("db")];
+    for (const config of ["unreadable", "unparsable"] as const) expect(judgeCodex({ config, mcpServers: db }, { watched: db })).toMatchObject({ measurement: { status: "unmeasured", reason: "unreadable" }, servers: [] });
+    const broken = codexProject("/work/a", { configStatus: "unparsable", safety: null });
+    expect(judgeCodex({ projects: [broken], mcpServers: db }, { watched: db }).measurement).toMatchObject({ status: "unmeasured", reason: "unreadable" });
+    // 신뢰하지 않은 프로젝트의 설정은 Codex가 쓰지 않는다. 없는 설정은 읽지 못한 것이 아니다
+    const untrusted = codexProject("/work/a", { trust: "untrusted", configStatus: null, safety: null });
+    expect(judgeCodex({ projects: [untrusted], config: "missing", mcpServers: db }, { watched: db }).servers.map((judged) => judged.verdict)).toEqual(["unused"]);
+  });
+  it("구성을 모르거나 MCP 정의를 읽지 못한 플러그인이 넣은 서버는 그 서버만 세지 않는다", () => {
+    const fromUnread = mcpServer("p-srv", { scope: "plugin", pluginId: "p@m" });
+    const fromUnknown = mcpServer("q-srv", { scope: "plugin", pluginId: "q@m" });
+    const db = mcpServer("db");
+    const plugins = [codexPlugin("p@m", { mcpUnreadable: true }), codexPlugin("q@m", { compositionKnown: false })];
+    const result = judgeCodex({ plugins, mcpServers: [fromUnread, fromUnknown, db] }, { watched: [fromUnread, fromUnknown, db] });
+    expect(result.servers.map((judged) => [judged.server.name, judged.verdict, judged.excluded])).toEqual([
+      ["db", "unused", null],
+      ["p-srv", "unknown", "plugin_unread"],
+      ["q-srv", "unknown", "plugin_unread"],
+    ]);
+  });
+});
 
 describe("판정한 서버의 판정을 시작할 수 있는 날", () => {
   it("쓰는지 모름이고 구조상 빼지 않은 서버만 날을 셈한다. 첫 점검이면 오늘의 15일 뒤다", () => {

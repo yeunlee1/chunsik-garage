@@ -4,7 +4,7 @@ import type { McpFact } from "../../scan/types.ts";
 import { blank, unmeasured, type Measurement } from "../measure.ts";
 import type { ToolSetup } from "../metrics/setup.ts";
 import { byContent } from "../order.ts";
-import { enablementUnread, unread } from "../readability.ts";
+import { codexSettingsUnread, enablementUnread, unread } from "../readability.ts";
 import { BLANK_INSTALL_EVIDENCE, measureInstalls, type Counted } from "./gate.ts";
 import { sameInstall } from "./same.ts";
 import { serverJudgeableFrom, serverVerdict, type Verdict, type VerdictContext } from "./verdict.ts";
@@ -46,6 +46,8 @@ const byServer = (a: McpFact, b: McpFact): number =>
  * 사용자와 프로젝트의 스킬 폴더는 그 폴더에 둔 플러그인이 넣은 서버를 모르게 한다(설계 11.3 「설치를 찾는 곳을 읽지 못했을 때」).
  */
 function serversUnread(tool: ToolSetup): boolean {
+  // Codex는 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이 서버와 켜짐을 정한다. 플러그인의 것은 그 서버만 세지 않는다(설계 「5단계 2부 계획 전 결정」 7번)
+  if (tool.tool === "codex") return codexSettingsUnread(tool.setup);
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
   return unread(setup.claudeJson) || places.user || places.projects.length > 0 || setup.projects.some((project) => unread(project.mcpJsonStatus)) || unread(setup.pluginsFile) || enablementUnread(setup);

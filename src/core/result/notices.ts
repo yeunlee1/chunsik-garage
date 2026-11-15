@@ -77,6 +77,8 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
   if (run.stateBroken) notices.push({ kind: "state_reset" });
 
   for (const tool of input.tools) {
+    // Codex의 셋팅 쪽 알림은 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)
+    if (tool.tool !== "claude-code") continue;
     const id = tool.tool;
     const setup = tool.setup;
     const unreadable: [UnreadableSetup, boolean, string[]][] = [

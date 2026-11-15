@@ -1,7 +1,7 @@
 // E5(안 쓰는 스킬)를 도구 하나에서 잰다. 위치마다 판정한 뒤 실제 경로가 같은 위치들을 스킬 묶음 하나로 합쳐 센다(순수 함수, 설계 10 「위치와 스킬 묶음」, 11.3 E5)
 import type { SkillFact } from "../../scan/types.ts";
 import { blank, unmeasured, type Measurement } from "../measure.ts";
-import type { ToolSetup } from "../metrics/setup.ts";
+import type { ClaudeToolSetup, ToolSetup } from "../metrics/setup.ts";
 import { byContent } from "../order.ts";
 import { enablementUnread, unread } from "../readability.ts";
 import { BLANK_INSTALL_EVIDENCE, measureInstalls } from "./gate.ts";
@@ -47,15 +47,16 @@ const byPosition = (a: SkillFact, b: SkillFact): number =>
   byContent(a, b);
 
 /** 설치를 찾는 곳, 설정 파일, 도구의 집계 가운데 읽지 못한 것이 있다. 집계가 든 파일은 없을 때도 모르는 것이다(설계 11.3 「설치를 찾는 곳을 읽지 못했을 때」) */
-function skillsUnread(tool: ToolSetup): boolean {
+function skillsUnread(tool: ClaudeToolSetup): boolean {
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
   return setup.claudeJson !== "ok" || places.user || places.projects.length > 0 || unread(setup.pluginsFile) || enablementUnread(setup);
 }
 
 export function judgeSkills(tool: ToolSetup, context: VerdictContext): SkillJudgement {
+  // Codex는 스킬 사용을 기록하지 않는다. 판정하지 않아 판정한 스킬 묶음에도 들지 않는다(설계 「5단계 3부 계획 전 결정」 10번)
+  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const { setup } = tool;
-  if (tool.coverage.skillUsage === "unsupported") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   // 대상을 모르면 분모가 몇인지도 따질 수 없다. 판정하지 않으므로 안 쓴 것이 확인됨도 정비 후보도 나오지 않는다
   if (skillsUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
 

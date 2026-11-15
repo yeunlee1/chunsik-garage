@@ -1,31 +1,44 @@
 // 셋팅으로 재는 상황 적합 규칙 넷(F3, F4, F5, F6)을 시험한다. 대상과 주로 쓴 도구, 견주는 것을 읽지 못했을 때, 남는 사본의 점수(설계 11.3 「상황 적합」, 11.4 「규칙마다의 이유」)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
-import type { ToolId } from "../../src/adapters/types.ts";
 import { fitToolRules, mergedFitRules } from "../../src/core/metrics/fit.ts";
 import type { ToolSetup } from "../../src/core/metrics/setup.ts";
 import { projectLookup, projectUsage } from "../../src/core/projects.ts";
 import { toolTotals } from "../../src/core/totals.ts";
-import type { ClaudeSetupFacts, ProjectFact } from "../../src/scan/types.ts";
-import { facts, instructionFile, instructions, project, skill } from "../helpers/facts.ts";
+import type { ClaudeSetupFacts, CodexProjectFact, CodexSetupFacts, ProjectFact } from "../../src/scan/types.ts";
+import { codexFacts, codexProject, facts, instructionFile, instructions, project, skill } from "../helpers/facts.ts";
 import { summary, type SummaryInput } from "../helpers/summaries.ts";
 
 const windows = makeWindows(Date.UTC(2026, 10, 13, 3, 0), "Asia/Seoul");
 const at = (cwd: string, count = 1): SummaryInput[] => Array.from({ length: count }, () => ({ cwd, days: { "2026-11-10": { responses: 1 } } }));
-const tool = (setup: Partial<ClaudeSetupFacts> = {}, sessions: SummaryInput[] = [], id = "claude-code"): ToolSetup => ({
-  tool: id as ToolId,
+const tool = (setup: Partial<ClaudeSetupFacts> = {}, sessions: SummaryInput[] = []): ToolSetup => ({
+  tool: "claude-code",
   totals: toolTotals(sessions.map((s) => summary(s)), windows, ["Bash"]),
   coverage: CLAUDE_COVERAGE,
   setup: facts(setup),
   highestVersion: "2.1.300",
 });
-/** 프로젝트 목록은 첫 도구의 것이다. 세션의 작업 폴더는 이미 정규화한 꼴로 적는다 */
-const merged = (...tools: ToolSetup[]) => {
-  const projects = tools[0]?.setup.projects ?? [];
+const codexTool = (setup: Partial<CodexSetupFacts> = {}, sessions: SummaryInput[] = []): ToolSetup => ({
+  tool: "codex",
+  totals: toolTotals(sessions.map((s) => summary(s)), windows, ["shell"]),
+  coverage: CODEX_COVERAGE,
+  setup: codexFacts(setup),
+  highestVersion: "0.166.0",
+});
+/** 주는 프로젝트 목록으로 잰다. 세션의 작업 폴더는 이미 정규화한 꼴로 적는다 */
+const mergedWith = (projects: ProjectFact[], ...tools: ToolSetup[]) => {
   const normalized = Object.fromEntries(projects.flatMap((p) => p.cwds.map((cwd) => [cwd, cwd])));
-  return mergedFitRules(tools, projectUsage(tools, projectLookup(projects, normalized)));
+  return mergedFitRules(tools, projectUsage(tools, projectLookup(projects, normalized)), projects);
 };
+/** 프로젝트 목록은 Claude Code 도구의 것이다 */
+const merged = (...tools: ToolSetup[]) => {
+  const claude = tools.find((item) => item.tool === "claude-code");
+  return mergedWith(claude?.tool === "claude-code" ? claude.setup.projects : [], ...tools);
+};
+/** 내용이 있는 Codex 프로젝트 지침(AGENTS.md)이 있는 신뢰한 프로젝트 */
+const codexGuide = (root: string, lineHashes: string[] = [], input: Partial<CodexProjectFact> = {}): CodexProjectFact => codexProject(root, { instructions: written(root + "/AGENTS.md", lineHashes), ...input });
 const written = (path: string, lineHashes: string[] = []) => instructions({ files: [instructionFile(path)], lineHashes });
 const withGuide = (root: string, input: Partial<ProjectFact> = {}): ProjectFact => project(root, { instructions: written(`${root}/CLAUDE.md`), ...input });
 
@@ -81,26 +94,42 @@ describe("F3 자주 쓰는 프로젝트에 지침이 있다", () => {
     const claudeOnly = (root: string) => [withGuide(root)];
     it("대상은 도구를 합쳐 세고, 주 세션이 3개 이상인 도구마다 그 도구가 읽는 지침이 있어야 한다", () => {
       const claude = tool({ projects: claudeOnly("/work/a") }, at("/work/a", 3));
-      const codex = tool({ projects: [project("/work/a")] }, at("/work/a", 3), "codex");
+      const codex = codexTool({ projects: [codexProject("/work/a")] }, at("/work/a", 3));
       const result = merged(claude, codex);
       expect(result.F3).toMatchObject({ status: "scored", value: 0, evidence: { targets: 1, withInstructions: 0 } });
       expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
     });
     it("한 도구로 여러 번 일하고 다른 도구를 한 번 열어 본 프로젝트는 여러 번 쓴 도구만 본다", () => {
       const claude = tool({ projects: claudeOnly("/work/a") }, at("/work/a", 20));
-      const codex = tool({ projects: [project("/work/a")] }, at("/work/a", 1), "codex");
+      const codex = codexTool({ projects: [codexProject("/work/a")] }, at("/work/a", 1));
       expect(merged(claude, codex).F3).toMatchObject({ status: "scored", value: 1 });
     });
     it("어느 도구도 3개에 못 미치면 주 세션이 가장 많은 도구를 본다. 수가 같으면 그 도구들 모두다", () => {
-      const more = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 2)), tool({ projects: [project("/work/a")] }, at("/work/a", 1), "codex"));
+      const more = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 2)), codexTool({ projects: [codexProject("/work/a")] }, at("/work/a", 1)));
       expect(more.F3).toMatchObject({ status: "scored", value: 1 });
-      const tie = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 2)), tool({ projects: [project("/work/a")] }, at("/work/a", 2), "codex"));
+      const tie = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 2)), codexTool({ projects: [codexProject("/work/a")] }, at("/work/a", 2)));
       expect(tie.F3).toMatchObject({ status: "scored", value: 0 });
       expect(tie.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
     });
     it("그 도구의 셋팅 사실에 그 프로젝트가 없으면 그 도구의 지침은 없는 것이다", () => {
-      const result = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 3)), tool({ projects: [] }, at("/work/a", 3), "codex"));
+      const result = merged(tool({ projects: claudeOnly("/work/a") }, at("/work/a", 3)), codexTool({ projects: [] }, at("/work/a", 3)));
       expect(result.missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
+    });
+    it("Codex가 주로 쓴 도구이면 Codex가 읽는 프로젝트 지침을 본다. 읽지 않은 프로젝트의 것은 없는 것이다(설계 「5단계 3부 계획 전 결정」 7번)", () => {
+      const claude = tool({ projects: claudeOnly("/work/a") }, at("/work/a", 3));
+      expect(merged(claude, codexTool({ projects: [codexGuide("/work/a")] }, at("/work/a", 3))).F3).toMatchObject({ status: "scored", value: 1 });
+      const unscanned = codexGuide("/work/a", [], { scanned: false });
+      expect(merged(claude, codexTool({ projects: [unscanned] }, at("/work/a", 3))).missingInstructions).toEqual([{ normRoot: "/work/a", name: "a", tools: ["codex"] }]);
+      // 내용이 없는 지침 파일은 지침이 아니다
+      const empty = codexProject("/work/a", { instructions: instructions({ files: [instructionFile("/work/a/AGENTS.md", { hasContent: false })] }) });
+      expect(merged(claude, codexTool({ projects: [empty] }, at("/work/a", 3))).F3).toMatchObject({ status: "scored", value: 0 });
+    });
+    it("깃 저장소가 아닌 폴더는 Codex의 지침 파일이나 신뢰한 프로젝트의 .codex/config.toml이 있어도 프로젝트로 다룬다", () => {
+      const folder = [project("/work/f", { kind: "folder" })];
+      const codexOnly = (input: Partial<CodexProjectFact>) => mergedWith(folder, codexTool({ projects: [codexProject("/work/f", input)] }, at("/work/f", 3)));
+      expect(codexOnly({ configStatus: "missing" }).F3).toMatchObject({ status: "unmeasured", reason: "not_applicable" });
+      for (const configStatus of ["ok", "unparsable", "unreadable"] as const) expect(codexOnly({ configStatus }).F3).toMatchObject({ status: "scored", value: 0, evidence: { targets: 1 } });
+      expect(codexOnly({ configStatus: null, trust: "untrusted", instructions: instructions({ unreadable: ["/work/f/AGENTS.md"] }) }).F3).toMatchObject({ status: "scored", value: 0 });
     });
   });
 });
@@ -158,11 +187,22 @@ describe("F4 전역과 프로젝트 지침이 겹치지 않는다", () => {
   });
   it("도구가 여럿이면 도구마다 제 전역 지침과 제 프로젝트 지침을 견주어 가장 큰 값을 낸다", () => {
     const claude = tool({ globalInstructions: GLOBAL, projects: [withLines("/work/a", ["g1"])] });
-    const codex = tool({ globalInstructions: written("/home/u/.codex/AGENTS.md", ["c1", "c2"]), projects: [withLines("/work/a", ["c1", "c2"])] }, [], "codex");
+    const codex = codexTool({ globalInstructions: written("/home/u/.codex/AGENTS.md", ["c1", "c2"]), projects: [codexGuide("/work/a", ["c1", "c2"])] });
     const result = merged(claude, codex);
     expect(result.F4).toEqual({ status: "scored", value: 1, evidence: { comparedProjects: 2, globalLines: 2, overlappingLines: 2 } });
+    // Codex의 프로젝트 사실에는 이름이 없어 프로젝트 목록의 이름을 쓴다
     expect(result.worstOverlap).toEqual({ tool: "codex", normRoot: "/work/a", name: "a" });
-    expect(merged(claude, tool({}, [], "codex")).F4).toMatchObject({ status: "scored", value: 0.25 });
+    expect(merged(claude, codexTool()).F4).toMatchObject({ status: "scored", value: 0.25 });
+  });
+  it("Codex는 전역과 같은 파일도 견준다. 목록에 없는 Codex 프로젝트의 이름은 정규화한 뿌리다(설계 「5단계 3부 계획 전 결정」 8번)", () => {
+    const global = written("/home/u/.codex/AGENTS.md", ["c1", "c2"]);
+    const same = codexProject("/work/z", { instructions: instructions({ files: [instructionFile("/home/u/.codex/AGENTS.md")], lineHashes: ["c1"] }) });
+    expect(mergedWith([], codexTool({ globalInstructions: global, projects: [same] }))).toMatchObject({ F4: { status: "scored", value: 0.5 }, worstOverlap: { tool: "codex", normRoot: "/work/z", name: "/work/z" } });
+  });
+  it("Codex의 지침을 하나라도 읽지 못하면 Claude Code의 것이 다 보여도 unreadable이다", () => {
+    const claude = tool({ globalInstructions: GLOBAL, projects: [withLines("/work/a", ["g1"])] });
+    expect(merged(claude, codexTool({ globalInstructions: instructions({ unreadable: ["/home/u/.codex/AGENTS.md"] }) })).F4).toMatchObject({ status: "unmeasured", reason: "unreadable" });
+    expect(merged(claude, codexTool({ projects: [codexProject("/work/a", { instructions: instructions({ unreadableDirs: ["/work/a"] }) })] })).F4).toMatchObject({ status: "unmeasured", reason: "unreadable" });
   });
 });
 
@@ -246,10 +286,10 @@ describe("F6 전역과 프로젝트 설정이 부딪히지 않는다", () => {
     const settings = { ...facts().settings, managedParts: [{ path: "/etc/claude-code/managed-settings.json", status: "unreadable" as const }] };
     expect(merged(tool({ settings, projects: [withSettings("/work/a", 1)] })).F6).toMatchObject({ status: "scored", value: 1 });
   });
-  it("도구가 여럿이면 부딪히는 쌍을 더하고, 한 도구의 설정만 읽지 못해도 규칙 전체가 unreadable이다", () => {
+  it("Codex는 견줄 권한 규칙이 없어 Claude Code만 센다. Codex의 설정을 읽지 못해도 잰다(설계 「5단계 계획 전 결정」 5번)", () => {
     const claude = tool({ projects: [withSettings("/work/a", 2)] });
-    expect(merged(claude, tool({ projects: [withSettings("/work/a", 1)] }, [], "codex")).F6).toEqual({ status: "scored", value: 3, evidence: { conflicts: 3, projectsWithSettings: 2 } });
-    expect(merged(claude, tool({}, [], "codex")).F6).toMatchObject({ status: "scored", value: 2 });
-    expect(merged(claude, tool({ settings: { ...facts().settings, user: "unreadable" } }, [], "codex")).F6).toMatchObject({ status: "unmeasured", reason: "unreadable" });
+    expect(merged(claude, codexTool({ projects: [codexProject("/work/a", { configStatus: "ok" })] })).F6).toEqual({ status: "scored", value: 2, evidence: { conflicts: 2, projectsWithSettings: 1 } });
+    expect(merged(claude, codexTool({ config: "unreadable" })).F6).toMatchObject({ status: "scored", value: 2 });
+    expect(merged(codexTool({ config: "unreadable" })).F6).toEqual({ status: "unmeasured", reason: "not_applicable", evidence: { conflicts: 0, projectsWithSettings: 0 } });
   });
 });

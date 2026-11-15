@@ -2,18 +2,20 @@
 import { compareVersions, maxVersion, parseVersion, type Version } from "../../adapters/common/version.ts";
 import type { SessionSummary, ToolId } from "../../adapters/types.ts";
 import type { ShellGuard } from "../../scan/hooks.ts";
-import type { ClaudeHooksFacts, ClaudeSetupFacts, SetupProblem } from "../../scan/types.ts";
+import type { ClaudeHooksFacts, ClaudeSetupFacts, CodexSetupFacts, SetupProblem } from "../../scan/types.ts";
 import { blank, countGate, scored, unmeasured, type Measurement } from "../measure.ts";
 import { sameInstall } from "../installs/same.ts";
-import { enablementUnread, globalSettingsUnread, mcpPlacesUnread, projectSettingsUnread } from "../readability.ts";
+import { codexSettingsUnread, enablementUnread, globalSettingsUnread, mcpPlacesUnread, projectSettingsUnread } from "../readability.ts";
 import type { ToolUsage } from "../totals.ts";
 
-/** 점수에 넣는 도구 하나의 구간 합계, 관측 범위, 셋팅 사실 */
-export interface ToolSetup extends ToolUsage {
-  setup: ClaudeSetupFacts;
+interface ToolSetupCommon extends Omit<ToolUsage, "tool"> {
   /** 읽은 주 세션의 버전 가운데 가장 높은 것(highestMainVersion). 버전을 아는 주 세션이 없으면 null */
   highestVersion: string | null;
 }
+
+/** 점수에 넣는 도구 하나의 구간 합계, 관측 범위, 셋팅 사실. 셋팅 사실의 꼴은 도구마다 다르다(설계 「5단계 3부 계획 전 결정」 4번) */
+export type ToolSetup = ToolSetupCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts });
+export type ClaudeToolSetup = Extract<ToolSetup, { tool: "claude-code" }>;
 
 /** 전역 지침 파일들의 크기를 합쳐 이만큼이면 전역 지침이 있는 것이다(설계 11.3 S1) */
 export const MIN_GLOBAL_INSTRUCTION_BYTES = 200;
@@ -32,9 +34,9 @@ export function highestMainVersion(summaries: readonly SessionSummary[]): string
 /** 도구 하나의 안전장치. 설정을 읽지 못해 정하지 못했으면 둘 다 null이다. 훅의 명령과 권한 규칙의 글은 싣지 않는다(설계 12.2) */
 export interface ToolSafeguard {
   tool: ToolId;
-  /** ㉠ 셸 명령을 덮는 도구 실행 전 확인 훅이 있고 꺼져 있지 않다 */
+  /** ㉠ 셸 명령을 덮는 도구 실행 전 확인 훅이 있고 꺼져 있지 않다. Codex는 훅을 안전장치로 치지 않아 늘 거짓이다(설계 11.3) */
   guardHook: boolean | null;
-  /** ㉡ 기본 모드가 권한 우회가 아니다(도구의 권한 확인이 돈다) */
+  /** ㉡ 기본 모드가 권한 우회가 아니다(도구의 권한 확인이 돈다). Codex는 승인 없음과 전면 해제를 함께 쓰는 맥락이 없다는 것이다 */
   permissionChecks: boolean | null;
 }
 
@@ -50,7 +52,19 @@ function seesProjectBypass(highestVersion: string | null): boolean {
   return version === null || compareVersions(version, PROJECT_BYPASS_IGNORED_FROM) < 0;
 }
 
+/**
+ * Codex의 안전장치. 맥락(전역, 신뢰한 프로젝트마다) 가운데 승인 없음과 전면 해제를 함께 쓰는 것이 하나도 없으면 안전장치가 있다.
+ * 신뢰한 프로젝트의 맥락은 그 설정을 읽은 것만 승인과 샌드박스가 있다(설계 「5단계 2부 계획 전 결정」 4번, 「5단계 3부 계획 전 결정」 5번)
+ */
+function codexSafeguard(setup: CodexSetupFacts): ToolSafeguard {
+  if (codexSettingsUnread(setup)) return { tool: "codex", guardHook: null, permissionChecks: null };
+  const contexts = [setup.safety, ...setup.projects.flatMap((project) => (project.trust === "trusted" && project.safety !== null ? [project.safety] : []))];
+  const unsafe = contexts.some((context) => context.approval === "never" && context.fullAccess);
+  return { tool: "codex", guardHook: false, permissionChecks: !unsafe };
+}
+
 function safeguardOf(tool: ToolSetup): ToolSafeguard {
+  if (tool.tool === "codex") return codexSafeguard(tool.setup);
   const { setup } = tool;
   const old = seesProjectBypass(tool.highestVersion);
   if (globalSettingsUnread(setup) || (old && projectSettingsUnread(setup))) return { tool: tool.tool, guardHook: null, permissionChecks: null };
@@ -67,12 +81,14 @@ function s1(tools: readonly ToolSetup[]): Measurement {
   return countGate(true, tools.length, 1, evidence) ?? scored(withInstructions / tools.length, evidence);
 }
 
-function s2(tools: readonly ToolSetup[], safeguards: readonly ToolSafeguard[]): Measurement {
-  // 한 도구라도 설정을 읽지 못했으면 규칙을 재지 않는다. 읽은 도구만으로 재면 읽지 못한 도구의 몫이 빠진다
-  if (safeguards.some((safeguard) => safeguard.guardHook === null)) return unmeasured("unreadable", { guarded: null, tools: tools.length });
-  const guarded = safeguards.filter((safeguard) => safeguard.guardHook === true || safeguard.permissionChecks === true).length;
-  const evidence = { guarded, tools: tools.length };
-  return countGate(true, tools.length, 1, evidence) ?? scored(guarded / tools.length, evidence);
+function s2(safeguards: readonly ToolSafeguard[]): Measurement {
+  // 안전장치를 정하는 설정을 읽지 못한 도구만 분자와 분모에서 빼고 남은 도구로 잰다. 남은 도구가 없으면 못 잰다(설계 「5단계 계획 전 결정」 4번)
+  const readable = safeguards.filter((safeguard) => safeguard.permissionChecks !== null);
+  const unreadTools = safeguards.length - readable.length;
+  if (readable.length === 0 && unreadTools > 0) return unmeasured("unreadable", { guarded: null, tools: 0, unreadTools });
+  const guarded = readable.filter((safeguard) => safeguard.guardHook === true || safeguard.permissionChecks === true).length;
+  const evidence = { guarded, tools: readable.length, unreadTools };
+  return countGate(true, readable.length, 1, evidence) ?? scored(guarded / readable.length, evidence);
 }
 
 const PROBLEM_COUNTERS = { danglingLink: "danglingLinks", noFrontmatter: "noFrontmatter", unparsable: "unparsable" } as const satisfies Record<SetupProblem["kind"], string>;
@@ -111,16 +127,19 @@ function s3(problems: readonly CountedProblem[]): Measurement {
 }
 
 function s5(tool: ToolSetup): Measurement {
-  const { setup, totals } = tool;
+  const { totals } = tool;
   // 정체가 같은 서버 사실은 설치 하나로 센다(E6과 같다)
-  const enabledServers = sameInstall(setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
+  const enabledServers = sameInstall(tool.setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
   const failedSessions = totals.mainSessions.filter((session) => session.mcpConnectionFailure).length;
   const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
+  // Codex는 켜짐과 서버를 정하는 설정이 같은 파일들이다(설계 「5단계 2부 계획 전 결정」 7번)
+  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
+  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
   // 켜짐을 정하는 설정을 읽지 못한 점검에서는 막아 둔 서버가 켜져 있는 것으로 보인다. 보이는 켜진 서버를 믿을 수 없다
-  if (enablementUnread(setup)) return unmeasured("unreadable", { ...evidence, enabledServers: null });
+  if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
   // 재는지는 지금의 셋팅으로 정한다. 켜져 있는 서버가 없으면 지난 연결 실패가 있어도 재지 않는다. 없다는 것은 다 읽었을 때만 말한다
-  if (enabledServers === 0) return mcpPlacesUnread(setup) ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
+  if (enabledServers === 0) return placesUnknown ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
   return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
 }
 
@@ -128,7 +147,7 @@ function s5(tool: ToolSetup): Measurement {
 export function mergedSetupRules(tools: readonly ToolSetup[]): Record<"S1" | "S2" | "S3", Measurement> & { safeguards: ToolSafeguard[]; setupProblems: CountedProblem[] } {
   const safeguards = tools.map(safeguardOf);
   const setupProblems = countedProblems(tools);
-  return { S1: s1(tools), S2: s2(tools, safeguards), S3: s3(setupProblems), safeguards, setupProblems };
+  return { S1: s1(tools), S2: s2(safeguards), S3: s3(setupProblems), safeguards, setupProblems };
 }
 
 /** 도구 하나에서 재는 셋팅 규칙 */

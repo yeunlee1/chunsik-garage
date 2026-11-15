@@ -1,30 +1,38 @@
 // 셋팅 규칙 넷(S1, S2, S3, S5)을 시험한다. 안전장치의 두 조건과 훅을 제한하는 설정, 버전으로 가르는 기본 모드, 읽지 못한 설정(설계 11.3 「셋팅」, 11.4 「규칙마다의 이유」, 21.1)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
-import type { ToolCoverage, ToolId } from "../../src/adapters/types.ts";
+import type { ToolCoverage } from "../../src/adapters/types.ts";
 import { highestMainVersion, mergedSetupRules, setupToolRules, type ToolSetup } from "../../src/core/metrics/setup.ts";
 import { toolTotals } from "../../src/core/totals.ts";
 import type { HookSource, ShellGuard } from "../../src/scan/hooks.ts";
-import type { ClaudeSetupFacts, FileStatus, SetupProblem } from "../../src/scan/types.ts";
-import { facts, instructionFile, instructions, mcpServer, plugin, project } from "../helpers/facts.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, FileStatus, SetupProblem } from "../../src/scan/types.ts";
+import { codexFacts, codexProject, codexSafety, facts, instructionFile, instructions, mcpServer, plugin, project } from "../helpers/facts.ts";
 import { summary, type SummaryInput } from "../helpers/summaries.ts";
 
 const windows = makeWindows(Date.UTC(2026, 10, 13, 3, 0), "Asia/Seoul");
 const D = "2026-11-10";
 
 interface ToolOptions {
-  id?: string;
   sessions?: SummaryInput[];
   coverage?: ToolCoverage;
   version?: string | null;
 }
 const tool = (setup: Partial<ClaudeSetupFacts> = {}, options: ToolOptions = {}): ToolSetup => ({
-  tool: (options.id ?? "claude-code") as ToolId,
+  tool: "claude-code",
   totals: toolTotals((options.sessions ?? []).map((s) => summary(s)), windows, ["Bash"]),
   coverage: options.coverage ?? CLAUDE_COVERAGE,
   setup: facts(setup),
   highestVersion: options.version === undefined ? "2.1.300" : options.version,
+});
+/** Codex 하나. 셸 명령 도구는 Codex의 것이다 */
+const codexTool = (setup: Partial<CodexSetupFacts> = {}, options: Omit<ToolOptions, "version"> = {}): ToolSetup => ({
+  tool: "codex",
+  totals: toolTotals((options.sessions ?? []).map((s) => summary(s)), windows, ["shell"]),
+  coverage: options.coverage ?? CODEX_COVERAGE,
+  setup: codexFacts(setup),
+  highestVersion: "0.166.0",
 });
 const hooks = (input: Partial<ClaudeSetupFacts["hooks"]> = {}): ClaudeSetupFacts["hooks"] => ({ ...facts().hooks, ...input });
 const guard = (source: HookSource = "user", input: Partial<ShellGuard> = {}): ShellGuard => ({ source, pluginId: null, coversShell: true, canBlock: true, ...input });
@@ -40,7 +48,10 @@ describe("S1 전역 지침이 있다", () => {
   it("전역 지침 파일들의 크기를 합쳐 200바이트 이상인 도구의 몫이다", () => {
     expect(mergedSetupRules([tool(withBytes(200))]).S1).toEqual({ status: "scored", value: 1, evidence: { tools: 1, withInstructions: 1 } });
     expect(mergedSetupRules([tool(withBytes(199))]).S1).toEqual({ status: "scored", value: 0, evidence: { tools: 1, withInstructions: 0 } });
-    expect(mergedSetupRules([tool(withBytes(5000)), tool({}, { id: "codex" })]).S1).toMatchObject({ status: "scored", value: 0.5 });
+    expect(mergedSetupRules([tool(withBytes(5000)), codexTool()]).S1).toMatchObject({ status: "scored", value: 0.5 });
+    // Codex의 전역 지침도 같은 꼴로 잰다(설계 「5단계 3부 계획 전 결정」 4번)
+    const codexGuide = instructions({ files: [instructionFile("/home/u/.codex/AGENTS.md", { bytes: 300 })] });
+    expect(mergedSetupRules([tool(withBytes(5000)), codexTool({ globalInstructions: codexGuide })]).S1).toEqual({ status: "scored", value: 1, evidence: { tools: 2, withInstructions: 2 } });
   });
   it("크기는 파일을 합쳐서 본다. 규칙 파일로만 나눠 둔 지침도 지침이다", () => {
     const split = instructions({ files: [instructionFile("/home/u/.claude/rules/a.md", { bytes: 120 }), instructionFile("/home/u/.claude/rules/b.md", { bytes: 80 })] });
@@ -57,7 +68,7 @@ describe("S2 안전장치가 있다", () => {
   it("기본 모드가 권한 우회가 아니면 권한 규칙이나 훅이 없어도 안전장치가 있다(㉡)", () => {
     for (const settings of [mode(null), mode("other"), mode(null, "other")]) {
       const result = s2({ settings });
-      expect(result.S2).toEqual({ status: "scored", value: 1, evidence: { guarded: 1, tools: 1 } });
+      expect(result.S2).toEqual({ status: "scored", value: 1, evidence: { guarded: 1, tools: 1, unreadTools: 0 } });
       expect(result.safeguards).toEqual([{ tool: "claude-code", guardHook: false, permissionChecks: true }]);
     }
   });
@@ -66,7 +77,7 @@ describe("S2 안전장치가 있다", () => {
   });
   it("기본 모드가 권한 우회이고 확인 훅이 없으면 안전장치가 없다", () => {
     const result = s2({ settings: BYPASS });
-    expect(result.S2).toEqual({ status: "scored", value: 0, evidence: { guarded: 0, tools: 1 } });
+    expect(result.S2).toEqual({ status: "scored", value: 0, evidence: { guarded: 0, tools: 1, unreadTools: 0 } });
     expect(result.safeguards).toEqual([{ tool: "claude-code", guardHook: false, permissionChecks: false }]);
   });
   it("권한 우회 모드라도 셸 명령을 덮고 실행을 막을 수 있는 확인 훅이 있으면 안전장치가 있다(㉠)", () => {
@@ -119,7 +130,7 @@ describe("S2 안전장치가 있다", () => {
   });
 
   describe("안전장치를 정하는 설정 파일 가운데 있는데 읽지 못한 것이 있으면 unreadable이다", () => {
-    const unread = { status: "unmeasured", reason: "unreadable", evidence: { guarded: null, tools: 1 } };
+    const unread = { status: "unmeasured", reason: "unreadable", evidence: { guarded: null, tools: 0, unreadTools: 1 } };
     it("사용자 설정이 풀리지 않거나 열리지 않는다", () => {
       for (const status of ["unparsable", "unreadable"] as const) {
         const result = s2({ settings: mode(null, null, status) });
@@ -149,11 +160,55 @@ describe("S2 안전장치가 있다", () => {
   });
 
   it("안전장치가 있는 도구 수를 쓰는 도구 수로 나눈다. 쓰는 도구가 없으면 no_data다", () => {
-    const result = mergedSetupRules([tool({ settings: BYPASS }), tool({ settings: mode("other") }, { id: "codex" })]);
-    expect(result.S2).toEqual({ status: "scored", value: 0.5, evidence: { guarded: 1, tools: 2 } });
+    const result = mergedSetupRules([tool({ settings: BYPASS }), codexTool()]);
+    expect(result.S2).toEqual({ status: "scored", value: 0.5, evidence: { guarded: 1, tools: 2, unreadTools: 0 } });
     expect(result.safeguards.map((s) => s.tool)).toEqual(["claude-code", "codex"]);
-    expect(mergedSetupRules([]).S2).toEqual({ status: "unmeasured", reason: "no_data", evidence: { guarded: 0, tools: 0 } });
+    expect(mergedSetupRules([]).S2).toEqual({ status: "unmeasured", reason: "no_data", evidence: { guarded: 0, tools: 0, unreadTools: 0 } });
     expect(mergedSetupRules([]).safeguards).toEqual([]);
+  });
+
+  describe("Codex는 승인 없음과 전면 해제를 함께 쓰는 맥락이 없을 때 안전장치가 있다(설계 「5단계 3부 계획 전 결정」 5번)", () => {
+    const codexS2 = (setup: Partial<CodexSetupFacts>) => mergedSetupRules([codexTool(setup)]);
+    const NEVER_FULL = codexSafety({ approval: "never", sandbox: "danger-full-access", fullAccess: true });
+    it("전역 맥락이 둘을 함께 쓰면 안전장치가 없다. 하나만으로는 있다. 훅은 안전장치로 치지 않는다", () => {
+      expect(codexS2({ safety: NEVER_FULL }).safeguards).toEqual([{ tool: "codex", guardHook: false, permissionChecks: false }]);
+      expect(codexS2({ safety: NEVER_FULL }).S2).toEqual({ status: "scored", value: 0, evidence: { guarded: 0, tools: 1, unreadTools: 0 } });
+      expect(codexS2({ safety: codexSafety({ approval: "never" }) }).S2).toMatchObject({ status: "scored", value: 1 });
+      expect(codexS2({ safety: codexSafety({ sandbox: "danger-full-access", fullAccess: true }) }).S2).toMatchObject({ status: "scored", value: 1 });
+      expect(codexS2({}).safeguards).toEqual([{ tool: "codex", guardHook: false, permissionChecks: true }]);
+    });
+    it("신뢰한 프로젝트 맥락 하나라도 둘을 함께 쓰면 안전장치가 없다. 전면 해제는 그 맥락의 판정(fullAccess)으로 본다", () => {
+      expect(codexS2({ projects: [codexProject("/work/a"), codexProject("/work/b", { safety: NEVER_FULL })] }).S2).toMatchObject({ status: "scored", value: 0 });
+      // 합친 값에 전면 해제가 남아 있어도 그 맥락이 정한 방식이 전면 해제가 아니면 안전장치가 있다
+      const readOnly = codexSafety({ approval: "never", sandbox: "danger-full-access", permissions: "other", fullAccess: false });
+      expect(codexS2({ projects: [codexProject("/work/a", { safety: readOnly })] }).S2).toMatchObject({ status: "scored", value: 1 });
+    });
+    it("신뢰하지 않은 프로젝트와 신뢰 기록이 없는 프로젝트의 맥락은 보지 않는다", () => {
+      const untrusted = codexProject("/work/a", { trust: "untrusted", configStatus: null, safety: NEVER_FULL });
+      const unknown = codexProject("/work/b", { trust: null, configStatus: null, safety: null });
+      expect(codexS2({ projects: [untrusted, unknown] }).S2).toMatchObject({ status: "scored", value: 1 });
+    });
+    it("사용자 config.toml이나 신뢰한 프로젝트의 .codex/config.toml을 읽지 못했으면(풀리지 않는 것도) Codex만 빼고 남은 도구로 잰다", () => {
+      for (const config of ["unreadable", "unparsable"] as const) {
+        const result = mergedSetupRules([tool({ settings: mode("other") }), codexTool({ config })]);
+        expect(result.S2).toEqual({ status: "scored", value: 1, evidence: { guarded: 1, tools: 1, unreadTools: 1 } });
+        expect(result.safeguards).toEqual([
+          { tool: "claude-code", guardHook: false, permissionChecks: true },
+          { tool: "codex", guardHook: null, permissionChecks: null },
+        ]);
+      }
+      const broken = codexProject("/work/a", { configStatus: "unparsable", safety: null });
+      expect(mergedSetupRules([tool({ settings: BYPASS }), codexTool({ projects: [broken] })]).S2).toEqual({ status: "scored", value: 0, evidence: { guarded: 0, tools: 1, unreadTools: 1 } });
+      // 신뢰하지 않은 프로젝트의 설정은 Codex가 쓰지 않는다. 없는 설정은 읽지 못한 것이 아니다
+      expect(codexS2({ projects: [codexProject("/work/a", { trust: "untrusted", configStatus: null, safety: null })] }).S2).toMatchObject({ status: "scored", value: 1 });
+      expect(codexS2({ config: "missing" }).S2).toMatchObject({ status: "scored", value: 1 });
+    });
+    it("한 도구만 읽지 못해 빠지면 근거에 그 수가 남고, 모든 도구를 읽지 못했으면 unreadable이다", () => {
+      const claudeUnread = mergedSetupRules([tool({ settings: mode(null, null, "unparsable") }), codexTool()]);
+      expect(claudeUnread.S2).toEqual({ status: "scored", value: 1, evidence: { guarded: 1, tools: 1, unreadTools: 1 } });
+      const both = mergedSetupRules([tool({ settings: mode(null, null, "unparsable") }), codexTool({ config: "unreadable" })]);
+      expect(both.S2).toEqual({ status: "unmeasured", reason: "unreadable", evidence: { guarded: null, tools: 0, unreadTools: 2 } });
+    });
   });
 });
 
@@ -191,7 +246,7 @@ describe("S3 설정이 깨지지 않았다", () => {
   });
   it("센 문제의 목록은 도구의 차례, 그 안에서는 스캐너의 차례이고 같은 실제 파일은 처음 본 것 하나다. 위치는 문제의 위치 그대로다", () => {
     const claude = tool({ problems: [problem("unparsable", "/work/a/.mcp.json"), problem("noFrontmatter", "/home/u/.claude/skills/x", { realPath: "/shared/x" }), problem("noFrontmatter", "/home/u/.claude/plugins/p/skills/y", { owner: "plugin" })] });
-    const codex = tool({ problems: [problem("noFrontmatter", "/home/u/.codex/skills/x", { realPath: "/shared/x" }), problem("unparsable", "/home/u/.codex/config.toml")] }, { id: "codex" });
+    const codex = codexTool({ problems: [problem("noFrontmatter", "/home/u/.codex/skills/x", { realPath: "/shared/x" }), problem("unparsable", "/home/u/.codex/config.toml")] });
     expect(mergedSetupRules([claude, codex]).setupProblems).toEqual([
       { tool: "claude-code", kind: "unparsable", place: "~/a/.mcp.json" },
       { tool: "claude-code", kind: "noFrontmatter", place: "~/skills/x" },
@@ -202,7 +257,7 @@ describe("S3 설정이 깨지지 않았다", () => {
   it("같은 실제 파일이나 폴더는 한 번만 센다", () => {
     const linked = [problem("noFrontmatter", "/home/u/.claude/skills/x", { realPath: "/shared/x" }), problem("noFrontmatter", "/work/a/.claude/skills/x", { realPath: "/shared/x" })];
     expect(mergedSetupRules([tool({ problems: linked })]).S3).toMatchObject({ status: "scored", value: 1 });
-    const twoTools = [tool({ problems: [problem("unparsable", "/work/a/.mcp.json")] }), tool({ problems: [problem("unparsable", "/work/a/.mcp.json")] }, { id: "codex" })];
+    const twoTools = [tool({ problems: [problem("unparsable", "/work/a/.mcp.json")] }), codexTool({ problems: [problem("unparsable", "/work/a/.mcp.json")] })];
     expect(mergedSetupRules(twoTools).S3).toMatchObject({ status: "scored", value: 1 });
   });
   it("문제가 없어도, 쓰는 도구가 없어도 잰다", () => {
@@ -276,6 +331,17 @@ describe("S5 MCP 연결이 안정적이다", () => {
   });
   it("켜져 있는 서버는 있는데 점수 구간에 응답이 있는 주 세션이 없으면 no_data다", () => {
     expect(s5(SERVER, { sessions: [session(true, { kind: "sub" })] })).toEqual({ status: "unmeasured", reason: "no_data", evidence: { enabledServers: 1, failedSessions: 0, mainSessions: 0 } });
+  });
+  it("Codex는 연결 실패를 기록하지 않아 unsupported다(관측 범위)", () => {
+    expect(setupToolRules(codexTool({ mcpServers: [mcpServer("db")] }, { sessions: [session(true)] })).S5).toMatchObject({ status: "unmeasured", reason: "unsupported" });
+  });
+  it("관측 범위가 있다면 Codex의 켜짐과 서버를 정하는 곳은 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이다", () => {
+    const measured: ToolCoverage = { ...CODEX_COVERAGE, mcpFailuresAndHooks: "measured" };
+    const db = [mcpServer("db")];
+    expect(setupToolRules(codexTool({ config: "unparsable", mcpServers: db }, { coverage: measured, sessions: [session(true)] })).S5).toMatchObject({ status: "unmeasured", reason: "unreadable" });
+    expect(setupToolRules(codexTool({ projects: [codexProject("/work/a", { configStatus: "unreadable", safety: null })] }, { coverage: measured, sessions: [session(true)] })).S5).toMatchObject({ status: "unmeasured", reason: "unreadable" });
+    expect(setupToolRules(codexTool({ mcpServers: db }, { coverage: measured, sessions: [session(true)] })).S5).toMatchObject({ status: "scored", value: 1 });
+    expect(setupToolRules(codexTool({}, { coverage: measured, sessions: [session(true)] })).S5).toMatchObject({ status: "unmeasured", reason: "not_applicable" });
   });
   it("연결 실패를 못 보는 도구는 unsupported이고, 그것이 다른 까닭보다 앞선다", () => {
     const blind: ToolCoverage = { ...CLAUDE_COVERAGE, mcpFailuresAndHooks: "unsupported" };

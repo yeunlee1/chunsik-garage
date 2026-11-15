@@ -43,7 +43,7 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
       problem: "{value} of the tools you use have a safeguard. A tool runs with permission checks bypassed and no confirming hook covers shell commands.",
       prescription: "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
       method: "Share of the tools you use that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands.",
-      evidence: "Tools with a safeguard {guarded} · tools in use {tools}",
+      evidence: "Tools with a safeguard {guarded} · tools measured {tools} · tools left out with unreadable settings {unreadTools}",
       unit: "%",
       reasons: {
         no_data: NO_TOOL.en,
@@ -58,7 +58,7 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
       problem: "쓰는 도구 가운데 안전장치가 있는 도구는 {value}입니다. 권한 확인을 건너뛰는데 셸 명령을 덮는 확인 훅이 없는 도구가 있습니다.",
       prescription: "Claude Code에서 셸 명령(Bash 또는 PowerShell)의 실행 전에 결과를 기다리며 실행을 막을 수 있는 PreToolUse 훅을 사용자 설정에 두고 켜거나, 기본 모드를 권한 우회가 아닌 것으로 바꾸세요. 권한 우회 모드를 계속 쓰려면 실행을 막을 수 있는 확인 훅을 두세요.",
       method: "쓰는 도구 가운데 안전장치가 있는 도구의 몫입니다. Claude Code는 기본 모드가 권한 우회가 아니거나, 셸 명령에 걸리고 실행을 막을 수 있는 도구 실행 전 확인 훅이 있으면 안전장치가 있는 것으로 봅니다.",
-      evidence: "안전장치가 있는 도구 {guarded} · 쓰는 도구 {tools}",
+      evidence: "안전장치가 있는 도구 {guarded} · 잰 도구 {tools} · 설정을 읽지 못해 뺀 도구 {unreadTools}",
       unit: "%",
       reasons: {
         no_data: NO_TOOL.ko,

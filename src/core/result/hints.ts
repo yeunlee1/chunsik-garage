@@ -20,6 +20,8 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 export function deepHints(input: EvaluationInput): DeepHint[] {
   const hints: DeepHint[] = [];
   for (const tool of [...input.tools].sort((a, b) => byText(a.tool, b.tool))) {
+    // Codex의 정밀 점검 단서는 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)
+    if (tool.tool !== "claude-code") continue;
     const setup = tool.setup;
     const rootOf = new Map(setup.projects.map((project) => [project.normRoot, project.root]));
 

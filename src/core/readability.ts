@@ -1,8 +1,16 @@
 // 셋팅 사실에서 "있는데 읽지 못한 것"을 가른다. 없는 파일과 폴더는 읽지 못한 것이 아니다(순수 함수, 설계 11.3, 11.4, 20.1)
-import type { ClaudeSetupFacts, FileStatus } from "../scan/types.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, FileStatus } from "../scan/types.ts";
 
 /** 있는데 열지 못했거나, 열었는데 풀리지 않았다. 읽지 않은 곳(null)과 없는 파일은 아니다 */
 export const unread = (status: FileStatus | null): boolean => status === "unparsable" || status === "unreadable";
+
+/**
+ * Codex의 안전장치와 서버를 정하는 설정 파일 가운데 있는데 읽지 못한 것(풀리지 않는 것도)이 있다. 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이다.
+ * 신뢰하지 않은 프로젝트의 것은 Codex가 쓰지 않으므로 읽지 않는다(설계 「5단계 2부 계획 전 결정」 2·4·7번, 「5단계 3부 계획 전 결정」 5·10번)
+ */
+export function codexSettingsUnread(facts: CodexSetupFacts): boolean {
+  return unread(facts.config) || facts.projects.some((project) => project.trust === "trusted" && unread(project.configStatus));
+}
 
 /** 사용자 설정이나 관리 정책을 이룬 파일 가운데 읽지 못한 것이 있다 */
 export function globalSettingsUnread(facts: ClaudeSetupFacts): boolean {

@@ -1,6 +1,7 @@
 // 정비 후보(A1 스킬 끄기, A2 플러그인 끄기, A3 서버 막기)를 내는 조건을 시험한다. 적용은 하지 않고 후보의 유무와 목록만 본다(설계 16.1, 16.2, 21.1)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
+import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { makeWindows } from "../../src/adapters/common/dates.ts";
 import { candidatesOf, NO_SELF, type SelfIdentity } from "../../src/core/installs/candidates.ts";
 import { sessionListings } from "../../src/core/installs/listing.ts";
@@ -13,7 +14,7 @@ import { projectLookup } from "../../src/core/projects.ts";
 import { toolTotals } from "../../src/core/totals.ts";
 import type { ClaudeSetupFacts, McpFact, PluginFact, SkillFact } from "../../src/scan/types.ts";
 import type { InstallRecord } from "../../src/state/state.ts";
-import { facts, mcpServer, plugin, skill } from "../helpers/facts.ts";
+import { codexFacts, facts, mcpServer, plugin, skill } from "../helpers/facts.ts";
 import { summary } from "../helpers/summaries.ts";
 
 const NOW = Date.UTC(2026, 10, 13, 3, 0);
@@ -207,6 +208,20 @@ describe("A2 플러그인 끄기", () => {
     expect(a2({}, {}, { self: { skillNames: [], pluginNames: ["p"], skillRealPaths: [] } })).toEqual([]);
     expect(a2({ name: "shown", entryName: "p" }, {}, { self: { skillNames: [], pluginNames: ["shown"], skillRealPaths: [] } })).toEqual([]);
     expect(a2({}, {}, { self: { skillNames: [], pluginNames: [], skillRealPaths: [SKILLS[1]!.realPath!] } })).toEqual([]);
+  });
+});
+
+describe("Codex(설계 「5단계 3부 계획 전 결정」 11번)", () => {
+  it("Codex 설치의 정비 후보는 6단계가 조건을 정할 때까지 내지 않는다. 안 부른 것이 확인된 서버가 있어도 없다", () => {
+    const idle = mcpServer("idle");
+    const summaries = [summary({ days: { "2026-11-10": { responses: 1 } } })];
+    const base = { day, windows, records: recordMap([{ key: idle.installKey!, firstSeen: "2026-09-01", appeared: false }]), complete: true };
+    const tool: ToolSetup = { tool: "codex", totals: toolTotals(summaries, windows, []), coverage: CODEX_COVERAGE, setup: codexFacts({ mcpServers: [idle] }), highestVersion: "0.166.0" };
+    const skills = judgeSkills(tool, { ...base, used: usedSkillNames(summaries, windows), listings: sessionListings(summaries, "skill", {}, lookup) });
+    const servers = judgeServers(tool, { ...base, used: calledMcpNames(summaries, windows), listings: sessionListings(summaries, "mcp", {}, lookup) });
+    expect(servers.servers.map((judged) => judged.verdict)).toEqual(["unused"]);
+    expect(skills).toEqual({ measurement: expect.objectContaining({ status: "unmeasured", reason: "unsupported" }), bundles: [] });
+    expect(candidatesOf(tool, skills, servers, day, NO_SELF)).toEqual([]);
   });
 });
 

@@ -32,6 +32,8 @@ export interface Candidate {
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: ServerJudgement, day: EvalDay, self: SelfIdentity): Candidate[] {
+  // Codex 설치의 정비는 6단계가 그 조건을 정할 때까지 내지 않는다(설계 「5단계 3부 계획 전 결정」 11번)
+  if (tool.tool === "codex") return [];
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   // 설정에 켜 두었는데 설치 기록에 없는 플러그인도 구성을 모르는 플러그인이다

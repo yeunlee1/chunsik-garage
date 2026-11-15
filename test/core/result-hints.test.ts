@@ -1,8 +1,8 @@
 // 정밀 점검 단서 셋(전역 지침에 프로젝트가 여러 번 나온다, 여러 프로젝트 지침에 같은 줄이 되풀이된다, 전역 지침이 크다)을 시험한다. 점수에 넣지 않는 약한 신호다(설계 17)
 import { describe, expect, it } from "vitest";
 import { deepHints, LARGE_GLOBAL_TOKENS, MENTION_HINT_MIN, REPEATED_LINES_HINT_MIN } from "../../src/core/result/hints.ts";
-import { instructions, project } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { codexProject, instructions, project } from "../helpers/facts.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const hintsOf = (tool: ClaudeToolInput) => deepHints(evaluationInput([claudeTool(tool)]));
 
@@ -11,6 +11,12 @@ describe("정밀 점검 단서", () => {
     expect([MENTION_HINT_MIN, REPEATED_LINES_HINT_MIN, LARGE_GLOBAL_TOKENS]).toEqual([3, 3, 4000]);
   });
 
+  it("Codex의 단서는 아직 내지 않는다. 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)", () => {
+    const big = instructions({ chars: { ascii: 0, other: LARGE_GLOBAL_TOKENS + 1 }, lineHashes: ["a", "b", "c"] });
+    const lines = instructions({ lineHashes: ["x", "y", "z"] });
+    const codex = codexTool({ setup: { globalInstructions: big, globalMentions: { "/work/a": MENTION_HINT_MIN }, projects: [codexProject("/work/a", { instructions: lines }), codexProject("/work/b", { instructions: lines })] } });
+    expect(deepHints(evaluationInput([codex]))).toEqual([]);
+  });
   it("셋팅에 단서가 없으면 빈 목록이다", () => {
     expect(hintsOf({ setup: { projects: [project("/work/a")] } })).toEqual([]);
   });

@@ -96,8 +96,8 @@ function usageOf(times: readonly (number | null | undefined)[]): { usageLastUsed
   return { usageLastUsedMs, usageUndated };
 }
 
-/** 사용자 범위 설정 문제의 위치가 시작하는 앞머리. 설정 폴더를 옮기지 않았으면 ~(~/.claude/…), 옮겼으면 환경 변수의 이름이다 */
-const USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
+/** 사용자 범위 설정 문제의 위치가 시작하는 앞머리. 설정 폴더를 옮기지 않았으면 ~(~/.claude/…, ~/.codex/…), 옮겼으면 환경 변수의 이름이다. Codex 스캐너도 같은 이름 함수를 쓴다 */
+const USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR", "$CODEX_HOME"];
 
 /**
  * 프로젝트마다 결과 화면에 보일 폴더 이름(정규화하기 전 뿌리 경로의 마지막 이름). 읽는 프로젝트(있고 프로젝트로 보지 않는 폴더가 아닌 것)는 이름이 서로 다르게 정한다.
@@ -106,7 +106,7 @@ const USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
  * 사용자 범위 위치의 앞머리(USER_PLACE_HEADS)는 처음부터 받은 것으로 본다. 이름이 ~인 프로젝트의 S3 위치가 사용자 설정과 같은 글이 되지 않게 하려는 것이다.
  * 위 폴더 이름을 보이지 않고도 두 프로젝트를 가른다(설계 「3단계 계획 전 결정」의 10번)
  */
-function projectNamesOf(refs: readonly { root: string; normRoot: string; exists: boolean; excluded: boolean }[]): Map<string, string> {
+export function projectNamesOf(refs: readonly { root: string; normRoot: string; exists: boolean; excluded: boolean }[]): Map<string, string> {
   const sorted = [...refs].sort((x, y) => (x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0));
   const original = (ref: { root: string }): string => basename(ref.root) || ref.root;
   const reading = (ref: { exists: boolean; excluded: boolean }): boolean => ref.exists && !ref.excluded;

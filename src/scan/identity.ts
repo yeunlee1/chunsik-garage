@@ -1,18 +1,33 @@
-// 셋팅 사실에서 설치마다의 정체 열쇠를 만든다. 스킬은 (도구, 범위, 프로젝트, 이름, 링크를 푼 실제 경로), MCP 서버는 (도구, 범위, 프로젝트, 플러그인, 이름, 정의의 지문)이다. 정의의 지문이 없는 서버는 정체를 만들 수 없어 넣지 않는다(설계 11.3, 18.1)
+// 셋팅 사실에서 설치마다의 정체 열쇠를 만든다. 스킬은 (도구, 범위, 프로젝트, 이름, 링크를 푼 실제 경로), MCP 서버는 (도구, 범위, 프로젝트, 플러그인, 이름, 정의의 지문)이다. 정의의 지문이 없는 서버는 정체를 만들 수 없어 넣지 않는다(설계 11.3, 18.1, 「5단계 2부 계획 전 결정」 9번)
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { installKey } from "../state/observations.ts";
 import type { ClaudeSetupFacts, FileStatus, McpFact, SkillFact } from "./types.ts";
 
+type Tool = "claude-code" | "codex";
+
+// 범위가 프로젝트이면 어느 프로젝트의 것인지도 정체다. 두 프로젝트가 같은 원본을 같은 이름의 링크로 걸면 설치는 둘이다(설계 11.3 「설치의 정체」)
+const skillKey = (skill: Omit<SkillFact, "installKey">, tool: Tool): string => installKey(["skill", tool, skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+const mcpKey = (server: Omit<McpFact, "installKey">, tool: Tool): string | null =>
+  server.definitionHash === null ? null : installKey(["mcp", tool, server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
+
 export function skillInstallKey(skill: Omit<SkillFact, "installKey">): string {
-  // 범위가 프로젝트이면 어느 프로젝트의 것인지도 정체다. 두 프로젝트가 같은 원본을 같은 이름의 링크로 걸면 설치는 둘이다(설계 11.3 「설치의 정체」)
-  return installKey(["skill", "claude-code", skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+  return skillKey(skill, "claude-code");
 }
 
 /** 정의를 읽지 못했거나 PC에 없는 서버(claude.ai에 연결한 서버 포함)는 null이다. */
 export function mcpInstallKey(server: Omit<McpFact, "installKey">): string | null {
-  if (server.definitionHash === null) return null;
-  return installKey(["mcp", "claude-code", server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
+  return mcpKey(server, "claude-code");
+}
+
+/** Codex 스킬의 정체 열쇠. 도구 칸이 codex다 */
+export function codexSkillInstallKey(skill: Omit<SkillFact, "installKey">): string {
+  return skillKey(skill, "codex");
+}
+
+/** Codex MCP 서버의 정체 열쇠. 정의의 지문이 없으면 null이다 */
+export function codexMcpInstallKey(server: Omit<McpFact, "installKey">): string | null {
+  return mcpKey(server, "codex");
 }
 
 /** 이번 점검에서 본 모든 스킬과 MCP 서버의 설치 열쇠(켜졌는지와 상관없다). */

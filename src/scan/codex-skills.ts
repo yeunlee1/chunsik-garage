@@ -74,8 +74,11 @@ async function manifestNamespace(pluginRoot: string): Promise<string | null> {
 
 const squash = (text: string): string => text.split(/\s+/u).filter((part) => part !== "").join(" ");
 
-/** 찾는 곳 하나를 훑는다. 스킬은 찾은 차례(폴더를 넓이 차례로, 폴더 안은 이름 차례)다 */
-export async function scanCodexSkillRoot(root: string, limits: CodexSkillScanLimits = LIMITS): Promise<CodexSkillRootScan> {
+/**
+ * 찾는 곳 하나를 훑는다. 스킬은 찾은 차례(폴더를 넓이 차례로, 폴더 안은 이름 차례)다. 플러그인의 스킬을 찾는 폴더는 그 플러그인의 이름(namespace)을 주고,
+ * 그때는 안쪽의 매니페스트를 보지 않고 그 이름을 붙인다(공개 소스 loader/namespace.rs의 with_provided_namespace)
+ */
+export async function scanCodexSkillRoot(root: string, limits: CodexSkillScanLimits = LIMITS, namespace: string | null = null): Promise<CodexSkillRootScan> {
   const out: CodexSkillRootScan = { skills: [], danglingLinks: [], unreadableDirs: [], truncated: false };
   const rootInfo = await entryInfo(root);
   if (!rootInfo.isDir) return out;
@@ -145,14 +148,14 @@ export async function scanCodexSkillRoot(root: string, limits: CodexSkillScanLim
     } catch {
       bytes = null;
     }
-    const namespace = await namespaceOf(dir);
+    const prefix = namespace ?? (await namespaceOf(dir));
     const own = folder.declaredName === null ? "" : squash(folder.declaredName);
     const base = own === "" ? folder.dirName : own;
     out.skills.push({
       folder,
       viaLink: viaLink || folder.isLink,
       frontmatterOk: folder.readable && bytes !== null && codexFrontmatterOk(bytes),
-      name: namespace === null ? base : `${namespace}:${base}`,
+      name: prefix === null ? base : `${prefix}:${base}`,
       skillFileRealPath: (await entryInfo(skillFile)).realPath,
     });
   }

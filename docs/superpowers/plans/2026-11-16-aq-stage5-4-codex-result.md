@@ -32,7 +32,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `C579774110C9A768C1AE3EED3BDEE956DFC68068E5E21F462212EA74CDDD70FB`, 4,419줄)이다. 설계 끝에 「5단계 4부 계획 전 결정」(열두 가지)을 더하고, 27절의 「Codex 평가의 한계」에 대신 봄의 굵기와 두 도구 단서의 기준을 더했다. 연습 작업 폴더에서 구현하다가 결정 2번에 건너뛴 압축 파일의 그림 고르기를 더했다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `B2A2A73957A43BFB8F5B6AABB39D82D7359BA8F6B6122632A4A5D121987207F8`, 4,428줄)이다. 설계 끝에 「5단계 4부 계획 전 결정」(열두 가지)을 더하고, 27절의 「Codex 평가의 한계」에 대신 봄의 굵기와 두 도구 단서의 기준을 더했다. 연습 작업 폴더에서 구현하다가 결정 2번에 건너뛴 압축 파일의 그림 고르기를 더했다. 계획 리뷰 1차에서 결정 3·6·7번을 고치고 설계 끝에 「5단계 4부 계획 리뷰 1차에서 보완」을 더했다.
 
 ## 파일 구조
 
@@ -40,7 +40,7 @@
 |---|---|---|
 | `src/core/result/tools.ts`, `src/core/result/coverage.ts`, `src/core/result/notices.ts`, `src/core/result/summary.ts`, `src/core/copy/notices.ts`, `src/adapters/claude/observation.ts`, `src/commands/checkup-input.ts`, `src/report/view.ts`(고침) | 1 | 수집 결과의 Codex 몫, 읽은 양, 기록 쪽 알림과 그 문장, 요약의 알림, 관측 까닭 `not-recorded`, 대신 봄으로 낮추기, 그림 고르기 |
 | `src/core/result/notices.ts`, `src/core/copy/notices.ts`, `src/core/result/hints.ts`(고침) | 2 | 셋팅 쪽 알림의 Codex 몫과 그 문구, 정밀 점검 단서의 Codex 몫과 두 도구 단서 |
-| `src/core/copy/types.ts`, `src/core/copy/common.ts`, `src/core/copy/rules-setup.ts`, `src/core/copy/findings.ts`(고침) | 3 | S2의 두 도구 문장과 도구별 처방, 안전장치 줄의 Codex 조건, 대신 본 값과 I3의 굵기의 줄 |
+| `src/core/copy/types.ts`, `src/core/copy/common.ts`, `src/core/copy/rules-setup.ts`, `src/core/copy/findings.ts`, `src/core/result/observed.ts`, `src/core/result/assemble.ts`(고침) | 3 | S2의 두 도구 문장과 도구별 처방, 안전장치 줄의 Codex 조건, 대신 본 값과 I3의 굵기의 줄, 합침 규칙을 잰 도구 |
 | `src/report/html.ts`(고침), `skills/aq/scripts/aq.mjs`(다시 만듦) | 4 | Codex 색을 확정한 까닭, 묶은 실행 파일 |
 
 ## 과제를 읽는 법
@@ -82,7 +82,7 @@
 
 - 읽은 양(결정 2). 건너뛴 압축 파일은 읽지 못한 파일과 함께 읽지 못한 비율의 분자에 넣고(파일 수와 바이트. 분모에는 이미 있다), 일부만 읽은 파일이 있으면 비율을 아래 경계로 보아 "일부만 읽었다" 띠를 띄운다. `coverage`의 `partialFiles`와 `skippedFiles`에 수를 싣는다. 결과 화면은 건너뛴 압축 파일도 읽지 못한 기록처럼 그림을 고른다.
 - 수집 결과의 Codex 몫은 `codex` 칸 하나에 모으고 Claude Code에는 두지 않는다. 시험이 짓는 수집 결과를 모두 고치지 않으려는 것이고, 칸이 없으면 Codex만의 것이 없는 것이다.
-- 기록 쪽 알림(결정 3). 읽지 못한 기록과 MCP 관측이 빠진 것을 Codex도 같은 꼴로 낸다. 스킬 사용은 Codex가 기록하지 않아(까닭 `not-recorded`) 알리지 않는다. 분류하지 못한 것에 Codex의 정체 모를 `thread_source`(세션마다)와 실행 층 종류(종류마다)를 더하고 문장에는 수만 넣는다. 새 알림 아홉은 수와 정해진 값만 문장에 넣고, 경로는 건너뛴 압축 파일과 일부만 읽은 파일의 자료에만 싣는다.
+- 기록 쪽 알림(결정 3). 읽지 못한 기록과 MCP 관측이 빠진 것을 Codex도 같은 꼴로 낸다. 스킬 사용은 Codex가 기록하지 않아(까닭 `not-recorded`) 알리지 않는다. 분류하지 못한 것에 Codex의 정체 모를 `thread_source`(세션마다)와 실행 층 종류(종류마다)를 더하고 문장에는 수만 넣는다. 새 알림 아홉은 수와 정해진 값만 문장에 넣고, 경로는 건너뛴 압축 파일과 일부만 읽은 파일의 자료에만 싣는다. 세션 ID를 대신 쓴 기록의 문장은 까닭(첫 줄을 읽지 못함, 첫 줄이 세션 머리가 아님, 세션 ID가 없음, 줄이 없음)과 상관없이 맞게 "첫 줄에서 세션 ID를 얻지 못했다"로 쓴다(계획 리뷰 1차).
 - 대신 봄(결정 4). 이어받은 것을 확인하지 못한 세션이 하나라도 있으면 입력 묶음이 그 점검의 Codex 관측 범위에서 응답과 토큰, 도구 호출, 도구 오류, 셸 명령의 종료 코드를 대신 봄으로 낮춘다. 점수 계산은 못 봄만 빼므로 바뀌지 않는다.
 - 시험은 임시 홈에 부모 기록이 없는 Codex 하위 세션을 만들어 이어받은 것을 확인하지 못한 세션을 짓는다.
 
@@ -296,8 +296,12 @@ describe("알림의 문장", () => {
     expect(noticeText(of("record_skipped"), "en")).toBe("Codex: 1 compressed record file was skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.");
     expect(noticeText(of("record_partial"), "ko")).toBe("Codex 기록 가운데 앞부분만 읽은 파일이 2개 있습니다. 읽은 부분만 계산해서 읽지 못한 비율은 적어도 보이는 값입니다.");
     expect(noticeText(of("unverified_inheritance"), "ko")).toBe("Codex에서 다른 기록에서 이어받은 앞부분을 확인하지 못한 세션이 2개 있습니다. 그 숫자는 가까운 값입니다.");
-    expect(noticeText(of("id_fallbacks"), "ko")).toBe("Codex에서 첫 줄을 읽지 못해 파일 이름으로 세션을 가른 기록이 3개 있습니다. 같은 세션이 둘로 나뉘거나 앞부분을 다시 셌을 수 있습니다.");
-    expect(noticeText(of("id_fallbacks"), "en")).toBe("Codex: the first line of 3 records could not be read, so the file name stood in for the session ID. A session may be split in two, or an earlier part counted again.");
+    expect(noticeText(of("id_fallbacks"), "ko")).toBe("Codex 기록 가운데 첫 줄에서 세션 ID를 얻지 못해 파일 이름으로 세션을 가른 것이 3개 있습니다. 같은 세션이 둘로 나뉘거나 앞부분을 다시 셌을 수 있습니다.");
+    expect(noticeText(of("id_fallbacks"), "en")).toBe("Codex: the session ID could not be taken from the first line of 3 records, so the file name stood in for it. A session may be split in two, or an earlier part counted again.");
+    // 첫 줄은 읽었는데 세션 ID만 없는 기록도 같은 문장이다. 첫 줄을 읽지 못했다고 하지 않는다(4부 계획 리뷰 1차)
+    const metaWithoutId: Notice = { kind: "id_fallbacks", tool: "codex", counts: [{ why: "meta-without-id", count: 1 }] };
+    expect(noticeText(metaWithoutId, "ko")).not.toContain("읽지 못해");
+    expect(noticeText(metaWithoutId, "en")).not.toContain("could not be read");
     expect(noticeText(of("parent_record_missing"), "ko")).toBe("Codex에 부모 세션의 기록을 찾지 못한 하위 세션이 1개 있습니다.");
     expect(noticeText(of("merged_sessions"), "ko")).toBe("Codex에서 기록 파일이 둘 이상인 세션 3개는 세션 하나씩으로 합쳐 셌습니다.");
     expect(noticeText(of("unknown_mtime_sessions"), "ko")).toBe("Codex에서 수정 시각을 보지 못한 사본이 있는 세션이 1개 있습니다. 수정 시각을 아는 사본을 먼저 읽었습니다.");
@@ -874,7 +878,7 @@ const UNCLASSIFIED: Record<(typeof UNCLASSIFIED_GROUPS)[number], Texts<string>> 
 ```ts
     overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
     unverified_inheritance: "{tool}: for {sessions} {sessions:session|sessions}, what was carried over from another record could not be confirmed, so the counts are approximate.",
-    id_fallbacks: "{tool}: the first line of {count} {count:record|records} could not be read, so the file name stood in for the session ID. A session may be split in two, or an earlier part counted again.",
+    id_fallbacks: "{tool}: the session ID could not be taken from the first line of {count} {count:record|records}, so the file name stood in for it. A session may be split in two, or an earlier part counted again.",
     unclassified: "{tool}: some records could not be classified ({items}).",
     orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session.",
     parent_record_missing: "{tool}: the parent session's records were not found for {sessions} {sessions:subsession|subsessions}.",
@@ -915,7 +919,7 @@ const UNCLASSIFIED: Record<(typeof UNCLASSIFIED_GROUPS)[number], Texts<string>> 
 ```ts
     overlapping_responses: "{tool}에서 처음 나온 응답이 다른 세션과 겹치는 세션이 {sessions}개 있습니다. 겹친 응답을 빼지 않고 셌습니다.",
     unverified_inheritance: "{tool}에서 다른 기록에서 이어받은 앞부분을 확인하지 못한 세션이 {sessions}개 있습니다. 그 숫자는 가까운 값입니다.",
-    id_fallbacks: "{tool}에서 첫 줄을 읽지 못해 파일 이름으로 세션을 가른 기록이 {count}개 있습니다. 같은 세션이 둘로 나뉘거나 앞부분을 다시 셌을 수 있습니다.",
+    id_fallbacks: "{tool} 기록 가운데 첫 줄에서 세션 ID를 얻지 못해 파일 이름으로 세션을 가른 것이 {count}개 있습니다. 같은 세션이 둘로 나뉘거나 앞부분을 다시 셌을 수 있습니다.",
     unclassified: "{tool}에 분류하지 못한 기록이 있습니다({items}).",
     orphan_subsessions: "{tool}에 부모 세션을 모르는 하위 세션이 {sessions}개 있습니다.",
     parent_record_missing: "{tool}에 부모 세션의 기록을 찾지 못한 하위 세션이 {sessions}개 있습니다.",
@@ -1896,20 +1900,23 @@ git commit -m "feat: 셋팅 쪽 알림과 정밀 점검 단서에 Codex를 넣�
 
 **Files:**
 - Modify: `test/core/copy-findings.test.ts`
+- Modify: `test/core/result-assemble.test.ts`
 - Modify: `src/core/copy/common.ts`
 - Modify: `src/core/copy/findings.ts`
 - Modify: `src/core/copy/rules-setup.ts`
 - Modify: `src/core/copy/types.ts`
+- Modify: `src/core/result/assemble.ts`
+- Modify: `src/core/result/observed.ts`
 
 **Interfaces:**
-- Consumes: 5단계 3부의 도구별 안전장치(`ToolSafeguard`, `src/core/metrics/setup.ts`), 결과의 도구별 값과 그 관측 범위(`ResultToolValue.observed`, `src/core/result/assemble.ts`).
-- Produces: `RuleCopy.prescriptionByTool`(`src/core/copy/types.ts`), S2의 두 도구 문장(`src/core/copy/rules-setup.ts`), `SAFEGUARD_COPY`의 Codex 조건과 뺀 도구의 말, `PROXY_LINE`, `TOOL_CALL_GRAIN`(`src/core/copy/common.ts`).
+- Consumes: 5단계 3부의 도구별 안전장치(`ToolSafeguard`, `src/core/metrics/setup.ts`), 결과의 도구별 값과 그 관측 범위(`ResultToolValue.observed`, `src/core/result/assemble.ts`), 평가의 점수에 넣는 도구(`Evaluation.tools`)와 입력의 관측 범위.
+- Produces: `RuleCopy.prescriptionByTool`(`src/core/copy/types.ts`), S2의 두 도구 문장(`src/core/copy/rules-setup.ts`), `SAFEGUARD_COPY`의 Codex 조건과 뺀 도구의 말, `PROXY_LINE`, `TOOL_CALL_GRAIN`(`src/core/copy/common.ts`), 합침 규칙을 잰 도구와 관측 범위(`MERGED_RULE_METRICS`, `mergedObserved`, `src/core/result/observed.ts`. 문장을 지을 때만 `FindingDetails.mergedTools`로 넘기고 결과의 `details`에는 싣지 않는다).
 
 설계 「5단계 4부 계획 전 결정」 6·7번이다.
 
-- S2(결정 6). 설명은 설정을 읽은 도구 가운데의 몫을 말하고, 어떻게 쟀나는 두 도구의 조건과 읽지 못한 도구를 빼고 잰다는 것을 적는다. 처방은 안전장치가 없는 도구(읽지 못해 뺀 도구는 아니다)마다의 문장을 도구의 차례로 잇는다. 그런 도구가 없을 때의 처방은 두 도구에 맞는 짧은 문장이다.
+- S2(결정 6). 잘함 제목과 설명(`good`, `why`), 할 일의 제목(`fix`)은 두 도구에 맞는 말이다(Codex는 확인 훅이 아니라 승인 요청이나 샌드박스 제한으로 인정된다. 계획 리뷰 1차). 정비할 것의 설명은 설정을 읽은 도구 가운데의 몫을 말하고, 어떻게 쟀나는 두 도구의 조건과 읽지 못한 도구를 빼고 잰다는 것을 적는다. 처방은 안전장치가 없는 도구(읽지 못해 뺀 도구는 아니다)마다의 문장을 도구의 차례로 잇는다. 그런 도구가 없을 때의 처방은 두 도구에 맞는 짧은 문장이다.
 - 도구별 안전장치 줄. Codex는 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있는지로 적고, 설정을 읽지 못한 도구는 빼고 쟀다고 적는다.
-- 대신 본 값(결정 7). 잰 도구 가운데 관측 범위가 대신 봄인 도구마다 어떻게 쟀나에 한 줄을 더한다. I3을 두 도구에서 쟀으면 도구 호출을 세는 굵기의 줄을 더한다.
+- 대신 본 값(결정 7). 그 규칙을 잰 도구 가운데 관측 범위가 대신 봄인 도구마다 어떻게 쟀나에 한 줄을 더한다. 도구별 규칙은 잰 도구별 값으로 보고, 도구별 값이 없는 합침 규칙(I2, I3)은 결과 조립이 넘긴 그 규칙을 잰 도구(점수에 넣는 도구 가운데 그 지표를 모두 보는 것)로 본다. I3을 두 도구로 쟀으면 도구 호출을 세는 굵기의 줄을 더한다(계획 리뷰 1차가 합침 규칙에서 줄이 빠지는 것을 찾았다).
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
 
@@ -1971,29 +1978,91 @@ import type { ResultToolValue, UnjudgedServer } from "../../src/core/result/asse
 
   it("도구별 값을 대신 본 것으로 쟀으면 그 도구마다 어떻게 쟀나에 가까운 값이라는 줄을 더한다. 못 잰 도구에는 더하지 않는다(설계 9.7, 「5단계 4부 계획 전 결정」 7번)", () => {
     const tools = [toolValue({ tool: "claude-code" }), toolValue({ tool: "codex", observed: "proxy" })];
-    const i1 = finding("I1", { axis: "intensity", kind: "rate", tools });
-    expect(findingText(i1, NONE, "ko").method.at(-1)).toBe("Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.");
-    expect(findingText(i1, NONE, "en").method.at(-1)).toBe("Codex: the records do not show this directly, so the value is approximate.");
-    const measuredOnly = findingText({ ...i1, tools: [toolValue({ tool: "claude-code" })] }, NONE, "ko").method;
+    const e3 = finding("E3", { kind: "rate", tools });
+    expect(findingText(e3, NONE, "ko").method.at(-1)).toBe("Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.");
+    expect(findingText(e3, NONE, "en").method.at(-1)).toBe("Codex: the records do not show this directly, so the value is approximate.");
+    const measuredOnly = findingText({ ...e3, tools: [toolValue({ tool: "claude-code" })] }, NONE, "ko").method;
     expect(measuredOnly.some((line) => line.includes("가까운 값"))).toBe(false);
-    const unmeasured = findingText({ ...i1, tools: [toolValue({ tool: "codex", status: "unmeasured", reason: "no_data", value: null, score: null, observed: "proxy" })] }, NONE, "ko").method;
+    const unmeasured = findingText({ ...e3, tools: [toolValue({ tool: "codex", status: "unmeasured", reason: "no_data", value: null, score: null, observed: "proxy" })] }, NONE, "ko").method;
     expect(unmeasured.some((line) => line.includes("가까운 값"))).toBe(false);
   });
 
-  it("I3을 두 도구에서 쟀으면 도구 호출을 세는 굵기가 다르다는 줄을 더한다", () => {
-    const i3 = finding("I3", { axis: "intensity", kind: "rate", tools: [toolValue({ tool: "claude-code" }), toolValue({ tool: "codex", observed: "proxy" })] });
+  it("합침 규칙은 결과 조립이 넘긴 그 규칙을 잰 도구로 본다. I3을 두 도구로 쟀으면 도구 호출을 세는 굵기의 줄을 더한다(4부 계획 리뷰 1차)", () => {
+    const i3 = finding("I3", { axis: "intensity", kind: "rate", evidence: { humanRequests: 42, toolCalls: 42 } });
+    const both = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "codex" as const, observed: "proxy" as const }] } };
     const line = "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.";
-    expect(findingText(i3, NONE, "ko").method.at(-1)).toBe(line);
-    expect(findingText(i3, NONE, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.");
-    expect(findingText({ ...i3, tools: [toolValue({ tool: "codex", observed: "proxy" })] }, NONE, "ko").method).not.toContain(line);
-    expect(findingText({ ...i3, tools: [toolValue({ tool: "claude-code" }), toolValue({ tool: "codex", status: "unmeasured", reason: "no_data", value: null, score: null })] }, NONE, "ko").method).not.toContain(line);
+    expect(findingText(i3, both, "ko").method.slice(-2)).toEqual(["Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.", line]);
+    expect(findingText(i3, both, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.");
+    const codexOnly = { ...NONE, mergedTools: { I3: [{ tool: "codex" as const, observed: "proxy" as const }] } };
+    expect(findingText(i3, codexOnly, "ko").method).not.toContain(line);
+    expect(findingText(i3, NONE, "ko").method).not.toContain(line);
+    expect(findingText({ ...i3, status: "unmeasured", reason: "too_little", value: null, score: null, category: "unmeasured" }, both, "ko").method).not.toContain(line);
   });
+
+  it("S2의 잘함 제목과 설명, 할 일의 제목은 두 도구에 맞는 말이다. Codex는 승인 요청이나 샌드박스 제한으로 인정된다(4부 계획 리뷰 1차)", () => {
+    const s2 = finding("S2", { axis: "setup", value: 1, score: 1, category: "strength", evidence: { guarded: 1, tools: 1, unreadTools: 0 } });
+    const text = findingText(s2, { safeguards: [{ tool: "codex", guardHook: false, permissionChecks: true }], unjudgedServers: [] }, "ko");
+    expect(text.title).toBe("셸 명령에 안전장치를 둠");
+    expect(text.description).toBe("도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.");
+    expect(RULE_COPY.S2.en.good).toBe("Has a safeguard on shell commands");
+    expect(RULE_COPY.S2.ko.fix).toBe("셸 명령에 안전장치 두기");
+  });
+```
+
+`test/core/result-assemble.test.ts`(찾을 곳 1/2):
+
+```ts
+import { mcpServer, project } from "../helpers/facts.ts";
+import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+
+```
+
+`test/core/result-assemble.test.ts`(바꾼 뒤 1/2):
+
+```ts
+import { mcpServer, project } from "../helpers/facts.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+
+```
+
+`test/core/result-assemble.test.ts`(찾을 곳 2/2):
+
+```ts
+
+describe("평가 결과의 조립", () => {
+```
+
+`test/core/result-assemble.test.ts`(바꾼 뒤 2/2):
+
+```ts
+
+describe("합침 규칙의 어떻게 쟀나(설계 9.7, 「5단계 4부 계획 전 결정」 7번, 4부 계획 리뷰 1차)", () => {
+  it("두 도구로 잰 I3과 I2에는 Codex의 가까운 값 줄이, I3에는 도구 호출을 세는 굵기의 줄이 붙는다. 한 도구만이면 굵기의 줄이 없다", () => {
+    const days = (count: number) => Object.fromEntries(Array.from({ length: count }, (_, index) => [`2026-11-1${index}`, { responses: 3, humanRequests: 10, tools: { Bash: { calls: 10 } } }]));
+    const sessions = [{ days: days(3) }];
+    const both = evaluationInput([claudeTool({ sessions }), codexTool({ sessions })]);
+    const result = checkupResult({ input: both, evaluation: evaluate(both), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    const method = (ruleId: string) => result.findings.find((finding) => finding.ruleId === ruleId)!.text.ko.method;
+    const proxy = "Codex: 기록이 그대로 남기지 않는 값이라 가까운 값으로 쟀습니다.";
+    const grain = "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.";
+    expect(result.findings.find((finding) => finding.ruleId === "I3")).toMatchObject({ status: "scored", tools: [] });
+    expect(method("I3").slice(-2)).toEqual([proxy, grain]);
+    expect(method("I2").at(-1)).toBe(proxy);
+    const claudeOnly = evaluationInput([claudeTool({ sessions })]);
+    const single = checkupResult({ input: claudeOnly, evaluation: evaluate(claudeOnly), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    const singleMethod = single.findings.find((finding) => finding.ruleId === "I3")!.text.ko.method;
+    expect(singleMethod).not.toContain(grain);
+    expect(singleMethod.some((line) => line.includes("가까운 값"))).toBe(false);
+  });
+});
+
+describe("평가 결과의 조립", () => {
 ```
 
 - [ ] **Step 2: 시험을 돌려 실패를 확인한다**
 
-Run: `npx vitest run test/core/copy-findings.test.ts`
-Expected: FAIL. 바뀐 시험 파일 하나가 실패한다. 안전장치 줄이 Codex의 조건을 Claude Code의 말로 적고, 처방이 도구를 가리지 않으며, 대신 본 값과 도구 호출의 굵기의 줄이 없다.
+Run: `npx vitest run test/core/copy-findings.test.ts test/core/result-assemble.test.ts`
+Expected: FAIL. 바뀐 시험 파일 둘이 실패한다. 안전장치 줄과 S2의 잘함 문장이 Codex를 Claude Code의 말로 적고, 처방이 도구를 가리지 않으며, 대신 본 값과 도구 호출의 굵기의 줄이 없다(합침 규칙인 I2와 I3의 실제 결과에서도 없다).
 
 - [ ] **Step 3: 구현한다**
 
@@ -2094,7 +2163,22 @@ export const TOOL_CALL_GRAIN: Texts<string> = {
 /** E6 항목의 정보. 판정에서 뺀 켜진 서버 가운데 부른 기록이 없는 것을 까닭마다 센다. 이름은 결과 화면이 따로 그린다(설계 13.1, 16.1) */
 ```
 
-`src/core/copy/findings.ts`(찾을 곳 1/4):
+`src/core/copy/findings.ts`(찾을 곳 1/6):
+
+```ts
+// 평가 결과의 규칙 하나에서 문장(제목, 설명, 처방, 어떻게 쟀나)을 만든다. 분류와 상태에 따라 문구 표에서 고르고 숫자를 끼운다. 이름과 경로는 넣지 않는다(순수 함수, 설계 11.5, 12.2, 13.1, 19.1)
+import type { Evidence } from "../measure.ts";
+```
+
+`src/core/copy/findings.ts`(바꾼 뒤 1/6):
+
+```ts
+// 평가 결과의 규칙 하나에서 문장(제목, 설명, 처방, 어떻게 쟀나)을 만든다. 분류와 상태에 따라 문구 표에서 고르고 숫자를 끼운다. 이름과 경로는 넣지 않는다(순수 함수, 설계 11.5, 12.2, 13.1, 19.1)
+import type { Coverage, ToolId } from "../../adapters/types.ts";
+import type { Evidence } from "../measure.ts";
+```
+
+`src/core/copy/findings.ts`(찾을 곳 2/6):
 
 ```ts
 import { ruleSpec, type RuleId, type ValueKind } from "../rules.ts";
@@ -2102,7 +2186,7 @@ import { OTHER_TOOL_COPY, REASON_COPY, SAFEGUARD_COPY, TOOL_LINE, TOOL_NAMES, UN
 import { fill, formatValue, slots } from "./format.ts";
 ```
 
-`src/core/copy/findings.ts`(바꾼 뒤 1/4):
+`src/core/copy/findings.ts`(바꾼 뒤 2/6):
 
 ```ts
 import { ruleSpec, type RuleId, type ValueKind } from "../rules.ts";
@@ -2110,7 +2194,23 @@ import { OTHER_TOOL_COPY, PROXY_LINE, REASON_COPY, SAFEGUARD_COPY, TOOL_CALL_GRA
 import { fill, formatValue, slots } from "./format.ts";
 ```
 
-`src/core/copy/findings.ts`(찾을 곳 2/4):
+`src/core/copy/findings.ts`(찾을 곳 3/6):
+
+```ts
+  unjudgedServers: readonly UnjudgedServer[];
+}
+```
+
+`src/core/copy/findings.ts`(바꾼 뒤 3/6):
+
+```ts
+  unjudgedServers: readonly UnjudgedServer[];
+  /** 합침 규칙을 잰 도구와 그 관측 범위(결과 조립이 넘긴다). 없으면 빈 것이다 */
+  mergedTools?: Readonly<Partial<Record<RuleId, readonly { tool: ToolId; observed: Coverage }[]>>>;
+}
+```
+
+`src/core/copy/findings.ts`(찾을 곳 4/6):
 
 ```ts
 
@@ -2122,7 +2222,7 @@ function safeguardLine(safeguard: ToolSafeguard, lang: Lang): string {
 }
 ```
 
-`src/core/copy/findings.ts`(바꾼 뒤 2/4):
+`src/core/copy/findings.ts`(바꾼 뒤 4/6):
 
 ```ts
 
@@ -2151,31 +2251,38 @@ function prescriptionOf(finding: FindingInput, copy: RuleCopy, details: FindingD
   return sentences.length > 0 ? sentences.join(" ") : copy.prescription;
 }
 
-/** 어떻게 쟀나에 덧붙는 줄. 대신 본 것으로 잰 도구마다 가까운 값이라는 줄, I3을 두 도구에서 쟀으면 도구 호출을 세는 굵기의 줄이다(설계 9.7) */
-function measurementNotes(finding: FindingInput, lang: Lang): string[] {
-  const scored = finding.tools.filter((value) => value.status === "scored");
-  const lines = scored.filter((value) => value.observed === "proxy").map((value) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[value.tool][lang] }));
-  if (finding.ruleId === "I3" && new Set(scored.map((value) => value.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+/**
+ * 어떻게 쟀나에 덧붙는 줄. 그 규칙을 대신 본 값으로 잰 도구마다 가까운 값이라는 줄, I3을 두 도구로 쟀으면 도구 호출을 세는 굵기의 줄이다. 도구별 규칙은 잰 도구별 값으로,
+ * 도구별 값이 없는 합침 규칙은 결과 조립이 넘긴 그 규칙을 잰 도구로 본다(설계 9.7, 「5단계 4부 계획 전 결정」 7번)
+ */
+function measurementNotes(finding: FindingInput, details: FindingDetails, lang: Lang): string[] {
+  if (finding.status !== "scored") return [];
+  const used =
+    ruleSpec(finding.ruleId).unit === "merged"
+      ? (details.mergedTools?.[finding.ruleId] ?? [])
+      : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
+  const lines = used.filter((item) => item.observed === "proxy").map((item) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item.tool][lang] }));
+  if (finding.ruleId === "I3" && new Set(used.map((item) => item.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
   return lines;
 }
 ```
 
-`src/core/copy/findings.ts`(찾을 곳 3/4):
+`src/core/copy/findings.ts`(찾을 곳 5/6):
 
 ```ts
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
   return {
 ```
 
-`src/core/copy/findings.ts`(바꾼 뒤 3/4):
+`src/core/copy/findings.ts`(바꾼 뒤 5/6):
 
 ```ts
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
-  method.push(...measurementNotes(finding, lang));
+  method.push(...measurementNotes(finding, details, lang));
   return {
 ```
 
-`src/core/copy/findings.ts`(찾을 곳 4/4):
+`src/core/copy/findings.ts`(찾을 곳 6/6):
 
 ```ts
     description: description(finding, copy, lang, shown),
@@ -2183,7 +2290,7 @@ function measurementNotes(finding: FindingInput, lang: Lang): string[] {
     method,
 ```
 
-`src/core/copy/findings.ts`(바꾼 뒤 4/4):
+`src/core/copy/findings.ts`(바꾼 뒤 6/6):
 
 ```ts
     description: description(finding, copy, lang, shown),
@@ -2194,6 +2301,9 @@ function measurementNotes(finding: FindingInput, lang: Lang): string[] {
 `src/core/copy/rules-setup.ts`(찾을 곳 1/2):
 
 ```ts
+      good: "Has permission checks or a hook for shell commands",
+      why: "This looks for permission checks in the default mode, or a confirming hook that can block shell commands. With one of them in place, a command you did not mean to run can be stopped before it runs. What the hook actually filters is not checked.",
+      fix: "Add a check before shell commands",
       problem: "{value} of the tools you use have a safeguard. A tool runs with permission checks bypassed and no confirming hook covers shell commands.",
       prescription: "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
       method: "Share of the tools you use that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands.",
@@ -2202,6 +2312,9 @@ function measurementNotes(finding: FindingInput, lang: Lang): string[] {
 `src/core/copy/rules-setup.ts`(바꾼 뒤 1/2):
 
 ```ts
+      good: "Has a safeguard on shell commands",
+      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, and in Codex it is asking for approval or a sandbox limit. What a hook actually filters is not checked.",
+      fix: "Add a safeguard on shell commands",
       problem: "{value} of the tools whose settings were read have a safeguard. A tool can run shell commands without asking first.",
       prescription: "Add a check before shell commands in each tool that has no safeguard.",
       prescriptionByTool: {
@@ -2217,6 +2330,9 @@ function measurementNotes(finding: FindingInput, lang: Lang): string[] {
 `src/core/copy/rules-setup.ts`(찾을 곳 2/2):
 
 ```ts
+      good: "권한 확인이나 셸 명령 확인 훅을 둠",
+      why: "기본 모드의 권한 확인이나, 셸 명령의 실행을 막을 수 있는 확인 훅이 있는지 봅니다. 그런 자리가 있으면 뜻하지 않은 명령을 실행 전에 멈출 수 있습니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.",
+      fix: "셸 명령 앞에 확인 두기",
       problem: "쓰는 도구 가운데 안전장치가 있는 도구는 {value}입니다. 권한 확인을 건너뛰는데 셸 명령을 덮는 확인 훅이 없는 도구가 있습니다.",
       prescription: "Claude Code에서 셸 명령(Bash 또는 PowerShell)의 실행 전에 결과를 기다리며 실행을 막을 수 있는 PreToolUse 훅을 사용자 설정에 두고 켜거나, 기본 모드를 권한 우회가 아닌 것으로 바꾸세요. 권한 우회 모드를 계속 쓰려면 실행을 막을 수 있는 확인 훅을 두세요.",
       method: "쓰는 도구 가운데 안전장치가 있는 도구의 몫입니다. Claude Code는 기본 모드가 권한 우회가 아니거나, 셸 명령에 걸리고 실행을 막을 수 있는 도구 실행 전 확인 훅이 있으면 안전장치가 있는 것으로 봅니다.",
@@ -2225,6 +2341,9 @@ function measurementNotes(finding: FindingInput, lang: Lang): string[] {
 `src/core/copy/rules-setup.ts`(바꾼 뒤 2/2):
 
 ```ts
+      good: "셸 명령에 안전장치를 둠",
+      why: "도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.",
+      fix: "셸 명령에 안전장치 두기",
       problem: "설정을 읽은 도구 가운데 안전장치가 있는 도구는 {value}입니다. 묻지 않고 셸 명령을 실행할 수 있는 도구가 있습니다.",
       prescription: "안전장치가 없는 도구마다 셸 명령 앞에 확인을 두세요.",
       prescriptionByTool: {
@@ -2268,15 +2387,103 @@ import type { Reason } from "../reasons.ts";
   /** 어떻게 쟀나의 첫 줄. 무엇을 무엇으로 나눴는지 적는다 */
 ```
 
+`src/core/result/assemble.ts`(찾을 곳 1/2):
+
+```ts
+import { recordNotices, setupNotices, sortNotices, type Notice } from "./notices.ts";
+import { observedOf } from "./observed.ts";
+import { resultTools, type CollectedTool, type ResultTool } from "./tools.ts";
+```
+
+`src/core/result/assemble.ts`(바꾼 뒤 1/2):
+
+```ts
+import { recordNotices, setupNotices, sortNotices, type Notice } from "./notices.ts";
+import { mergedObserved, observedOf } from "./observed.ts";
+import { resultTools, type CollectedTool, type ResultTool } from "./tools.ts";
+```
+
+`src/core/result/assemble.ts`(찾을 곳 2/2):
+
+```ts
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  const findings = evaluation.findings.map((finding): ResultFinding => {
+    const source = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId as ToolRuleId, coverageByTool.get(value.tool)!) })) };
+    return { ...source, text: textsOf((lang) => findingText(source, details, lang)) };
+  });
+```
+
+`src/core/result/assemble.ts`(바꾼 뒤 2/2):
+
+```ts
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  // 합침 규칙에는 도구별 값이 없어, 그 규칙을 잰 도구와 관측 범위를 문장을 지을 때만 넘긴다. 결과의 details에는 싣지 않는다(설계 「5단계 4부 계획 전 결정」 7번)
+  const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool)! }));
+  const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
+  const findings = evaluation.findings.map((finding): ResultFinding => {
+    const source = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId as ToolRuleId, coverageByTool.get(value.tool)!) })) };
+    return { ...source, text: textsOf((lang) => findingText(source, textDetails, lang)) };
+  });
+```
+
+`src/core/result/observed.ts`(찾을 곳 1/2):
+
+```ts
+// 도구별 값의 관측 범위를 정한다. 규칙마다 재는지를 가르는 지표(설계 9.7의 표의 줄)를 두고, 그 도구가 그 지표를 봤는지(봄, 대신 봄, 못 봄) 가운데 가장 약한 것을 낸다(순수 함수, 설계 9.7, 12.2)
+import type { Coverage, CoverageKey, ToolCoverage } from "../../adapters/types.ts";
+import type { ToolRuleId } from "../scoreboard.ts";
+```
+
+`src/core/result/observed.ts`(바꾼 뒤 1/2):
+
+```ts
+// 도구별 값의 관측 범위를 정한다. 규칙마다 재는지를 가르는 지표(설계 9.7의 표의 줄)를 두고, 그 도구가 그 지표를 봤는지(봄, 대신 봄, 못 봄) 가운데 가장 약한 것을 낸다. 합침 규칙은 그 규칙을 잰 도구마다 낸다(순수 함수, 설계 9.7, 12.2, 「5단계 4부 계획 전 결정」 7번)
+import type { Coverage, CoverageKey, ToolCoverage, ToolId } from "../../adapters/types.ts";
+import type { RuleId } from "../rules.ts";
+import type { ToolRuleId } from "../scoreboard.ts";
+```
+
+`src/core/result/observed.ts`(찾을 곳 2/2):
+
+```ts
+
+/** 그 규칙이 쓰는 지표를 그 도구가 봤는지. 지표가 여럿이면 가장 약한 것이고, 지표를 쓰지 않는 규칙은 봄이다 */
+export function observedOf(rule: ToolRuleId, coverage: ToolCoverage): Coverage {
+  return RULE_METRICS[rule].reduce<Coverage>((weakest, key) => (STRENGTH[coverage[key]] < STRENGTH[weakest] ? coverage[key] : weakest), "measured");
+}
+```
+
+`src/core/result/observed.ts`(바꾼 뒤 2/2):
+
+```ts
+
+const weakestOf = (keys: readonly CoverageKey[], coverage: ToolCoverage): Coverage => keys.reduce<Coverage>((weakest, key) => (STRENGTH[coverage[key]] < STRENGTH[weakest] ? coverage[key] : weakest), "measured");
+
+/** 그 규칙이 쓰는 지표를 그 도구가 봤는지. 지표가 여럿이면 가장 약한 것이고, 지표를 쓰지 않는 규칙은 봄이다 */
+export function observedOf(rule: ToolRuleId, coverage: ToolCoverage): Coverage {
+  return weakestOf(RULE_METRICS[rule], coverage);
+}
+
+/** 합침 규칙 가운데 대신 볼 수 있는 기록의 지표로 재는 것과 그 지표. 강도 규칙이 그 지표를 보는 도구만 넣는 것과 같다(metrics/intensity.ts) */
+export const MERGED_RULE_METRICS: Partial<Record<RuleId, readonly CoverageKey[]>> = { I2: ["humanRequests"], I3: ["humanRequests", "toolCalls"] };
+
+/** 합침 규칙을 잰 도구(점수에 넣는 도구 가운데 그 지표를 모두 보는 것)와 그 관측 범위. 그런 지표가 없는 합침 규칙은 빈 목록이다 */
+export function mergedObserved(rule: RuleId, tools: readonly { tool: ToolId; coverage: ToolCoverage }[]): { tool: ToolId; observed: Coverage }[] {
+  const metrics = MERGED_RULE_METRICS[rule] ?? [];
+  if (metrics.length === 0) return [];
+  return tools.filter((tool) => metrics.every((key) => tool.coverage[key] !== "unsupported")).map((tool) => ({ tool: tool.tool, observed: weakestOf(metrics, tool.coverage) }));
+}
+```
+
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
-Run: `npx tsc --noEmit && npx vitest run test/core/copy-findings.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 18개.
+Run: `npx tsc --noEmit && npx vitest run test/core/copy-findings.test.ts test/core/result-assemble.test.ts`
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 2개, 시험 30개.
 
 - [ ] **Step 5: 커밋한다**
 
 ```bash
-git add test/core/copy-findings.test.ts src/core/copy/common.ts src/core/copy/findings.ts src/core/copy/rules-setup.ts src/core/copy/types.ts
+git add test/core/copy-findings.test.ts test/core/result-assemble.test.ts src/core/copy/common.ts src/core/copy/findings.ts src/core/copy/rules-setup.ts src/core/copy/types.ts src/core/result/assemble.ts src/core/result/observed.ts
 git commit -m "feat: S2 문장과 대신 본 값의 줄에 Codex를 넣음"
 ```
 
@@ -2317,7 +2524,7 @@ git commit -m "feat: S2 문장과 대신 본 값의 줄에 Codex를 넣음"
 - [ ] **Step 2: 전체 검사가 통과하는지 확인한다**
 
 Run: `npm run build && npm run check`
-Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,785개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
+Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 105개·시험 1,787개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
 
 - [ ] **Step 3: 커밋한다**
 
@@ -2346,7 +2553,7 @@ Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공�
 
 Run: `npx -y -p node@22 -- node --version` → `v22.`로 시작하는지 본다.
 Run: `npx -y -p node@22 -- node node_modules/vitest/vitest.mjs run`
-Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,785개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
+Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 105개·시험 1,787개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
 
 - [ ] **Step 3: 이 PC의 기록과 셋팅으로 실제로 돌려 본다**
 
@@ -2456,10 +2663,10 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`946ee4b`)에서 과제 1부터 4까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1부터 3까지는 시험만 놓고 돌리면 실패하고(과제 1은 바뀐 시험 파일 일곱, 과제 2는 셋, 과제 3은 하나), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 4의 `npm run build && npm run check`는 시험 파일 105개·시험 1,785개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,784개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다.
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`946ee4b`)에서 과제 1부터 4까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1부터 3까지는 시험만 놓고 돌리면 실패하고(과제 1은 바뀐 시험 파일 일곱, 과제 2는 셋, 과제 3은 둘), 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 4의 `npm run build && npm run check`는 시험 파일 105개·시험 1,787개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,786개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 262개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다.
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 셋을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 스물네 시험, 과제 2는 여섯 시험, 과제 3은 다섯 시험), 구현 커밋 넷을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 셋을 정했다. 수집 결과의 Codex 몫은 시험이 짓는 수집 결과를 모두 고치지 않으려고 `codex` 칸 하나에 모았다. 알림의 문장에 경로가 없어야 한다는 시험이 있어 Codex 설정 자리의 이름을 `config.toml`과 "프로젝트의 config.toml"로 적었다. 건너뛴 압축 파일도 읽지 못한 기록이라 결과 화면의 그림 고르기에 넣고 설계 결정 2번에 더했다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 과제의 시험 커밋 셋을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 스물네 시험, 과제 2는 여섯 시험, 과제 3은 일곱 시험), 구현 커밋 넷을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 셋을 정했다. 수집 결과의 Codex 몫은 시험이 짓는 수집 결과를 모두 고치지 않으려고 `codex` 칸 하나에 모았다. 알림의 문장에 경로가 없어야 한다는 시험이 있어 Codex 설정 자리의 이름을 `config.toml`과 "프로젝트의 config.toml"로 적었다. 건너뛴 압축 파일도 읽지 못한 기록이라 결과 화면의 그림 고르기에 넣고 설계 결정 2번에 더했다. 계획 리뷰 1차가 찾은 셋(합침 규칙 I2·I3의 어떻게 쟀나에서 빠진 줄, Codex를 Claude Code의 말로 설명한 S2의 잘함 문장, 까닭과 맞지 않는 세션 ID 대체 문장)은 과제 1과 3의 그 자리에서 고쳤다.
 
-이 PC의 기록과 셋팅(읽기만)으로 Task 5 Step 3과 Step 4를 미리 돌렸다. 저장하지 않는 점검이 오류 없이 1분 안에 끝났고 두 도구가 찾음과 점수에 넣음으로 들었다. Codex의 알림이 나왔고 그 문장에 이름과 경로가 없었으며, 스킬 사용의 관측이 빠진 것은 Codex 몫으로 나오지 않았다. 읽은 양과 알림의 Codex 수는 같은 방식(수정 시각 거르기를 켜고 캐시를 끈 것)으로 따로 모은 수집 결과와 같았다. S2에 두 도구의 조건 줄과 Codex 처방이 붙었고, 대신 본 것으로 잰 Codex의 값에 가까운 값이라는 줄이 붙었다. 사용자 `config.toml`의 MCP 서버 값은 결과 JSON의 경로 칸 밖과 결과 화면에 없었고, 돌리기 앞뒤로 두 도구의 설정과 상태 폴더의 수정 시각과 지문이 그대로였다. 결과 화면을 이고라이트로 데스크톱(1440), 태블릿(820), 휴대폰(390) 폭에서 찍어 보니 세 폭 모두 가로로 넘치는 요소가 없었고, 도구별 띠에 두 색이 이름과 값과 함께 보였다. 휴대폰 폭에서 알림 칸과 S2 칸(펼친 어떻게 쟀나 포함)을 따로 찍어 줄바꿈과 잘림이 없는 것을 직접 봤다. 값과 개수, 화면 사진은 저장소 밖 작업 기록에 두었다.
+이 PC의 기록과 셋팅(읽기만)으로 Task 5 Step 3과 Step 4를 미리 돌렸다(계획 리뷰 1차의 고침 앞이다. 고친 것은 문장과 합침 규칙의 줄이라 그 뒤에는 Step 3의 규칙 문장만 다시 봤다). 저장하지 않는 점검이 오류 없이 1분 안에 끝났고 두 도구가 찾음과 점수에 넣음으로 들었다. Codex의 알림이 나왔고 그 문장에 이름과 경로가 없었으며, 스킬 사용의 관측이 빠진 것은 Codex 몫으로 나오지 않았다. 읽은 양과 알림의 Codex 수는 같은 방식(수정 시각 거르기를 켜고 캐시를 끈 것)으로 따로 모은 수집 결과와 같았다. S2에 두 도구의 조건 줄과 Codex 처방이 붙었고, 대신 본 것으로 잰 Codex의 값에 가까운 값이라는 줄이 붙었다. 사용자 `config.toml`의 MCP 서버 값은 결과 JSON의 경로 칸 밖과 결과 화면에 없었고, 돌리기 앞뒤로 두 도구의 설정과 상태 폴더의 수정 시각과 지문이 그대로였다. 결과 화면을 이고라이트로 데스크톱(1440), 태블릿(820), 휴대폰(390) 폭에서 찍어 보니 세 폭 모두 가로로 넘치는 요소가 없었고, 도구별 띠에 두 색이 이름과 값과 함께 보였다. 휴대폰 폭에서 알림 칸과 S2 칸(펼친 어떻게 쟀나 포함)을 따로 찍어 줄바꿈과 잘림이 없는 것을 직접 봤다. 값과 개수, 화면 사진은 저장소 밖 작업 기록에 두었다.
 
 확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 5 Step 2에서 한다. Codex를 실제로 돌려 맞춰 본 것은 없다. 실제 휴대폰과 태블릿 기기에서 본 것이 아니라 데스크톱의 이고라이트에서 화면 폭만 바꿔 본 것이다. 이 PC에는 건너뛴 압축 파일, 일부만 읽은 파일, 이어받은 것을 확인하지 못한 세션이 없어 그 알림과 띠, 대신 봄으로 낮추기는 시험으로만 봤다. macOS와 Linux는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.

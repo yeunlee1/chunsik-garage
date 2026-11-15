@@ -1151,7 +1151,9 @@ var SAFEGUARD_COPY = {
     permissions: "the default mode does not bypass permissions",
     both: "the default mode does not bypass permissions, and a confirming hook covers shell commands too",
     none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
-    unknown: "could not tell, because a settings file could not be read"
+    codexGuarded: "no place combines no approval with full sandbox access",
+    codexNone: "no safeguard (a place combines no approval with full sandbox access)",
+    unknown: "left out, because a settings file that decides the safeguard could not be read"
   },
   ko: {
     line: "{tool}: {condition}",
@@ -1159,8 +1161,18 @@ var SAFEGUARD_COPY = {
     permissions: "\uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2D8",
     both: "\uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uACE0 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uB3C4 \uC788\uC74C",
     none: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uC774\uACE0 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uC74C)",
-    unknown: "\uC124\uC815 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574 \uAC00\uB9AC\uC9C0 \uBABB\uD568"
+    codexGuarded: "\uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC5C6\uC74C",
+    codexNone: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC788\uC74C)",
+    unknown: "\uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574 \uBE7C\uACE0 \uC7C0\uC74C"
   }
+};
+var PROXY_LINE = {
+  en: "{tool}: the records do not show this directly, so the value is approximate.",
+  ko: "{tool}: \uAE30\uB85D\uC774 \uADF8\uB300\uB85C \uB0A8\uAE30\uC9C0 \uC54A\uB294 \uAC12\uC774\uB77C \uAC00\uAE4C\uC6B4 \uAC12\uC73C\uB85C \uC7C0\uC2B5\uB2C8\uB2E4."
+};
+var TOOL_CALL_GRAIN = {
+  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "\uB3C4\uAD6C \uD638\uCD9C\uC744 \uC138\uB294 \uAD75\uAE30\uAC00 \uB3C4\uAD6C\uB9C8\uB2E4 \uB2E4\uB985\uB2C8\uB2E4. Claude Code\uB294 \uBAA8\uB378\uC774 \uB0B8 \uD638\uCD9C \uD558\uB098\uAC00, Codex\uB294 \uC2E4\uC81C\uB85C \uC2E4\uD589\uB41C \uC791\uC5C5 \uD558\uB098\uAC00 \uD558\uB098\uC785\uB2C8\uB2E4."
 };
 var UNJUDGED_COPY = {
   en: {
@@ -1821,12 +1833,16 @@ var SETUP_COPY = {
   S2: {
     en: {
       name: "Safeguard",
-      good: "Has permission checks or a hook for shell commands",
-      why: "This looks for permission checks in the default mode, or a confirming hook that can block shell commands. With one of them in place, a command you did not mean to run can be stopped before it runs. What the hook actually filters is not checked.",
-      fix: "Add a check before shell commands",
-      problem: "{value} of the tools you use have a safeguard. A tool runs with permission checks bypassed and no confirming hook covers shell commands.",
-      prescription: "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
-      method: "Share of the tools you use that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands.",
+      good: "Has a safeguard on shell commands",
+      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, and in Codex it is asking for approval or a sandbox limit. What a hook actually filters is not checked.",
+      fix: "Add a safeguard on shell commands",
+      problem: "{value} of the tools whose settings were read have a safeguard. A tool can run shell commands without asking first.",
+      prescription: "Add a check before shell commands in each tool that has no safeguard.",
+      prescriptionByTool: {
+        "claude-code": "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
+        codex: "In Codex, if you set the approval policy to never, do not give the sandbox full access (danger-full-access). If you need full access, set the approval policy to on-request. Both your user config.toml and the settings of trusted projects count."
+      },
+      method: "Share of the tools whose settings were read that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands. Codex has one if no place (the user settings or a trusted project) combines no approval with full sandbox access. A tool whose deciding settings could not be read is left out.",
       evidence: "Tools with a safeguard {guarded} \xB7 tools measured {tools} \xB7 tools left out with unreadable settings {unreadTools}",
       unit: "%",
       reasons: {
@@ -1836,12 +1852,16 @@ var SETUP_COPY = {
     },
     ko: {
       name: "\uC548\uC804\uC7A5\uCE58",
-      good: "\uAD8C\uD55C \uD655\uC778\uC774\uB098 \uC178 \uBA85\uB839 \uD655\uC778 \uD6C5\uC744 \uB460",
-      why: "\uAE30\uBCF8 \uBAA8\uB4DC\uC758 \uAD8C\uD55C \uD655\uC778\uC774\uB098, \uC178 \uBA85\uB839\uC758 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC774 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4. \uADF8\uB7F0 \uC790\uB9AC\uAC00 \uC788\uC73C\uBA74 \uB73B\uD558\uC9C0 \uC54A\uC740 \uBA85\uB839\uC744 \uC2E4\uD589 \uC804\uC5D0 \uBA48\uCD9C \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uD6C5\uC774 \uBB34\uC5C7\uC744 \uAC78\uB7EC \uB0B4\uB294\uC9C0\uB294 \uBCF4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
-      fix: "\uC178 \uBA85\uB839 \uC55E\uC5D0 \uD655\uC778 \uB450\uAE30",
-      problem: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4. \uAD8C\uD55C \uD655\uC778\uC744 \uAC74\uB108\uB6F0\uB294\uB370 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uB294 \uB3C4\uAD6C\uAC00 \uC788\uC2B5\uB2C8\uB2E4.",
-      prescription: "Claude Code\uC5D0\uC11C \uC178 \uBA85\uB839(Bash \uB610\uB294 PowerShell)\uC758 \uC2E4\uD589 \uC804\uC5D0 \uACB0\uACFC\uB97C \uAE30\uB2E4\uB9AC\uBA70 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 PreToolUse \uD6C5\uC744 \uC0AC\uC6A9\uC790 \uC124\uC815\uC5D0 \uB450\uACE0 \uCF1C\uAC70\uB098, \uAE30\uBCF8 \uBAA8\uB4DC\uB97C \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2CC \uAC83\uC73C\uB85C \uBC14\uAFB8\uC138\uC694. \uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uB97C \uACC4\uC18D \uC4F0\uB824\uBA74 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC744 \uB450\uC138\uC694.",
-      method: "\uC4F0\uB294 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4.",
+      good: "\uC178 \uBA85\uB839\uC5D0 \uC548\uC804\uC7A5\uCE58\uB97C \uB460",
+      why: "\uB3C4\uAD6C\uB9C8\uB2E4 \uB73B\uD558\uC9C0 \uC54A\uC740 \uC178 \uBA85\uB839\uC744 \uBA48\uCD9C \uC790\uB9AC\uAC00 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uC758 \uAD8C\uD55C \uD655\uC778\uC774\uB098 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC774\uACE0, Codex\uB294 \uC2B9\uC778 \uC694\uCCAD\uC774\uB098 \uC0CC\uB4DC\uBC15\uC2A4 \uC81C\uD55C\uC785\uB2C8\uB2E4. \uD6C5\uC774 \uBB34\uC5C7\uC744 \uAC78\uB7EC \uB0B4\uB294\uC9C0\uB294 \uBCF4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      fix: "\uC178 \uBA85\uB839\uC5D0 \uC548\uC804\uC7A5\uCE58 \uB450\uAE30",
+      problem: "\uC124\uC815\uC744 \uC77D\uC740 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4. \uBB3B\uC9C0 \uC54A\uACE0 \uC178 \uBA85\uB839\uC744 \uC2E4\uD589\uD560 \uC218 \uC788\uB294 \uB3C4\uAD6C\uAC00 \uC788\uC2B5\uB2C8\uB2E4.",
+      prescription: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC5C6\uB294 \uB3C4\uAD6C\uB9C8\uB2E4 \uC178 \uBA85\uB839 \uC55E\uC5D0 \uD655\uC778\uC744 \uB450\uC138\uC694.",
+      prescriptionByTool: {
+        "claude-code": "Claude Code\uC5D0\uC11C \uC178 \uBA85\uB839(Bash \uB610\uB294 PowerShell)\uC758 \uC2E4\uD589 \uC804\uC5D0 \uACB0\uACFC\uB97C \uAE30\uB2E4\uB9AC\uBA70 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 PreToolUse \uD6C5\uC744 \uC0AC\uC6A9\uC790 \uC124\uC815\uC5D0 \uB450\uACE0 \uCF1C\uAC70\uB098, \uAE30\uBCF8 \uBAA8\uB4DC\uB97C \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2CC \uAC83\uC73C\uB85C \uBC14\uAFB8\uC138\uC694. \uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uB97C \uACC4\uC18D \uC4F0\uB824\uBA74 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC744 \uB450\uC138\uC694.",
+        codex: "Codex\uC5D0\uC11C \uC2B9\uC778 \uC815\uCC45\uC744 never\uB85C \uB450\uB824\uBA74 \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uC804\uBA74 \uD574\uC81C(danger-full-access)\uD558\uC9C0 \uB9C8\uC138\uC694. \uC804\uBA74 \uD574\uC81C\uAC00 \uD544\uC694\uD558\uBA74 \uC2B9\uC778 \uC815\uCC45\uC744 on-request\uB85C \uB450\uC138\uC694. \uC0AC\uC6A9\uC790 config.toml\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8\uC758 \uC124\uC815\uC744 \uBAA8\uB450 \uBD05\uB2C8\uB2E4."
+      },
+      method: "\uC124\uC815\uC744 \uC77D\uC740 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. Codex\uB294 \uC0AC\uC6A9\uC790 \uC124\uC815\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370 \uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC5C6\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. \uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD55C \uB3C4\uAD6C\uB294 \uBE7C\uACE0 \uC7BD\uB2C8\uB2E4.",
       evidence: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C {guarded} \xB7 \uC7B0 \uB3C4\uAD6C {tools} \xB7 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD574 \uBE80 \uB3C4\uAD6C {unreadTools}",
       unit: "%",
       reasons: {
@@ -1987,11 +2007,29 @@ function description(finding, copy2, lang, shown) {
   const others = sources.map((value) => fillEvidence(OTHER_TOOL_COPY[value.reason][lang], value.evidence, { tool: TOOL_NAMES[value.tool][lang], candidates: value.candidates.length }));
   return [fill(copy2.problem, { value: joinValue(shown.value, shown.unit, lang) }), ...others].join(" ");
 }
+function safeguardCondition(safeguard, copy2) {
+  const { guardHook, permissionChecks } = safeguard;
+  if (guardHook === null || permissionChecks === null) return copy2.unknown;
+  if (safeguard.tool === "codex") return permissionChecks ? copy2.codexGuarded : copy2.codexNone;
+  return guardHook && permissionChecks ? copy2.both : guardHook ? copy2.hook : permissionChecks ? copy2.permissions : copy2.none;
+}
 function safeguardLine(safeguard, lang) {
   const copy2 = SAFEGUARD_COPY[lang];
-  const { guardHook, permissionChecks } = safeguard;
-  const condition = guardHook === null || permissionChecks === null ? copy2.unknown : guardHook && permissionChecks ? copy2.both : guardHook ? copy2.hook : permissionChecks ? copy2.permissions : copy2.none;
-  return fill(copy2.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition });
+  return fill(copy2.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition: safeguardCondition(safeguard, copy2) });
+}
+function prescriptionOf(finding, copy2, details) {
+  const byTool = copy2.prescriptionByTool;
+  if (finding.ruleId !== "S2" || byTool === void 0) return copy2.prescription;
+  const lacking = details.safeguards.filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false).map((safeguard) => safeguard.tool).sort();
+  const sentences = lacking.map((tool) => byTool[tool]).filter((sentence) => sentence !== void 0);
+  return sentences.length > 0 ? sentences.join(" ") : copy2.prescription;
+}
+function measurementNotes(finding, details, lang) {
+  if (finding.status !== "scored") return [];
+  const used = ruleSpec(finding.ruleId).unit === "merged" ? details.mergedTools?.[finding.ruleId] ?? [] : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
+  const lines = used.filter((item2) => item2.observed === "proxy").map((item2) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item2.tool][lang] }));
+  if (finding.ruleId === "I3" && new Set(used.map((item2) => item2.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+  return lines;
 }
 var WHY_ORDER = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
 function unjudgedNotes(servers, lang) {
@@ -2014,6 +2052,7 @@ function findingText(finding, details, lang) {
   if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy2.evidence, finding.evidence));
   for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy2, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
+  method.push(...measurementNotes(finding, details, lang));
   return {
     name: copy2.name,
     title: finding.category === "strength" ? copy2.good : finding.category === "repair" ? copy2.fix : copy2.name,
@@ -2021,7 +2060,7 @@ function findingText(finding, details, lang) {
     unit: shown?.unit ?? null,
     reason: finding.status === "unmeasured" ? reasonOf(copy2, finding.reason, lang).word : null,
     description: description(finding, copy2, lang, shown),
-    prescription: finding.category === "average" || finding.category === "repair" ? copy2.prescription : null,
+    prescription: finding.category === "average" || finding.category === "repair" ? prescriptionOf(finding, copy2, details) : null,
     method,
     notes: finding.ruleId === "E6" ? unjudgedNotes(details.unjudgedServers, lang) : []
   };
@@ -2081,7 +2120,8 @@ var METRIC = {
 var OBSERVATION_REASON = {
   "unreadable-files": { en: "unreadable files", ko: "\uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C" },
   "too-long-lines": { en: "lines too long", ko: "\uB108\uBB34 \uAE34 \uC904" },
-  "unconfirmed-pieces": { en: "unconfirmed pieces", ko: "\uD655\uC778\uD558\uC9C0 \uBABB\uD55C \uC870\uAC01" }
+  "unconfirmed-pieces": { en: "unconfirmed pieces", ko: "\uD655\uC778\uD558\uC9C0 \uBABB\uD55C \uC870\uAC01" },
+  "not-recorded": { en: "not recorded by the tool", ko: "\uB3C4\uAD6C\uAC00 \uAE30\uB85D\uD558\uC9C0 \uC54A\uC74C" }
 };
 var UNREADABLE_SETUP = {
   claude_json: { en: ".claude.json", ko: ".claude.json" },
@@ -2091,6 +2131,8 @@ var UNREADABLE_SETUP = {
   local_settings: { en: "local settings", ko: "\uB85C\uCEEC \uC124\uC815" },
   mcp_json: { en: "project .mcp.json", ko: "\uD504\uB85C\uC81D\uD2B8\uC758 .mcp.json" },
   plugins_file: { en: "plugin install records", ko: "\uD50C\uB7EC\uADF8\uC778 \uC124\uCE58 \uAE30\uB85D" },
+  codex_config: { en: "config.toml", ko: "config.toml" },
+  codex_project_config: { en: "project config.toml", ko: "\uD504\uB85C\uC81D\uD2B8\uC758 config.toml" },
   skill_dirs: { en: "skill folders", ko: "\uC2A4\uD0AC \uD3F4\uB354" },
   instructions: { en: "instruction files", ko: "\uC9C0\uCE68 \uD30C\uC77C" },
   hook_settings: { en: "settings with hooks", ko: "\uD6C5\uC744 \uC801\uC740 \uC124\uC815" },
@@ -2103,16 +2145,21 @@ var UNCOUNTED2 = {
   mcp_unreadable: { en: "MCP definitions could not be read", ko: "MCP \uC815\uC758\uB97C \uC77D\uC9C0 \uBABB\uD568" },
   hooks_unreadable: { en: "hooks could not be read", ko: "\uD6C5\uC744 \uC77D\uC9C0 \uBABB\uD568" }
 };
+var UNCLASSIFIED_GROUPS = ["compaction", "denial", "hook", "thread_source", "item"];
 var UNCLASSIFIED = {
   compaction: { en: "{count} {count:compaction|compactions}", ko: "\uC555\uCD95 {count}\uAC1C" },
   denial: { en: "{count} {count:denial marker|denial markers}", ko: "\uAC70\uC808 \uD45C\uC2DC {count}\uAC1C" },
-  hook: { en: "{count} {count:hook attachment|hook attachments}", ko: "\uD6C5 \uCCA8\uBD80 {count}\uAC1C" }
+  hook: { en: "{count} {count:hook attachment|hook attachments}", ko: "\uD6C5 \uCCA8\uBD80 {count}\uAC1C" },
+  thread_source: { en: "{count} {count:session|sessions} of unknown origin counted as main", ko: "\uC8FC \uC138\uC158\uC73C\uB85C \uC13C \uCD9C\uCC98 \uBAA8\uB97C \uC138\uC158 {count}\uAC1C" },
+  item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "\uC885\uB958\uB97C \uBAA8\uB974\uB294 \uC2E4\uD589 \uD56D\uBAA9 {count}\uAC1C" }
 };
 var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
+    record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
+    record_partial: "{tool}: only the first part of {files} record {files:file|files} could be read. Only what was read is counted, so the unread share is at least what is shown.",
     observation_incomplete: "{tool}: the records of {metric} could not all be read ({reasons}), so unused ones were not judged.",
     setup_unreadable: "{tool}: some setup could not be read ({what}). Only what was read is counted.",
     setupCounted: "{tool}: some setup could not be read ({what}, {count} {count:place|places}). Only what was read is counted.",
@@ -2122,13 +2169,22 @@ var LINES = {
     version_unverified: "{tool}: the records include {count} {count:version|versions} outside the verified range ({from} to {to}). Only the fields that could be read are counted.",
     weak_human_requests: "{tool}: {weak} of {total} {total:request|requests} in the scoring window {weak:has|have} weak evidence of coming from a person.",
     overlapping_responses: "{tool}: {sessions} {sessions:session starts|sessions start} with responses that also appear in another session. The overlap was not removed from the counts.",
+    unverified_inheritance: "{tool}: for {sessions} {sessions:session|sessions}, what was carried over from another record could not be confirmed, so the counts are approximate.",
+    id_fallbacks: "{tool}: the session ID could not be taken from the first line of {count} {count:record|records}, so the file name stood in for it. A session may be split in two, or an earlier part counted again.",
     unclassified: "{tool}: some records could not be classified ({items}).",
-    orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session."
+    orphan_subsessions: "{tool}: {sessions} {sessions:subsession has|subsessions have} no known parent session.",
+    parent_record_missing: "{tool}: the parent session's records were not found for {sessions} {sessions:subsession|subsessions}.",
+    merged_sessions: "{tool}: {sessions} {sessions:session has|sessions have} more than one record file, counted as one session each.",
+    unknown_mtime_sessions: "{tool}: {sessions} {sessions:session has|sessions have} a copy whose modification time could not be read. Copies with a known time were read first.",
+    skipped_copies: "{tool}: {count} other {count:copy|copies} of the same records {count:was|were} not read. One copy of each record is read.",
+    unnamed_files: "{tool}: {count} {count:file|files} in the records folder could not be recognized by name and {count:was|were} not read."
   },
   ko: {
     withheld: "AQ\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. {reasons}",
     state_reset: "\uC0C1\uD0DC \uD30C\uC77C\uC774 \uAE68\uC838 \uC0C8\uB85C \uC2DC\uC791\uD588\uC2B5\uB2C8\uB2E4. \uC124\uCE58\uB97C \uC9C0\uCF1C\uBCF8 \uAE30\uB85D\uC774 \uCC98\uC74C\uBD80\uD130 \uB2E4\uC2DC \uC313\uC785\uB2C8\uB2E4.",
     record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    record_skipped: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC774 Node.js\uAC00 zstd \uC555\uCD95\uC744 \uD480\uC9C0 \uBABB\uD574 \uAC74\uB108\uB6F4 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. Node.js 22\uB294 22.15.0 \uC774\uC0C1, 23\uC740 23.8.0 \uC774\uC0C1, 24\uBD80\uD130\uB294 \uBAA8\uB4E0 \uBC84\uC804\uC5D0\uC11C \uC77D\uD799\uB2C8\uB2E4.",
+    record_partial: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC55E\uBD80\uBD84\uB9CC \uC77D\uC740 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uBD80\uBD84\uB9CC \uACC4\uC0B0\uD574\uC11C \uC77D\uC9C0 \uBABB\uD55C \uBE44\uC728\uC740 \uC801\uC5B4\uB3C4 \uBCF4\uC774\uB294 \uAC12\uC785\uB2C8\uB2E4.",
     observation_incomplete: "{tool}\uC758 {metric} \uAE30\uB85D\uC744 \uBE60\uC9D0\uC5C6\uC774 \uC77D\uC9C0 \uBABB\uD574({reasons}) \uC548 \uC4F0\uB294 \uAC83\uC744 \uD310\uC815\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     setup_unreadable: "{tool}\uC5D0\uC11C \uC77D\uC9C0 \uBABB\uD55C \uC14B\uD305\uC774 \uC788\uC2B5\uB2C8\uB2E4({what}). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
     setupCounted: "{tool}\uC5D0\uC11C \uC77D\uC9C0 \uBABB\uD55C \uC14B\uD305\uC774 \uC788\uC2B5\uB2C8\uB2E4({what} {count}\uACF3). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
@@ -2138,13 +2194,20 @@ var LINES = {
     version_unverified: "{tool} \uAE30\uB85D\uC5D0 \uD655\uC778\uD55C \uBC94\uC704({from}~{to}) \uBC16\uC758 \uBC84\uC804\uC774 {count}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC744 \uC218 \uC788\uB294 \uD544\uB4DC\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
     weak_human_requests: "{tool}\uC758 \uC810\uC218 \uAD6C\uAC04 \uC0AC\uB78C \uC694\uCCAD {total}\uAC1C \uAC00\uC6B4\uB370 {weak}\uAC1C\uB294 \uC0AC\uB78C\uC774 \uBCF4\uB0C8\uB2E4\uB294 \uADFC\uAC70\uAC00 \uC57D\uD569\uB2C8\uB2E4.",
     overlapping_responses: "{tool}\uC5D0\uC11C \uCC98\uC74C \uB098\uC628 \uC751\uB2F5\uC774 \uB2E4\uB978 \uC138\uC158\uACFC \uACB9\uCE58\uB294 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uACB9\uCE5C \uC751\uB2F5\uC744 \uBE7C\uC9C0 \uC54A\uACE0 \uC14C\uC2B5\uB2C8\uB2E4.",
+    unverified_inheritance: "{tool}\uC5D0\uC11C \uB2E4\uB978 \uAE30\uB85D\uC5D0\uC11C \uC774\uC5B4\uBC1B\uC740 \uC55E\uBD80\uBD84\uC744 \uD655\uC778\uD558\uC9C0 \uBABB\uD55C \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uADF8 \uC22B\uC790\uB294 \uAC00\uAE4C\uC6B4 \uAC12\uC785\uB2C8\uB2E4.",
+    id_fallbacks: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uCCAB \uC904\uC5D0\uC11C \uC138\uC158 ID\uB97C \uC5BB\uC9C0 \uBABB\uD574 \uD30C\uC77C \uC774\uB984\uC73C\uB85C \uC138\uC158\uC744 \uAC00\uB978 \uAC83\uC774 {count}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uAC19\uC740 \uC138\uC158\uC774 \uB458\uB85C \uB098\uB258\uAC70\uB098 \uC55E\uBD80\uBD84\uC744 \uB2E4\uC2DC \uC14C\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
     unclassified: "{tool}\uC5D0 \uBD84\uB958\uD558\uC9C0 \uBABB\uD55C \uAE30\uB85D\uC774 \uC788\uC2B5\uB2C8\uB2E4({items}).",
-    orphan_subsessions: "{tool}\uC5D0 \uBD80\uBAA8 \uC138\uC158\uC744 \uBAA8\uB974\uB294 \uD558\uC704 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4."
+    orphan_subsessions: "{tool}\uC5D0 \uBD80\uBAA8 \uC138\uC158\uC744 \uBAA8\uB974\uB294 \uD558\uC704 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4.",
+    parent_record_missing: "{tool}\uC5D0 \uBD80\uBAA8 \uC138\uC158\uC758 \uAE30\uB85D\uC744 \uCC3E\uC9C0 \uBABB\uD55C \uD558\uC704 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4.",
+    merged_sessions: "{tool}\uC5D0\uC11C \uAE30\uB85D \uD30C\uC77C\uC774 \uB458 \uC774\uC0C1\uC778 \uC138\uC158 {sessions}\uAC1C\uB294 \uC138\uC158 \uD558\uB098\uC529\uC73C\uB85C \uD569\uCCD0 \uC14C\uC2B5\uB2C8\uB2E4.",
+    unknown_mtime_sessions: "{tool}\uC5D0\uC11C \uC218\uC815 \uC2DC\uAC01\uC744 \uBCF4\uC9C0 \uBABB\uD55C \uC0AC\uBCF8\uC774 \uC788\uB294 \uC138\uC158\uC774 {sessions}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC218\uC815 \uC2DC\uAC01\uC744 \uC544\uB294 \uC0AC\uBCF8\uC744 \uBA3C\uC800 \uC77D\uC5C8\uC2B5\uB2C8\uB2E4.",
+    skipped_copies: "{tool}\uC5D0\uC11C \uAC19\uC740 \uAE30\uB85D\uC758 \uB2E4\uB978 \uC0AC\uBCF8 {count}\uAC1C\uB294 \uC77D\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uAE30\uB85D\uB9C8\uB2E4 \uC0AC\uBCF8 \uD558\uB098\uB9CC \uC77D\uC2B5\uB2C8\uB2E4.",
+    unnamed_files: "{tool} \uAE30\uB85D \uD3F4\uB354\uC5D0\uC11C \uC774\uB984\uC73C\uB85C \uAE30\uB85D\uC744 \uC54C\uC544\uBCFC \uC218 \uC5C6\uB294 \uD30C\uC77C {count}\uAC1C\uB294 \uC77D\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4."
   }
 };
 var LIST_JOIN = ", ";
 function unclassifiedItems(counts, lang) {
-  const groups = ["compaction", "denial", "hook"].map((group) => ({ group, count: counts.filter((item2) => item2.what.split(":")[0] === group).reduce((sum2, item2) => sum2 + item2.count, 0) }));
+  const groups = UNCLASSIFIED_GROUPS.map((group) => ({ group, count: counts.filter((item2) => item2.what.split(":")[0] === group).reduce((sum2, item2) => sum2 + item2.count, 0) }));
   return groups.filter((item2) => item2.count > 0).map((item2) => fill(UNCLASSIFIED[item2.group][lang], { count: item2.count })).join(LIST_JOIN);
 }
 function noticeText(notice, lang) {
@@ -2157,6 +2220,9 @@ function noticeText(notice, lang) {
       return lines.state_reset;
     case "record_unreadable":
       return fill(lines.record_unreadable, { tool, files: notice.files.length, dirs: notice.dirs.length });
+    case "record_skipped":
+    case "record_partial":
+      return fill(lines[notice.kind], { tool, files: notice.files.length });
     case "observation_incomplete":
       return fill(lines.observation_incomplete, { tool, metric: METRIC[notice.metric][lang], reasons: notice.reasons.map((reason) => OBSERVATION_REASON[reason][lang]).join(LIST_JOIN) });
     case "setup_unreadable": {
@@ -2174,11 +2240,20 @@ function noticeText(notice, lang) {
     case "weak_human_requests":
       return fill(lines.weak_human_requests, { tool, weak: notice.weak, total: notice.total });
     case "overlapping_responses":
-      return fill(lines.overlapping_responses, { tool, sessions: notice.sessions });
+    case "unverified_inheritance":
+    case "parent_record_missing":
+    case "merged_sessions":
+    case "unknown_mtime_sessions":
+      return fill(lines[notice.kind], { tool, sessions: notice.sessions });
+    case "id_fallbacks":
+      return fill(lines.id_fallbacks, { tool, count: notice.counts.reduce((sum2, item2) => sum2 + item2.count, 0) });
     case "unclassified":
       return fill(lines.unclassified, { tool, items: unclassifiedItems(notice.counts, lang) });
     case "orphan_subsessions":
       return fill(lines.orphan_subsessions, { tool, sessions: notice.sessions });
+    case "skipped_copies":
+    case "unnamed_files":
+      return fill(lines[notice.kind], { tool, count: notice.count });
   }
 }
 
@@ -2191,9 +2266,14 @@ function resultCoverage(input, collected) {
     if (found === void 0) throw new Error(`no collected result for ${tool.tool}`);
     const { read } = found;
     const sum2 = (pick) => tool.summaries.reduce((total, summary) => total + pick(summary.missing), 0);
-    const shares = [read.files > 0 ? read.unreadableFiles.length / read.files : null, read.listedBytes > 0 ? read.unreadableFileBytes / read.listedBytes : null].filter((share2) => share2 !== null);
+    const skipped = found.codex?.skippedFiles.length ?? 0;
+    const skippedBytes = found.codex?.skippedFileBytes ?? 0;
+    const partialFiles = found.codex?.partialFiles.length ?? 0;
+    const shares = [read.files > 0 ? (read.unreadableFiles.length + skipped) / read.files : null, read.listedBytes > 0 ? (read.unreadableFileBytes + skippedBytes) / read.listedBytes : null].filter(
+      (share2) => share2 !== null
+    );
     const unreadableShare = shares.length === 0 ? null : Math.max(...shares);
-    const lowerBound = read.unreadableDirs.length > 0 || read.unknownSizeFiles > 0;
+    const lowerBound = read.unreadableDirs.length > 0 || read.unknownSizeFiles > 0 || partialFiles > 0;
     return {
       tool: tool.tool,
       files: read.files,
@@ -2204,8 +2284,8 @@ function resultCoverage(input, collected) {
       unreadableFiles: read.unreadableFiles.length,
       unreadableDirs: read.unreadableDirs.length,
       unknownSizeFiles: read.unknownSizeFiles,
-      partialFiles: 0,
-      skippedFiles: 0,
+      partialFiles,
+      skippedFiles: skipped,
       brokenLines: sum2((missing) => missing.brokenLines),
       tooLongLines: sum2((missing) => missing.tooLongLines),
       tailFragments: sum2((missing) => missing.tailFragments),
@@ -2222,28 +2302,60 @@ var MENTION_HINT_MIN = 3;
 var REPEATED_LINES_HINT_MIN = 3;
 var LARGE_GLOBAL_TOKENS = ruleSpec("E4").fullAt;
 var byText8 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-function deepHints(input) {
-  const hints = [];
-  for (const tool of [...input.tools].sort((a, b) => byText8(a.tool, b.tool))) {
-    if (tool.tool !== "claude-code") continue;
-    const setup = tool.setup;
-    const rootOf = new Map(setup.projects.map((project) => [project.normRoot, project.root]));
-    const mentioned = Object.entries(setup.globalMentions).filter(([, count]) => count >= MENTION_HINT_MIN).map(([normRoot, count]) => ({ root: rootOf.get(normRoot) ?? normRoot, mentions: count })).sort((a, b) => byText8(a.root, b.root));
-    if (mentioned.length > 0) hints.push({ kind: "global_mentions_project", tool: tool.tool, projects: mentioned });
-    const global = new Set(setup.globalInstructions.lineHashes);
-    const seen = /* @__PURE__ */ new Map();
-    for (const project of setup.projects.filter((item2) => item2.exists && !item2.excluded)) {
-      for (const hash of new Set(project.instructions.lineHashes)) {
-        if (global.has(hash)) continue;
-        seen.set(hash, [...seen.get(hash) ?? [], project.root]);
-      }
-    }
-    const repeated = [...seen.values()].filter((roots) => roots.length >= 2);
-    if (repeated.length >= REPEATED_LINES_HINT_MIN) hints.push({ kind: "repeated_project_lines", tool: tool.tool, lines: repeated.length, projects: [...new Set(repeated.flat())].sort(byText8) });
-    const { ascii, other } = setup.globalInstructions.chars;
-    const tokens = ascii / 4 + other;
-    if (tokens > LARGE_GLOBAL_TOKENS) hints.push({ kind: "large_global_instructions", tool: tool.tool, tokens });
+function hintSetup(tool, input) {
+  if (tool.tool === "claude-code") {
+    const { setup: setup2 } = tool;
+    return {
+      globalInstructions: setup2.globalInstructions,
+      globalMentions: setup2.globalMentions,
+      projects: setup2.projects.filter((item2) => item2.exists && !item2.excluded).map((project) => ({ root: project.root, instructions: project.instructions })),
+      rootOf: new Map(setup2.projects.map((project) => [project.normRoot, project.root]))
+    };
   }
+  const rootOf = new Map(input.projects.map((project) => [project.normRoot, project.root]));
+  const { setup } = tool;
+  return {
+    globalInstructions: setup.globalInstructions,
+    globalMentions: setup.globalMentions,
+    projects: setup.projects.filter((project) => project.scanned).map((project) => ({ root: rootOf.get(project.normRoot) ?? project.normRoot, instructions: project.instructions })),
+    rootOf
+  };
+}
+function toolHints(tool, setup) {
+  const hints = [];
+  const mentioned = Object.entries(setup.globalMentions).filter(([, count]) => count >= MENTION_HINT_MIN).map(([normRoot, count]) => ({ root: setup.rootOf.get(normRoot) ?? normRoot, mentions: count })).sort((a, b) => byText8(a.root, b.root));
+  if (mentioned.length > 0) hints.push({ kind: "global_mentions_project", tool, projects: mentioned });
+  const global = new Set(setup.globalInstructions.lineHashes);
+  const seen = /* @__PURE__ */ new Map();
+  for (const project of setup.projects) {
+    for (const hash of new Set(project.instructions.lineHashes)) {
+      if (global.has(hash)) continue;
+      seen.set(hash, [...seen.get(hash) ?? [], project.root]);
+    }
+  }
+  const repeated = [...seen.values()].filter((roots) => roots.length >= 2);
+  if (repeated.length >= REPEATED_LINES_HINT_MIN) hints.push({ kind: "repeated_project_lines", tool, lines: repeated.length, projects: [...new Set(repeated.flat())].sort(byText8) });
+  const { ascii, other } = setup.globalInstructions.chars;
+  const tokens = ascii / 4 + other;
+  if (tokens > LARGE_GLOBAL_TOKENS) hints.push({ kind: "large_global_instructions", tool, tokens });
+  return hints;
+}
+function toolsDiffer(claude, codex) {
+  if (claude.lineHashes.length === 0 || codex.lineHashes.length === 0) return null;
+  const codexReal = new Set(codex.files.map((file) => file.realPath).filter((realPath) => realPath !== null));
+  if (claude.files.some((file) => file.realPath !== null && codexReal.has(file.realPath))) return null;
+  const codexLines = new Set(codex.lineHashes);
+  const shared = claude.lineHashes.filter((hash) => codexLines.has(hash)).length;
+  const fewer = Math.min(claude.lineHashes.length, codex.lineHashes.length);
+  return shared * 2 < fewer ? { kind: "tools_instructions_differ", shared, lines: { "claude-code": claude.lineHashes.length, codex: codex.lineHashes.length } } : null;
+}
+function deepHints(input) {
+  const tools2 = [...input.tools].sort((a, b) => byText8(a.tool, b.tool));
+  const hints = tools2.flatMap((tool) => toolHints(tool.tool, hintSetup(tool, input)));
+  const claude = tools2.find((tool) => tool.tool === "claude-code");
+  const codex = tools2.find((tool) => tool.tool === "codex");
+  const differ = claude === void 0 || codex === void 0 ? null : toolsDiffer(claude.setup.globalInstructions, codex.setup.globalInstructions);
+  if (differ !== null) hints.push(differ);
   return hints;
 }
 
@@ -2254,6 +2366,8 @@ var NOTICE_KINDS = [
   "score_withheld",
   "state_reset",
   "record_unreadable",
+  "record_skipped",
+  "record_partial",
   "observation_incomplete",
   "setup_unreadable",
   "plugins_uncounted",
@@ -2262,8 +2376,15 @@ var NOTICE_KINDS = [
   "version_unverified",
   "weak_human_requests",
   "overlapping_responses",
+  "unverified_inheritance",
+  "id_fallbacks",
   "unclassified",
-  "orphan_subsessions"
+  "orphan_subsessions",
+  "parent_record_missing",
+  "merged_sessions",
+  "unknown_mtime_sessions",
+  "skipped_copies",
+  "unnamed_files"
 ];
 var byText9 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var inRange = (date, range) => date >= range.from && date <= range.to;
@@ -2273,12 +2394,45 @@ function sortNotices(notices2) {
 }
 var unread2 = (status) => status === "unparsable" || status === "unreadable";
 var sortedUnique = (values) => [...new Set(values)].sort(byText9);
+function unscoredProblems(tool, problems) {
+  const unscored = problems.filter((problem) => problem.owner === "plugin" || problem.owner === "managed").map((problem) => ({ kind: problem.kind, path: problem.path }));
+  return unscored.length > 0 ? [{ kind: "setup_problems_unscored", tool, problems: unscored.sort((a, b) => byText9(a.path, b.path) || byText9(a.kind, b.kind)) }] : [];
+}
+function codexSetupNotices(setup, projects) {
+  const notices2 = [];
+  const rootOf = new Map(projects.map((project) => [project.normRoot, project.root]));
+  const unreadable = [
+    ["codex_config", unread2(setup.config), []],
+    ["codex_project_config", false, setup.projects.filter((project) => project.trust === "trusted" && unread2(project.configStatus)).map((project) => rootOf.get(project.normRoot) ?? project.normRoot)],
+    ["skill_dirs", false, setup.unreadableDirs],
+    ["instructions", false, [setup.globalInstructions, ...setup.projects.map((project) => project.instructions)].flatMap((set) => [...set.unreadable, ...set.unreadableDirs])],
+    ["skill_files", false, setup.skills.filter((skill) => !skill.readable).map((skill) => skill.path)]
+  ];
+  for (const [what, whole, targets] of unreadable) {
+    if (whole || targets.length > 0) notices2.push({ kind: "setup_unreadable", tool: "codex", what, targets: sortedUnique(targets) });
+  }
+  const enabledIds = new Set(setup.plugins.filter((plugin) => plugin.enabled).map((plugin) => plugin.id));
+  const uncounted = [
+    // 설정으로 켰는데 놓인 곳이나 매니페스트를 읽지 못했거나 Agent Plugins 형식이라 구성을 모르는 것(설계 「5단계 2부 계획 전 결정」 8번)
+    ["composition_unknown", setup.plugins.filter((plugin) => plugin.configured && !plugin.compositionKnown).map((plugin) => plugin.id)],
+    ["skills_unreadable", setup.unreadableSkillPlaces.plugins.filter((id) => enabledIds.has(id))],
+    ["mcp_unreadable", setup.plugins.filter((plugin) => plugin.enabled && plugin.mcpUnreadable).map((plugin) => plugin.id)]
+  ];
+  for (const [why, plugins] of uncounted) {
+    if (plugins.length > 0) notices2.push({ kind: "plugins_uncounted", tool: "codex", why, plugins: sortedUnique(plugins) });
+  }
+  notices2.push(...unscoredProblems("codex", setup.problems));
+  return notices2;
+}
 function setupNotices(input, evaluation, run2) {
   const notices2 = [];
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run2.stateBroken) notices2.push({ kind: "state_reset" });
   for (const tool of input.tools) {
-    if (tool.tool !== "claude-code") continue;
+    if (tool.tool === "codex") {
+      notices2.push(...codexSetupNotices(tool.setup, input.projects));
+      continue;
+    }
     const id = tool.tool;
     const setup = tool.setup;
     const unreadable = [
@@ -2310,26 +2464,40 @@ function setupNotices(input, evaluation, run2) {
     for (const [why, plugins] of uncounted) {
       if (plugins.length > 0) notices2.push({ kind: "plugins_uncounted", tool: id, why, plugins: sortedUnique(plugins) });
     }
-    const problems = setup.problems.filter((problem) => problem.owner === "plugin" || problem.owner === "managed").map((problem) => ({ kind: problem.kind, path: problem.path }));
-    if (problems.length > 0) notices2.push({ kind: "setup_problems_unscored", tool: id, problems: problems.sort((a, b) => byText9(a.path, b.path) || byText9(a.kind, b.kind)) });
+    notices2.push(...unscoredProblems(id, setup.problems));
   }
   const gone = input.projects.filter((project) => !project.exists).map((project) => project.root);
   if (gone.length > 0) notices2.push({ kind: "projects_gone", projects: sortedUnique(gone) });
   return sortNotices(notices2);
+}
+function codexRecordNotices(tool, codex) {
+  const notices2 = [];
+  if (codex.skippedFiles.length > 0) notices2.push({ kind: "record_skipped", tool, files: [...codex.skippedFiles].sort(byText9) });
+  if (codex.partialFiles.length > 0) notices2.push({ kind: "record_partial", tool, files: [...codex.partialFiles].sort(byText9) });
+  if (codex.unverifiedInheritance > 0) notices2.push({ kind: "unverified_inheritance", tool, sessions: codex.unverifiedInheritance });
+  const fallbacks = Object.entries(codex.idFallbacks).filter(([, count]) => count > 0).sort((a, b) => byText9(a[0], b[0])).map(([why, count]) => ({ why, count }));
+  if (fallbacks.length > 0) notices2.push({ kind: "id_fallbacks", tool, counts: fallbacks });
+  if (codex.parentRecordMissing > 0) notices2.push({ kind: "parent_record_missing", tool, sessions: codex.parentRecordMissing });
+  if (codex.mergedSessions > 0) notices2.push({ kind: "merged_sessions", tool, sessions: codex.mergedSessions });
+  if (codex.unknownMtimeSessions > 0) notices2.push({ kind: "unknown_mtime_sessions", tool, sessions: codex.unknownMtimeSessions });
+  if (codex.skippedCopies > 0) notices2.push({ kind: "skipped_copies", tool, count: codex.skippedCopies });
+  if (codex.unnamedFiles > 0) notices2.push({ kind: "unnamed_files", tool, count: codex.unnamedFiles });
+  return notices2;
 }
 function recordNotices(input, evaluation, collected) {
   const notices2 = [];
   for (const tool of input.tools) {
     const id = tool.tool;
     const found = collected.find((item2) => item2.tool === id);
-    if (found !== void 0 && id === "claude-code") {
+    if (found !== void 0) {
       const { unreadableFiles, unreadableDirs } = found.read;
       if (unreadableFiles.length > 0 || unreadableDirs.length > 0) notices2.push({ kind: "record_unreadable", tool: id, files: [...unreadableFiles].sort(byText9), dirs: [...unreadableDirs].sort(byText9) });
       for (const metric of ["skills", "mcp"]) {
         const observation = found.observation[metric];
-        if (!observation.complete) notices2.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
+        if (!observation.complete && !observation.reasons.includes("not-recorded")) notices2.push({ kind: "observation_incomplete", tool: id, metric, reasons: [...observation.reasons] });
       }
       if (found.overlappingSessions > 0) notices2.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
+      if (found.codex !== void 0) notices2.push(...codexRecordNotices(id, found.codex));
     }
     const verified = VERIFIED_VERSIONS[id];
     const [from, to] = [parseVersion(verified.from), parseVersion(verified.to)];
@@ -2355,6 +2523,8 @@ function recordNotices(input, evaluation, collected) {
       if (count > 0) counts.set(what, (counts.get(what) ?? 0) + count);
     };
     for (const summary of tool.summaries) {
+      if (summary.codex?.unknownThreadSource != null) add(`thread_source:${summary.codex.unknownThreadSource}`, 1);
+      for (const [kind, count] of Object.entries(summary.codex?.unknownItemTypes ?? {})) add(`item:${kind}`, count);
       for (const [kind, count] of Object.entries(summary.notes.unknownHookKinds)) add(`hook:${kind}`, count);
       for (const day of Object.values(summary.days)) {
         for (const [kind, count] of Object.entries(day.unknownDenialKinds)) add(`denial:${kind}`, count);
@@ -2384,8 +2554,15 @@ var RULE_METRICS = {
   F5: []
 };
 var STRENGTH = { unsupported: 0, proxy: 1, measured: 2 };
+var weakestOf = (keys, coverage) => keys.reduce((weakest, key) => STRENGTH[coverage[key]] < STRENGTH[weakest] ? coverage[key] : weakest, "measured");
 function observedOf(rule2, coverage) {
-  return RULE_METRICS[rule2].reduce((weakest, key) => STRENGTH[coverage[key]] < STRENGTH[weakest] ? coverage[key] : weakest, "measured");
+  return weakestOf(RULE_METRICS[rule2], coverage);
+}
+var MERGED_RULE_METRICS = { I2: ["humanRequests"], I3: ["humanRequests", "toolCalls"] };
+function mergedObserved(rule2, tools2) {
+  const metrics = MERGED_RULE_METRICS[rule2] ?? [];
+  if (metrics.length === 0) return [];
+  return tools2.filter((tool) => metrics.every((key) => tool.coverage[key] !== "unsupported")).map((tool) => ({ tool: tool.tool, observed: weakestOf(metrics, tool.coverage) }));
 }
 
 // src/core/result/tools.ts
@@ -2495,9 +2672,11 @@ function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
   const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool) }));
+  const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding) => {
     const source2 = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId, coverageByTool.get(value.tool)) })) };
-    return { ...source2, text: textsOf((lang) => findingText(source2, details, lang)) };
+    return { ...source2, text: textsOf((lang) => findingText(source2, textDetails, lang)) };
   });
   const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
@@ -2533,6 +2712,9 @@ function summaryNotice(notice) {
       return { kind: notice.kind, tool, detail: null, count: null };
     case "record_unreadable":
       return { kind: notice.kind, tool, detail: null, count: notice.files.length + notice.dirs.length };
+    case "record_skipped":
+    case "record_partial":
+      return { kind: notice.kind, tool, detail: null, count: notice.files.length };
     case "observation_incomplete":
       return { kind: notice.kind, tool, detail: notice.metric, count: null };
     case "setup_unreadable":
@@ -2549,9 +2731,17 @@ function summaryNotice(notice) {
       return { kind: notice.kind, tool, detail: null, count: notice.weak };
     case "overlapping_responses":
     case "orphan_subsessions":
+    case "unverified_inheritance":
+    case "parent_record_missing":
+    case "merged_sessions":
+    case "unknown_mtime_sessions":
       return { kind: notice.kind, tool, detail: null, count: notice.sessions };
     case "unclassified":
+    case "id_fallbacks":
       return { kind: notice.kind, tool, detail: null, count: notice.counts.reduce((sum2, item2) => sum2 + item2.count, 0) };
+    case "skipped_copies":
+    case "unnamed_files":
+      return { kind: notice.kind, tool, detail: null, count: notice.count };
   }
 }
 function fixDetail(fix, lang) {
@@ -3608,7 +3798,8 @@ function reportView(result, run2) {
     round: run2.saved ? run2.round : null,
     score: { aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: [...result.score.withheld] },
     withheldText: withheld,
-    unreadable: result.notices.some((notice) => notice.kind === "record_unreadable"),
+    // 건너뛴 압축 파일도 읽지 못한 기록이다(설계 「5단계 계획 전 결정」 2번, 「5단계 4부 계획 전 결정」 2번)
+    unreadable: result.notices.some((notice) => notice.kind === "record_unreadable" || notice.kind === "record_skipped"),
     text: result.text,
     axes: result.axes,
     findings: result.findings.map((finding) => ({
@@ -9964,7 +10155,14 @@ async function scanCodexSetup(input) {
 
 // src/commands/checkup-input.ts
 var CLAUDE_AI_PREFIX = "claude.ai ";
-var CODEX_SKILL_OBSERVATION = { complete: false, reasons: [] };
+var CODEX_SKILL_OBSERVATION = { complete: false, reasons: ["not-recorded"] };
+var INHERITED_METRICS = ["responsesAndTokens", "toolCalls", "toolErrors", "shellExitCodes"];
+function codexCoverage(unverifiedInheritance) {
+  if (unverifiedInheritance === 0) return CODEX_COVERAGE;
+  const coverage = { ...CODEX_COVERAGE };
+  for (const key of INHERITED_METRICS) if (coverage[key] === "measured") coverage[key] = "proxy";
+  return coverage;
+}
 function codexSharedRead(read) {
   return {
     files: read.files,
@@ -10024,7 +10222,7 @@ async function gatherCheckupInput(options) {
       {
         tool: "codex",
         summaries: codex.summaries,
-        coverage: CODEX_COVERAGE,
+        coverage: codexCoverage(codex.unverifiedInheritance),
         shellTools: [...CODEX_SHELL_TOOLS].sort(),
         complete: { skills: codexObserved.skills.complete, mcp: codexObserved.mcp.complete },
         setup: codexFacts
@@ -10040,7 +10238,26 @@ async function gatherCheckupInput(options) {
   const tools2 = [
     { tool: "claude-code", detected: claude.detected, visibleFrom: claude.visibleFrom, overlappingSessions: claude.overlappingSessions, read: claudeRead, observation: claudeObserved },
     // Codex는 다른 기록에서 이어받은 앞부분을 빼고 세므로 다른 세션과 겹쳐 세는 응답이 없다(설계 「5단계 계획 전 결정」 7번)
-    { tool: "codex", detected: codex.detected, visibleFrom: codex.visibleFrom, overlappingSessions: 0, read: codexSharedRead(codex.read), observation: codexObserved }
+    {
+      tool: "codex",
+      detected: codex.detected,
+      visibleFrom: codex.visibleFrom,
+      overlappingSessions: 0,
+      read: codexSharedRead(codex.read),
+      observation: codexObserved,
+      codex: {
+        skippedFiles: codex.read.skippedFiles,
+        skippedFileBytes: codex.read.skippedFileBytes,
+        partialFiles: codex.read.partialFiles,
+        skippedCopies: codex.read.skippedCopies,
+        unnamedFiles: codex.read.unnamedFiles,
+        parentRecordMissing: codex.parentRecordMissing,
+        mergedSessions: codex.mergedSessions,
+        unknownMtimeSessions: codex.unknownMtimeSessions,
+        unverifiedInheritance: codex.unverifiedInheritance,
+        idFallbacks: codex.idFallbacks
+      }
+    }
   ];
   return { input, collected: { claude, codex }, facts: { claude: claudeFacts, codex: codexFacts }, tools: tools2 };
 }

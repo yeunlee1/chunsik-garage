@@ -4246,12 +4246,13 @@ function updateInstalls(previous, currentKeys, today, keepUnseen = () => false) 
 }
 
 // src/scan/identity.ts
+var skillKey = (skill, tool) => installKey(["skill", tool, skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+var mcpKey = (server, tool) => server.definitionHash === null ? null : installKey(["mcp", tool, server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
 function skillInstallKey(skill) {
-  return installKey(["skill", "claude-code", skill.scope, skill.projectRoot ?? "", skill.name, skill.realPath ?? normalizePath(skill.path)]);
+  return skillKey(skill, "claude-code");
 }
 function mcpInstallKey(server) {
-  if (server.definitionHash === null) return null;
-  return installKey(["mcp", "claude-code", server.scope, server.projectRoot ?? "", server.pluginId ?? "", server.name, server.definitionHash]);
+  return mcpKey(server, "claude-code");
 }
 function installKeysOf(facts) {
   const keys = facts.skills.map(skillInstallKey);
@@ -6750,7 +6751,7 @@ function usageOf(times) {
   }
   return { usageLastUsedMs, usageUndated };
 }
-var USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR"];
+var USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR", "$CODEX_HOME"];
 function projectNamesOf(refs) {
   const sorted = [...refs].sort((x, y) => x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0);
   const original = (ref) => basename6(ref.root) || ref.root;

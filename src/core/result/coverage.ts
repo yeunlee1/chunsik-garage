@@ -43,9 +43,15 @@ export function resultCoverage(input: EvaluationInput, collected: readonly Colle
     if (found === undefined) throw new Error(`no collected result for ${tool.tool}`);
     const { read } = found;
     const sum = (pick: (missing: (typeof tool.summaries)[number]["missing"]) => number): number => tool.summaries.reduce((total, summary) => total + pick(summary.missing), 0);
-    const shares = [read.files > 0 ? read.unreadableFiles.length / read.files : null, read.listedBytes > 0 ? read.unreadableFileBytes / read.listedBytes : null].filter((share): share is number => share !== null);
+    // 건너뛴 압축 파일은 읽지 못한 파일과 함께 분자에 넣고(분모에는 이미 있다), 일부만 읽은 파일은 분자에 넣지 않고 아래 경계로 본다(설계 「5단계 계획 전 결정」 2번)
+    const skipped = found.codex?.skippedFiles.length ?? 0;
+    const skippedBytes = found.codex?.skippedFileBytes ?? 0;
+    const partialFiles = found.codex?.partialFiles.length ?? 0;
+    const shares = [read.files > 0 ? (read.unreadableFiles.length + skipped) / read.files : null, read.listedBytes > 0 ? (read.unreadableFileBytes + skippedBytes) / read.listedBytes : null].filter(
+      (share): share is number => share !== null,
+    );
     const unreadableShare = shares.length === 0 ? null : Math.max(...shares);
-    const lowerBound = read.unreadableDirs.length > 0 || read.unknownSizeFiles > 0;
+    const lowerBound = read.unreadableDirs.length > 0 || read.unknownSizeFiles > 0 || partialFiles > 0;
     return {
       tool: tool.tool,
       files: read.files,
@@ -56,8 +62,8 @@ export function resultCoverage(input: EvaluationInput, collected: readonly Colle
       unreadableFiles: read.unreadableFiles.length,
       unreadableDirs: read.unreadableDirs.length,
       unknownSizeFiles: read.unknownSizeFiles,
-      partialFiles: 0,
-      skippedFiles: 0,
+      partialFiles,
+      skippedFiles: skipped,
       brokenLines: sum((missing) => missing.brokenLines),
       tooLongLines: sum((missing) => missing.tooLongLines),
       tailFragments: sum((missing) => missing.tailFragments),

@@ -5,6 +5,7 @@ import { SHELL_TOOLS } from "../adapters/claude/parser.ts";
 import { CODEX_COVERAGE, codexMcpObservation } from "../adapters/codex/observation.ts";
 import { CODEX_SHELL_TOOLS } from "../adapters/codex/parser.ts";
 import { makeWindows } from "../adapters/common/dates.ts";
+import type { ToolCoverage } from "../adapters/types.ts";
 import { collectClaude, unreadableCount, type ClaudeCollectResult, type ClaudeReadStats, type EvalClock } from "../collect/claude.ts";
 import { codexUnreadableCount, collectCodex, type CodexCollectResult, type CodexReadStats } from "../collect/codex.ts";
 import type { EvaluationInput } from "../core/evaluate.ts";
@@ -46,10 +47,21 @@ export interface CheckupInput {
 
 const CLAUDE_AI_PREFIX = "claude.ai ";
 
-/** Codex는 스킬 사용을 기록하지 않아 스킬의 관측은 늘 빠짐없지 않다. 그 까닭의 문장은 4부가 정한다(설계 「5단계 2부 계획 전 결정」 6번, 「5단계 3부 계획 전 결정」 2·13번) */
-const CODEX_SKILL_OBSERVATION: Observation = { complete: false, reasons: [] };
+/** Codex는 스킬 사용을 기록하지 않아 스킬의 관측은 늘 빠짐없지 않다(설계 「5단계 2부 계획 전 결정」 6번, 「5단계 4부 계획 전 결정」 3번) */
+const CODEX_SKILL_OBSERVATION: Observation = { complete: false, reasons: ["not-recorded"] };
 
-/** 결과에 싣는 Codex의 읽은 양. Claude Code와 같은 칸만 싣는다. Codex에만 있는 칸(건너뛴 압축 파일, 일부만 읽은 파일)은 4부가 잇는다(「5단계 3부 계획 전 결정」 13번) */
+/** 이어받은 것을 확인하지 못한 세션이 있으면 대신 보는 것으로 낮추는 Codex의 관측 범위(「5단계 4부 계획 전 결정」 4번) */
+const INHERITED_METRICS = ["responsesAndTokens", "toolCalls", "toolErrors", "shellExitCodes"] as const;
+
+/** 이어받은 것을 확인하지 못한 세션의 숫자는 대신 본 것이다. 그런 세션이 있으면 그 점검의 Codex 관측 범위에서 응답과 토큰, 도구 호출과 그 결과를 낮춘다. 못 봄은 그대로 둔다 */
+function codexCoverage(unverifiedInheritance: number): ToolCoverage {
+  if (unverifiedInheritance === 0) return CODEX_COVERAGE;
+  const coverage: ToolCoverage = { ...CODEX_COVERAGE };
+  for (const key of INHERITED_METRICS) if (coverage[key] === "measured") coverage[key] = "proxy";
+  return coverage;
+}
+
+/** 결과에 싣는 Codex의 읽은 양 가운데 Claude Code와 같은 칸 */
 function codexSharedRead(read: CodexReadStats): Omit<ClaudeReadStats, "fromCache"> {
   return {
     files: read.files,
@@ -115,7 +127,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
       {
         tool: "codex",
         summaries: codex.summaries,
-        coverage: CODEX_COVERAGE,
+        coverage: codexCoverage(codex.unverifiedInheritance),
         shellTools: [...CODEX_SHELL_TOOLS].sort(),
         complete: { skills: codexObserved.skills.complete, mcp: codexObserved.mcp.complete },
         setup: codexFacts,
@@ -131,7 +143,26 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
   const tools: CollectedTool[] = [
     { tool: "claude-code", detected: claude.detected, visibleFrom: claude.visibleFrom, overlappingSessions: claude.overlappingSessions, read: claudeRead, observation: claudeObserved },
     // Codex는 다른 기록에서 이어받은 앞부분을 빼고 세므로 다른 세션과 겹쳐 세는 응답이 없다(설계 「5단계 계획 전 결정」 7번)
-    { tool: "codex", detected: codex.detected, visibleFrom: codex.visibleFrom, overlappingSessions: 0, read: codexSharedRead(codex.read), observation: codexObserved },
+    {
+      tool: "codex",
+      detected: codex.detected,
+      visibleFrom: codex.visibleFrom,
+      overlappingSessions: 0,
+      read: codexSharedRead(codex.read),
+      observation: codexObserved,
+      codex: {
+        skippedFiles: codex.read.skippedFiles,
+        skippedFileBytes: codex.read.skippedFileBytes,
+        partialFiles: codex.read.partialFiles,
+        skippedCopies: codex.read.skippedCopies,
+        unnamedFiles: codex.read.unnamedFiles,
+        parentRecordMissing: codex.parentRecordMissing,
+        mergedSessions: codex.mergedSessions,
+        unknownMtimeSessions: codex.unknownMtimeSessions,
+        unverifiedInheritance: codex.unverifiedInheritance,
+        idFallbacks: codex.idFallbacks,
+      },
+    },
   ];
   return { input, collected: { claude, codex }, facts: { claude: claudeFacts, codex: codexFacts }, tools };
 }

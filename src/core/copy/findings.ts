@@ -1,10 +1,11 @@
 // 평가 결과의 규칙 하나에서 문장(제목, 설명, 처방, 어떻게 쟀나)을 만든다. 분류와 상태에 따라 문구 표에서 고르고 숫자를 끼운다. 이름과 경로는 넣지 않는다(순수 함수, 설계 11.5, 12.2, 13.1, 19.1)
+import type { Coverage, ToolId } from "../../adapters/types.ts";
 import type { Evidence } from "../measure.ts";
 import type { ToolSafeguard } from "../metrics/setup.ts";
 import type { Reason } from "../reasons.ts";
 import type { ResultFinding, ResultToolValue, UnjudgedServer } from "../result/assemble.ts";
 import { ruleSpec, type RuleId, type ValueKind } from "../rules.ts";
-import { OTHER_TOOL_COPY, REASON_COPY, SAFEGUARD_COPY, TOOL_LINE, TOOL_NAMES, UNJUDGED_COPY } from "./common.ts";
+import { OTHER_TOOL_COPY, PROXY_LINE, REASON_COPY, SAFEGUARD_COPY, TOOL_CALL_GRAIN, TOOL_LINE, TOOL_NAMES, UNJUDGED_COPY } from "./common.ts";
 import { fill, formatValue, slots } from "./format.ts";
 import type { Lang, Texts } from "./lang.ts";
 import { EFFICIENCY_COPY } from "./rules-efficiency.ts";
@@ -44,6 +45,8 @@ export type FindingInput = Omit<ResultFinding, "text">;
 export interface FindingDetails {
   safeguards: readonly ToolSafeguard[];
   unjudgedServers: readonly UnjudgedServer[];
+  /** 합침 규칙을 잰 도구와 그 관측 범위(결과 조립이 넘긴다). 없으면 빈 것이다 */
+  mergedTools?: Readonly<Partial<Record<RuleId, readonly { tool: ToolId; observed: Coverage }[]>>>;
 }
 
 /** 잰 값에 단위를 붙인 글. %는 두 언어 모두 붙여 쓰고, 그 밖의 단위는 영어만 띄어 쓴다 */
@@ -103,11 +106,44 @@ function description(finding: FindingInput, copy: RuleCopy, lang: Lang, shown: {
   return [fill(copy.problem, { value: joinValue(shown!.value, shown!.unit, lang) }), ...others].join(" ");
 }
 
+/** 도구마다 안전장치가 인정된 조건. Codex는 확인 훅을 안전장치로 치지 않고, 승인 없음과 전면 해제를 함께 쓰는 곳이 없는 것으로 본다(설계 「5단계 3부 계획 전 결정」 5번) */
+function safeguardCondition(safeguard: ToolSafeguard, copy: (typeof SAFEGUARD_COPY)[Lang]): string {
+  const { guardHook, permissionChecks } = safeguard;
+  if (guardHook === null || permissionChecks === null) return copy.unknown;
+  if (safeguard.tool === "codex") return permissionChecks ? copy.codexGuarded : copy.codexNone;
+  return guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
+}
+
 function safeguardLine(safeguard: ToolSafeguard, lang: Lang): string {
   const copy = SAFEGUARD_COPY[lang];
-  const { guardHook, permissionChecks } = safeguard;
-  const condition = guardHook === null || permissionChecks === null ? copy.unknown : guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
-  return fill(copy.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition });
+  return fill(copy.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition: safeguardCondition(safeguard, copy) });
+}
+
+/** 처방. 도구마다의 처방이 있는 규칙(S2)은 안전장치가 없는 도구(읽지 못해 뺀 도구는 아니다)마다의 문장을 도구의 차례로 잇는다 */
+function prescriptionOf(finding: FindingInput, copy: RuleCopy, details: FindingDetails): string {
+  const byTool = copy.prescriptionByTool;
+  if (finding.ruleId !== "S2" || byTool === undefined) return copy.prescription;
+  const lacking = details.safeguards
+    .filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false)
+    .map((safeguard) => safeguard.tool)
+    .sort();
+  const sentences = lacking.map((tool) => byTool[tool]).filter((sentence): sentence is string => sentence !== undefined);
+  return sentences.length > 0 ? sentences.join(" ") : copy.prescription;
+}
+
+/**
+ * 어떻게 쟀나에 덧붙는 줄. 그 규칙을 대신 본 값으로 잰 도구마다 가까운 값이라는 줄, I3을 두 도구로 쟀으면 도구 호출을 세는 굵기의 줄이다. 도구별 규칙은 잰 도구별 값으로,
+ * 도구별 값이 없는 합침 규칙은 결과 조립이 넘긴 그 규칙을 잰 도구로 본다(설계 9.7, 「5단계 4부 계획 전 결정」 7번)
+ */
+function measurementNotes(finding: FindingInput, details: FindingDetails, lang: Lang): string[] {
+  if (finding.status !== "scored") return [];
+  const used =
+    ruleSpec(finding.ruleId).unit === "merged"
+      ? (details.mergedTools?.[finding.ruleId] ?? [])
+      : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
+  const lines = used.filter((item) => item.observed === "proxy").map((item) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item.tool][lang] }));
+  if (finding.ruleId === "I3" && new Set(used.map((item) => item.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+  return lines;
 }
 
 const WHY_ORDER: readonly UnjudgedServer["why"][] = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
@@ -134,6 +170,7 @@ export function findingText(finding: FindingInput, details: FindingDetails, lang
   if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy.evidence, finding.evidence));
   for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
+  method.push(...measurementNotes(finding, details, lang));
   return {
     name: copy.name,
     title: finding.category === "strength" ? copy.good : finding.category === "repair" ? copy.fix : copy.name,
@@ -141,7 +178,7 @@ export function findingText(finding: FindingInput, details: FindingDetails, lang
     unit: shown?.unit ?? null,
     reason: finding.status === "unmeasured" ? reasonOf(copy, finding.reason!, lang).word : null,
     description: description(finding, copy, lang, shown),
-    prescription: finding.category === "average" || finding.category === "repair" ? copy.prescription : null,
+    prescription: finding.category === "average" || finding.category === "repair" ? prescriptionOf(finding, copy, details) : null,
     method,
     notes: finding.ruleId === "E6" ? unjudgedNotes(details.unjudgedServers, lang) : [],
   };

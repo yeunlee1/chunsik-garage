@@ -11,11 +11,38 @@ describe("정밀 점검 단서", () => {
     expect([MENTION_HINT_MIN, REPEATED_LINES_HINT_MIN, LARGE_GLOBAL_TOKENS]).toEqual([3, 3, 4000]);
   });
 
-  it("Codex의 단서는 아직 내지 않는다. 4부가 넣는다(설계 「5단계 3부 계획 전 결정」 13번)", () => {
+  it("Codex의 단서 셋을 Codex의 셋팅 사실로 낸다. 프로젝트의 경로는 입력 묶음의 프로젝트 목록에서 얻고, 스캐너가 읽지 않은 프로젝트의 지침은 보지 않는다(설계 「5단계 4부 계획 전 결정」 8번)", () => {
     const big = instructions({ chars: { ascii: 0, other: LARGE_GLOBAL_TOKENS + 1 }, lineHashes: ["a", "b", "c"] });
-    const lines = instructions({ lineHashes: ["x", "y", "z"] });
-    const codex = codexTool({ setup: { globalInstructions: big, globalMentions: { "/work/a": MENTION_HINT_MIN }, projects: [codexProject("/work/a", { instructions: lines }), codexProject("/work/b", { instructions: lines })] } });
-    expect(deepHints(evaluationInput([codex]))).toEqual([]);
+    const lines = instructions({ lineHashes: ["x", "y", "z", "a"] });
+    const codex = codexTool({
+      setup: {
+        globalInstructions: big,
+        globalMentions: { "/work/a": MENTION_HINT_MIN, "/work/b": MENTION_HINT_MIN - 1 },
+        projects: [codexProject("/work/a", { instructions: lines }), codexProject("/work/b", { instructions: lines }), codexProject("/work/c", { scanned: false, instructions: lines })],
+      },
+    });
+    const input = evaluationInput([codex], { projects: [project("C:/Work/A", { normRoot: "/work/a" }), project("C:/Work/B", { normRoot: "/work/b" })] });
+    expect(deepHints(input)).toEqual([
+      { kind: "global_mentions_project", tool: "codex", projects: [{ root: "C:/Work/A", mentions: MENTION_HINT_MIN }] },
+      { kind: "repeated_project_lines", tool: "codex", lines: 3, projects: ["C:/Work/A", "C:/Work/B"] },
+      { kind: "large_global_instructions", tool: "codex", tokens: LARGE_GLOBAL_TOKENS + 1 },
+    ]);
+  });
+
+  it("두 도구의 전역 지침이 같은 원본이 아니고 겹치는 줄이 줄이 적은 쪽의 절반에 못 미치면 두 도구 단서를 낸다(설계 17, 「5단계 4부 계획 전 결정」 8번)", () => {
+    const file = (realPath: string) => ({ path: realPath, realPath, bytes: 10, hasContent: true, sameAsGlobal: false });
+    const both = (claude: Partial<Parameters<typeof instructions>[0]>, codex: Partial<Parameters<typeof instructions>[0]>) =>
+      deepHints(evaluationInput([claudeTool({ setup: { globalInstructions: instructions(claude) } }), codexTool({ setup: { globalInstructions: instructions(codex) } })])).filter((hint) => hint.kind === "tools_instructions_differ");
+    // 넷 가운데 하나만 겹친다(절반에 못 미친다)
+    expect(both({ files: [file("/h/.claude/CLAUDE.md")], lineHashes: ["a", "b", "c", "d"] }, { files: [file("/h/.codex/AGENTS.md")], lineHashes: ["a", "x", "y", "z", "w"] })).toEqual([
+      { kind: "tools_instructions_differ", shared: 1, lines: { "claude-code": 4, codex: 5 } },
+    ]);
+    // 정확히 절반은 못 미친 것이 아니다
+    expect(both({ files: [file("/h/.claude/CLAUDE.md")], lineHashes: ["a", "b", "c", "d"] }, { files: [file("/h/.codex/AGENTS.md")], lineHashes: ["a", "b", "x", "y"] })).toEqual([]);
+    // 실제 경로가 같은 파일을 나누면 같은 원본이다
+    expect(both({ files: [file("/h/.claude/CLAUDE.md")], lineHashes: ["a", "b"] }, { files: [{ ...file("/h/.claude/CLAUDE.md"), path: "/h/.codex/AGENTS.md" }], lineHashes: ["x", "y"] })).toEqual([]);
+    // 한 도구라도 줄 지문이 없으면 내지 않는다
+    expect(both({ files: [file("/h/.claude/CLAUDE.md")], lineHashes: ["a"] }, { files: [], lineHashes: [] })).toEqual([]);
   });
   it("셋팅에 단서가 없으면 빈 목록이다", () => {
     expect(hintsOf({ setup: { projects: [project("/work/a")] } })).toEqual([]);

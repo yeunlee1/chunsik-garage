@@ -5,7 +5,7 @@ import { checkupResult, type CheckupResult } from "../../src/core/result/assembl
 import type { CollectedTool } from "../../src/core/result/tools.ts";
 import { reportView } from "../../src/report/view.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -66,6 +66,20 @@ describe("결과 화면 자료", () => {
     // 읽지 못한 폴더가 있으면 비율이 작아도 아래 경계로 띄우고, 목록에 파일이 없으면 비율을 내지 않는다
     expect(bands({ unreadableDirs: ["C:/SECRET-PARENT/logs"] })).toEqual([{ tool: "claude-code", share: 0, lowerBound: true }]);
     expect(bands({ files: 0, listedBytes: 0, bytes: 0, unreadableDirs: ["C:/SECRET-PARENT/logs"] })).toEqual([{ tool: "claude-code", share: null, lowerBound: true }]);
+  });
+
+  it("Codex의 건너뛴 압축 파일도 읽지 못한 기록처럼 그림을 고르고 「일부만 읽었다」 띠에 든다(설계 「5단계 4부 계획 전 결정」 2·3번)", () => {
+    const input = evaluationInput([claudeTool({ sessions: enough }), codexTool({ sessions: enough })]);
+    const codex = collected({
+      tool: "codex",
+      observation: { skills: { complete: false, reasons: ["not-recorded"] }, mcp: { complete: true, reasons: [] } },
+      codex: { skippedFiles: ["C:/SECRET-PARENT/a.jsonl.zst"], skippedFileBytes: 100, partialFiles: [], skippedCopies: 0, unnamedFiles: 0, parentRecordMissing: 0, mergedSessions: 0, unknownMtimeSessions: 0, unverifiedInheritance: 0, idFallbacks: {} },
+    });
+    const checked = checkupResult({ input, evaluation: evaluate(input), collected: [collected(), codex], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    const view = reportView(checked, { saved: true, round: 1 });
+    expect(view.unreadable).toBe(true);
+    expect(view.partialReads).toEqual([{ tool: "codex", share: 1 / 3, lowerBound: false }]);
+    expect(JSON.stringify(view)).not.toContain("SECRET-PARENT");
   });
 
   it("판정을 시작할 수 있는 날까지 남은 날 수를 평가 시계의 오늘에서 센다. 날을 모르면 null이다", () => {

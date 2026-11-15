@@ -1,4 +1,5 @@
 // 규칙 문구 표의 모양. 규칙마다 영어와 한국어의 글을 나란히 둔다. 문장은 프로그램이 이 표에서 골라 숫자를 끼워 만들고 AI가 고쳐 쓰지 않는다(설계 11.5, 12.2)
+import type { ToolId } from "../../adapters/types.ts";
 import type { Reason } from "../reasons.ts";
 
 /** 못 잰 이유의 낱말과 설명. 낱말은 점수 자리에 "잴 수 없음"과 함께 보이고, 설명은 잴 수 없음 목록에 보인다 */
@@ -24,6 +25,8 @@ export interface RuleCopy {
   problem: string;
   /** 처방. 직접 고치는 방법이다. 정비할 것과 보통에 보인다 */
   prescription: string;
+  /** 도구마다의 처방(S2). 있으면 그 규칙에 걸린 도구마다의 문장을 도구의 차례로 이어 처방으로 쓴다(설계 「5단계 4부 계획 전 결정」 6번) */
+  prescriptionByTool?: Partial<Record<ToolId, string>>;
   /** 어떻게 쟀나의 첫 줄. 무엇을 무엇으로 나눴는지 적는다 */
   method: string;
   /** 어떻게 쟀나의 근거 숫자 줄. 자리는 그 규칙의 근거 숫자 이름이고 모두 쓴다 */

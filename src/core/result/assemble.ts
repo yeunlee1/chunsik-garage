@@ -15,7 +15,7 @@ import type { AxisScore, Finding, Overall, ToolRuleId, ToolValue } from "../scor
 import { resultCoverage, type ResultCoverage } from "./coverage.ts";
 import { deepHints, type DeepHint } from "./hints.ts";
 import { recordNotices, setupNotices, sortNotices, type Notice } from "./notices.ts";
-import { observedOf } from "./observed.ts";
+import { mergedObserved, observedOf } from "./observed.ts";
 import { resultTools, type CollectedTool, type ResultTool } from "./tools.ts";
 import { resultUsage, type ResultUsage } from "./usage.ts";
 
@@ -112,9 +112,12 @@ export function checkupResult(source: ResultInput): CheckupResult {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
   const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  // 합침 규칙에는 도구별 값이 없어, 그 규칙을 잰 도구와 관측 범위를 문장을 지을 때만 넘긴다. 결과의 details에는 싣지 않는다(설계 「5단계 4부 계획 전 결정」 7번)
+  const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool)! }));
+  const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding): ResultFinding => {
     const source = { ...finding, tools: finding.tools.map((value) => ({ ...value, observed: observedOf(finding.ruleId as ToolRuleId, coverageByTool.get(value.tool)!) })) };
-    return { ...source, text: textsOf((lang) => findingText(source, details, lang)) };
+    return { ...source, text: textsOf((lang) => findingText(source, textDetails, lang)) };
   });
   const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);

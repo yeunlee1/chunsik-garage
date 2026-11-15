@@ -44,7 +44,18 @@ async function codexSession(cwd: string): Promise<void> {
   await writeFile(path, lines.join("\n") + "\n");
   await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
 }
-const options = (overrides: Partial<CheckupInputOptions> = {}): CheckupInputOptions => ({
+/** 부모 기록이 없는 Codex 하위 세션 하나 */
+async function codexSubSession(cwd: string, parent: string): Promise<void> {
+  const dir = join(home, ".codex", "sessions", "2026", "11", "11");
+  await mkdir(dir, { recursive: true });
+  const id = "019a0000-0000-7000-8000-000000000002";
+  const path = join(dir, "rollout-2026-11-11T13-00-00-" + id + ".jsonl");
+  const usage = { input_tokens: 10, cached_input_tokens: 0, cache_write_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0, total_tokens: 11 };
+  const lines = [codexLine("session_meta", { id, cwd, cli_version: "0.166.0", thread_source: "subagent", parent_thread_id: parent }), codexLine("token_usage_record", { response_id: "r2", usage, thread_token_usage: usage })];
+  await writeFile(path, lines.join("\n") + "\n");
+  await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
+}
+const options =(overrides: Partial<CheckupInputOptions> = {}): CheckupInputOptions => ({
   env: {},
   homedir: home,
   tmpdir: join(root, "os-tmp"),
@@ -142,9 +153,34 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
   it("결과에 싣는 Codex의 수집 결과는 Claude Code와 같은 칸이다. 겹쳐 세는 응답은 없다", async () => {
     const { tools } = await gatherCheckupInput(options());
     expect(tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex"]);
-    expect(tools[1]).toMatchObject({ detected: true, overlappingSessions: 0, observation: { skills: { complete: false, reasons: [] }, mcp: { complete: true, reasons: [] } } });
+    expect(tools[1]).toMatchObject({ detected: true, overlappingSessions: 0, observation: { skills: { complete: false, reasons: ["not-recorded"] }, mcp: { complete: true, reasons: [] } } });
     expect(Object.keys(tools[1]!.read).sort()).toEqual(Object.keys(tools[0]!.read).sort());
     expect(tools[1]!.read).toMatchObject({ files: 1, unreadableFiles: [] });
+  });
+
+  it("Codex만 내는 수집 결과(건너뛴 압축 파일, 일부만 읽은 파일, 기록을 묶으며 센 것)를 따로 싣는다. Claude Code에는 없다(설계 「5단계 4부 계획 전 결정」 2·3번)", async () => {
+    const { tools, collected } = await gatherCheckupInput(options());
+    expect(tools[0]!.codex).toBeUndefined();
+    expect(tools[1]!.codex).toEqual({
+      skippedFiles: collected.codex.read.skippedFiles,
+      skippedFileBytes: collected.codex.read.skippedFileBytes,
+      partialFiles: collected.codex.read.partialFiles,
+      skippedCopies: 0,
+      unnamedFiles: 0,
+      parentRecordMissing: 0,
+      mergedSessions: 0,
+      unknownMtimeSessions: 0,
+      unverifiedInheritance: 0,
+      idFallbacks: {},
+    });
+  });
+
+  it("이어받은 것을 확인하지 못한 세션이 있으면 그 점검의 Codex 응답과 토큰, 도구 오류, 셸 명령의 종료 코드를 대신 봄으로 낮춘다(설계 「5단계 4부 계획 전 결정」 4번)", async () => {
+    expect((await gatherCheckupInput(options())).input.tools[1]!.coverage).toEqual(CODEX_COVERAGE);
+    await codexSubSession(other, "019a0000-0000-7000-8000-0000000000ff");
+    const { input, tools } = await gatherCheckupInput(options());
+    expect(tools[1]!.codex).toMatchObject({ parentRecordMissing: 1, unverifiedInheritance: 1 });
+    expect(input.tools[1]!.coverage).toEqual({ ...CODEX_COVERAGE, responsesAndTokens: "proxy", toolCalls: "proxy", toolErrors: "proxy", shellExitCodes: "proxy" });
   });
 
   it("프로젝트 목록은 두 도구의 주 세션의 작업 폴더로 만들고, 두 스캐너에 같은 목록을 준다", async () => {

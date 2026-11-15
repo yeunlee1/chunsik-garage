@@ -22,7 +22,8 @@ type SwapAttr = Exclude<(typeof SWAP_TARGETS)[number], "text" | "value">;
 
 /** 날짜별 응답 수의 진하기(적음에서 많음). 색각 이상 검증을 통과한 자료 색이다(설계 13.2) */
 const RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"] as const;
-// Codex 색은 결과 화면에 Codex를 넣는 5단계 3부에서 색 검증과 함께 확정한다(파랑과 색각 이상에서도 구분되는 주황을 임시로 둔다)
+// 도구 색. Codex의 주황은 종이 바탕(#fcfcfb)과의 대비가 3.82:1로 비문자 대비 3:1을 넘고, Claude Code의 파랑과는 색각 이상에서도 갈리는 짝이다.
+// 두 색의 밝기가 비슷해 흑백으로는 갈리지 않으므로 도구별 띠에는 도구 이름과 값을 글로 함께 둔다(설계 「5단계 4부 계획 전 결정」 9번)
 const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a" };
 const REPO = "chunsik-garage";
 

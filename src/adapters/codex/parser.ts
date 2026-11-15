@@ -1,10 +1,11 @@
-// Codex 세션 파일 하나를 줄마다 해석해 세션 요약을 만든다. 세션의 정체는 첫 줄 session_meta에서, 토큰은 옛 구간(token_count의 누적값 차분)과 새 구간(token_usage_record의 response_id)으로 가르고, 도구는 실행 층에서 이름별로 세되 턴마다 호출 층이 더 많으면 그 차이를 이름 모름으로 더한다. 사람 요청, 모델과 추론 강도, 압축, 끊은 턴, MCP 호출, 지침 크기도 센다(설계 9.2, 9.6, 9.7, 「5단계 계획 전 결정」 1·7번)
+// Codex 세션 파일 하나를 줄마다 해석해 세션 요약을 만든다. 세션의 정체는 첫 줄 session_meta에서, 토큰은 옛 구간(token_count의 누적값 차분)과 새 구간(token_usage_record의 response_id)으로 가르고, 도구는 실행 층에서 이름별로 세되 턴마다 호출 층이 더 많으면 그 차이를 이름 모름으로 더한다. 사람 요청, 모델과 추론 강도, 압축, 끊은 턴, MCP 호출, 지침 크기, 깨진 줄과 끝 조각의 맨 바깥 종류도 센다(설계 9.2, 9.6, 9.7, 9.8, 「5단계 계획 전 결정」 1·7번)
 import { UNKNOWN_TOOL } from "../claude/parser.ts";
-import { nameRecord } from "../common/canonical.ts";
+import { nameRecord, sortedRecord } from "../common/canonical.ts";
 import { fnv1a64 } from "../common/hash.ts";
 import { localDateOfIso, type LocalDate } from "../common/dates.ts";
 import { maxVersion } from "../common/version.ts";
 import type { CodexIdFallback } from "../types.ts";
+import { outerTypeOf } from "../common/outer-type.ts";
 import { canonicalDay, emptyDay, emptyToolCounts, type DayCell, type SessionKind, type SessionSummary, type TokenCounts, type ToolCounts } from "../types.ts";
 
 /** 실행 층(item_completed)의 도구 종류와 그 공통 이름. 상태를 보는 종류는 결과와 오류를 낸다(설계 9.6) */
@@ -104,6 +105,8 @@ export class CodexSessionParser {
   private tailFragments = 0;
   private tooLongLines = 0;
   private undatedLines = 0;
+  /** 깨진 줄과 끝 조각의 맨 바깥 종류(온전히 읽히지 않으면 ?)별 수. MCP 호출의 관측이 빠짐없는지 가른다(설계 9.8) */
+  private readonly unconfirmedTypes = nameRecord<number>();
   /** 새 구간에 들어섰는지(token_usage_record를 한 번이라도 봤는지) */
   private inNew = false;
   /** 옛 구간에서 마지막으로 본 누적값. 새 구간의 첫 기록과 견준다 */
@@ -182,8 +185,16 @@ export class CodexSessionParser {
     this.lines++;
     const parsed = parseObject(text);
     this.firstLine(parsed);
-    if (parsed === null) this.brokenLines++;
+    if (parsed === null) this.missing(text, "broken");
     else this.accept(parsed);
+  }
+
+  /** 풀리지 않는 줄이나 끝 조각 하나. 맨 바깥 종류를 센다(1단계와 같다) */
+  private missing(text: string, kind: "broken" | "tail"): void {
+    if (kind === "broken") this.brokenLines++;
+    else this.tailFragments++;
+    const type = outerTypeOf(text) ?? "?";
+    this.unconfirmedTypes[type] = (Object.hasOwn(this.unconfirmedTypes, type) ? this.unconfirmedTypes[type]! : 0) + 1;
   }
 
   /** 빈 줄이 아닌 첫 물리적 줄 하나만 본다. 풀리지 않거나 너무 길면 첫 줄을 읽지 못한 것이고, 풀렸는데 session_meta가 아니면 정체를 모르는 것이다. 그 뒤의 session_meta로 정체를 정하지 않는다(「5단계 계획 전 결정」 7번) */
@@ -418,8 +429,7 @@ export class CodexSessionParser {
       const parsed = parseObject(tail);
       this.firstLine(parsed);
       if (parsed !== null) this.accept(parsed);
-      else if (inProgress) this.tailFragments++;
-      else this.brokenLines++;
+      else this.missing(tail, inProgress ? "tail" : "broken");
     }
     this.closeGroup();
     this.closeContext();
@@ -438,7 +448,7 @@ export class CodexSessionParser {
       instructionChars: this.instructionChars,
       initialSkills: null,
       initialMcpServers: null,
-      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: nameRecord<number>() },
+      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord<number>() },
       codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: this.unknownItemTypes, inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine },

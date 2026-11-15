@@ -1,4 +1,4 @@
-// Claude Code가 지표마다 무엇을 기록하는지(설계 9.7)와, 스킬 사용·MCP 호출의 관측이 빠짐없는지(설계 9.8), 절반 넘게 깨진 파일인지(설계 20.1)를 가른다(순수 함수)
+// Claude Code가 지표마다 무엇을 기록하는지(설계 9.7)와, 스킬 사용·MCP 호출의 관측이 빠짐없는지(설계 9.8), 절반 넘게 깨진 파일인지(설계 20.1)를 가른다. 관측의 까닭과 기록에서 까닭을 찾는 observeRecords는 Codex도 쓴다(순수 함수)
 import type { SessionSummary, ToolCoverage } from "../types.ts";
 
 /** 설계 9.7의 Claude Code 열. Claude Code는 모든 지표를 기록한다. */
@@ -49,8 +49,8 @@ export function mostlyBroken(summary: SessionSummary): boolean {
   return summary.missing.brokenLines * 2 > summary.missing.lines;
 }
 
-export function claudeObservation(summaries: readonly SessionSummary[], unreadableCount: number, metric: "skill" | "mcp"): Observation {
-  const harmless = metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES;
+/** 기록에서 관측을 막는 것을 찾는다. 읽지 못한 것, 너무 긴 줄, 사용 신호가 될 수 없는 종류(harmless)로 확인되지 않은 깨진 줄과 끝 조각이다(설계 9.8) */
+export function observeRecords(summaries: readonly SessionSummary[], unreadableCount: number, harmless: ReadonlySet<string>): Observation {
   const found = new Set<ObservationReason>();
   if (unreadableCount > 0) found.add("unreadable-files");
   for (const summary of summaries) {
@@ -61,4 +61,8 @@ export function claudeObservation(summaries: readonly SessionSummary[], unreadab
   }
   const reasons = REASON_ORDER.filter((reason) => found.has(reason));
   return { complete: reasons.length === 0, reasons };
+}
+
+export function claudeObservation(summaries: readonly SessionSummary[], unreadableCount: number, metric: "skill" | "mcp"): Observation {
+  return observeRecords(summaries, unreadableCount, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES);
 }

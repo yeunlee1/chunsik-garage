@@ -1062,7 +1062,8 @@ function evaluate(input) {
 
 // src/core/copy/common.ts
 var TOOL_NAMES = {
-  "claude-code": { en: "Claude Code", ko: "Claude Code" }
+  "claude-code": { en: "Claude Code", ko: "Claude Code" },
+  codex: { en: "Codex", ko: "Codex" }
 };
 var AXIS_NAMES = {
   setup: { en: "Setup", ko: "\uC14B\uD305" },
@@ -2221,7 +2222,7 @@ function deepHints(input) {
 }
 
 // src/core/result/notices.ts
-var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" } };
+var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
 var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
@@ -2361,7 +2362,7 @@ function observedOf(rule2, coverage) {
 }
 
 // src/core/result/tools.ts
-var FORMATS = { "claude-code": ["claude-code-jsonl"] };
+var FORMATS = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"] };
 var inRange2 = (date, range) => date >= range.from && date <= range.to;
 function resultTools(input, evaluation, collected) {
   return evaluation.tools.map((tool) => {
@@ -3312,7 +3313,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 
 // src/report/html.ts
 var RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"];
-var TOOL_COLORS = { "claude-code": "#2a78d6" };
+var TOOL_COLORS = { "claude-code": "#2a78d6", codex: "#c8660a" };
 var REPO = "chunsik-garage";
 function esc(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -3690,6 +3691,30 @@ async function listClaudeFiles(home, minMtimeMs) {
   return { projectsFound: true, files, olderThanWindow, unreadableDirs, unreadableFiles };
 }
 
+// src/adapters/codex/fingerprints.ts
+var KINDS = ["itemIds", "callIds", "totals", "responseIds"];
+var PRINT = /^[0-9a-f]{16}$/;
+var DIGEST = /^[0-9a-f]{64}$/;
+var isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+function toLists(prints) {
+  return { itemIds: [...prints.itemIds].sort(), callIds: [...prints.callIds].sort(), totals: [...prints.totals].sort(), responseIds: [...prints.responseIds].sort() };
+}
+function fromLists(value) {
+  if (!isObject(value)) return null;
+  const out = {};
+  for (const kind of KINDS) {
+    const list = value[kind];
+    if (!Array.isArray(list) || !list.every((print) => typeof print === "string" && PRINT.test(print))) return null;
+    out[kind] = new Set(list);
+  }
+  return { itemIds: out.itemIds, callIds: out.callIds, totals: out.totals, responseIds: out.responseIds };
+}
+function reviveCodexExtra(value) {
+  if (!isObject(value) || typeof value.sharedDigest !== "string" || !DIGEST.test(value.sharedDigest)) return null;
+  const prints = fromLists(value.fingerprints);
+  return prints === null ? null : { fingerprints: toLists(prints), sharedDigest: value.sharedDigest };
+}
+
 // src/adapters/common/canonical.ts
 function nameRecord() {
   return /* @__PURE__ */ Object.create(null);
@@ -3782,11 +3807,11 @@ var DAY_SHAPE = {
   reloadedMcpServers: "names"
 };
 var DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
-var isObject = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-var isNumber = (v) => typeof v === "number" && Number.isFinite(v);
+var isObject2 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var isNumber = (v) => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 var isNullableString = (v) => v === null || typeof v === "string";
 function fixed(v, fields) {
-  if (!isObject(v)) return null;
+  if (!isObject2(v)) return null;
   const out = {};
   for (const field of fields) {
     const x = v[field];
@@ -3796,7 +3821,7 @@ function fixed(v, fields) {
   return out;
 }
 function named(v, each) {
-  if (!isObject(v)) return null;
+  if (!isObject2(v)) return null;
   const out = nameRecord();
   for (const key of Object.keys(v).sort()) {
     const x = each(v[key]);
@@ -3829,7 +3854,7 @@ function reviveValue(v, shape) {
   }
 }
 function reviveDay(v) {
-  if (!isObject(v)) return null;
+  if (!isObject2(v)) return null;
   const out = {};
   for (const key of Object.keys(emptyDay())) {
     const value = reviveValue(v[key], DAY_SHAPE[key]);
@@ -3838,13 +3863,29 @@ function reviveDay(v) {
   }
   return out;
 }
+var ID_FALLBACKS = /* @__PURE__ */ new Set(["first-line-unreadable", "first-line-not-meta", "meta-without-id", "no-lines"]);
+function reviveCodex(v) {
+  if (!isObject2(v) || typeof v.recordId !== "string" || !isNullableString(v.unknownThreadSource) || typeof v.baselineMissing !== "boolean") return null;
+  if (v.idFallback !== null && !ID_FALLBACKS.has(v.idFallback)) return null;
+  const unknownItemTypes = named(v.unknownItemTypes, (x) => isNumber(x) ? x : null);
+  const skipped = fixed(v.inheritedSkipped, ["items", "totals", "responses"]);
+  if (unknownItemTypes === null || skipped === null) return null;
+  return {
+    recordId: v.recordId,
+    unknownThreadSource: v.unknownThreadSource,
+    idFallback: v.idFallback,
+    unknownItemTypes,
+    inheritedSkipped: { items: skipped.items, totals: skipped.totals, responses: skipped.responses },
+    baselineMissing: v.baselineMissing
+  };
+}
 function reviveSummary(value) {
-  if (!isObject(value)) return null;
+  if (!isObject2(value)) return null;
   const v = value;
-  if (v.tool !== "claude-code" || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
+  if (v.tool !== "claude-code" && v.tool !== "codex" || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
   if (!isNullableString(v.parentSessionId) || !isNullableString(v.cwd) || !isNullableString(v.version)) return null;
   if (!isNullableString(v.firstDate) || v.firstDate !== null && !DATE_KEY.test(v.firstDate)) return null;
-  if (!isObject(v.days)) return null;
+  if (!isObject2(v.days)) return null;
   const days = {};
   for (const date of Object.keys(v.days).sort()) {
     const day = DATE_KEY.test(date) ? reviveDay(v.days[date]) : null;
@@ -3854,14 +3895,16 @@ function reviveSummary(value) {
   const instructionChars = v.instructionChars === null ? null : fixed(v.instructionChars, ["ascii", "other"]);
   if (v.instructionChars !== null && instructionChars === null) return null;
   const missing = fixed(v.missing, ["lines", "brokenLines", "tailFragments", "tooLongLines"]);
-  const unconfirmedTypes = isObject(v.missing) ? named(v.missing.unconfirmedTypes, (x) => isNumber(x) ? x : null) : null;
+  const unconfirmedTypes = isObject2(v.missing) ? named(v.missing.unconfirmedTypes, (x) => isNumber(x) ? x : null) : null;
   const notes = fixed(v.notes, ["syntheticResponses", "responsesWithoutId", "undatedLines"]);
-  const unknownHookKinds = isObject(v.notes) ? named(v.notes.unknownHookKinds, (x) => isNumber(x) ? x : null) : null;
+  const unknownHookKinds = isObject2(v.notes) ? named(v.notes.unknownHookKinds, (x) => isNumber(x) ? x : null) : null;
   const hashes = names(v.firstResponseIdHashes);
   const initialSkills = v.initialSkills === null ? null : names(v.initialSkills);
   const initialMcpServers = v.initialMcpServers === null ? null : names(v.initialMcpServers);
   if (missing === null || unconfirmedTypes === null || notes === null || unknownHookKinds === null || hashes === null) return null;
   if (v.initialSkills !== null && initialSkills === null || v.initialMcpServers !== null && initialMcpServers === null) return null;
+  const codex = v.tool === "codex" ? reviveCodex(v.codex) : void 0;
+  if (codex === null || v.tool !== "codex" && v.codex !== void 0) return null;
   return {
     tool: v.tool,
     sessionId: v.sessionId,
@@ -3887,7 +3930,8 @@ function reviveSummary(value) {
       responsesWithoutId: notes.responsesWithoutId,
       undatedLines: notes.undatedLines,
       unknownHookKinds
-    }
+    },
+    ...codex === void 0 ? {} : { codex }
   };
 }
 
@@ -4016,10 +4060,17 @@ async function cacheKeyFor(file, parser, timeZone) {
     const length = Math.min(EDGE_BYTES, file.size);
     const head = Buffer.alloc(length);
     const tail = Buffer.alloc(length);
-    if (length > 0) {
-      await handle.read(head, 0, length, 0);
-      await handle.read(tail, 0, length, file.size - length);
-    }
+    const fill2 = async (buffer, position) => {
+      for (let offset = 0; offset < buffer.length; ) {
+        const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, position + offset);
+        if (bytesRead === 0) return false;
+        offset += bytesRead;
+      }
+      return true;
+    };
+    if (!await fill2(head, 0) || !await fill2(tail, file.size - length)) return null;
+    const after = await handle.stat();
+    if (after.size !== file.size || after.mtimeMs !== file.mtimeMs) return null;
     return {
       normPath: file.normPath,
       size: file.size,
@@ -4037,15 +4088,22 @@ async function cacheKeyFor(file, parser, timeZone) {
 function sameKey(a, b) {
   return a.normPath === b.normPath && a.size === b.size && a.mtimeMs === b.mtimeMs && a.head === b.head && a.tail === b.tail && a.cacheFormat === b.cacheFormat && a.parser === b.parser && a.timeZone === b.timeZone;
 }
+async function keyStillMatches(path, key) {
+  const now = await cacheKeyFor({ path, normPath: key.normPath, size: key.size, mtimeMs: key.mtimeMs }, key.parser, key.timeZone);
+  return now !== null && sameKey(now, key);
+}
 function entryPath(dir, normPath) {
   return join4(dir, `${sha256(normPath).slice(0, 32)}.json`);
 }
 async function loadCached(dir, key) {
   try {
     const entry = JSON.parse(await readFile2(entryPath(dir, key.normPath), "utf8"));
-    if (entry.key === void 0 || typeof entry.bytesRead !== "number" || !sameKey(entry.key, key)) return null;
+    if (entry.key === void 0 || typeof entry.bytesRead !== "number" || !Number.isSafeInteger(entry.bytesRead) || entry.bytesRead < 0 || entry.bytesRead > key.size || !sameKey(entry.key, key)) return null;
     const summary = reviveSummary(entry.summary);
-    return summary === null ? null : { key: entry.key, summary, bytesRead: entry.bytesRead };
+    if (summary === null) return null;
+    if (summary.tool !== "codex") return entry.codex === void 0 ? { key: entry.key, summary, bytesRead: entry.bytesRead } : null;
+    const codex = reviveCodexExtra(entry.codex);
+    return codex === null ? null : { key: entry.key, summary, bytesRead: entry.bytesRead, codex };
   } catch {
     return null;
   }
@@ -4450,8 +4508,7 @@ var REASON_ORDER = ["unreadable-files", "too-long-lines", "unconfirmed-pieces"];
 function mostlyBroken(summary) {
   return summary.missing.brokenLines * 2 > summary.missing.lines;
 }
-function claudeObservation(summaries, unreadableCount2, metric) {
-  const harmless = metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES;
+function observeRecords(summaries, unreadableCount2, harmless) {
   const found = /* @__PURE__ */ new Set();
   if (unreadableCount2 > 0) found.add("unreadable-files");
   for (const summary of summaries) {
@@ -4462,6 +4519,9 @@ function claudeObservation(summaries, unreadableCount2, metric) {
   }
   const reasons = REASON_ORDER.filter((reason) => found.has(reason));
   return { complete: reasons.length === 0, reasons };
+}
+function claudeObservation(summaries, unreadableCount2, metric) {
+  return observeRecords(summaries, unreadableCount2, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES);
 }
 
 // src/adapters/common/hash.ts
@@ -4579,18 +4639,18 @@ function outerTypeOf(text) {
 var INTERRUPT_PREFIX = "[Request interrupted by user";
 var COMMAND = /^(?:<command-message>[\s\S]*?<\/command-message>\s*)?<command-name>\/?([^<]*)<\/command-name>/;
 var TAG = /^<([A-Za-z][\w-]*)>/;
-var isObject2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var isObject3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 function userText(content) {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     for (const block of content) {
-      if (isObject2(block) && block.type === "text") return typeof block.text === "string" ? block.text : "";
+      if (isObject3(block) && block.type === "text") return typeof block.text === "string" ? block.text : "";
     }
   }
   return "";
 }
 function hasToolResult(content) {
-  return Array.isArray(content) && content.some((block) => isObject2(block) && block.type === "tool_result");
+  return Array.isArray(content) && content.some((block) => isObject3(block) && block.type === "tool_result");
 }
 var toolInserted = (line) => line.isMeta === true || line.isCompactSummary === true || line.isVisibleInTranscriptOnly === true;
 function commandNameOf(text) {
@@ -4598,10 +4658,10 @@ function commandNameOf(text) {
   return command === null ? null : command[1].trim();
 }
 function classifyOwnUser(line) {
-  const message = isObject2(line.message) ? line.message : {};
+  const message = isObject3(line.message) ? line.message : {};
   if (hasToolResult(message.content)) return { kind: "tool-result" };
   if (toolInserted(line)) return { kind: "skip", reason: "meta" };
-  if (isObject2(line.origin)) {
+  if (isObject3(line.origin)) {
     const kind = line.origin.kind;
     if (kind === "human") return { kind: "human", weak: false };
     return { kind: "skip", reason: `origin:${typeof kind === "string" ? kind : "?"}` };
@@ -4624,13 +4684,13 @@ function isInterruptMarker(line) {
   return verdict.kind === "skip" && verdict.reason === "interrupt";
 }
 function slashCommandOf(line) {
-  const message = isObject2(line.message) ? line.message : {};
+  const message = isObject3(line.message) ? line.message : {};
   if (hasToolResult(message.content) || toolInserted(line)) return null;
   return commandNameOf(userText(message.content));
 }
 function denialOf(line) {
   const kind = line.toolDenialKind;
-  const decision = isObject2(line.permissionDecision) ? line.permissionDecision : null;
+  const decision = isObject3(line.permissionDecision) ? line.permissionDecision : null;
   const rejected = decision !== null && decision.decision === "reject";
   if (kind === "user-rejected") return { kind: "user", raw: null };
   if (rejected && decision.source === "hook") return { kind: "hook", raw: null };
@@ -4757,7 +4817,7 @@ var ResponseTable = class {
 };
 
 // src/adapters/claude/parser.ts
-var CLAUDE_PARSER_VERSION = 1;
+var CLAUDE_PARSER_VERSION = 2;
 var COUNTED_TYPES = /* @__PURE__ */ new Set(["assistant", "user", "attachment", "system"]);
 var FIRST_RESPONSE_IDS = 20;
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["Bash", "PowerShell"]);
@@ -5223,25 +5283,12 @@ var IN_PROGRESS_WINDOW_MS = 2e3;
 function decode(buffer, start, end) {
   return buffer.toString("utf8", start, end > start && buffer[end - 1] === 13 ? end - 1 : end);
 }
-async function readLines(path, nowMs, sink, options = {}) {
-  const maxLine = options.maxLineBytes ?? MAX_LINE_BYTES;
-  const chunkSize = options.chunkBytes ?? 1024 * 1024;
-  const handle = await open3(path, "r");
-  try {
-    const opened = await handle.stat();
-    const sizeAtOpen = opened.size;
-    const mtimeMsAtOpen = opened.mtimeMs;
-    if (options.afterOpen) await options.afterOpen();
-    const buffer = Buffer.allocUnsafe(chunkSize);
-    let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
-    let carryBytes = 0;
-    let skipping = false;
-    let position = 0;
-    while (position < sizeAtOpen) {
-      const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
-      if (bytesRead === 0) break;
-      position += bytesRead;
-      const view = buffer.subarray(0, bytesRead);
+function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
+  let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
+  let carryBytes = 0;
+  let skipping = false;
+  return {
+    push(view) {
       let start = 0;
       for (; ; ) {
         const newline = view.indexOf(10, start);
@@ -5275,13 +5322,38 @@ async function readLines(path, nowMs, sink, options = {}) {
         carryBytes = 0;
         start = newline + 1;
       }
+    },
+    finish() {
+      if (skipping) {
+        sink.tooLong();
+        return null;
+      }
+      return carryBytes > 0 ? decode(carry, 0, carryBytes) : null;
     }
-    let tail = null;
-    if (skipping) sink.tooLong();
-    else if (carryBytes > 0) tail = decode(carry, 0, carryBytes);
+  };
+}
+async function readLines(path, nowMs, sink, options = {}) {
+  const maxLine = options.maxLineBytes ?? MAX_LINE_BYTES;
+  const chunkSize = options.chunkBytes ?? 1024 * 1024;
+  const handle = await open3(path, "r");
+  try {
+    const opened = await handle.stat();
+    const sizeAtOpen = opened.size;
+    const mtimeMsAtOpen = opened.mtimeMs;
+    if (options.afterOpen) await options.afterOpen();
+    const buffer = Buffer.allocUnsafe(chunkSize);
+    const splitter = lineSplitter(sink, maxLine);
+    let position = 0;
+    while (position < sizeAtOpen) {
+      const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
+      if (bytesRead === 0) break;
+      position += bytesRead;
+      splitter.push(buffer.subarray(0, bytesRead));
+    }
+    const tail = splitter.finish();
     const after = await stat2(path);
     const inProgress = after.size !== sizeAtOpen || after.mtimeMs !== mtimeMsAtOpen || nowMs - mtimeMsAtOpen < IN_PROGRESS_WINDOW_MS;
-    return { sizeAtOpen, mtimeMsAtOpen, bytesRead: position, tail, inProgress };
+    return { sizeAtOpen, mtimeMsAtOpen, bytesRead: position, tail, inProgress: inProgress || position < sizeAtOpen, endedEarly: position < sizeAtOpen };
   } finally {
     await handle.close();
   }
@@ -5317,7 +5389,7 @@ async function collectFromList(home, list, options) {
     try {
       if (cacheDir !== null) {
         key = await cacheKeyFor(file, CLAUDE_PARSER_ID, options.clock.timeZone);
-        if (!options.rescan) {
+        if (!options.rescan && key !== null) {
           const hit = await loadCached(cacheDir, key);
           if (hit !== null) {
             summaries.push(hit.summary);
@@ -5341,14 +5413,14 @@ async function collectFromList(home, list, options) {
       const summary = parser.finish(outcome.tail, outcome.inProgress);
       summaries.push(summary);
       bytes += outcome.bytesRead;
-      if (mostlyBroken(summary)) markUnreadable(file.path, file.size);
+      if (mostlyBroken(summary) || outcome.endedEarly) markUnreadable(file.path, file.size);
       if (outcome.inProgress) {
         inProgress++;
         continue;
       }
       if (key !== null && cacheDir !== null && outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs) {
         try {
-          await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
+          if (await keyStillMatches(file.path, key)) await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
         } catch {
         }
       }
@@ -5486,7 +5558,7 @@ import { basename as basename3, join as join10, resolve as resolve2 } from "node
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
-var isObject3 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var isObject4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function matcherMatches(matcher, tool) {
   if (matcher === void 0 || matcher === null || matcher === "" || matcher === "*") return true;
   if (typeof matcher !== "string") return false;
@@ -5518,29 +5590,29 @@ var REQUIRED_FIELDS = /* @__PURE__ */ new Map([
   ["agent", ["prompt"]]
 ]);
 function isHandler(handler) {
-  if (!isObject3(handler) || typeof handler.type !== "string") return false;
+  if (!isObject4(handler) || typeof handler.type !== "string") return false;
   const required = REQUIRED_FIELDS.get(handler.type);
   return required !== void 0 && required.every((field) => typeof handler[field] === "string" && handler[field] !== "");
 }
 function hookMapValid(events) {
-  if (!isObject3(events)) return false;
+  if (!isObject4(events)) return false;
   for (const groups of Object.values(events)) {
     if (!Array.isArray(groups)) return false;
-    for (const group of groups) if (!isObject3(group) || !Array.isArray(group.hooks) || !group.hooks.every(isHandler)) return false;
+    for (const group of groups) if (!isObject4(group) || !Array.isArray(group.hooks) || !group.hooks.every(isHandler)) return false;
   }
   return true;
 }
 function hookFileEvents(file) {
-  return isObject3(file) && hookMapValid(file.hooks) ? file.hooks : null;
+  return isObject4(file) && hookMapValid(file.hooks) ? file.hooks : null;
 }
 function inlineHookEvents(inline) {
   return hookMapValid(inline) ? inline : null;
 }
 function preToolUseGuards(events, source, pluginId) {
-  if (!isObject3(events) || !Array.isArray(events.PreToolUse)) return [];
+  if (!isObject4(events) || !Array.isArray(events.PreToolUse)) return [];
   const out = [];
   for (const group of events.PreToolUse) {
-    if (!isObject3(group) || !Array.isArray(group.hooks)) continue;
+    if (!isObject4(group) || !Array.isArray(group.hooks)) continue;
     for (const handler of group.hooks) {
       if (!isHandler(handler)) continue;
       out.push({ source, pluginId, coversShell: coversShell(group.matcher, handler.if), canBlock: handler.async !== true && handler.asyncRewake !== true });
@@ -5549,14 +5621,14 @@ function preToolUseGuards(events, source, pluginId) {
   return out;
 }
 function hookCommandTexts(events) {
-  if (!isObject3(events)) return [];
+  if (!isObject4(events)) return [];
   const out = [];
   for (const groups of Object.values(events)) {
     if (!Array.isArray(groups)) continue;
     for (const group of groups) {
-      if (!isObject3(group) || !Array.isArray(group.hooks)) continue;
+      if (!isObject4(group) || !Array.isArray(group.hooks)) continue;
       for (const handler of group.hooks) {
-        if (!isObject3(handler)) continue;
+        if (!isObject4(handler)) continue;
         const parts = [];
         if (typeof handler.command === "string") parts.push(handler.command);
         if (Array.isArray(handler.args)) {
@@ -5571,7 +5643,7 @@ function hookCommandTexts(events) {
 
 // src/scan/json.ts
 var MAX_JSON_DEPTH = 64;
-var isObject4 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var isObject5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 function canonicalJson(value, depth = 0) {
   if (depth > MAX_JSON_DEPTH) return null;
   if (Array.isArray(value)) {
@@ -5583,7 +5655,7 @@ function canonicalJson(value, depth = 0) {
     }
     return `[${parts.join(",")}]`;
   }
-  if (isObject4(value)) {
+  if (isObject5(value)) {
     const parts = [];
     for (const key of Object.keys(value).sort()) {
       const part = canonicalJson(value[key], depth + 1);
@@ -5632,7 +5704,7 @@ var wellFormedPath = (path) => path.startsWith("./") && !path.split(/[\\/]/).inc
 function declarationsOf(value) {
   if (value === void 0) return [];
   const items = Array.isArray(value) ? value : [value];
-  return items.map((item2) => typeof item2 === "string" ? item2 : isObject4(item2) ? item2 : null);
+  return items.map((item2) => typeof item2 === "string" ? item2 : isObject5(item2) ? item2 : null);
 }
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
@@ -5649,21 +5721,21 @@ var firstSegment = (path) => path.replace(/\\/g, "/").replace(/^\.\//, "").split
 var bareName = (name) => name.includes("@") ? name.slice(0, name.indexOf("@")) : name;
 var cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function mcpMapOf(value) {
-  if (!isObject4(value)) return null;
+  if (!isObject5(value)) return null;
   let map = value;
   if (Object.hasOwn(value, "mcpServers")) {
-    if (!isObject4(value.mcpServers)) return null;
+    if (!isObject5(value.mcpServers)) return null;
     map = value.mcpServers;
   }
-  return Object.keys(map).sort().map((name) => ({ name, definition: isObject4(map[name]) ? map[name] : null }));
+  return Object.keys(map).sort().map((name) => ({ name, definition: isObject5(map[name]) ? map[name] : null }));
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
   const known = await readJson(join10(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known.status === "missing") return { file: "missing", markets };
-  if (known.status !== "ok" || !isObject4(known.value)) return { file: "unreadable", markets };
+  if (known.status !== "ok" || !isObject5(known.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known.value)) {
-    if (!isObject4(info) || typeof info.installLocation !== "string") {
+    if (!isObject5(info) || typeof info.installLocation !== "string") {
       markets.set(market, "unreadable");
       continue;
     }
@@ -5673,12 +5745,12 @@ async function readMarketplaceEntries(claudeHome2) {
       markets.set(market, "missing");
       continue;
     }
-    if (read.status !== "ok" || !isObject4(read.value) || !Array.isArray(read.value.plugins)) {
+    if (read.status !== "ok" || !isObject5(read.value) || !Array.isArray(read.value.plugins)) {
       markets.set(market, "unreadable");
       continue;
     }
     const entries = /* @__PURE__ */ new Map();
-    for (const entry of read.value.plugins) if (isObject4(entry) && typeof entry.name === "string" && !entries.has(entry.name)) entries.set(entry.name, entry);
+    for (const entry of read.value.plugins) if (isObject5(entry) && typeof entry.name === "string" && !entries.has(entry.name)) entries.set(entry.name, entry);
     markets.set(market, entries);
   }
   return { file: "ok", markets };
@@ -5686,10 +5758,10 @@ async function readMarketplaceEntries(claudeHome2) {
 function mergeEvents(base, replace) {
   const merged = /* @__PURE__ */ Object.create(null);
   for (const events of base) {
-    if (!isObject4(events)) continue;
+    if (!isObject5(events)) continue;
     for (const [event, groups] of Object.entries(events)) if (Array.isArray(groups)) merged[event] = [...merged[event] ?? [], ...groups];
   }
-  if (isObject4(replace)) {
+  if (isObject5(replace)) {
     for (const [event, groups] of Object.entries(replace)) if (Array.isArray(groups)) merged[event] = [...groups];
   }
   return merged;
@@ -5739,7 +5811,7 @@ async function readPluginInstall(group, markets) {
   const listing = await listDir(installPath);
   const manifestRead = await readJson(join10(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
-  if (manifestRead.status === "ok" && isObject4(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
+  if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
     manifest = manifestRead.value;
     plugin.name = manifestRead.value.name;
@@ -5756,7 +5828,7 @@ async function readPluginInstall(group, markets) {
   const appended = manifest !== null ? Object.fromEntries(Object.entries(entry).filter(([key]) => ENTRY_APPENDED.has(key))) : {};
   plugin.compositionKnown = true;
   const deps = [...Array.isArray(base.dependencies) ? base.dependencies : [], ...manifest !== null && Array.isArray(entry.dependencies) ? entry.dependencies : []];
-  plugin.dependencies = [...new Set(deps.flatMap((d) => typeof d === "string" ? [bareName(d)] : isObject4(d) && typeof d.name === "string" ? [bareName(d.name)] : []))].sort();
+  plugin.dependencies = [...new Set(deps.flatMap((d) => typeof d === "string" ? [bareName(d)] : isObject5(d) && typeof d.name === "string" ? [bareName(d.name)] : []))].sort();
   const kinds = /* @__PURE__ */ new Set();
   const referenced = /* @__PURE__ */ new Set();
   const addComponents = (source) => {
@@ -5765,7 +5837,7 @@ async function readPluginInstall(group, markets) {
       kinds.add(kind);
       for (const path of pathsOf(source[key])) referenced.add(firstSegment(path));
     }
-    const experimental = isObject4(source.experimental) ? source.experimental : {};
+    const experimental = isObject5(source.experimental) ? source.experimental : {};
     for (const [key, kind] of [["themes", "themes"], ["monitors", "monitors"]]) {
       if (experimental[key] === void 0) continue;
       kinds.add(kind);
@@ -5782,7 +5854,7 @@ async function readPluginInstall(group, markets) {
   const unknownKeys = (source, from, known) => {
     for (const key of Object.keys(source)) {
       if (key === "experimental") {
-        const experimental = isObject4(source.experimental) ? source.experimental : {};
+        const experimental = isObject5(source.experimental) ? source.experimental : {};
         for (const inner of Object.keys(experimental)) if (inner !== "themes" && inner !== "monitors") plugin.unknownEntries.push(`${from}:experimental.${inner}`);
         continue;
       }
@@ -5845,7 +5917,7 @@ async function readPluginInstall(group, markets) {
       } else addInlineHooks(declaration);
     }
   }
-  const entryHooks = isObject4(entry.hooks) ? inlineHookEvents(entry.hooks) : void 0;
+  const entryHooks = isObject5(entry.hooks) ? inlineHookEvents(entry.hooks) : void 0;
   if (entryHooks === null) plugin.hooksUnreadable = true;
   plugin.hookEvents = [manifest !== null ? mergeEvents(hookSources, entryHooks) : mergeEvents([...hookSources, entryHooks], void 0)];
   const servers = /* @__PURE__ */ new Map();
@@ -5902,7 +5974,7 @@ async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
     const read = await readJson(join10(ref.path, ".claude-plugin", "plugin.json"));
-    const declared = read.status === "ok" && isObject4(read.value) ? read.value.name : void 0;
+    const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
     const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
     out.push(await readPluginInstall(group, { file: "ok", markets: /* @__PURE__ */ new Map() }));
@@ -5912,13 +5984,13 @@ async function readSkillsDirPlugins(refs) {
 async function scanPlugins(claudeHome2) {
   const read = await readJson(join10(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
-  if (!isObject4(read.value) || !isObject4(read.value.plugins)) return { file: "unparsable", plugins: [] };
+  if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
   for (const id of Object.keys(read.value.plugins)) {
     if (id.endsWith("@builtin")) continue;
     const entries = read.value.plugins[id];
     for (const entry of Array.isArray(entries) ? entries : []) {
-      if (!isObject4(entry) || typeof entry.installPath !== "string") continue;
+      if (!isObject5(entry) || typeof entry.installPath !== "string") continue;
       const key = `${id}\0${normalizePath(entry.installPath)}`;
       let group = groups.get(key);
       if (group === void 0) {
@@ -5942,16 +6014,16 @@ function claudeJsonPath(env, homedir2) {
   return fromEnv ? join11(resolve3(fromEnv), ".claude.json") : join11(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
-var isObject5 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 var strings2 = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
 function isDateMs(v) {
   return typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= MAX_DATE_MS;
 }
 function lastUsed(v) {
   const out = /* @__PURE__ */ Object.create(null);
-  if (!isObject5(v)) return out;
+  if (!isObject6(v)) return out;
   for (const [name, entry] of Object.entries(v)) {
-    out[name] = isObject5(entry) && isDateMs(entry.lastUsedAt) ? entry.lastUsedAt : null;
+    out[name] = isObject6(entry) && isDateMs(entry.lastUsedAt) ? entry.lastUsedAt : null;
   }
   return out;
 }
@@ -5969,18 +6041,18 @@ async function readClaudeJson(path) {
   let read = await readJson(path);
   if (read.status === "unparsable") read = await readJson(path);
   if (read.status !== "ok") return emptyClaudeJson(read.status);
-  if (!isObject5(read.value)) return emptyClaudeJson("unparsable");
+  if (!isObject6(read.value)) return emptyClaudeJson("unparsable");
   const v = read.value;
   const facts = emptyClaudeJson("ok");
-  facts.userMcpServers = isObject5(v.mcpServers) ? mcpMapOf({ mcpServers: v.mcpServers }) ?? [] : [];
-  if (isObject5(v.projects)) {
+  facts.userMcpServers = isObject6(v.mcpServers) ? mcpMapOf({ mcpServers: v.mcpServers }) ?? [] : [];
+  if (isObject6(v.projects)) {
     for (const key of Object.keys(v.projects)) {
       const entry = v.projects[key];
-      if (!isObject5(entry)) continue;
+      if (!isObject6(entry)) continue;
       facts.projects.push({
         key,
         normKey: normalizePath(key),
-        mcpServers: isObject5(entry.mcpServers) ? mcpMapOf({ mcpServers: entry.mcpServers }) ?? [] : [],
+        mcpServers: isObject6(entry.mcpServers) ? mcpMapOf({ mcpServers: entry.mcpServers }) ?? [] : [],
         enabledMcpjsonServers: strings2(entry.enabledMcpjsonServers),
         disabledMcpjsonServers: strings2(entry.disabledMcpjsonServers),
         disabledMcpServers: strings2(entry.disabledMcpServers)
@@ -6259,7 +6331,7 @@ function managedSettingsDir(platform) {
 async function readPart(path) {
   const read = await readJson(path);
   if (read.status !== "ok") return { part: { path, status: read.status }, value: null };
-  if (!isObject4(read.value)) return { part: { path, status: "unparsable" }, value: null };
+  if (!isObject5(read.value)) return { part: { path, status: "unparsable" }, value: null };
   return { part: { path, status: "ok" }, value: read.value };
 }
 async function readLayer(path) {
@@ -6288,8 +6360,8 @@ function mergeSettings(base, next, depth = 0) {
     const before = Object.hasOwn(out, key) ? out[key] : void 0;
     if (Array.isArray(value)) {
       out[key] = unionList(Array.isArray(before) ? before : [], value);
-    } else if (isObject4(value) && depth < MERGE_MAX_DEPTH) {
-      out[key] = mergeSettings(isObject4(before) ? before : {}, value, depth + 1);
+    } else if (isObject5(value) && depth < MERGE_MAX_DEPTH) {
+      out[key] = mergeSettings(isObject5(before) ? before : {}, value, depth + 1);
     } else {
       out[key] = value;
     }
@@ -6317,7 +6389,7 @@ function sanitizeManagedPart(value) {
     } else if (key === "enableAllProjectMcpServers") {
       out[key] = failClosedBoolean(v, false);
     } else if (key === "permissions") {
-      if (!isObject4(v)) continue;
+      if (!isObject5(v)) continue;
       const permissions = /* @__PURE__ */ Object.create(null);
       for (const [field, fv] of Object.entries(v)) {
         if (fv === null) continue;
@@ -6331,7 +6403,7 @@ function sanitizeManagedPart(value) {
     } else if (MANAGED_LISTS.has(key)) {
       if (Array.isArray(v)) out[key] = v;
     } else if (key === "enabledPlugins" || key === "skillOverrides") {
-      if (!isObject4(v)) continue;
+      if (!isObject5(v)) continue;
       const kept = Object.entries(v).filter(([, entry]) => key === "enabledPlugins" ? typeof entry === "boolean" : typeof entry === "string" && SKILL_OVERRIDE_MODES.has(entry));
       if (kept.length > 0) out[key] = Object.fromEntries(kept);
     } else {
@@ -6365,7 +6437,7 @@ function matchers(v) {
   if (!Array.isArray(v)) return [];
   const out = [];
   for (const item2 of v) {
-    if (!isObject4(item2)) continue;
+    if (!isObject5(item2)) continue;
     const m = {};
     if (typeof item2.serverName === "string") m.serverName = item2.serverName;
     if (typeof item2.serverUrl === "string") m.serverUrl = item2.serverUrl;
@@ -6376,13 +6448,13 @@ function matchers(v) {
 }
 function viewOf(value) {
   const v = value ?? {};
-  const permissions = isObject4(v.permissions) ? v.permissions : {};
+  const permissions = isObject5(v.permissions) ? v.permissions : {};
   const overrides = /* @__PURE__ */ Object.create(null);
-  if (isObject4(v.skillOverrides)) {
+  if (isObject5(v.skillOverrides)) {
     for (const [name, mode2] of Object.entries(v.skillOverrides)) if (typeof mode2 === "string" && SKILL_OVERRIDE_MODES.has(mode2)) overrides[name] = mode2;
   }
   const plugins = /* @__PURE__ */ Object.create(null);
-  if (isObject4(v.enabledPlugins)) {
+  if (isObject5(v.enabledPlugins)) {
     for (const [id, on] of Object.entries(v.enabledPlugins)) if (typeof on === "boolean") plugins[id] = on;
   }
   const mode = permissions.defaultMode;
@@ -7241,16 +7313,16 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve5) => {
+  return new Promise((resolve6) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve5(false));
+      child.once("error", () => resolve6(false));
       child.once("spawn", () => {
         child.unref();
-        resolve5(true);
+        resolve6(true);
       });
     } catch {
-      resolve5(false);
+      resolve6(false);
     }
   });
 }
@@ -7335,13 +7407,95 @@ async function clean(dir, level) {
 
 // src/commands/doctor.ts
 import { mkdir as mkdir5, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 import * as zlib from "node:zlib";
+
+// src/adapters/codex/locate.ts
+import { readdir as readdir8, stat as stat4 } from "node:fs/promises";
+import { join as join19, resolve as resolve5 } from "node:path";
+function codexHome(env, homedir2) {
+  const fromEnv = env.CODEX_HOME?.trim();
+  return fromEnv ? resolve5(fromEnv) : join19(homedir2, ".codex");
+}
+var isMissing5 = (error) => error?.code === "ENOENT";
+var DIGITS = /^\d+$/;
+var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
+async function listCodexFiles(home, minChangedMs, statFile = stat4) {
+  const sessions = join19(home, "sessions");
+  const files = [];
+  const unreadableDirs = [];
+  let olderThanWindow = 0;
+  let unnamedFiles = 0;
+  const walk = async (dir, depth) => {
+    let entries;
+    try {
+      entries = await readdir8(dir, { withFileTypes: true });
+    } catch (error) {
+      if (depth === 0 && isMissing5(error)) return false;
+      if (!isMissing5(error)) unreadableDirs.push(dir);
+      return true;
+    }
+    for (const entry of entries) {
+      const path = join19(dir, entry.name);
+      if (depth < 3) {
+        if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
+        else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
+        continue;
+      }
+      if (!entry.isFile() || !/^rollout-.*\.jsonl(\.zst)?$/i.test(entry.name)) continue;
+      const match = ROLLOUT.exec(entry.name);
+      if (match === null) {
+        unnamedFiles++;
+        continue;
+      }
+      const baseId = match[1]?.toLowerCase() ?? null;
+      const recordId = match[2].toLowerCase();
+      const compressed = match[3] !== void 0;
+      try {
+        const info = await statFile(path);
+        const changedMs = Math.max(info.mtimeMs, info.ctimeMs);
+        if (minChangedMs !== null && changedMs < minChangedMs) {
+          olderThanWindow++;
+          continue;
+        }
+        files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, changedMs, recordId, baseId, compressed });
+      } catch {
+        files.push({ path, normPath: normalizePath(path), size: null, mtimeMs: null, changedMs: null, recordId, baseId, compressed });
+      }
+    }
+    return true;
+  };
+  const found = await walk(sessions, 0);
+  if (!found) return { sessionsFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unnamedFiles: 0 };
+  files.sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
+  unreadableDirs.sort();
+  return { sessionsFound: true, files, olderThanWindow, unreadableDirs, unnamedFiles };
+}
+function canonicalOrder(a, b) {
+  if (a.compressed !== b.compressed) return a.compressed ? 1 : -1;
+  if (a.changedMs !== b.changedMs) {
+    if (a.changedMs === null) return 1;
+    if (b.changedMs === null) return -1;
+    return b.changedMs - a.changedMs;
+  }
+  return a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0;
+}
+function groupCopies(files) {
+  const groups = /* @__PURE__ */ new Map();
+  for (const file of files) {
+    const list = groups.get(file.recordId);
+    if (list) list.push(file);
+    else groups.set(file.recordId, [file]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([recordId, copies]) => ({ recordId, copies: [...copies].sort(canonicalOrder) }));
+}
+
+// src/commands/doctor.ts
 function hasZstd() {
   return typeof zlib.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join19(dir, `.write-probe-${process.pid}`);
+  const probe = join20(dir, `.write-probe-${process.pid}`);
   try {
     await mkdir5(dir, { recursive: true });
     await writeFile4(probe, "ok");
@@ -7354,25 +7508,35 @@ async function canWrite(dir) {
 async function doctor(input) {
   const home = claudeHome(input.env, input.homedir);
   const list = await listClaudeFiles(home, null);
+  const codex = codexHome(input.env, input.homedir);
+  const records = await listCodexFiles(codex, null);
+  const groups = groupCopies(records.files);
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),
     claudeCode: { home, projectsFound: list.projectsFound, sessionFiles: list.files.length, unreadable: list.unreadableDirs.length + list.unreadableFiles.length },
+    codex: {
+      home: codex,
+      sessionsFound: records.sessionsFound,
+      recordFiles: groups.length,
+      compressedOnly: groups.filter((group) => group.copies.every((copy2) => copy2.compressed)).length,
+      unreadable: records.unreadableDirs.length + records.files.filter((file) => file.size === null).length
+    },
     state: { dir: input.stateDir, writable: await canWrite(input.stateDir) }
   };
 }
 
 // src/commands/where.ts
-import { lstat as lstat8, readdir as readdir8 } from "node:fs/promises";
-import { join as join20 } from "node:path";
-var isMissing5 = (error) => error?.code === "ENOENT";
+import { lstat as lstat8, readdir as readdir9 } from "node:fs/promises";
+import { join as join21 } from "node:path";
+var isMissing6 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
     dirInfo = await lstat8(dir);
   } catch (error) {
-    if (!isMissing5(error)) throw error;
+    if (!isMissing6(error)) throw error;
   }
   report.exists = dirInfo !== void 0;
   report.link = dirInfo?.isSymbolicLink() ?? false;
@@ -7381,16 +7545,16 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat8(join20(dir, spec.name));
+        const info = await lstat8(join21(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join20(dir, spec.name));
+          const size = await treeSize(join21(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
       } catch (error) {
-        if (!isMissing5(error)) entry.unreadable = true;
+        if (!isMissing6(error)) entry.unreadable = true;
       }
     }
     report.files += entry.files;
@@ -7399,7 +7563,7 @@ async function where(dir) {
   }
   if (inside2) {
     const known = new Set(STATE_ENTRIES.map((spec) => spec.name));
-    report.others = (await readdir8(dir)).filter((name) => !known.has(name)).sort();
+    report.others = (await readdir9(dir)).filter((name) => !known.has(name)).sort();
   }
   return report;
 }

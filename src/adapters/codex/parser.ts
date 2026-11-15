@@ -1,9 +1,26 @@
-// Codex 세션 파일 하나를 줄마다 해석해 세션 요약을 만든다. 세션의 정체는 첫 줄 session_meta에서, 토큰은 옛 구간(token_count의 누적값 차분)과 새 구간(token_usage_record의 response_id)으로 가른다(설계 9.2, 9.6, 「5단계 계획 전 결정」 1·7번)
+// Codex 세션 파일 하나를 줄마다 해석해 세션 요약을 만든다. 세션의 정체는 첫 줄 session_meta에서, 토큰은 옛 구간(token_count의 누적값 차분)과 새 구간(token_usage_record의 response_id)으로 가르고, 도구는 실행 층에서 이름별로 세되 턴마다 호출 층이 더 많으면 그 차이를 이름 모름으로 더한다. 사람 요청, 모델과 추론 강도, 압축, 끊은 턴, MCP 호출, 지침 크기도 센다(설계 9.2, 9.6, 9.7, 「5단계 계획 전 결정」 1·7번)
+import { UNKNOWN_TOOL } from "../claude/parser.ts";
 import { nameRecord } from "../common/canonical.ts";
 import { localDateOfIso, type LocalDate } from "../common/dates.ts";
 import { maxVersion } from "../common/version.ts";
 import type { CodexIdFallback } from "../types.ts";
-import { canonicalDay, emptyDay, type DayCell, type SessionKind, type SessionSummary, type TokenCounts } from "../types.ts";
+import { canonicalDay, emptyDay, emptyToolCounts, type DayCell, type SessionKind, type SessionSummary, type TokenCounts, type ToolCounts } from "../types.ts";
+
+/** 실행 층(item_completed)의 도구 종류와 그 공통 이름. 상태를 보는 종류는 결과와 오류를 낸다(설계 9.6) */
+export const EXEC_TOOLS: ReadonlyMap<string, { name: string; status: boolean }> = new Map([
+  ["CommandExecution", { name: "shell", status: true }],
+  ["FileChange", { name: "file_change", status: true }],
+  ["McpToolCall", { name: "mcp", status: true }],
+  ["ImageView", { name: "image_view", status: false }],
+  ["Extension", { name: "extension", status: false }],
+  ["WebSearch", { name: "web_search", status: false }],
+]);
+/** Codex의 셸 명령 이름. 평가 입력의 shellTools로 넘긴다 */
+export const CODEX_SHELL_TOOLS: readonly string[] = ["shell"];
+/** 도구가 아닌 실행 층 종류(설계 9.6) */
+const NON_TOOL_ITEMS: ReadonlySet<string> = new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
+/** 호출 층(response_item)의 도구 호출 종류 */
+const CALL_TYPES: ReadonlySet<string> = new Set(["function_call", "custom_tool_call", "web_search_call"]);
 
 export const CODEX_PARSER_VERSION = 1;
 
@@ -78,8 +95,60 @@ export class CodexSessionParser {
   /** 옛 구간에서 마지막으로 본 누적값. 새 구간의 첫 기록과 견준다 */
   private lastOldTotal: Usage | null = null;
   private readonly seenResponses = new Set<string>();
+  /** 지금 창(앞 턴이 끝난 뒤부터 이 턴이 끝날 때까지)의 turn_context의 모델과 추론 강도, 그 창에서 문맥을 봤는지, 문맥보다 앞에 와서 아직 문맥을 붙이지 못한 응답의 칸 */
+  private model: string | null = null;
+  private effort: string | null = null;
+  private contextSeen = false;
+  private readonly pendingCells: DayCell[] = [];
+  /** 지금 묶음(턴, 또는 턴 밖)에서 날짜마다 센 호출 층과 실행 층의 도구 수. 날짜를 몰라 세지 못한 줄은 넣지 않는다 */
+  private readonly groupCalls = new Map<LocalDate, number>();
+  private readonly groupExec = new Map<LocalDate, number>();
+  private readonly unknownItemTypes = nameRecord<number>();
+  private instructionChars: { ascii: number; other: number } | null = null;
 
   constructor(private readonly ctx: CodexParserContext) {}
+
+  private tool(cell: DayCell, name: string): ToolCounts {
+    let counts = cell.tools[name];
+    if (!counts) {
+      counts = emptyToolCounts();
+      cell.tools[name] = counts;
+    }
+    return counts;
+  }
+
+  /**
+   * 묶음을 닫는다. 호출 층이 실행 층보다 많으면 그 차이를 이름 모름의 호출로 더한다(설계 9.6). 차이는 날짜 차례로, 그날 호출 층이 실행 층보다 많은 만큼까지
+   * 그날에 나눈다. 날짜를 몰라 세지 못한 줄은 어느 층에도 넣지 않았다(「5단계 1부 계획에서 보완」)
+   */
+  private closeGroup(): void {
+    const sum = (counts: Map<LocalDate, number>): number => [...counts.values()].reduce((total, n) => total + n, 0);
+    let extra = sum(this.groupCalls) - sum(this.groupExec);
+    for (const date of [...this.groupCalls.keys()].sort()) {
+      if (extra <= 0) break;
+      const give = Math.min(extra, this.groupCalls.get(date)! - (this.groupExec.get(date) ?? 0));
+      if (give <= 0) continue;
+      this.tool(this.day(date), UNKNOWN_TOOL).calls += give;
+      extra -= give;
+    }
+    this.groupCalls.clear();
+    this.groupExec.clear();
+  }
+
+  /** 문맥의 창을 닫는다. 창에서 문맥을 보지 못한 응답은 모델을 모르고 추론 강도를 모르는 것으로 센다(설계 9.6 「그 턴의 응답들에 적용」) */
+  private closeContext(): void {
+    for (const cell of this.pendingCells.splice(0)) cell.unknownEffort++;
+    this.model = null;
+    this.effort = null;
+    this.contextSeen = false;
+  }
+
+  /** 응답 하나의 칸에 지금 창의 모델과 추론 강도를 붙인다 */
+  private attribute(cell: DayCell): void {
+    if (this.model !== null) cell.models[this.model] = (Object.hasOwn(cell.models, this.model) ? cell.models[this.model]! : 0) + 1;
+    if (this.effort !== null) cell.efforts[this.effort] = (Object.hasOwn(cell.efforts, this.effort) ? cell.efforts[this.effort]! : 0) + 1;
+    else cell.unknownEffort++;
+  }
 
   /** 줄바꿈으로 끝난 줄 하나를 받는다. 빈 줄(공백만 있는 줄)은 세지 않는다 */
   line(text: string): void {
@@ -139,7 +208,81 @@ export class CodexSessionParser {
       if (!this.inNew) this.oldCount(usageOf(obj(payload.info)?.total_token_usage));
       return;
     }
-    if (row.type === "token_usage_record") this.newRecord(payload);
+    if (row.type === "token_usage_record") return this.newRecord(payload);
+    if (row.type === "turn_context") {
+      this.model = str(payload.model);
+      this.effort = str(payload.effort);
+      // 창에서 문맥보다 앞에 온 응답에도 이 문맥을 붙인다
+      if (!this.contextSeen) {
+        this.contextSeen = true;
+        for (const cell of this.pendingCells.splice(0)) this.attribute(cell);
+      }
+      return;
+    }
+    if (row.type === "event_msg" && (payload.type === "task_started" || payload.type === "task_complete" || payload.type === "turn_aborted")) {
+      this.closeGroup();
+      // 턴 시작은 도구 묶음만 닫는다. 문맥은 시작 앞에 오기도 해서 턴이 끝날 때 닫는다
+      if (payload.type !== "task_started") this.closeContext();
+      if (payload.type === "turn_aborted") {
+        const date = this.dateOf();
+        if (date !== null) this.day(date).interruptedTurns++;
+      }
+      return;
+    }
+    if (row.type === "response_item" && typeof payload.type === "string" && CALL_TYPES.has(payload.type)) {
+      const date = this.dateOf();
+      if (date !== null) this.groupCalls.set(date, (this.groupCalls.get(date) ?? 0) + 1);
+      return;
+    }
+    if (row.type === "event_msg" && payload.type === "item_completed") return this.item(obj(payload.item));
+    if (row.type === "compacted") {
+      const date = this.dateOf();
+      if (date !== null) this.day(date).autoCompactions++;
+      return;
+    }
+    if (row.type === "world_state" && this.instructionChars === null) {
+      const text = obj(obj(obj(payload.state)?.agents_md))?.text;
+      if (typeof text === "string") {
+        let ascii = 0;
+        let other = 0;
+        for (const char of text) {
+          if (char.codePointAt(0)! < 128) ascii++;
+          else other++;
+        }
+        this.instructionChars = { ascii, other };
+      }
+    }
+  }
+
+  /** 실행 층의 사건 하나. 도구면 이름별로 세고, 사람 요청이면 세고, 도구가 아닌 종류는 넘기며, 모르는 종류는 따로 센다 */
+  private item(item: Json | null): void {
+    if (item === null) return;
+    const type = str(item.type);
+    if (type === null) return;
+    if (type === "UserMessage") {
+      const date = this.dateOf();
+      if (date !== null) this.day(date).humanRequests++;
+      return;
+    }
+    if (NON_TOOL_ITEMS.has(type)) return;
+    const kind = EXEC_TOOLS.get(type);
+    if (kind === undefined) {
+      this.unknownItemTypes[type] = (Object.hasOwn(this.unknownItemTypes, type) ? this.unknownItemTypes[type]! : 0) + 1;
+      return;
+    }
+    const date = this.dateOf();
+    if (date === null) return;
+    this.groupExec.set(date, (this.groupExec.get(date) ?? 0) + 1);
+    const cell = this.day(date);
+    const server = type === "McpToolCall" ? str(item.server) : null;
+    const name = type === "McpToolCall" ? `mcp__${server ?? UNKNOWN_TOOL}` : kind.name;
+    const counts = this.tool(cell, name);
+    counts.calls++;
+    if (type === "McpToolCall" && server !== null) cell.mcpCalls[server] = (Object.hasOwn(cell.mcpCalls, server) ? cell.mcpCalls[server]! : 0) + 1;
+    if (!kind.status) return;
+    counts.results++;
+    const failed = type === "CommandExecution" ? typeof item.exit_code === "number" && item.exit_code !== 0 : item.status === "failed";
+    if (failed) counts.errors++;
   }
 
   /** session_meta 하나. 버전은 모든 session_meta에서 가장 높은 것을 남기고(설계 9.3), 정체(세션 ID, 작업 폴더, 주·하위, 부모)는 첫 줄의 것에서만 정한다 */
@@ -168,6 +311,8 @@ export class CodexSessionParser {
     const cell = this.day(date);
     cell.responses++;
     for (const key of KEYS) cell.tokens[key] += add[key];
+    if (this.contextSeen) this.attribute(cell);
+    else this.pendingCells.push(cell);
   }
 
   private oldCount(total: Usage | null): void {
@@ -211,6 +356,8 @@ export class CodexSessionParser {
       else if (inProgress) this.tailFragments++;
       else this.brokenLines++;
     }
+    this.closeGroup();
+    this.closeContext();
     if (!this.firstLineSeen) this.idFallback = "no-lines";
     const days: Record<LocalDate, DayCell> = {};
     for (const date of [...this.days.keys()].sort()) days[date] = canonicalDay(this.days.get(date)!);
@@ -223,13 +370,13 @@ export class CodexSessionParser {
       version: this.version,
       firstDate: this.firstDate,
       days,
-      instructionChars: null,
+      instructionChars: this.instructionChars,
       initialSkills: null,
       initialMcpServers: null,
       missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: nameRecord<number>() },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord<number>() },
-      codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback },
+      codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: this.unknownItemTypes },
     };
   }
 }

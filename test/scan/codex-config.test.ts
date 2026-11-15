@@ -136,6 +136,13 @@ describe("codexConfigShapeOk", () => {
     expect(ok("approval_policy = { granular = {}, extra = {} }\n")).toBe(false);
   });
 
+  it("Codex 0.166.0이 더는 받지 않는 승인 정책 untrusted는 틀린 값이다. 옛 이름 on-failure는 맞다(3부 계획 리뷰 1차)", () => {
+    expect(ok('approval_policy = "untrusted"\n')).toBe(false);
+    expect(ok('approval_policy = "on-failure"\n')).toBe(true);
+    expect(ok('approval_policy = "on-request"\n')).toBe(true);
+    expect(ok('approval_policy = "never"\n')).toBe(true);
+  });
+
   it.each([
     ["sandbox_mode = true", "sandbox_mode"],
     ["default_permissions = 1", "default_permissions"],

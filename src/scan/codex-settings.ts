@@ -30,7 +30,7 @@ export function trustOf(user: TomlTable, root: string, platform: NodeJS.Platform
   return found[0]?.trust ?? null;
 }
 
-export type ApprovalFact = "never" | "on-request" | "untrusted" | "granular" | "other" | null;
+export type ApprovalFact = "never" | "on-request" | "granular" | "other" | null;
 export type SandboxFact = "danger-full-access" | "workspace-write" | "read-only" | "other" | null;
 
 /** 한 맥락(사용자 층 위에 얹은 층들)의 승인과 샌드박스. 적히지 않은 값은 null이다(Codex의 기본은 묻는 승인과 샌드박스다) */
@@ -49,7 +49,8 @@ export interface CodexSafetyFact {
 function approvalOf(value: unknown): ApprovalFact {
   if (value === undefined) return null;
   if (isTable(value)) return "granular";
-  if (value === "never" || value === "untrusted") return value;
+  // "untrusted"는 Codex가 거부해 그 설정 파일이 풀리지 않는 것이 되므로(codex-config.ts) 따로 가르지 않는다
+  if (value === "never") return value;
   // on-failure는 on-request의 옛 이름이다(공개 소스 protocol/src/protocol.rs의 AskForApproval)
   if (value === "on-request" || value === "on-failure") return "on-request";
   return "other";

@@ -1,4 +1,4 @@
-// Codex 설정 파일(TOML)을 읽어 묶음으로 푼다. 스캐너가 읽는 자리의 값의 종류와 MCP 서버의 전송 꼴이 Codex가 시작하지 못하는 꼴이면 풀리지 않는 것으로 보고, 층을 Codex와 같이 합치며, 지문용으로 TOML 값을 JSON 꼴로 바꾼다. 값은 메모리에서만 쓴다(설계 10, 「5단계 2부 계획 전 결정」 1·3·7번)
+// Codex 설정 파일(TOML)을 읽어 묶음으로 푼다. 스캐너가 읽는 자리의 값의 종류, 더는 받지 않는 승인 정책, MCP 서버의 전송 꼴이 Codex가 시작하지 못하는 꼴이면 풀리지 않는 것으로 보고, 층을 Codex와 같이 합치며, 지문용으로 TOML 값을 JSON 꼴로 바꾼다. 값은 메모리에서만 쓴다(설계 10, 「5단계 2부 계획 전 결정」 1·3·7번)
 import { parse } from "smol-toml";
 import { readText } from "./fs.ts";
 import { isObject } from "./json.ts";
@@ -67,14 +67,18 @@ export function codexServerShapeOk(server: unknown): boolean {
   return false;
 }
 
-/** 글자이거나 granular 하나를 담은 묶음이다 */
-const approvalShapeOk = (value: unknown): boolean => value === undefined || isText(value) || (isTable(value) && Object.keys(value).length === 1 && isTable(value.granular));
+/**
+ * 글자이거나 granular 하나를 담은 묶음이다. "untrusted"는 Codex 0.166.0이 더는 받지 않아 설정을 읽다가 멈추는 값이라 틀린 값이다(공개 소스
+ * core/src/config/mod.rs의 UnsupportedUntrustedApprovalPolicyError, 3부 계획 리뷰 1차)
+ */
+const approvalShapeOk = (value: unknown): boolean =>
+  value === undefined || (isText(value) && value !== "untrusted") || (isTable(value) && Object.keys(value).length === 1 && isTable(value.granular));
 const pluginShapeOk = (plugin: unknown): boolean =>
   isTable(plugin) && optional(plugin.enabled, isBool) && optional(plugin.mcp_servers, (servers) => tableOf(servers, (server) => isTable(server) && optional(server.enabled, isBool)));
 const skillsShapeOk = (skills: unknown): boolean =>
   optional(skills, (value) => isTable(value) && optional(value.config, (list) => Array.isArray(list) && list.every((entry) => isTable(entry) && isBool(entry.enabled) && optional(entry.path, isText) && optional(entry.name, isText))));
 
-/** 스캐너가 읽는 자리의 값의 종류가 맞는지. 모르는 열쇠와 모르는 글자 값은 틀린 것이 아니다(「5단계 2부 계획 전 결정」 3번) */
+/** 스캐너가 읽는 자리의 값의 종류가 맞는지. 모르는 열쇠와 모르는 글자 값은 틀린 것이 아니고, Codex가 더는 받지 않는 승인 정책은 틀린 것이다(「5단계 2부 계획 전 결정」 3번) */
 export function codexConfigShapeOk(doc: TomlTable): boolean {
   return (
     approvalShapeOk(doc.approval_policy) &&

@@ -165,6 +165,25 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
     const e1 = result.findings.find((f) => f.ruleId === "E1")!;
     expect(e1.tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
   });
+
+  it("Codex 0.166.0이 거부하는 승인 정책 untrusted를 적은 설정은 풀리지 않는 설정이다. S3이 세고 S2는 Codex를 빼고 잰다(3부 계획 리뷰 1차)", async () => {
+    await put(join(home, ".codex", "config.toml"), 'approval_policy = "untrusted"\nsandbox_mode = "workspace-write"\n');
+    const gathered = await gatherCheckupInput(options());
+    expect(gathered.facts.codex.config).toBe("unparsable");
+    const result = evaluate(gathered.input);
+    expect(result.findings.find((f) => f.ruleId === "S3")!.evidence).toMatchObject({ unparsable: 1 });
+    expect(result.findings.find((f) => f.ruleId === "S2")!.evidence).toMatchObject({ tools: 1, unreadTools: 1 });
+  });
+
+  it("신뢰한 프로젝트의 설정이 그 승인 정책을 적어도 그 프로젝트의 설정이 풀리지 않는다(3부 계획 리뷰 1차)", async () => {
+    await put(join(other, ".codex", "config.toml"), 'approval_policy = "untrusted"\n');
+    const gathered = await gatherCheckupInput(options());
+    expect(gathered.facts.codex.config).toBe("ok");
+    expect(gathered.facts.codex.projects.find((project) => project.normRoot === normalizePath(other))).toMatchObject({ trust: "trusted", configStatus: "unparsable", safety: null });
+    const result = evaluate(gathered.input);
+    expect(result.findings.find((f) => f.ruleId === "S3")!.evidence).toMatchObject({ unparsable: 1 });
+    expect(result.findings.find((f) => f.ruleId === "S2")!.evidence).toMatchObject({ tools: 1, unreadTools: 1 });
+  });
 });
 
 describe("모은 입력으로 평가한 결과", () => {

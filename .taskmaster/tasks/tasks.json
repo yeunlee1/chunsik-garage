@@ -524,13 +524,41 @@
           37
         ],
         "updatedAt": "2026-11-15T23:46:19.528Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 39,
+        "title": "5단계 5부 구현 계획 쓰기: Codex 플러그인",
+        "description": "Codex 플러그인(매니페스트 둘, 버전 검사, 산출물, Codex에서 스킬이 도는지)의 구현 계획을 쓰고 짝 리뷰를 받는다.",
+        "details": "5단계 4부가 병합된 뒤(6cddb73) 쓴다(로드맵: 부마다 앞 부가 병합된 뒤 쓴다). 설계 7.1의 Codex 매니페스트 자리와 23절, 27절이 \"구현 때 실제로 설치해 보고 확정한다\"고 남긴 것을 정한다. 리뷰는 제품 결함만 필수로 보고, 오래 끌면 주 세션이 제품 결함만 한 번 찾고 넘어간다(Fable은 쓰지 않는다, 2026-11-16 사용자 지시). Codex로 모델을 실제로 부르는 확인은 사용자 계정의 사용량과 로그인 정보를 쓰므로 실행 직전에 사용자에게 묻는다.",
+        "testStrategy": "계획의 코드를 새 복제본에 적용해 과제마다 실패에서 통과, npm run check 통과, 짝 리뷰 필수 0건.",
+        "status": "in-progress",
+        "dependencies": [
+          38
+        ],
+        "updatedAt": "2026-11-15T23:47:59.746Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 40,
+        "title": "5단계 5부 구현: Codex 플러그인",
+        "description": "5단계 5부 계획을 브랜치에 적용하고 짝 검증 뒤 develop에 병합한다.",
+        "details": "짝 검증에서 짝과 주 세션 모두 필수 0건이면 주 세션이 묻지 않고 병합한다(사용자 지시 2026-11-13). 필수는 제품 결함과 수용 조건 미충족이다(2026-11-16).",
+        "testStrategy": "npm run check와 Node.js 22 통과, 산출물을 임시 Codex 홈에 설치해 플러그인과 스킬이 실리는지 확인, 짝 검증 필수 0건.",
+        "status": "pending",
+        "dependencies": [
+          39
+        ],
+        "updatedAt": "2026-11-15T23:47:59.746Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
       "created": "2026-11-12T10:51:53.246Z",
       "lastModified": "2026-11-12T12:25:44.422Z",
-      "updated": "2026-11-15T23:46:19.528Z",
+      "updated": "2026-11-15T23:47:59.746Z",
       "taskCount": 7,
       "completedCount": 4,
       "tags": [

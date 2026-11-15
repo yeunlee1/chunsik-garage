@@ -51,6 +51,14 @@ describe("compareCodexPluginVersions", () => {
     // pre-release가 먼저 견주어진다
     expect(compareCodexPluginVersions("1.0.0-a+9", "1.0.0-b+1")).toBeLessThan(0);
   });
+
+  it("주·부·패치가 u64를 넘으면 SemVer로 풀리지 않아 글자로 견준다(Codex의 semver는 넘치면 실패한다, 구현 검증)", () => {
+    // 18446744073709551615는 u64의 최댓값이다
+    expect(compareCodexPluginVersions("18446744073709551615.0.0", "999.0.0")).toBeGreaterThan(0);
+    expect(compareCodexPluginVersions("18446744073709551616.0.0", "999.0.0")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.18446744073709551616.0", "1.2.0")).toBeLessThan(0);
+    expect(compareCodexPluginVersions("1.0.18446744073709551616", "1.0.2")).toBeLessThan(0);
+  });
 });
 
 describe("readCodexPlugin의 놓인 곳", () => {
@@ -59,6 +67,9 @@ describe("readCodexPlugin의 놓인 곳", () => {
     expect((await readCodexPlugin(home, "p@m")).root).toBe(cache("m", "p", "local"));
     for (const version of ["2.0.0", "10.0.0", "9.9.9"]) await manifest(cache("m", "q", version), { name: "q" });
     expect((await readCodexPlugin(home, "q@m")).root).toBe(cache("m", "q", "10.0.0"));
+    // u64를 넘는 주 버전은 SemVer가 아니라 글자로 견주어 999.0.0이 높다(구현 검증)
+    for (const version of ["18446744073709551616.0.0", "999.0.0"]) await manifest(cache("m", "r", version), { name: "r" });
+    expect((await readCodexPlugin(home, "r@m")).root).toBe(cache("m", "r", "999.0.0"));
   });
 
   it("이름이 맞지 않는 폴더, 파일, 폴더 링크는 버전으로 보지 않는다", async () => {

@@ -106,10 +106,18 @@ function cmpBuild(a: string, b: string): number {
   return ys.length > xs.length ? -1 : 0;
 }
 
-/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer 꼴이면 SemVer의 차례(빌드 꼬리까지)이고, 아니면 글자의 차례다 */
+const U64_MAX = 2n ** 64n - 1n;
+
+/** SemVer로 풀리는지. Codex가 쓰는 semver 1.0.27은 주·부·패치를 u64로 풀어 넘치면 실패한다(parse.rs의 numeric_identifier. 구현 검증) */
+function semverOf(text: string): RegExpExecArray | null {
+  const match = SEMVER.exec(text);
+  return match !== null && [match[1], match[2], match[3]].every((part) => BigInt(part!) <= U64_MAX) ? match : null;
+}
+
+/** 버전 폴더의 차례(공개 소스 installed.rs의 compare_plugin_versions). 둘 다 SemVer로 풀리면 SemVer의 차례(빌드 꼬리까지)이고, 아니면 글자의 차례다 */
 export function compareCodexPluginVersions(a: string, b: string): number {
-  const x = SEMVER.exec(a);
-  const y = SEMVER.exec(b);
+  const x = semverOf(a);
+  const y = semverOf(b);
   if (x === null || y === null) return cmpText(a, b);
   for (let i = 1; i <= 3; i++) {
     const order = cmpBig(x[i]!, y[i]!);

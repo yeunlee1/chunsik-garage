@@ -6,7 +6,7 @@ import { claudeHome, listClaudeFiles, type FileList } from "../adapters/claude/l
 import { mostlyBroken } from "../adapters/claude/observation.ts";
 import { CLAUDE_PARSER_VERSION, ClaudeSessionParser } from "../adapters/claude/parser.ts";
 import type { SessionSummary } from "../adapters/types.ts";
-import { cacheKeyFor, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
+import { cacheKeyFor, keyStillMatches, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
 
 export interface EvalClock {
   nowMs: number;
@@ -33,7 +33,7 @@ export interface ClaudeReadStats {
   fromCache: number;
   inProgress: number;
   olderThanWindow: number;
-  /** 크기를 보지 못했거나, 열거나 읽지 못했거나, 절반 넘게 깨진 파일. 경로 차례다 */
+  /** 크기를 보지 못했거나, 열거나 읽지 못했거나, 절반 넘게 깨졌거나, 읽는 동안 줄어 연 크기까지 읽지 못한 파일(그때까지 읽은 숫자는 쓴다). 경로 차례다 */
   unreadableFiles: string[];
   /** unreadableFiles 가운데 크기를 아는 것의 바이트 */
   unreadableFileBytes: number;
@@ -88,7 +88,7 @@ export async function collectFromList(home: string, list: FileList, options: Col
     try {
       if (cacheDir !== null) {
         key = await cacheKeyFor(file, CLAUDE_PARSER_ID, options.clock.timeZone);
-        if (!options.rescan) {
+        if (!options.rescan && key !== null) {
           const hit = await loadCached(cacheDir, key);
           if (hit !== null) {
             summaries.push(hit.summary);
@@ -112,14 +112,16 @@ export async function collectFromList(home: string, list: FileList, options: Col
       const summary = parser.finish(outcome.tail, outcome.inProgress);
       summaries.push(summary);
       bytes += outcome.bytesRead;
-      if (mostlyBroken(summary)) markUnreadable(file.path, file.size);
+      // 읽는 동안 줄어 연 크기까지 읽지 못했으면 앞부분만 읽은 것이라 읽지 못한 파일로도 센다(관측이 빠짐없다고 하지 않게)
+      if (mostlyBroken(summary) || outcome.endedEarly) markUnreadable(file.path, file.size);
       if (outcome.inProgress) {
         inProgress++;
         continue;
       }
       if (key !== null && cacheDir !== null && outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs) {
         try {
-          await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
+          // 해석하는 동안 바뀌었으면(크기와 수정 시각을 되돌렸어도 앞뒤 지문이 다르면) 그 요약을 이 열쇠로 넣지 않는다
+          if (await keyStillMatches(file.path, key)) await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
         } catch {
           // 캐시를 쓰지 못해도 점검은 이어 간다. 다음 점검이 다시 읽는다.
         }

@@ -135,4 +135,29 @@ describe("reviveSummary", () => {
     ];
     for (const value of broken) expect(reviveSummary(value)).toBeNull();
   });
+  it("개수 칸에 음수, 소수, 안전한 정수 밖의 수가 있으면 null이다(손으로 고쳤거나 깨진 캐시. 0과 가장 큰 안전한 정수는 받는다)", () => {
+    const base = JSON.parse(JSON.stringify(fullSummary())) as Record<string, any>;
+    const cell = base.days["2026-11-11"];
+    const day = (patch: Record<string, unknown>) => ({ ...base, days: { "2026-11-11": { ...cell, ...patch } } });
+    const wrong: Array<[string, unknown]> = [
+      ["응답 -1", day({ responses: -1 })],
+      ["응답 0.5", day({ responses: 0.5 })],
+      ["응답 2^53", day({ responses: 2 ** 53 })],
+      ["입력 토큰 -10", day({ tokens: { ...cell.tokens, input: -10 } })],
+      ["입력 토큰 1.5", day({ tokens: { ...cell.tokens, input: 1.5 } })],
+      ["모델별 수 -1", day({ models: { ...cell.models, "claude-a": -1 } })],
+      ["모델별 수 0.5", day({ models: { ...cell.models, "claude-a": 0.5 } })],
+      ["입력 토큰 2^53", day({ tokens: { ...cell.tokens, input: 2 ** 53 } })],
+      ["도구 호출 -1", day({ tools: { Bash: { ...cell.tools.Bash, calls: -1 } } })],
+      ["훅 실행 -1", day({ hooks: { PreToolUse: { ...cell.hooks.PreToolUse, runs: -1 } } })],
+      ["빠진 줄 -1", { ...base, missing: { ...base.missing, lines: -1 } }],
+      ["확인 못 한 종류 -1", { ...base, missing: { ...base.missing, unconfirmedTypes: { system: -1 } } }],
+      ["알림 -1", { ...base, notes: { ...base.notes, syntheticResponses: -1 } }],
+      ["모르는 훅 종류 0.5", { ...base, notes: { ...base.notes, unknownHookKinds: { hook_new: 0.5 } } }],
+      ["지침 글자 -1", { ...base, instructionChars: { ascii: -1, other: 1 } }],
+    ];
+    for (const [name, value] of wrong) expect(reviveSummary(value), name).toBeNull();
+    expect(reviveSummary(day({ responses: 0 }))).not.toBeNull();
+    expect(reviveSummary(day({ responses: Number.MAX_SAFE_INTEGER }))).not.toBeNull();
+  });
 });

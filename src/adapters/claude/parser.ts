@@ -20,7 +20,9 @@ import {
 import { classifyUser, denialOf, isInterruptMarker, slashCommandOf, type DenialKind } from "./classify.ts";
 import { ResponseTable } from "./responses.ts";
 
-export const CLAUDE_PARSER_VERSION = 1;
+/** 해석 버전. 캐시 열쇠에 들어가, 읽기나 해석이 바뀌어 예전 버전이 넣은 캐시가 틀릴 수 있으면 올린다(설계 9.4).
+ *  2: 1~4단계의 줄 읽기는 읽는 동안 줄었다 되돌아온 파일을 온전하다고 보아, 앞부분만 읽은 요약을 온전한 파일의 열쇠로 넣을 수 있었다(5단계 1부 계획 리뷰 17차) */
+export const CLAUDE_PARSER_VERSION = 2;
 
 /** 숫자를 세는 종류. 그 밖의 종류는 풀리는지와 날짜만 본다(설계 9.4) */
 const COUNTED_TYPES: ReadonlySet<string> = new Set(["assistant", "user", "attachment", "system"]);

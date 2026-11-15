@@ -1,8 +1,9 @@
-// 파일마다의 세션 요약을 상태 폴더에 저장하고, 열쇠(경로·크기·수정 시각·앞뒤 4KB 지문·캐시 형식·해석 버전·시간대)가 모두 같고 요약의 모양이 맞을 때만 꺼낸다(설계 9.4)
+// 파일마다의 세션 요약을 상태 폴더에 저장하고, 열쇠(경로·크기·수정 시각·앞뒤 4KB 지문·캐시 형식·해석 버전·시간대)가 모두 같고 요약의 모양이 맞을 때만 꺼낸다. Codex 항목은 지문 목록과 뺄 지문과의 겹침도 함께 넣고 꺼낸다(설계 9.4, 「5단계 계획 전 결정」 7번)
 import { createHash } from "node:crypto";
 import { lstat, mkdir, open, readdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
+import { reviveCodexExtra, type CodexCacheExtra } from "../adapters/codex/fingerprints.ts";
 import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 import { expectedRealDir, removeFiles } from "./folder.ts";
 
@@ -24,6 +25,8 @@ export interface CacheEntry {
   key: CacheKey;
   summary: SessionSummary;
   bytesRead: number;
+  /** Codex 항목만. 자기 기록의 지문 목록과, 해석할 때 뺀 지문 가운데 이 기록에도 있던 것의 지문 */
+  codex?: CodexCacheExtra;
 }
 
 export interface KeySource {
@@ -35,16 +38,26 @@ export interface KeySource {
 
 const sha256 = (data: Buffer | string): string => createHash("sha256").update(data).digest("hex");
 
-export async function cacheKeyFor(file: KeySource, parser: string, timeZone: string): Promise<CacheKey> {
+/** 열쇠를 만든다. 앞뒤 지문을 읽은 뒤의 크기나 수정 시각이 목록에서 받은 것과 다르면(목록을 본 뒤나 지문을 읽는 동안 바뀌었으면) null이다. 부르는 쪽은 그 파일의 캐시를 꺼내지도 넣지도 않는다 */
+export async function cacheKeyFor(file: KeySource, parser: string, timeZone: string): Promise<CacheKey | null> {
   const handle = await open(file.path, "r");
   try {
     const length = Math.min(EDGE_BYTES, file.size);
     const head = Buffer.alloc(length);
     const tail = Buffer.alloc(length);
-    if (length > 0) {
-      await handle.read(head, 0, length, 0);
-      await handle.read(tail, 0, length, file.size - length);
-    }
+    // 한 번의 읽기는 요청보다 짧게 끝날 수 있어 지문을 채울 때까지 읽는다. 채우기 전에 파일이 끝나면 열쇠를 만들지 않는다
+    const fill = async (buffer: Buffer, position: number): Promise<boolean> => {
+      for (let offset = 0; offset < buffer.length; ) {
+        const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, position + offset);
+        if (bytesRead === 0) return false;
+        offset += bytesRead;
+      }
+      return true;
+    };
+    if (!(await fill(head, 0)) || !(await fill(tail, file.size - length))) return null;
+    // 목록을 본 뒤나 앞뒤 지문을 읽는 동안 바뀌었으면 그 지문은 목록에서 본 파일의 것이 아니다
+    const after = await handle.stat();
+    if (after.size !== file.size || after.mtimeMs !== file.mtimeMs) return null;
     return {
       normPath: file.normPath,
       size: file.size,
@@ -73,6 +86,12 @@ export function sameKey(a: CacheKey, b: CacheKey): boolean {
   );
 }
 
+/** 넣기 직전에 열쇠를 다시 만들어 처음 열쇠와 같을 때만 참이다. 해석하는 동안 내용이 바뀌었으면(크기와 수정 시각을 되돌렸어도 앞뒤 지문이 다르면) 그 요약은 이 열쇠의 것이 아니다 */
+export async function keyStillMatches(path: string, key: CacheKey): Promise<boolean> {
+  const now = await cacheKeyFor({ path, normPath: key.normPath, size: key.size, mtimeMs: key.mtimeMs }, key.parser, key.timeZone);
+  return now !== null && sameKey(now, key);
+}
+
 function entryPath(dir: string, normPath: string): string {
   return join(dir, `${sha256(normPath).slice(0, 32)}.json`);
 }
@@ -80,10 +99,14 @@ function entryPath(dir: string, normPath: string): string {
 export async function loadCached(dir: string, key: CacheKey): Promise<CacheEntry | null> {
   try {
     const entry = JSON.parse(await readFile(entryPath(dir, key.normPath), "utf8")) as Partial<CacheEntry>;
-    if (entry.key === undefined || typeof entry.bytesRead !== "number" || !sameKey(entry.key, key)) return null;
+    // 읽은 바이트는 0 이상의 안전한 정수이고 파일 크기를 넘지 않는다. 아니면 손으로 고쳤거나 깨진 캐시다
+    if (entry.key === undefined || typeof entry.bytesRead !== "number" || !Number.isSafeInteger(entry.bytesRead) || entry.bytesRead < 0 || entry.bytesRead > key.size || !sameKey(entry.key, key)) return null;
     // JSON으로 풀려도 요약의 모양이 다르면(손으로 고쳤거나 옛 형식) 없는 것으로 보고 원본을 다시 읽는다
     const summary = reviveSummary(entry.summary);
-    return summary === null ? null : { key: entry.key, summary, bytesRead: entry.bytesRead };
+    if (summary === null) return null;
+    if (summary.tool !== "codex") return entry.codex === undefined ? { key: entry.key, summary, bytesRead: entry.bytesRead } : null;
+    const codex = reviveCodexExtra(entry.codex);
+    return codex === null ? null : { key: entry.key, summary, bytesRead: entry.bytesRead, codex };
   } catch {
     return null;
   }

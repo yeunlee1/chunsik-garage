@@ -120,18 +120,24 @@ describe("aq tune plan(「6단계 1부 계획 전 결정」 6번)", () => {
 
 describe("aq tune apply·undo·verify의 인자(6단계 2부 계획 전 결정 10번)", () => {
   const ID = "2026-11-12T03-00-00-000Z-abc123";
-  it("첫 위치 인자는 ID 꼴이고, apply는 항목이 하나 이상, verify는 항목이 없으며, 항목은 겹치지 않는다", () => {
+  it("첫 위치 인자는 ID 꼴이고, apply는 항목이 하나 이상, verify는 항목이 없으며, 항목은 겹치지 않는다. undo만 ID를 빼도 된다(0.1.1)", () => {
     expect(tuneRunArgs("apply", [ID, "A1:claude-code:idle", "--lang", "ko", "--rescan"])).toEqual({ lang: "ko", rescan: true, id: ID, items: ["A1:claude-code:idle"] });
     expect(tuneRunArgs("undo", [ID])).toEqual({ lang: null, rescan: false, id: ID, items: [] });
     expect(tuneRunArgs("verify", [ID, "--lang", "en"])).toEqual({ lang: "en", rescan: false, id: ID, items: [] });
+    // 작업 번호를 모르는 새 세션의 되돌리기는 ID 없이 부른다
+    expect(tuneRunArgs("undo", [])).toEqual({ lang: null, rescan: false, id: null, items: [] });
+    expect(tuneRunArgs("undo", ["--lang", "ko"])).toEqual({ lang: "ko", rescan: false, id: null, items: [] });
     for (const [command, args] of [
       ["apply", [ID]],
+      ["apply", []],
       ["apply", ["../x", "A1:claude-code:idle"]],
       ["apply", [ID, "a", "a"]],
       ["verify", [ID, "a"]],
+      ["verify", []],
       ["undo", [ID, "--no-save"]],
       ["undo", [ID, "--lang"]],
-      ["undo", []],
+      ["undo", ["../x"]],
+      ["undo", ["A1:claude-code:idle"]],
     ] as const) expect(tuneRunArgs(command, args)).toBeNull();
   });
 });

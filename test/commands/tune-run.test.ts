@@ -75,6 +75,35 @@ describe("계획부터 되돌리기까지", () => {
     expect((await loadWork(stateDir, applied.work.workId))!.items[0]!.state).toBe("undone");
   });
 
+  it("작업 ID 없이 되돌리면 아직 되돌릴 것이 남은 가장 최근 적용을 되돌리고, 남은 것이 없으면 오류로 끝낸다(0.1.1)", async () => {
+    const planId = await planned();
+    const applied = await runTuneApply({ ...run(), planId, itemIds: [ITEM] });
+    // 같은 항목을 바꾼 더 이른 적용과, 더 늦은 되돌림 기록을 둔다. 되돌림 기록은 고르지 않는다
+    const older = { ...structuredClone(applied.work), workId: "2026-11-12T02-00-00-000Z-aaaaaa", createdAt: "2026-11-12T02:00:00.000Z" };
+    const later = { ...structuredClone(applied.work), workId: "2026-11-12T04-00-00-000Z-bbbbbb", createdAt: "2026-11-12T04:00:00.000Z", kind: "undo" as const, planId: null, of: older.workId };
+    await saveWork(stateDir, older);
+    await saveWork(stateDir, later);
+    expect((await loadWork(stateDir, older.workId))?.kind).toBe("apply");
+    expect((await loadWork(stateDir, later.workId))?.kind).toBe("undo");
+
+    const first = await runTuneUndo({ ...run({ random: () => "000002" }), workId: null, itemIds: [] });
+    expect(first.work.of).toBe(applied.work.workId);
+    expect(first.run.text.items[ITEM]).toBe("되돌렸습니다.");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": []\n}\n');
+    expect((await loadWork(stateDir, applied.work.workId))!.items[0]!.state).toBe("undone");
+
+    // 가장 최근 적용을 다 되돌렸으니 그 앞의 적용을 고른다. 이미 되돌린 값이라 쓰지는 않는다
+    const second = await runTuneUndo({ ...run({ random: () => "000003" }), workId: null, itemIds: [] });
+    expect(second.work.of).toBe(older.workId);
+    expect(second.work.items[0]!.state).not.toBe("written");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": []\n}\n');
+
+    const olderNow = (await loadWork(stateDir, older.workId))!;
+    olderNow.items[0]!.state = "undone";
+    await saveWork(stateDir, olderNow);
+    await expect(runTuneUndo({ ...run({ random: () => "000004" }), workId: null, itemIds: [] })).rejects.toMatchObject({ code: "nothing-to-undo" });
+  });
+
   it("계획 뒤 설정 파일이 바뀌었으면 바꾸지 않고 다시 계획하라고 알린다", async () => {
     const planId = await planned();
     await writeFile(settings, '{\n  "permissions": {"allow": []}\n}\n');

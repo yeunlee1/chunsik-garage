@@ -7,7 +7,7 @@ import { verifyText, workItemText, workNoticeText, type WorkNotice } from "../tu
 import { replaceSetting, runFiles, type EngineIo, type EngineNotice } from "../tune/engine.ts";
 import { readTarget, sameSlot, slotOf, type Slot, type TuneItem } from "../tune/items.ts";
 import { PLANS_DIR, planIdOf, type TunePlan } from "../tune/plan.ts";
-import { ID_PATTERN, LOCK_FILE, loadWork, reconcileWorks, saveWork, takeLock, type TuneWork, type WorkFile, type WorkItem } from "../tune/work.ts";
+import { ID_PATTERN, LOCK_FILE, listWorks, loadWork, reconcileWorks, saveWork, takeLock, type TuneWork, type WorkFile, type WorkItem } from "../tune/work.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { judgeTune, type Judged, type TunePlanOptions } from "./tune-plan.ts";
 
@@ -127,12 +127,21 @@ export async function runTuneApply(options: TuneRunOptions & { planId: string; i
   });
 }
 
-/** aq tune undo <작업 ID> [항목 ID…]. 열쇠 단위로 되돌리고, 그 사이 값이 달라졌으면 덮어쓰지 않는다(16.6). 항목을 주지 않으면 그 작업에서 쓴 것 모두다 */
-export async function runTuneUndo(options: TuneRunOptions & { workId: string; itemIds: readonly string[] }): Promise<TuneWorkOutcome> {
+/** 아직 되돌릴 것이 남은 가장 최근 적용. 작업 ID가 시각으로 시작하므로 ID 차례의 마지막이 가장 최근이다. 다 되돌린 적용은 건너뛰어, 되풀이해 부르면 한 단계씩 앞의 정비로 간다 */
+async function latestUndoable(stateDir: string): Promise<TuneWork | null> {
+  return (await listWorks(stateDir)).filter((work) => work.kind === "apply" && work.items.some(isUndoable)).at(-1) ?? null;
+}
+
+/**
+ * aq tune undo [<작업 ID> [항목 ID…]]. 열쇠 단위로 되돌리고, 그 사이 값이 달라졌으면 덮어쓰지 않는다(16.6). 항목을 주지 않으면 그 작업에서 쓴 것 모두다.
+ * 작업 ID가 null이면 아직 되돌릴 것이 남은 가장 최근 적용을 되돌린다(작업 번호를 모르는 새 세션, 0.1.1)
+ */
+export async function runTuneUndo(options: TuneRunOptions & { workId: string | null; itemIds: readonly string[] }): Promise<TuneWorkOutcome> {
   const started = (options.now ?? Date.now)();
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
-    const target = await loadWork(options.stateDir, options.workId);
+    const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
+    if (target === null && options.workId === null) throw failure("nothing-to-undo", "no apply run has changes left to undo");
     if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item) => item.id === id));
     if (unknown.length > 0) throw failure("item-not-in-work", `not in the run: ${unknown.join(", ")}`);

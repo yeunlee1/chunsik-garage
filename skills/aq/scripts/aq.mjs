@@ -5078,7 +5078,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.1.1";
+var PROGRAM_VERSION = "0.2.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {

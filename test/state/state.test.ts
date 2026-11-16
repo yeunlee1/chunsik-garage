@@ -53,13 +53,16 @@ describe("상태 파일", () => {
     const base = { schema: 1, salt: "0".repeat(64), lastCheckupAt: null };
     expect(reviveState({ ...base, installs: [{ key: "k", firstSeen: "11/13", appeared: true }] })).toBeNull();
     expect(reviveState({ ...base, installs: [{ key: "k", firstSeen: "2026-11-13", appeared: "yes" }] })).toBeNull();
-    expect(reviveState({ ...base, installs: null })).toEqual({ ...base, installs: null });
+    expect(reviveState({ ...base, installs: null })).toEqual({ ...base, installs: null, notify: null });
+    // 알림 칸(7단계)은 없으면 꺼짐이고, 모양이 어긋나면 상태 파일이 다른 것이다
+    expect(reviveState({ ...base, installs: null, notify: { on: true, lang: "ko", names: ["b", "a"] } })).toEqual({ ...base, installs: null, notify: { on: true, lang: "ko", names: ["a", "b"] } });
+    expect(reviveState({ ...base, installs: null, notify: { on: "yes", lang: "ko", names: null } })).toBeNull();
   });
 
   it("저장한 파일에 무작위 값 말고 MCP 정의 원문이 들어갈 자리가 없다", async () => {
     await saveState(dir, newState());
     const text = await readFile(join(dir, "state.json"), "utf8");
-    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["installs", "lastCheckupAt", "salt", "schema"]);
+    expect(Object.keys(JSON.parse(text)).sort()).toEqual(["installs", "lastCheckupAt", "notify", "salt", "schema"]);
   });
 });
 

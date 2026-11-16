@@ -16,6 +16,13 @@ export interface InstallRecord {
   appeared: boolean;
 }
 
+/** 세션 시작 알림(설계 18.2). names는 알림용 이름 목록(18.1)이고 훅과 같은 함수로 만든다. 아직 만든 적이 없으면 null이다 */
+export interface NotifySettings {
+  on: boolean;
+  lang: "en" | "ko";
+  names: string[] | null;
+}
+
 export interface StateFile {
   schema: typeof STATE_SCHEMA;
   /** 이 PC에서 만든 무작위 값(16진 64자). MCP 서버 정의의 지문에 섞는다. 이 값으로 정의의 원문을 되살릴 수 없다 */
@@ -24,6 +31,8 @@ export interface StateFile {
   lastCheckupAt: string | null;
   /** 설치마다의 관측 기록(열쇠 차례). null이면 이 도구가 아직 관측을 적은 적이 없다(첫 점검) */
   installs: InstallRecord[] | null;
+  /** 세션 시작 알림. 켠 적이 없으면 null이다(꺼진 것과 같다) */
+  notify: NotifySettings | null;
 }
 
 export type StateLoad = { status: "missing" } | { status: "broken" } | { status: "ok"; state: StateFile };
@@ -32,7 +41,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SALT = /^[0-9a-f]{64}$/;
 
 export function newState(): StateFile {
-  return { schema: STATE_SCHEMA, salt: randomBytes(32).toString("hex"), lastCheckupAt: null, installs: null };
+  return { schema: STATE_SCHEMA, salt: randomBytes(32).toString("hex"), lastCheckupAt: null, installs: null, notify: null };
 }
 
 function reviveRecord(value: unknown): InstallRecord | null {
@@ -40,6 +49,16 @@ function reviveRecord(value: unknown): InstallRecord | null {
   const v = value as Record<string, unknown>;
   if (typeof v.key !== "string" || typeof v.firstSeen !== "string" || !DATE.test(v.firstSeen) || typeof v.appeared !== "boolean") return null;
   return { key: v.key, firstSeen: v.firstSeen, appeared: v.appeared };
+}
+
+/** 알림 칸을 되살린다. 칸이 없으면(알림을 만들기 전의 상태) null이고, 모양이 어긋나면 undefined다 */
+function reviveNotify(value: unknown): NotifySettings | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return undefined;
+  const v = value as Record<string, unknown>;
+  if (typeof v.on !== "boolean" || (v.lang !== "en" && v.lang !== "ko")) return undefined;
+  if (v.names !== null && (!Array.isArray(v.names) || !v.names.every((name) => typeof name === "string"))) return undefined;
+  return { on: v.on, lang: v.lang, names: v.names === null ? null : [...(v.names as string[])].sort() };
 }
 
 /** 풀어 낸 값이 상태 파일의 모양이면 같은 모양으로 되살린다. 하나라도 어긋나면 null이다. */
@@ -59,7 +78,9 @@ export function reviveState(value: unknown): StateFile | null {
     }
     installs.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
   }
-  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs };
+  const notify = reviveNotify(v.notify);
+  if (notify === undefined) return null;
+  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify };
 }
 
 export async function loadState(dir: string): Promise<StateLoad> {

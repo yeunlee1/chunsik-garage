@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
 import { runCheckup } from "./commands/checkup.ts";
 import { runDeepHints } from "./commands/deep-hints.ts";
+import { runNotify } from "./commands/notify.ts";
 import { runTunePlan } from "./commands/tune-plan.ts";
 import { runTuneApply, runTuneUndo, runTuneVerify, type TuneRunOptions } from "./commands/tune-run.ts";
 import { openInBrowser } from "./commands/open.ts";
@@ -110,6 +111,12 @@ async function run(command: string | undefined, rest: string[], context: CliCont
   }
   if (command === "clean" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--all"))) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "notify" && (rest[0] === "on" || rest[0] === "off" || rest[0] === "status")) {
+    const args = checkupArgs(rest.slice(1), new Set());
+    if (args === null) return null;
+    printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
     return 0;
   }
   if (command === "deep-hints") {

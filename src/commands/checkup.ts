@@ -13,6 +13,7 @@ import { appendHistory, historyCount, historyEntry, recentAq } from "../state/hi
 import { nextState, openState } from "../state/next-state.ts";
 import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
 import { saveState } from "../state/state.ts";
+import { nextNames, notifyNames } from "../hook/notify.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
 import { runNoticeText } from "./run-notices.ts";
@@ -113,7 +114,10 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     try {
       resultPath = await writeResult(options.stateDir, stamp, result);
       step = "state";
-      await saveState(options.stateDir, nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString()));
+      const next = nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString());
+      // 알림이 켜져 있으면 알림용 이름 목록을 훅과 같은 함수로 새로 짓는다(설계 18.1)
+      if (next.notify?.on === true) next.notify = { ...next.notify, names: nextNames(next.notify.names, notifyNames(options.env, options.homedir)) };
+      await saveState(options.stateDir, next);
       step = "history";
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;

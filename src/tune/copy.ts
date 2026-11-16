@@ -188,7 +188,7 @@ interface WorkCopy {
 export const WORK_COPY: Texts<WorkCopy> = {
   en: {
     written: { apply: "Changed.", undo: "Undone." },
-    verified: "Verified. The value is still in place and the item is off when judged again.",
+    verified: "Verified. The value is still in place and the item is off in every layer when judged again.",
     undone: "Undone later.",
     writtenOnResume: "The run was interrupted, but the file shows the change was written.",
     unknown: "The run was interrupted and the result is unknown. Check the file yourself.",
@@ -214,12 +214,12 @@ export const WORK_COPY: Texts<WorkCopy> = {
     verify: {
       ok: "Still off.",
       changed: "The value changed after the apply. Check the current settings.",
-      still: "The file still has the value, but it is a candidate again when judged. Another settings layer may turn it back on.",
+      still: "The file still has the value, but it is still on when judged again. Another settings layer, such as a project's settings, may turn it back on.",
     },
   },
   ko: {
     written: { apply: "바꿨습니다.", undo: "되돌렸습니다." },
-    verified: "확인했습니다. 값이 그대로이고 다시 판정해도 꺼져 있습니다.",
+    verified: "확인했습니다. 값이 그대로이고 다시 판정해도 어느 층에서도 꺼져 있습니다.",
     undone: "그 뒤에 되돌렸습니다.",
     writtenOnResume: "끊긴 작업이지만 파일에 쓴 것을 확인했습니다.",
     unknown: "끊긴 작업이라 결과를 모릅니다. 파일을 직접 확인하세요.",
@@ -245,7 +245,7 @@ export const WORK_COPY: Texts<WorkCopy> = {
     verify: {
       ok: "그대로 꺼져 있습니다.",
       changed: "바꾼 값이 그 뒤에 달라졌습니다. 지금 설정을 확인하세요.",
-      still: "파일에는 그대로지만 다시 판정해도 후보로 나옵니다. 다른 설정 층이 다시 켜고 있을 수 있습니다.",
+      still: "파일에는 그대로지만 다시 판정해도 켜져 있습니다. 다른 설정 층(프로젝트 설정 같은 것)이 다시 켜고 있을 수 있습니다.",
     },
   },
 };
@@ -282,9 +282,9 @@ export function workNoticeText(notice: WorkNotice, lang: Lang): string {
   return lines[notice.kind];
 }
 
-/** 확인의 결과 하나. 값이 그대로이고 다시 판정해도 후보가 아니면 꺼진 것이다 */
-export function verifyText(result: { kept: boolean; stillCandidate: boolean }, lang: Lang): string {
+/** 확인의 결과 하나. 값이 그대로이고 다시 판정해도 어느 층에서도 켜져 있지 않으면 꺼진 것이다 */
+export function verifyText(result: { kept: boolean; stillOn: boolean }, lang: Lang): string {
   const copy = WORK_COPY[lang].verify;
   if (!result.kept) return copy.changed;
-  return result.stillCandidate ? copy.still : copy.ok;
+  return result.stillOn ? copy.still : copy.ok;
 }

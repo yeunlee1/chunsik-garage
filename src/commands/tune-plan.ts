@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { EvalClock } from "../collect/claude.ts";
 import type { Lang } from "../core/copy/lang.ts";
-import { evaluate } from "../core/evaluate.ts";
+import { evaluate, type Evaluation, type EvaluationInput } from "../core/evaluate.ts";
 import { highestMainVersion } from "../core/metrics/setup.ts";
 import { openState } from "../state/next-state.ts";
 import { fingerprintOf, readTarget, targetPath, tuneItem, type TargetRead, type TuneItem } from "../tune/items.ts";
@@ -45,7 +45,15 @@ const codeOf = (error: unknown): string => (error as NodeJS.ErrnoException | nul
 export type JudgeOptions = Omit<TunePlanOptions, "lang" | "save" | "now" | "random"> & { cache: boolean };
 
 /** 점검과 같은 입력으로 평가해 정비 후보를 계획 항목으로 짓는다. 바꿀 파일은 파일마다 한 번만 읽는다. 계획과, 적용·확인의 다시 하는 판정이 같이 쓴다(「6단계 계획 전 결정」 6번) */
-export async function judgeTune(options: JudgeOptions): Promise<{ items: TuneItem[]; reads: Map<string, TargetRead> }> {
+/** 다시 한 판정. 확인이 대상의 실제 켜짐을 볼 수 있게 평가 결과와 입력도 돌려준다 */
+export interface Judged {
+  items: TuneItem[];
+  reads: Map<string, TargetRead>;
+  evaluation: Evaluation;
+  input: EvaluationInput;
+}
+
+export async function judgeTune(options: JudgeOptions): Promise<Judged> {
   // 판정에 쓰는 지난 상태(무작위 값과 관측 기록)는 읽기만 한다. 계획은 상태와 관측 기록을 고치지 않는다(1부 결정 5번)
   const opened = await openState(options.stateDir);
   const gathered = await gatherCheckupInput({
@@ -74,7 +82,7 @@ export async function judgeTune(options: JudgeOptions): Promise<{ items: TuneIte
     const context = { home, bundles: judged.skills, servers: judged.servers, versionOk: versionVerified(candidate.tool, highestMainVersion(input.summaries)) };
     items.push(tuneItem(candidate, context, reads.get(path)!));
   }
-  return { items, reads };
+  return { items, reads, evaluation, input: gathered.input };
 }
 
 export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOutcome> {

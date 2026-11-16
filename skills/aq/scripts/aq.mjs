@@ -10828,7 +10828,7 @@ function tuneNoticeText(notice, lang) {
 var WORK_COPY = {
   en: {
     written: { apply: "Changed.", undo: "Undone." },
-    verified: "Verified. The value is still in place and the item is off when judged again.",
+    verified: "Verified. The value is still in place and the item is off in every layer when judged again.",
     undone: "Undone later.",
     writtenOnResume: "The run was interrupted, but the file shows the change was written.",
     unknown: "The run was interrupted and the result is unknown. Check the file yourself.",
@@ -10854,12 +10854,12 @@ var WORK_COPY = {
     verify: {
       ok: "Still off.",
       changed: "The value changed after the apply. Check the current settings.",
-      still: "The file still has the value, but it is a candidate again when judged. Another settings layer may turn it back on."
+      still: "The file still has the value, but it is still on when judged again. Another settings layer, such as a project's settings, may turn it back on."
     }
   },
   ko: {
     written: { apply: "\uBC14\uAFE8\uC2B5\uB2C8\uB2E4.", undo: "\uB418\uB3CC\uB838\uC2B5\uB2C8\uB2E4." },
-    verified: "\uD655\uC778\uD588\uC2B5\uB2C8\uB2E4. \uAC12\uC774 \uADF8\uB300\uB85C\uC774\uACE0 \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
+    verified: "\uD655\uC778\uD588\uC2B5\uB2C8\uB2E4. \uAC12\uC774 \uADF8\uB300\uB85C\uC774\uACE0 \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uC5B4\uB290 \uCE35\uC5D0\uC11C\uB3C4 \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
     undone: "\uADF8 \uB4A4\uC5D0 \uB418\uB3CC\uB838\uC2B5\uB2C8\uB2E4.",
     writtenOnResume: "\uB04A\uAE34 \uC791\uC5C5\uC774\uC9C0\uB9CC \uD30C\uC77C\uC5D0 \uC4F4 \uAC83\uC744 \uD655\uC778\uD588\uC2B5\uB2C8\uB2E4.",
     unknown: "\uB04A\uAE34 \uC791\uC5C5\uC774\uB77C \uACB0\uACFC\uB97C \uBAA8\uB985\uB2C8\uB2E4. \uD30C\uC77C\uC744 \uC9C1\uC811 \uD655\uC778\uD558\uC138\uC694.",
@@ -10885,7 +10885,7 @@ var WORK_COPY = {
     verify: {
       ok: "\uADF8\uB300\uB85C \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
       changed: "\uBC14\uAFBC \uAC12\uC774 \uADF8 \uB4A4\uC5D0 \uB2EC\uB77C\uC84C\uC2B5\uB2C8\uB2E4. \uC9C0\uAE08 \uC124\uC815\uC744 \uD655\uC778\uD558\uC138\uC694.",
-      still: "\uD30C\uC77C\uC5D0\uB294 \uADF8\uB300\uB85C\uC9C0\uB9CC \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uD6C4\uBCF4\uB85C \uB098\uC635\uB2C8\uB2E4. \uB2E4\uB978 \uC124\uC815 \uCE35\uC774 \uB2E4\uC2DC \uCF1C\uACE0 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+      still: "\uD30C\uC77C\uC5D0\uB294 \uADF8\uB300\uB85C\uC9C0\uB9CC \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uCF1C\uC838 \uC788\uC2B5\uB2C8\uB2E4. \uB2E4\uB978 \uC124\uC815 \uCE35(\uD504\uB85C\uC81D\uD2B8 \uC124\uC815 \uAC19\uC740 \uAC83)\uC774 \uB2E4\uC2DC \uCF1C\uACE0 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
     }
   }
 };
@@ -10920,7 +10920,7 @@ function workNoticeText(notice, lang) {
 function verifyText(result, lang) {
   const copy2 = WORK_COPY[lang].verify;
   if (!result.kept) return copy2.changed;
-  return result.stillCandidate ? copy2.still : copy2.ok;
+  return result.stillOn ? copy2.still : copy2.ok;
 }
 
 // src/tune/plan.ts
@@ -11094,7 +11094,7 @@ async function judgeTune(options) {
     const context = { home, bundles: judged.skills, servers: judged.servers, versionOk: versionVerified(candidate.tool, highestMainVersion(input.summaries)) };
     items.push(tuneItem(candidate, context, reads.get(path)));
   }
-  return { items, reads };
+  return { items, reads, evaluation, input: gathered.input };
 }
 async function runTunePlan(options) {
   const now = options.now ?? Date.now;
@@ -11615,6 +11615,21 @@ async function runTuneUndo(options) {
     return outcomeOf(options, started, work, noticesOf(work, engine, reconciled));
   });
 }
+function stillOn(item2, judged) {
+  const tool = judged.evaluation.tools.find((x) => x.tool === item2.tool);
+  if (tool === void 0) return false;
+  switch (item2.unit) {
+    case "A1":
+      return tool.skills.some((bundle) => bundle.enabled && bundle.positions.some((position) => position.recordNames.includes(item2.target)));
+    case "A2": {
+      const input = judged.input.tools.find((x) => x.tool === "claude-code");
+      return input !== void 0 && input.tool === "claude-code" && input.setup.plugins.some((plugin) => plugin.id === item2.target && plugin.enabled);
+    }
+    case "A3":
+    case "A4":
+      return tool.servers.some(({ server }) => server.name === item2.target && server.enabled);
+  }
+}
 async function runTuneVerify(options) {
   const now = options.now ?? Date.now;
   const started = now();
@@ -11622,13 +11637,13 @@ async function runTuneVerify(options) {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
     if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
-    const { items: fresh } = await judgeTune({ ...options, cache: true });
+    const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
       if (!isUndoable(item2)) continue;
       const slot = slotOf(await readTarget(item2.file), item2.key);
-      const result = { id: item2.id, kept: slot !== null && sameSlot(slot, item2.after), stillCandidate: fresh.some((x) => x.id === item2.id) };
-      if (result.kept && !result.stillCandidate) item2.state = "verified";
+      const result = { id: item2.id, kept: slot !== null && sameSlot(slot, item2.after), stillOn: stillOn(item2, judged) };
+      if (result.kept && !result.stillOn) item2.state = "verified";
       results.push(result);
     }
     await saveWork(options.stateDir, target);

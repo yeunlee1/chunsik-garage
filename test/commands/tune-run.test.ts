@@ -65,7 +65,7 @@ describe("계획부터 되돌리기까지", () => {
     expect(applied.work.files[0]!.candidate).toBe(fingerprintOf(await readFile(settings)));
 
     const verified = await runTuneVerify({ ...run({ random: () => "000001" }), workId: applied.work.workId });
-    expect(verified.run.results).toEqual([{ id: ITEM, kept: true, stillCandidate: false }]);
+    expect(verified.run.results).toEqual([{ id: ITEM, kept: true, stillOn: false }]);
     expect((await loadWork(stateDir, applied.work.workId))!.items[0]!.state).toBe("verified");
 
     const undone = await runTuneUndo({ ...run({ random: () => "000002" }), workId: applied.work.workId, itemIds: [] });

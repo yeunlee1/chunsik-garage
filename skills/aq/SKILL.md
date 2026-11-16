@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘").
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, or to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -106,13 +106,13 @@ Only the program changes settings files. Never open, edit, or rewrite a settings
    node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune verify <work ID> --lang <lang>
    ```
 
-6. Tell the user how to undo: ask Chunsik to undo it. To undo, run the command below with the same `work.workId`. Add item IDs after the work ID only when the user wants to undo some of them.
+6. Tell the user how to undo: ask Chunsik to undo it. To undo, run the command below with the same `work.workId`. Add item IDs after the work ID only when the user wants to undo some of them. If this conversation has no work ID, for example when the user asks in a new session, run the same command without the work ID. The program then undoes the most recent tune-up that still has changes to undo. Relay its sentences the same way.
 
    ```bash
    node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune undo <work ID> --lang <lang>
    ```
 
-7. If any tune command stops with `{"error": {...}}`, give `error.code` in one line: `locked` means another tune-up is running, `plan-not-found` means the plan should be made again. If writing a settings file is blocked by a sandbox or a permission prompt, tell the user the change needs permission to write that settings file.
+7. If any tune command stops with `{"error": {...}}`, give `error.code` in one line: `locked` means another tune-up is running, `plan-not-found` means the plan should be made again, `nothing-to-undo` means there is no tune-up left to undo. If writing a settings file is blocked by a sandbox or a permission prompt, tell the user the change needs permission to write that settings file.
 8. Before running `aq clean --all` for the user, warn that it also deletes the tune-up records, so the changes can no longer be undone with this tool.
 
 ## 6. Deep checkup: reading the instructions together

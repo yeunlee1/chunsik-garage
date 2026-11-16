@@ -2,6 +2,8 @@
 import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
 import { runCheckup } from "./commands/checkup.ts";
+import { runDeepHints } from "./commands/deep-hints.ts";
+import { runNotify } from "./commands/notify.ts";
 import { runTunePlan } from "./commands/tune-plan.ts";
 import { runTuneApply, runTuneUndo, runTuneVerify, type TuneRunOptions } from "./commands/tune-run.ts";
 import { openInBrowser } from "./commands/open.ts";
@@ -109,6 +111,33 @@ async function run(command: string | undefined, rest: string[], context: CliCont
   }
   if (command === "clean" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--all"))) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "notify" && (rest[0] === "on" || rest[0] === "off" || rest[0] === "status")) {
+    const args = checkupArgs(rest.slice(1), new Set());
+    if (args === null) return null;
+    printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "deep-hints") {
+    const args = checkupArgs(rest, TUNE_PLAN_FLAGS);
+    if (args === null) return null;
+    // 단서와 읽을 수 있는 지침 파일 목록만 낸다. 파일의 글은 스킬이 사용자가 고른 것만 읽는다(설계 17)
+    printJson(
+      await runDeepHints({
+        env: context.env,
+        homedir: context.homedir,
+        tmpdir: context.tmpdir ?? tmpdir(),
+        platform: context.platform ?? process.platform,
+        clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        stateDir: stateDir(context.homedir),
+        save: !args.flags.has("--no-save"),
+        rescan: args.flags.has("--rescan"),
+        entryFile: context.entryFile ?? process.argv[1] ?? "",
+        ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
+      }),
+    );
     return 0;
   }
   if (command === "tune" && rest[0] === "plan") {

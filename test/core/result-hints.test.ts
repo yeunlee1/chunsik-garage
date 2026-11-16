@@ -1,6 +1,6 @@
 // 정밀 점검 단서 셋(전역 지침에 프로젝트가 여러 번 나온다, 여러 프로젝트 지침에 같은 줄이 되풀이된다, 전역 지침이 크다)을 시험한다. 점수에 넣지 않는 약한 신호다(설계 17)
 import { describe, expect, it } from "vitest";
-import { deepHints, LARGE_GLOBAL_TOKENS, MENTION_HINT_MIN, REPEATED_LINES_HINT_MIN } from "../../src/core/result/hints.ts";
+import { deepFiles, deepHints, LARGE_GLOBAL_TOKENS, MENTION_HINT_MIN, REPEATED_LINES_HINT_MIN } from "../../src/core/result/hints.ts";
 import { codexProject, instructions, project } from "../helpers/facts.ts";
 import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
@@ -77,5 +77,23 @@ describe("정밀 점검 단서", () => {
       },
     });
     expect(hints.map((hint) => hint.kind)).toEqual(["global_mentions_project", "repeated_project_lines", "large_global_instructions"]);
+  });
+});
+
+describe("정밀 점검의 파일 목록(7단계)", () => {
+  it("내용이 있는 지침 파일을 낸다. 전역은 골라 두고 프로젝트는 고르지 않으며, 전역과 같은 파일과 두 도구가 같이 읽는 파일은 한 번만 낸다", () => {
+    const file = (path: string, input: { hasContent?: boolean; sameAsGlobal?: boolean } = {}) => ({ path, realPath: path, bytes: 10, hasContent: true, sameAsGlobal: false, ...input });
+    const claude = claudeTool({
+      setup: {
+        globalInstructions: instructions({ files: [file("/h/.claude/CLAUDE.md"), file("/h/.claude/empty.md", { hasContent: false })] }),
+        projects: [project("/work/a", { instructions: instructions({ files: [file("/work/a/CLAUDE.md"), file("/work/a/link.md", { sameAsGlobal: true })] }) })],
+      },
+    });
+    const codex = codexTool({ setup: { globalInstructions: instructions({ files: [file("/h/.codex/AGENTS.md"), file("/h/.claude/CLAUDE.md")] }) } });
+    expect(deepFiles(evaluationInput([claude, codex]))).toEqual([
+      { tool: "claude-code", scope: "global", project: null, path: "/h/.claude/CLAUDE.md", bytes: 10, selected: true },
+      { tool: "claude-code", scope: "project", project: "/work/a", path: "/work/a/CLAUDE.md", bytes: 10, selected: false },
+      { tool: "codex", scope: "global", project: null, path: "/h/.codex/AGENTS.md", bytes: 10, selected: true },
+    ]);
   });
 });

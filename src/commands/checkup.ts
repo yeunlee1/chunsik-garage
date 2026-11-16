@@ -9,10 +9,11 @@ import { assetsDirOf, loadArt } from "../report/assets.ts";
 import { reportHtml } from "../report/html.ts";
 import { reportView } from "../report/view.ts";
 import { pruneCache } from "../state/cache.ts";
-import { appendHistory, historyCount, historyEntry } from "../state/history.ts";
+import { appendHistory, historyCount, historyEntry, recentAq } from "../state/history.ts";
 import { nextState, openState } from "../state/next-state.ts";
 import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
-import { saveState } from "../state/state.ts";
+import { loadState, saveState, type StateFile } from "../state/state.ts";
+import { nextNames, notifyNames } from "../hook/notify.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
 import { runNoticeText } from "./run-notices.ts";
@@ -113,7 +114,8 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     try {
       resultPath = await writeResult(options.stateDir, stamp, result);
       step = "state";
-      await saveState(options.stateDir, nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString()));
+      const next = nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString());
+      await saveState(options.stateDir, await withLatestNotify(next, options.stateDir, options.env, options.homedir));
       step = "history";
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;
@@ -144,7 +146,8 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
 
   // 결과 화면. 저장한 점검은 결과 폴더에, 저장하지 않았거나 결과 폴더에 쓰지 못하면 OS 임시 폴더에 쓴다. 회차는 이력의 줄 수다(설계 13.1, 13.2, 20.2)
   const round = saved ? await historyCount(options.stateDir).catch(() => null) : null;
-  const view = reportView(result, { saved, round });
+  const history = saved ? await recentAq(options.stateDir) : [];
+  const view = reportView(result, { saved, round, history });
   const repairs = view.findings.filter((finding) => finding.category === "repair").length;
   const html = reportHtml(view, await loadArt(assetsDirOf(options.entryFile), { tier: result.score.tier, unreadable: view.unreadable, repairs }));
   let reportPath: string | null = null;
@@ -166,4 +169,15 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
 
   const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run, result };
+}
+
+/**
+ * 저장할 다음 상태에 알림 칸을 맞춘다. 점검이 도는 동안 다른 명령(aq notify off 같은 것)이 알림을 바꿨을 수 있어, 저장 바로 앞에서 상태 파일을 다시 읽어 그 알림 칸을 쓴다(7단계 구현 검증).
+ * 알림이 켜져 있으면 알림용 이름 목록을 훅과 같은 함수로 새로 짓는다(설계 18.1)
+ */
+export async function withLatestNotify(next: StateFile, stateDir: string, env: Record<string, string | undefined>, homedir: string): Promise<StateFile> {
+  const latest = await loadState(stateDir);
+  const notify = latest.status === "ok" ? latest.state.notify : next.notify;
+  if (notify === null || !notify.on) return { ...next, notify };
+  return { ...next, notify: { ...notify, names: nextNames(notify.names, notifyNames(env, homedir)) } };
 }

@@ -31,6 +31,10 @@ const EXPECTED = [
   ".claude-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   "LICENSE",
+  "hooks/hooks.json",
+  "hooks/run-hook.cmd",
+  "hooks/session-start",
+  "hooks/session-start.mjs",
   "skills/aq/SKILL.md",
   "skills/aq/assets/ART-LICENSE.md",
   ...Object.values(ART_FILES).map((file) => `skills/aq/assets/${file}`),
@@ -39,7 +43,7 @@ const EXPECTED = [
 
 describe("플러그인 산출물", () => {
   it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스다(「5단계 5부 계획 전 결정」 5번)", () => {
-    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "LICENSE"]);
+    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE"]);
   });
 
   it("이 저장소에서 모으면 그 파일만 같은 자리에 같은 내용으로 담고, 담은 파일의 목록을 돌려준다", async () => {

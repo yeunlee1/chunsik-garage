@@ -256,7 +256,21 @@ function tools(view: ReportView): { chart: string; table: string } {
   return { chart, table };
 }
 
-/** 03 사용 기록. 숫자 넷, 달력, 도구별 나눔, 셸 명령 몫이다. 점검 이력 그래프는 7단계에서 넣는다(설계 13.1) */
+/** 점검 이력 그래프와 지난 점검과의 차이. AQ가 있는 저장한 점검이 둘 이상일 때만 그린다. 그림은 읽기 도구에 숨기고 같은 수를 글로 둔다(설계 13.1, 18.1) */
+function historyChart(view: ReportView): string {
+  const points = view.history.flatMap((entry) => (entry.aq === null ? [] : [{ at: entry.at, aq: Math.max(0, Math.min(100, entry.aq)) }]));
+  if (points.length < 2) return "";
+  const [width, height, pad] = [320, 80, 6];
+  const x = (index: number): string => (pad + (index * (width - 2 * pad)) / (points.length - 1)).toFixed(1);
+  const y = (aq: number): string => (height - pad - (aq / 100) * (height - 2 * pad)).toFixed(1);
+  const line = points.map((point, index) => `${x(index)},${y(point.aq)}`).join(" ");
+  const dots = points.map((point, index) => `<circle cx="${x(index)}" cy="${y(point.aq)}" r="2.5"/>`).join("");
+  const delta = points[points.length - 1]!.aq - points[points.length - 2]!.aq;
+  const d = delta > 0 ? `+${delta}` : String(delta);
+  return `<div class="hist"><p class="sub">${both(REPORT_COPY.hist)}</p><svg class="histsvg" viewBox="0 0 ${width} ${height}" aria-hidden="true"><polyline points="${line}"/>${dots}</svg><p class="histd">${both(copy("histDelta", { d }))}</p><p class="sr">${both(copy("histList", { list: points.map((point) => point.aq).join(", ") }))}</p></div>`;
+}
+
+/** 03 사용 기록. 숫자 넷, 달력, 도구별 나눔, 셸 명령 몫, 점검 이력 그래프다(설계 13.1) */
 function usage(view: ReportView, lang: Lang): string {
   const days = dayNumber(view.window.to) - dayNumber(view.window.from) + 1;
   const kpi = (value: string, label: Texts<string>): string => `<div class="kpi"><b>${value}</b><span>${both(label)}</span></div>`;
@@ -269,7 +283,7 @@ function usage(view: ReportView, lang: Lang): string {
   const cal = calendar(view, lang);
   const byTool = tools(view);
   const shell = view.usage.shellNonZero === null ? "" : `<p class="shell">${both(copy("shell", { v: percent(view.usage.shellNonZero) }))}</p>`;
-  return `<section class="use" aria-labelledby="h-use"><div class="usehd"><h2 id="h-use"><span class="no">03</span>${both(REPORT_COPY.use)}</h2><button type="button" class="mini-btn" data-act="table"><span class="when-chart">${both(REPORT_COPY.asTable)}</span><span class="when-table">${both(REPORT_COPY.asChart)}</span></button></div><div class="kpis">${kpis}</div><div class="grid2"><div><p class="sub">${both(REPORT_COPY.cal)}</p><div class="chart">${cal.chart}</div><div class="table tvwrap">${cal.table}</div></div><div><p class="sub">${both(REPORT_COPY.byTool)}</p><div class="chart">${byTool.chart}</div><div class="table tvwrap">${byTool.table}</div></div></div>${shell}</section>`;
+  return `<section class="use" aria-labelledby="h-use"><div class="usehd"><h2 id="h-use"><span class="no">03</span>${both(REPORT_COPY.use)}</h2><button type="button" class="mini-btn" data-act="table"><span class="when-chart">${both(REPORT_COPY.asTable)}</span><span class="when-table">${both(REPORT_COPY.asChart)}</span></button></div><div class="kpis">${kpis}</div><div class="grid2"><div><p class="sub">${both(REPORT_COPY.cal)}</p><div class="chart">${cal.chart}</div><div class="table tvwrap">${cal.table}</div></div><div><p class="sub">${both(REPORT_COPY.byTool)}</p><div class="chart">${byTool.chart}</div><div class="table tvwrap">${byTool.table}</div></div></div>${shell}${historyChart(view)}</section>`;
 }
 
 /** 「일부만 읽었다」 띠. 점수 띠 위에 둔다. 아래 경계이면 "적어도", 비율을 낼 수 없으면 숫자 없이 적는다(설계 9.8, 20.1) */

@@ -63,3 +63,24 @@ export async function historyCount(stateDir: string): Promise<number> {
   }
   return text.split("\n").filter((line) => line.trim() !== "").length;
 }
+
+/** 최근 점검의 시각과 AQ(오래된 것부터, 많아야 limit개). 깨진 줄은 건너뛰고, 파일이 없거나 읽지 못하면 빈 목록이다(결과 화면의 점검 이력 그래프, 설계 13.1, 18.1) */
+export async function recentAq(stateDir: string, limit = 12): Promise<{ at: string; aq: number | null }[]> {
+  let text: string;
+  try {
+    text = await readFile(join(stateDir, HISTORY_FILE), "utf8");
+  } catch {
+    return [];
+  }
+  const entries: { at: string; aq: number | null }[] = [];
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const value = JSON.parse(line) as { at?: unknown; aq?: unknown };
+      if (typeof value.at === "string" && (value.aq === null || typeof value.aq === "number")) entries.push({ at: value.at, aq: value.aq });
+    } catch {
+      // 깨진 줄은 건너뛴다
+    }
+  }
+  return entries.slice(-limit);
+}

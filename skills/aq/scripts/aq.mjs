@@ -4,7 +4,7 @@
 import { homedir, tmpdir } from "node:os";
 
 // src/commands/checkup.ts
-import { join as join23 } from "node:path";
+import { join as join24 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -2373,6 +2373,22 @@ function deepHints(input) {
   if (differ !== null) hints.push(differ);
   return hints;
 }
+function deepFiles(input) {
+  const files = [];
+  const seen = /* @__PURE__ */ new Set();
+  const add = (file, entry) => {
+    const key = file.realPath ?? file.path;
+    if (!file.hasContent || seen.has(key)) return;
+    seen.add(key);
+    files.push({ ...entry, path: file.path, bytes: file.bytes });
+  };
+  for (const tool of [...input.tools].sort((a, b) => byText8(a.tool, b.tool))) {
+    const setup = hintSetup(tool, input);
+    for (const file of setup.globalInstructions.files) add(file, { tool: tool.tool, scope: "global", project: null, selected: true });
+    for (const project of setup.projects) for (const file of project.instructions.files) if (!file.sameAsGlobal) add(file, { tool: tool.tool, scope: "project", project: project.root, selected: false });
+  }
+  return files;
+}
 
 // src/core/result/notices.ts
 var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
@@ -2917,6 +2933,9 @@ var REPORT_COPY = {
   kDays: { en: "Active days", ko: "\uC0AC\uC6A9\uD55C \uB0A0" },
   kOut: { en: "Output tokens", ko: "\uCD9C\uB825 \uD1A0\uD070" },
   kCache: { en: "Cache hits", ko: "\uCE90\uC2DC \uC801\uC911" },
+  hist: { en: "Checkup history", ko: "\uC810\uAC80 \uC774\uB825" },
+  histDelta: { en: "{d} since the last checkup", ko: "\uC9C0\uB09C \uC810\uAC80\uBCF4\uB2E4 {d}" },
+  histList: { en: "AQ of recent checkups: {list}.", ko: "\uCD5C\uADFC \uC810\uAC80\uC758 AQ\uB294 {list}\uC785\uB2C8\uB2E4." },
   cal: { en: "Replies per day", ko: "\uB0A0\uC9DC\uBCC4 \uC751\uB2F5 \uC218" },
   calAria: { en: "Replies per day from {from} to {to}. {u} {u:day|days} used, {n} not used, {x} with no records kept. Busiest day: {max} {max:reply|replies}.", ko: "{from}\uBD80\uD130 {to}\uAE4C\uC9C0 \uB0A0\uC9DC\uBCC4 \uC751\uB2F5 \uC218. \uC4F4 \uB0A0 {u}\uC77C, \uC548 \uC4F4 \uB0A0 {n}\uC77C, \uAE30\uB85D\uC774 \uB0A8\uC544 \uC788\uC9C0 \uC54A\uC740 \uB0A0 {x}\uC77C, \uAC00\uC7A5 \uB9CE\uC740 \uB0A0 {max}\uAC1C" },
   toolsTable: { en: "Main sessions and output tokens by tool", ko: "\uB3C4\uAD6C\uBCC4 \uC8FC \uC138\uC158\uACFC \uCD9C\uB825 \uD1A0\uD070" },
@@ -3491,6 +3510,7 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .tools small{font-size:12px;color:var(--ink2)}
 .shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}
+.hist{margin:20px 0 0}.histsvg{display:block;width:100%;max-width:420px;height:auto;color:var(--fill)}.histsvg polyline{fill:none;stroke:currentColor;stroke-width:2}.histsvg circle{fill:currentColor}.histd{margin:4px 0 0;font-size:13px;color:var(--ink2)}
 .partial{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;margin:18px 0 0;padding:10px 14px;border:1px solid #fab219;border-radius:6px;background:#fff7e0}
 .partial svg{margin-top:2px}
 .partial p{margin:0;font-size:14px;color:var(--ink)}
@@ -3716,6 +3736,18 @@ function tools(view) {
   const table = `<table class="tv"><caption class="sr">${both(REPORT_COPY.toolsTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thTool)}</th><th scope="col">${both(REPORT_COPY.kMain)}</th><th scope="col">${both(REPORT_COPY.kOut)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   return { chart, table };
 }
+function historyChart(view) {
+  const points = view.history.flatMap((entry) => entry.aq === null ? [] : [{ at: entry.at, aq: Math.max(0, Math.min(100, entry.aq)) }]);
+  if (points.length < 2) return "";
+  const [width, height, pad] = [320, 80, 6];
+  const x = (index) => (pad + index * (width - 2 * pad) / (points.length - 1)).toFixed(1);
+  const y = (aq) => (height - pad - aq / 100 * (height - 2 * pad)).toFixed(1);
+  const line = points.map((point, index) => `${x(index)},${y(point.aq)}`).join(" ");
+  const dots = points.map((point, index) => `<circle cx="${x(index)}" cy="${y(point.aq)}" r="2.5"/>`).join("");
+  const delta = points[points.length - 1].aq - points[points.length - 2].aq;
+  const d = delta > 0 ? `+${delta}` : String(delta);
+  return `<div class="hist"><p class="sub">${both(REPORT_COPY.hist)}</p><svg class="histsvg" viewBox="0 0 ${width} ${height}" aria-hidden="true"><polyline points="${line}"/>${dots}</svg><p class="histd">${both(copy("histDelta", { d }))}</p><p class="sr">${both(copy("histList", { list: points.map((point) => point.aq).join(", ") }))}</p></div>`;
+}
 function usage(view, lang) {
   const days = dayNumber(view.window.to) - dayNumber(view.window.from) + 1;
   const kpi = (value, label) => `<div class="kpi"><b>${value}</b><span>${both(label)}</span></div>`;
@@ -3728,7 +3760,7 @@ function usage(view, lang) {
   const cal = calendar(view, lang);
   const byTool = tools(view);
   const shell = view.usage.shellNonZero === null ? "" : `<p class="shell">${both(copy("shell", { v: percent(view.usage.shellNonZero) }))}</p>`;
-  return `<section class="use" aria-labelledby="h-use"><div class="usehd"><h2 id="h-use"><span class="no">03</span>${both(REPORT_COPY.use)}</h2><button type="button" class="mini-btn" data-act="table"><span class="when-chart">${both(REPORT_COPY.asTable)}</span><span class="when-table">${both(REPORT_COPY.asChart)}</span></button></div><div class="kpis">${kpis}</div><div class="grid2"><div><p class="sub">${both(REPORT_COPY.cal)}</p><div class="chart">${cal.chart}</div><div class="table tvwrap">${cal.table}</div></div><div><p class="sub">${both(REPORT_COPY.byTool)}</p><div class="chart">${byTool.chart}</div><div class="table tvwrap">${byTool.table}</div></div></div>${shell}</section>`;
+  return `<section class="use" aria-labelledby="h-use"><div class="usehd"><h2 id="h-use"><span class="no">03</span>${both(REPORT_COPY.use)}</h2><button type="button" class="mini-btn" data-act="table"><span class="when-chart">${both(REPORT_COPY.asTable)}</span><span class="when-table">${both(REPORT_COPY.asChart)}</span></button></div><div class="kpis">${kpis}</div><div class="grid2"><div><p class="sub">${both(REPORT_COPY.cal)}</p><div class="chart">${cal.chart}</div><div class="table tvwrap">${cal.table}</div></div><div><p class="sub">${both(REPORT_COPY.byTool)}</p><div class="chart">${byTool.chart}</div><div class="table tvwrap">${byTool.table}</div></div></div>${shell}${historyChart(view)}</section>`;
 }
 function partialBand(view) {
   if (view.partialReads.length === 0) return "";
@@ -3811,6 +3843,7 @@ function reportView(result, run2) {
     tools: result.tools.filter((tool) => tool.detected).map((tool) => tool.tool),
     saved: run2.saved,
     round: run2.saved ? run2.round : null,
+    history: run2.saved ? [...run2.history ?? []] : [],
     score: { aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: [...result.score.withheld] },
     withheldText: withheld,
     // 건너뛴 압축 파일도 읽지 못한 기록이다(설계 「5단계 계획 전 결정」 2번, 「5단계 4부 계획 전 결정」 2번)
@@ -4508,6 +4541,24 @@ async function historyCount(stateDir2) {
   }
   return text.split("\n").filter((line) => line.trim() !== "").length;
 }
+async function recentAq(stateDir2, limit = 12) {
+  let text;
+  try {
+    text = await readFile3(join5(stateDir2, HISTORY_FILE), "utf8");
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const value = JSON.parse(line);
+      if (typeof value.at === "string" && (value.aq === null || typeof value.aq === "number")) entries.push({ at: value.at, aq: value.aq });
+    } catch {
+    }
+  }
+  return entries.slice(-limit);
+}
 
 // src/scan/identity.ts
 import { join as join6 } from "node:path";
@@ -4641,13 +4692,21 @@ var STATE_FILE = "state.json";
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
 var SALT = /^[0-9a-f]{64}$/;
 function newState() {
-  return { schema: STATE_SCHEMA, salt: randomBytes(32).toString("hex"), lastCheckupAt: null, installs: null };
+  return { schema: STATE_SCHEMA, salt: randomBytes(32).toString("hex"), lastCheckupAt: null, installs: null, notify: null };
 }
 function reviveRecord(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value;
   if (typeof v.key !== "string" || typeof v.firstSeen !== "string" || !DATE.test(v.firstSeen) || typeof v.appeared !== "boolean") return null;
   return { key: v.key, firstSeen: v.firstSeen, appeared: v.appeared };
+}
+function reviveNotify(value) {
+  if (value === void 0 || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return void 0;
+  const v = value;
+  if (typeof v.on !== "boolean" || v.lang !== "en" && v.lang !== "ko") return void 0;
+  if (v.names !== null && (!Array.isArray(v.names) || !v.names.every((name) => typeof name === "string"))) return void 0;
+  return { on: v.on, lang: v.lang, names: v.names === null ? null : [...v.names].sort() };
 }
 function reviveState(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -4665,7 +4724,9 @@ function reviveState(value) {
     }
     installs.sort((a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   }
-  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs };
+  const notify = reviveNotify(v.notify);
+  if (notify === void 0) return null;
+  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify };
 }
 async function loadState(dir) {
   let text;
@@ -4805,6 +4866,43 @@ async function pruneReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   if (stale.boundary === null || stale.paths.length === 0) return { removed: 0, skipped: stale.skipped };
   const result = await removeFiles(stale.paths, stateDir2, stale.boundary);
   return { removed: result.removed, skipped: result.linked > 0 ? "reports" : null };
+}
+
+// src/hook/notify.ts
+import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join as join9 } from "node:path";
+var isMissing3 = (error) => {
+  const code = error?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+};
+function readObject(path) {
+  try {
+    const value = JSON.parse(readFileSync(path, "utf8").replace(/^﻿/, ""));
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
+  } catch (error) {
+    return isMissing3(error) ? null : void 0;
+  }
+}
+var keysOf = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? Object.keys(value) : [];
+function notifyNames(env, homedir2) {
+  const configDir = env.CLAUDE_CONFIG_DIR || join9(homedir2, ".claude");
+  const names2 = /* @__PURE__ */ new Set();
+  let complete = true;
+  try {
+    for (const entry of readdirSync(join9(configDir, "skills"), { withFileTypes: true })) if (entry.isDirectory() || entry.isSymbolicLink()) names2.add(`skill:${entry.name}`);
+  } catch (error) {
+    if (!isMissing3(error)) complete = false;
+  }
+  const settings = readObject(join9(configDir, "settings.json"));
+  if (settings === void 0) complete = false;
+  for (const id of keysOf(settings?.enabledPlugins)) names2.add(`plugin:${id}`);
+  const global = readObject(env.CLAUDE_CONFIG_DIR ? join9(env.CLAUDE_CONFIG_DIR, ".claude.json") : join9(homedir2, ".claude.json"));
+  if (global === void 0) complete = false;
+  for (const name of keysOf(global?.mcpServers)) names2.add(`mcp:${name}`);
+  return { names: [...names2].sort(), complete };
+}
+function nextNames(previous, current) {
+  return current.complete || previous === null ? current.names : [.../* @__PURE__ */ new Set([...previous, ...current.names])].sort();
 }
 
 // src/version.ts
@@ -6025,7 +6123,7 @@ var CodexSessionParser = class {
 };
 
 // src/collect/claude.ts
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 
 // src/adapters/common/lines.ts
 import { open as open3, stat as stat2 } from "node:fs/promises";
@@ -6123,7 +6221,7 @@ async function collectClaude(options) {
 }
 async function collectFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const cacheDir = options.cacheDir === null ? null : join9(options.cacheDir, "claude-code");
+  const cacheDir = options.cacheDir === null ? null : join10(options.cacheDir, "claude-code");
   const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
   const summaries = [];
   const unreadableFiles = [...list.unreadableFiles];
@@ -6230,20 +6328,20 @@ function overlappingSessions(summaries) {
 }
 
 // src/collect/codex.ts
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 
 // src/adapters/codex/locate.ts
 import { readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { join as join10, resolve as resolve2 } from "node:path";
+import { join as join11, resolve as resolve2 } from "node:path";
 function codexHome(env, homedir2) {
   const fromEnv = env.CODEX_HOME?.trim();
-  return fromEnv ? resolve2(fromEnv) : join10(homedir2, ".codex");
+  return fromEnv ? resolve2(fromEnv) : join11(homedir2, ".codex");
 }
-var isMissing3 = (error) => error?.code === "ENOENT";
+var isMissing4 = (error) => error?.code === "ENOENT";
 var DIGITS = /^\d+$/;
 var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
 async function listCodexFiles(home, minChangedMs, statFile = stat3) {
-  const sessions = join10(home, "sessions");
+  const sessions = join11(home, "sessions");
   const files = [];
   const unreadableDirs = [];
   let olderThanWindow = 0;
@@ -6253,12 +6351,12 @@ async function listCodexFiles(home, minChangedMs, statFile = stat3) {
     try {
       entries = await readdir5(dir, { withFileTypes: true });
     } catch (error) {
-      if (depth === 0 && isMissing3(error)) return false;
-      if (!isMissing3(error)) unreadableDirs.push(dir);
+      if (depth === 0 && isMissing4(error)) return false;
+      if (!isMissing4(error)) unreadableDirs.push(dir);
       return true;
     }
     for (const entry of entries) {
-      const path = join10(dir, entry.name);
+      const path = join11(dir, entry.name);
       if (depth < 3) {
         if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
         else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
@@ -6551,7 +6649,7 @@ var siblingOrder = (a, b) => {
   const bn = baseName(b.canonical.path);
   return an < bn ? -1 : an > bn ? 1 : byPath(a.canonical, b.canonical);
 };
-var keysOf = (group) => [.../* @__PURE__ */ new Set([group.recordId, ...group.copies.flatMap((copy2) => copy2.baseId === null ? [] : [copy2.baseId])])];
+var keysOf2 = (group) => [.../* @__PURE__ */ new Set([group.recordId, ...group.copies.flatMap((copy2) => copy2.baseId === null ? [] : [copy2.baseId])])];
 var recentlyChanged = (file, options) => file.changedMs !== null && options.clock.nowMs - file.changedMs < IN_PROGRESS_WINDOW_MS;
 async function parseCopy(file, inherited, options) {
   const parser = new CodexSessionParser({ recordId: file.recordId, timeZone: options.clock.timeZone, inherited });
@@ -6573,14 +6671,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure2 = null;
+  let failure3 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure2 ??= "unknown-size";
+      failure3 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure2 ??= "skipped";
+      failure3 ??= "skipped";
       continue;
     }
     try {
@@ -6598,10 +6696,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure2 ??= "failed";
+      failure3 ??= "failed";
     }
   }
-  return failure2 ?? "failed";
+  return failure3 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -6610,7 +6708,7 @@ async function collectCodex(options) {
 async function collectCodexFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const lowerBound = options.rescan ? null : windows.collectStartLowerBoundMs;
-  const cacheDir = options.cacheDir === null ? null : join11(options.cacheDir, "codex");
+  const cacheDir = options.cacheDir === null ? null : join12(options.cacheDir, "codex");
   const zstd = options.zstd ?? zstdAvailable();
   const groups = groupCopies(list.files).map((group) => ({ ...group, copies: [...group.copies] })).sort((a, b) => byPath(a.copies[0], b.copies[0]));
   const inWindow = groups.filter((group) => lowerBound === null || group.copies[0].changedMs === null || group.copies[0].changedMs >= lowerBound);
@@ -6618,7 +6716,7 @@ async function collectCodexFromList(home, list, options) {
   const outside2 = /* @__PURE__ */ new Map();
   for (const group of groups) {
     if (inside2.has(group)) continue;
-    for (const key of keysOf(group)) {
+    for (const key of keysOf2(group)) {
       const found = outside2.get(key);
       if (found === void 0) outside2.set(key, [group]);
       else found.push(group);
@@ -6670,7 +6768,7 @@ async function collectCodexFromList(home, list, options) {
     const record = readOf.get(group);
     unknownMtime.add(record === void 0 ? `record:${group.recordId}` : `session:${record.summary.sessionId}`);
   }
-  const failedKeys = new Set(failedGroups.flatMap(keysOf));
+  const failedKeys = new Set(failedGroups.flatMap(keysOf2));
   const damaged = new Set(reads.filter((record) => record.partial || mostlyBroken(record.summary)).map((record) => record.summary.sessionId));
   const extra = /* @__PURE__ */ new Map();
   const parentPrints = /* @__PURE__ */ new Map();
@@ -6807,14 +6905,14 @@ async function collectCodexFromList(home, list, options) {
 }
 
 // src/scan/claude.ts
-import { basename as basename6, join as join18, relative as relative3 } from "node:path";
+import { basename as basename6, join as join19, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join13, resolve as resolve4 } from "node:path";
+import { join as join14, resolve as resolve4 } from "node:path";
 
 // src/scan/fs.ts
 import { lstat as lstat4, readdir as readdir6, readFile as readFile5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
-var isMissing4 = (error) => {
+var isMissing5 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
 };
@@ -6823,7 +6921,7 @@ async function readText(path) {
   try {
     return { status: "ok", text: stripBom(await readFile5(path, "utf8")) };
   } catch (error) {
-    return isMissing4(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing5(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 async function readJson(path) {
@@ -6839,7 +6937,7 @@ async function listDir(path) {
   try {
     return { status: "ok", names: (await readdir6(path)).sort() };
   } catch (error) {
-    return isMissing4(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing5(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 function createdMsOf(info) {
@@ -6882,7 +6980,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename3, join as join12, resolve as resolve3 } from "node:path";
+import { basename as basename3, join as join13, resolve as resolve3 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -7037,7 +7135,7 @@ function declarationsOf(value) {
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join12(root, name));
+  const info = await entryInfo(join13(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -7059,7 +7157,7 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known = await readJson(join12(claudeHome2, "plugins", "known_marketplaces.json"));
+  const known = await readJson(join13(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known.status === "missing") return { file: "missing", markets };
   if (known.status !== "ok" || !isObject5(known.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known.value)) {
@@ -7068,7 +7166,7 @@ async function readMarketplaceEntries(claudeHome2) {
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join12(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join13(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -7137,7 +7235,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join12(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join13(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -7232,7 +7330,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join12(installPath, "hooks", "hooks.json");
+  const defaultHooks = join13(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -7264,7 +7362,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join12(installPath, ".mcp.json"), false);
+  await addMcpFile(join13(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -7290,7 +7388,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join12(installPath, "skills");
+  const defaultSkills = join13(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -7301,7 +7399,7 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join12(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join13(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
     const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
@@ -7310,7 +7408,7 @@ async function readSkillsDirPlugins(refs) {
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join12(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join13(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -7339,7 +7437,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join13(resolve4(fromEnv), ".claude.json") : join13(homedir2, ".claude.json");
+  return fromEnv ? join14(resolve4(fromEnv), ".claude.json") : join14(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -7397,7 +7495,7 @@ async function readClaudeJson(path) {
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
 import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, join as join14 } from "node:path";
+import { basename as basename4, join as join15 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 function emptyInstructionSet() {
@@ -7431,7 +7529,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join14(current, name);
+      const path = join15(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -7491,15 +7589,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join14(claudeHome2, "rules"));
-  return { paths: [join14(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join15(claudeHome2, "rules"));
+  return { paths: [join15(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join14(root, "CLAUDE.md"), join14(root, ".claude", "CLAUDE.md"), join14(root, "CLAUDE.local.md")];
+  const claudeFiles = [join15(root, "CLAUDE.md"), join15(root, ".claude", "CLAUDE.md"), join15(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join14(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join14(root, "AGENTS.md"), join14(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join15(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join15(root, "AGENTS.md"), join15(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets) {
@@ -7580,14 +7678,14 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname3, isAbsolute, join as join15, parse, resolve as resolve5 } from "node:path";
+import { dirname as dirname3, isAbsolute, join as join16, parse, resolve as resolve5 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
   const gitDir = isAbsolute(match[1]) ? match[1] : resolve5(dir, match[1]);
-  const common = await readText(join15(gitDir, "commondir"));
+  const common = await readText(join16(gitDir, "commondir"));
   if (common.status !== "ok") return null;
   const commonDir = resolve5(gitDir, common.text.trim());
   return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
@@ -7595,7 +7693,7 @@ async function mainRootFromGitFile(dir, dotGit) {
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join15(dir, ".git");
+    const dotGit = join16(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
@@ -7607,7 +7705,7 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join15(context.homedir, "Desktop"), join15(context.homedir, "Documents"), join15(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join16(context.homedir, "Desktop"), join16(context.homedir, "Documents"), join16(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
@@ -7648,7 +7746,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join16 } from "node:path";
+import { join as join17 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -7750,12 +7848,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join16(dir, "managed-settings.json"));
-  const dropIns = await listDir(join16(dir, "managed-settings.d"));
+  await take(join17(dir, "managed-settings.json"));
+  const dropIns = await listDir(join17(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join16(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join17(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join16(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join17(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -7807,7 +7905,7 @@ function viewOf(value) {
 // src/scan/skills.ts
 import { createHash as createHash5 } from "node:crypto";
 import { lstat as lstat6, readdir as readdir7, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename5, join as join17, relative as relative2 } from "node:path";
+import { basename as basename5, join as join18, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -7950,7 +8048,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       return false;
     }
     for (const name of names2) {
-      const path = join17(current, name);
+      const path = join18(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -7982,7 +8080,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join17(path, "SKILL.md"));
+  const skillMd = await readText(join18(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -8009,13 +8107,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join17(dir, name);
+    const path = join18(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join17(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join18(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -8025,7 +8123,7 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join17(path, "SKILL.md"))).isFile) {
+  if ((await entryInfo(join18(path, "SKILL.md"))).isFile) {
     const single = await readSkillFolder(path, basename5(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
@@ -8103,7 +8201,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join18(home, "settings.json"));
+  const userLayer = await readLayer(join19(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -8126,8 +8224,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join18(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join18(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join19(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join19(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -8142,9 +8240,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active);
-  const userSkillScan = await scanSkillRoot(join18(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join19(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join18(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join19(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -8216,7 +8314,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join18(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join19(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -8321,7 +8419,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join18(ref.root, ".mcp.json");
+    const file = join19(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -8422,7 +8520,7 @@ async function scanClaudeSetup(input) {
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute2, join as join22, relative as relative5, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join23, relative as relative5, resolve as resolve8 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -9508,12 +9606,12 @@ function tomlToJson(value) {
 }
 
 // src/scan/codex-instructions.ts
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 var NAMES = ["AGENTS.override.md", "AGENTS.md"];
 async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
   const unreadable = [];
   for (const name of NAMES) {
-    const path = join19(codexHome2, name);
+    const path = join20(codexHome2, name);
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "unreadable") unreadable.push(path);
@@ -9528,7 +9626,7 @@ async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
 }
 async function readCodexProjectInstructions(root, fallback) {
   for (const name of [...NAMES, ...fallback]) {
-    const path = join19(root, name);
+    const path = join20(root, name);
     if ((await entryInfo(path)).isFile) return (await readInstructionSet([path])).set;
   }
   return emptyInstructionSet();
@@ -9579,12 +9677,12 @@ function codexMcpFacts(input) {
 }
 
 // src/scan/codex-plugins.ts
-import { join as join21, relative as relative4, resolve as resolve6, sep } from "node:path";
+import { join as join22, relative as relative4, resolve as resolve6, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
 import { readFile as readFile7 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname4, join as join20 } from "node:path";
+import { basename as basename7, dirname as dirname4, join as join21 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -9599,7 +9697,7 @@ function codexFrontmatterOk(bytes) {
 }
 async function manifestNamespace(pluginRoot) {
   for (const relative6 of CODEX_MANIFEST_PATHS) {
-    const path = join20(pluginRoot, ...relative6.split("/"));
+    const path = join21(pluginRoot, ...relative6.split("/"));
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status !== "ok") return null;
@@ -9636,7 +9734,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
         break walk;
       }
       entries++;
-      const path = join20(dir, name);
+      const path = join21(dir, name);
       const info = await entryInfo(path);
       if (info.dangling) {
         out.danglingLinks.push(path);
@@ -9674,7 +9772,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
   for (const { dir, viaLink } of found) {
     const folder = await readSkillFolder(dir, basename7(dir));
     if (folder === null) continue;
-    const skillFile = join20(dir, "SKILL.md");
+    const skillFile = join21(dir, "SKILL.md");
     let bytes = null;
     try {
       bytes = await readFile7(skillFile);
@@ -9772,12 +9870,12 @@ async function installRoot(base) {
   const versions = [];
   for (const name of listing.names) {
     if (name === "." || name === ".." || !VERSION_SEGMENT.test(name)) continue;
-    const info = await entryInfo(join21(base, name));
+    const info = await entryInfo(join22(base, name));
     if (info.isDir && !info.isLink) versions.push(name);
   }
   if (versions.length === 0) return { install: "missing", root: null };
   const chosen = versions.includes("local") ? "local" : versions.reduce((best, version) => compareCodexPluginVersions(version, best) > 0 ? version : best);
-  return { install: "ok", root: join21(base, chosen) };
+  return { install: "ok", root: join22(base, chosen) };
 }
 async function findManifest(root) {
   const own = async (path) => {
@@ -9788,7 +9886,7 @@ async function findManifest(root) {
       return error.code === "ENOENT" ? { kind: "none" } : null;
     }
   };
-  const agentPath = join21(root, "plugin.json");
+  const agentPath = join22(root, "plugin.json");
   const agent = await own(agentPath);
   if (agent === null) return { status: "unreadable" };
   if (agent.kind === "dir" || agent.kind === "other") return { status: "missing" };
@@ -9805,11 +9903,11 @@ async function findManifest(root) {
   }
   for (const relativePath of CODEX_MANIFEST_PATHS) {
     const [dir, file] = relativePath.split("/");
-    const parent = await own(join21(root, dir));
+    const parent = await own(join22(root, dir));
     if (parent === null) return { status: "unreadable" };
     if (parent.kind === "none") continue;
     if (parent.kind !== "dir") return { status: "missing" };
-    const path = join21(root, dir, file);
+    const path = join22(root, dir, file);
     const manifest = await own(path);
     if (manifest === null) return { status: "unreadable" };
     if (manifest.kind === "none") continue;
@@ -9846,7 +9944,7 @@ async function readCodexPlugin(codexHome2, id) {
   const out = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
   if (!out.idValid) return out;
   const at = id.lastIndexOf("@");
-  const located = await installRoot(join21(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
+  const located = await installRoot(join22(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
   out.install = located.install;
   out.root = located.root;
   out.compositionKnown = located.install !== "unreadable";
@@ -9886,15 +9984,15 @@ async function readCodexPlugin(codexHome2, id) {
   }
   const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item2) => typeof item2 === "string") ? manifest.skills : [];
   const declared = listed.map((raw) => manifestPath(root, raw)).filter((path) => path !== null);
-  const roots = declared.length > 0 ? declared : (await entryInfo(join21(root, "skills"))).isDir ? [join21(root, "skills")] : [];
-  if ((await entryInfo(join21(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join21(root, ".codex-plugin", "migrated-command-skills"));
+  const roots = declared.length > 0 ? declared : (await entryInfo(join22(root, "skills"))).isDir ? [join22(root, "skills")] : [];
+  if ((await entryInfo(join22(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join22(root, ".codex-plugin", "migrated-command-skills"));
   out.skillRoots = [...new Set(roots)].sort();
   if (isObject5(manifest.mcpServers)) {
     out.mcpServers = serversOf2(manifest.mcpServers);
     return out;
   }
   const declaredFile = manifestPath(root, manifest.mcpServers);
-  const file = declaredFile ?? ((await entryInfo(join21(root, ".mcp.json"))).isFile ? join21(root, ".mcp.json") : null);
+  const file = declaredFile ?? ((await entryInfo(join22(root, ".mcp.json"))).isFile ? join22(root, ".mcp.json") : null);
   if (file === null) return out;
   const text = await readText(file);
   if (text.status === "missing") return out;
@@ -9977,7 +10075,7 @@ var cmp4 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
 var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
-  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join22(homedir2, raw.slice(2)) : raw;
+  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join23(homedir2, raw.slice(2)) : raw;
   const absolute = isAbsolute2(expanded) ? expanded : resolve8(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
@@ -10010,7 +10108,7 @@ function configuredIn(merged, id) {
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
-  const userFile = join22(home, "config.toml");
+  const userFile = join23(home, "config.toml");
   const userRead = await readCodexConfig(userFile);
   const user = userRead.status === "ok" ? userRead.value : {};
   const problems = [];
@@ -10028,11 +10126,11 @@ async function scanCodexSetup(input) {
   const perProject = /* @__PURE__ */ new Map();
   for (const ref of active) {
     const trust = trustOf(user, ref.root, input.platform);
-    if (trust !== "trusted" || await sameAsHome(join22(ref.root, ".codex"))) {
+    if (trust !== "trusted" || await sameAsHome(join23(ref.root, ".codex"))) {
       perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
       continue;
     }
-    const file = join22(ref.root, ".codex", "config.toml");
+    const file = join23(ref.root, ".codex", "config.toml");
     const text = await readText(file);
     const layer = text.status === "ok" ? parseCodexConfig(text.text) : null;
     let status = text.status === "ok" ? layer === null ? "unparsable" : "ok" : text.status;
@@ -10104,13 +10202,13 @@ async function scanCodexSetup(input) {
     }
   };
   const userRoots = [
-    { dir: join22(home, "skills"), place: codexPlace },
-    { dir: join22(input.homedir, ".agents", "skills"), place: homePlace }
+    { dir: join23(home, "skills"), place: codexPlace },
+    { dir: join23(input.homedir, ".agents", "skills"), place: homePlace }
   ].filter((root, index, all) => all.findIndex((other) => normalizePath(other.dir) === normalizePath(root.dir)) === index);
   for (const root of userRoots) addScan(root.dir, await scanCodexSkillRoot(root.dir), root.place, { scope: "user" });
   for (const ref of active) {
-    const dirs = [join22(ref.root, ".agents", "skills")];
-    if (!await sameAsHome(join22(ref.root, ".codex"))) dirs.push(join22(ref.root, ".codex", "skills"));
+    const dirs = [join23(ref.root, ".agents", "skills")];
+    if (!await sameAsHome(join23(ref.root, ".codex"))) dirs.push(join23(ref.root, ".codex", "skills"));
     for (const dir of dirs) addScan(dir, await scanCodexSkillRoot(dir), (path) => projectPlace(ref, path), { scope: "project", projectRoot: ref.normRoot });
   }
   for (const plugin of reads) {
@@ -10365,7 +10463,7 @@ async function runCheckup(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join23(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join24(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -10382,7 +10480,8 @@ async function runCheckup(options) {
     try {
       resultPath = await writeResult(options.stateDir, stamp, result);
       step = "state";
-      await saveState(options.stateDir, nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString()));
+      const next = nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString());
+      await saveState(options.stateDir, await withLatestNotify(next, options.stateDir, options.env, options.homedir));
       step = "history";
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;
@@ -10410,7 +10509,8 @@ async function runCheckup(options) {
     }
   }
   const round = saved ? await historyCount(options.stateDir).catch(() => null) : null;
-  const view = reportView(result, { saved, round });
+  const history = saved ? await recentAq(options.stateDir) : [];
+  const view = reportView(result, { saved, round, history });
   const repairs = view.findings.filter((finding) => finding.category === "repair").length;
   const html = reportHtml(view, await loadArt(assetsDirOf(options.entryFile), { tier: result.score.tier, unreadable: view.unreadable, repairs }));
   let reportPath = null;
@@ -10432,19 +10532,110 @@ async function runCheckup(options) {
   const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run: run2, result };
 }
+async function withLatestNotify(next, stateDir2, env, homedir2) {
+  const latest = await loadState(stateDir2);
+  const notify = latest.status === "ok" ? latest.state.notify : next.notify;
+  if (notify === null || !notify.on) return { ...next, notify };
+  return { ...next, notify: { ...notify, names: nextNames(notify.names, notifyNames(env, homedir2)) } };
+}
+
+// src/commands/deep-hints.ts
+import { join as join25 } from "node:path";
+
+// src/core/copy/deep-hints.ts
+var DEEP_HINT_COPY = {
+  en: {
+    global_mentions_project: "The global instructions of {tool} mention project paths or names several times ({projects}). Project-only content may have slipped into the global file.",
+    repeated_project_lines: "{lines} lines repeat across the project instructions of {tool} ({projects}). They may belong in the global instructions.",
+    large_global_instructions: "The global instructions of {tool} are about {tokens} tokens. Some of it may move into skills or project documents.",
+    tools_instructions_differ: "The global instructions of Claude Code and Codex are not the same file and share only {shared} lines (Claude Code {claude}, Codex {codex}). The two tools may get different directions."
+  },
+  ko: {
+    global_mentions_project: "{tool}\uC758 \uC804\uC5ED \uC9C0\uCE68\uC5D0 \uD504\uB85C\uC81D\uD2B8 \uACBD\uB85C\uB098 \uC774\uB984\uC774 \uC5EC\uB7EC \uBC88 \uB098\uC635\uB2C8\uB2E4({projects}). \uADF8 \uD504\uB85C\uC81D\uD2B8 \uC804\uC6A9 \uB0B4\uC6A9\uC774 \uC804\uC5ED\uC5D0 \uC11E\uC600\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+    repeated_project_lines: "{tool}\uC758 \uD504\uB85C\uC81D\uD2B8 \uC9C0\uCE68 \uC5EC\uB7EC \uACF3({projects})\uC5D0 \uAC19\uC740 \uC904\uC774 {lines}\uAC1C \uB418\uD480\uC774\uB429\uB2C8\uB2E4. \uC804\uC5ED\uC73C\uB85C \uC62C\uB9B4 \uB0B4\uC6A9\uC77C \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+    large_global_instructions: "{tool}\uC758 \uC804\uC5ED \uC9C0\uCE68\uC774 \uC5B4\uB9BC\uC7A1\uC544 {tokens} \uD1A0\uD070\uC785\uB2C8\uB2E4. \uC2A4\uD0AC\uC774\uB098 \uD504\uB85C\uC81D\uD2B8 \uBB38\uC11C\uB85C \uB0B4\uB9B4 \uB0B4\uC6A9\uC774 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+    tools_instructions_differ: "Claude Code\uC640 Codex\uC758 \uC804\uC5ED \uC9C0\uCE68\uC774 \uAC19\uC740 \uD30C\uC77C\uC774 \uC544\uB2C8\uACE0 \uACB9\uCE58\uB294 \uC904\uC774 {shared}\uC904\uBFD0\uC785\uB2C8\uB2E4(Claude Code {claude}\uC904, Codex {codex}\uC904). \uB450 \uB3C4\uAD6C\uAC00 \uB2E4\uB978 \uC9C0\uC2DC\uB97C \uBC1B\uACE0 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+  }
+};
+function deepHintText(hint, lang) {
+  const text = DEEP_HINT_COPY[lang][hint.kind];
+  switch (hint.kind) {
+    case "global_mentions_project":
+      return fill(text, { tool: TOOL_NAMES[hint.tool][lang], projects: hint.projects.map((project) => `${project.root} ${project.mentions}`).join(", ") });
+    case "repeated_project_lines":
+      return fill(text, { tool: TOOL_NAMES[hint.tool][lang], lines: hint.lines, projects: hint.projects.join(", ") });
+    case "large_global_instructions":
+      return fill(text, { tool: TOOL_NAMES[hint.tool][lang], tokens: Math.round(hint.tokens) });
+    case "tools_instructions_differ":
+      return fill(text, { shared: hint.shared, claude: hint.lines["claude-code"], codex: hint.lines.codex });
+  }
+}
+
+// src/commands/deep-hints.ts
+async function runDeepHints(options) {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const opened = await openState(options.stateDir);
+  const gathered = await gatherCheckupInput({
+    env: options.env,
+    homedir: options.homedir,
+    tmpdir: options.tmpdir,
+    platform: options.platform,
+    clock: options.clock,
+    cacheDir: options.save ? join25(options.stateDir, "cache") : null,
+    rescan: options.rescan,
+    state: opened.state,
+    self: await selfIdentity(options.entryFile),
+    ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
+  });
+  const hints = deepHints(gathered.input);
+  return { hints, files: deepFiles(gathered.input), run: { durationMs: now() - started, text: { hints: hints.map((hint) => deepHintText(hint, options.lang)) } } };
+}
+
+// src/commands/notify.ts
+var COPY = {
+  en: {
+    on: "Session start notices are on. When 7 days pass after the last checkup or something new is installed, a Claude Code session shows one line when it starts. Codex has no notices.",
+    off: "Session start notices are off.",
+    statusOn: "Session start notices are on.",
+    statusOff: "Session start notices are off."
+  },
+  ko: {
+    on: "\uC138\uC158 \uC2DC\uC791 \uC54C\uB9BC\uC744 \uCF30\uC2B5\uB2C8\uB2E4. \uB9C8\uC9C0\uB9C9 \uC810\uAC80 \uB4A4 7\uC77C\uC774 \uC9C0\uB098\uAC70\uB098 \uC0C8\uB85C \uAE50 \uAC83\uC774 \uC788\uC73C\uBA74 Claude Code \uC138\uC158\uC744 \uC2DC\uC791\uD560 \uB54C \uD55C \uC904\uB85C \uC54C\uB9BD\uB2C8\uB2E4. Codex\uC5D0\uB294 \uC54C\uB9BC\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+    off: "\uC138\uC158 \uC2DC\uC791 \uC54C\uB9BC\uC744 \uAED0\uC2B5\uB2C8\uB2E4.",
+    statusOn: "\uC138\uC158 \uC2DC\uC791 \uC54C\uB9BC\uC774 \uCF1C\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
+    statusOff: "\uC138\uC158 \uC2DC\uC791 \uC54C\uB9BC\uC774 \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4."
+  }
+};
+var failure = (code, message) => Object.assign(new Error(message), { code });
+async function runNotify(action, options) {
+  const opened = await openState(options.stateDir);
+  if (opened.broken && action !== "status") throw failure("state-broken", "the state file could not be read; run a checkup first");
+  const { state } = opened;
+  if (action === "on") {
+    state.notify = { on: true, lang: options.lang, names: nextNames(state.notify?.names ?? null, notifyNames(options.env, options.homedir)) };
+    await saveState(options.stateDir, state);
+  } else if (action === "off" && state.notify !== null && !opened.fresh) {
+    state.notify = { ...state.notify, on: false };
+    await saveState(options.stateDir, state);
+  }
+  const on = state.notify?.on === true;
+  const text = action === "on" ? COPY[options.lang].on : action === "off" ? COPY[options.lang].off : on ? COPY[options.lang].statusOn : COPY[options.lang].statusOff;
+  return { notify: { on, lang: state.notify?.lang ?? options.lang }, lastCheckupAt: state.lastCheckupAt, run: { text } };
+}
 
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { join as join27 } from "node:path";
+import { join as join29 } from "node:path";
 
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join24 } from "node:path";
+import { dirname as dirname6, join as join26 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
-  return join24(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
+  return join26(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
   const folder = await lstat8(dirname6(path)).then(
@@ -10925,7 +11116,7 @@ function verifyText(result, lang) {
 
 // src/tune/plan.ts
 import { mkdir as mkdir5 } from "node:fs/promises";
-import { join as join25 } from "node:path";
+import { join as join27 } from "node:path";
 var TUNE_VERIFIED = { "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } };
 function versionVerified(tool, version) {
   const parsed = parseVersion(version);
@@ -10936,21 +11127,21 @@ function versionVerified(tool, version) {
 function planIdOf(nowMs, random) {
   return `${resultStamp(nowMs)}-${random}`;
 }
-var PLANS_DIR = join25("tune", "plans");
+var PLANS_DIR = join27("tune", "plans");
 async function writePlan(stateDir2, plan) {
-  const dir = join25(stateDir2, PLANS_DIR);
+  const dir = join27(stateDir2, PLANS_DIR);
   await mkdir5(dir, { recursive: true });
-  const path = join25(dir, `${plan.planId}.json`);
+  const path = join27(dir, `${plan.planId}.json`);
   await writeJson(path, plan);
   return path;
 }
 
 // src/tune/work.ts
 import { chmod, mkdir as mkdir6, open as open5, readdir as readdir8, readFile as readFile9, rename as rename4, rm as rm3, unlink as unlink2 } from "node:fs/promises";
-import { join as join26 } from "node:path";
+import { join as join28 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
-var LOCK_FILE = join26(TUNE_DIR, "lock");
+var LOCK_FILE = join28(TUNE_DIR, "lock");
 async function writeDurable(path, data, mode) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
@@ -10968,9 +11159,9 @@ async function writeDurable(path, data, mode) {
     throw error;
   }
 }
-var workPath = (stateDir2, workId) => join26(stateDir2, TUNE_DIR, `${workId}.json`);
+var workPath = (stateDir2, workId) => join28(stateDir2, TUNE_DIR, `${workId}.json`);
 async function saveWork(stateDir2, work) {
-  await mkdir6(join26(stateDir2, TUNE_DIR), { recursive: true });
+  await mkdir6(join28(stateDir2, TUNE_DIR), { recursive: true });
   await writeDurable(workPath(stateDir2, work.workId), `${JSON.stringify(work, null, 2)}
 `);
 }
@@ -10990,7 +11181,7 @@ async function loadWork(stateDir2, workId) {
 async function listWorks(stateDir2) {
   let names2;
   try {
-    names2 = await readdir8(join26(stateDir2, TUNE_DIR));
+    names2 = await readdir8(join28(stateDir2, TUNE_DIR));
   } catch {
     return [];
   }
@@ -11012,8 +11203,8 @@ function isAlive(pid) {
   }
 }
 async function takeLock(stateDir2, alive = isAlive) {
-  const path = join26(stateDir2, LOCK_FILE);
-  await mkdir6(join26(stateDir2, TUNE_DIR), { recursive: true });
+  const path = join28(stateDir2, LOCK_FILE);
+  await mkdir6(join28(stateDir2, TUNE_DIR), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const handle = await open5(path, "wx");
@@ -11076,7 +11267,7 @@ async function judgeTune(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.cache ? join27(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join29(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -11124,7 +11315,7 @@ async function runTunePlan(options) {
 // src/commands/tune-run.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { readFile as readFile10 } from "node:fs/promises";
-import { join as join28 } from "node:path";
+import { join as join30 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
 // src/tune/engine.ts
@@ -11516,10 +11707,10 @@ async function runFiles(work, io, planned) {
 }
 
 // src/commands/tune-run.ts
-var failure = (code, message) => Object.assign(new Error(message), { code });
+var failure2 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure("locked", `another tune run holds the lock: ${join28(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure2("locked", `another tune run holds the lock: ${join30(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -11529,7 +11720,7 @@ async function withLock(options, body) {
 async function loadPlan(stateDir2, planId) {
   if (!ID_PATTERN.test(planId)) return null;
   try {
-    const plan = JSON.parse(await readFile10(join28(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
+    const plan = JSON.parse(await readFile10(join30(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
     return plan !== null && plan.planId === planId && Array.isArray(plan.items) && Array.isArray(plan.files) ? plan : null;
   } catch {
     return null;
@@ -11570,9 +11761,9 @@ async function runTuneApply(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const plan = await loadPlan(options.stateDir, options.planId);
-    if (plan === null) throw failure("plan-not-found", `no saved plan: ${options.planId}`);
+    if (plan === null) throw failure2("plan-not-found", `no saved plan: ${options.planId}`);
     const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure2("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
     const { items: fresh } = await judgeTune({ ...options, cache: true });
     const work = newWork(options, "apply", plan.planId, null);
     for (const id of options.itemIds) {
@@ -11597,9 +11788,9 @@ async function runTuneUndo(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure2("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure2("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
     const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
     const work = newWork(options, "undo", null, target.workId);
     work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
@@ -11636,7 +11827,7 @@ async function runTuneVerify(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure2("work-not-found", `no apply run: ${options.workId}`);
     const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
@@ -11680,13 +11871,13 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 
 // src/commands/clean.ts
 import { lstat as lstat9, readdir as readdir9, realpath as realpath7 } from "node:fs/promises";
-import { join as join29 } from "node:path";
-var isMissing5 = (error) => error?.code === "ENOENT";
+import { join as join31 } from "node:path";
+var isMissing6 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
     return await lstat9(path);
   } catch (error) {
-    if (isMissing5(error)) return null;
+    if (isMissing6(error)) return null;
     throw error;
   }
 }
@@ -11695,13 +11886,13 @@ async function cleanReports(path, boundary) {
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat9(join29(path, name));
+    const info = await lstat9(join31(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join29(path, name);
+    const full = join31(path, name);
     const info = await lstat9(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
@@ -11715,7 +11906,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join29(dir, spec.name);
+  const path = join31(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -11758,13 +11949,13 @@ async function clean(dir, level) {
 
 // src/commands/doctor.ts
 import { mkdir as mkdir7, rm as rm4, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join30 } from "node:path";
+import { join as join32 } from "node:path";
 import * as zlib2 from "node:zlib";
 function hasZstd() {
   return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join30(dir, `.write-probe-${process.pid}`);
+  const probe = join32(dir, `.write-probe-${process.pid}`);
   try {
     await mkdir7(dir, { recursive: true });
     await writeFile4(probe, "ok");
@@ -11797,15 +11988,15 @@ async function doctor(input) {
 
 // src/commands/where.ts
 import { lstat as lstat10, readdir as readdir10 } from "node:fs/promises";
-import { join as join31 } from "node:path";
-var isMissing6 = (error) => error?.code === "ENOENT";
+import { join as join33 } from "node:path";
+var isMissing7 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
     dirInfo = await lstat10(dir);
   } catch (error) {
-    if (!isMissing6(error)) throw error;
+    if (!isMissing7(error)) throw error;
   }
   report.exists = dirInfo !== void 0;
   report.link = dirInfo?.isSymbolicLink() ?? false;
@@ -11814,16 +12005,16 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat10(join31(dir, spec.name));
+        const info = await lstat10(join33(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join31(dir, spec.name));
+          const size = await treeSize(join33(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
       } catch (error) {
-        if (!isMissing6(error)) entry.unreadable = true;
+        if (!isMissing7(error)) entry.unreadable = true;
       }
     }
     report.files += entry.files;
@@ -11905,6 +12096,32 @@ async function run(command, rest, context) {
   }
   if (command === "clean" && (rest.length === 0 || rest.length === 1 && rest[0] === "--all")) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "notify" && (rest[0] === "on" || rest[0] === "off" || rest[0] === "status")) {
+    const args2 = checkupArgs(rest.slice(1), /* @__PURE__ */ new Set());
+    if (args2 === null) return null;
+    printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "deep-hints") {
+    const args2 = checkupArgs(rest, TUNE_PLAN_FLAGS);
+    if (args2 === null) return null;
+    printJson(
+      await runDeepHints({
+        env: context.env,
+        homedir: context.homedir,
+        tmpdir: context.tmpdir ?? tmpdir(),
+        platform: context.platform ?? process.platform,
+        clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        stateDir: stateDir(context.homedir),
+        save: !args2.flags.has("--no-save"),
+        rescan: args2.flags.has("--rescan"),
+        entryFile: context.entryFile ?? process.argv[1] ?? "",
+        ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
+      })
+    );
     return 0;
   }
   if (command === "tune" && rest[0] === "plan") {

@@ -119,15 +119,23 @@ function safeguardLine(safeguard: ToolSafeguard, lang: Lang): string {
   return fill(copy.line, { tool: TOOL_NAMES[safeguard.tool][lang], condition: safeguardCondition(safeguard, copy) });
 }
 
-/** 처방. 도구마다의 처방이 있는 규칙(S2)은 안전장치가 없는 도구(읽지 못해 뺀 도구는 아니다)마다의 문장을 도구의 차례로 잇는다 */
+/**
+ * 처방. 도구마다의 처방이 있는 규칙은 그 규칙이 가리키는 도구마다의 문장을 도구의 차례로 잇는다. S2는 안전장치가 없는 도구(읽지 못해 뺀 도구는 아니다)이고,
+ * E6은 정비 후보가 나온 도구다(「6단계 1부 계획 전 결정」 8번). 가리키는 도구가 없으면 두 도구에 맞는 처방이다
+ */
 function prescriptionOf(finding: FindingInput, copy: RuleCopy, details: FindingDetails): string {
   const byTool = copy.prescriptionByTool;
-  if (finding.ruleId !== "S2" || byTool === undefined) return copy.prescription;
-  const lacking = details.safeguards
-    .filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false)
-    .map((safeguard) => safeguard.tool)
-    .sort();
-  const sentences = lacking.map((tool) => byTool[tool]).filter((sentence): sentence is string => sentence !== undefined);
+  if (byTool === undefined) return copy.prescription;
+  const pointed =
+    finding.ruleId === "S2"
+      ? details.safeguards.filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false).map((safeguard) => safeguard.tool)
+      : finding.ruleId === "E6"
+        ? finding.tools.filter((value) => value.candidates.length > 0).map((value) => value.tool)
+        : [];
+  const sentences = [...new Set(pointed)]
+    .sort()
+    .map((tool) => byTool[tool])
+    .filter((sentence): sentence is string => sentence !== undefined);
   return sentences.length > 0 ? sentences.join(" ") : copy.prescription;
 }
 

@@ -77,13 +77,23 @@ function msOlderThan(day, epochMs, days) {
 
 // src/core/installs/candidates.ts
 var byText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var make = (tool, unit, rule2, targets) => [...targets].sort(byText).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule: rule2, tool: tool.tool, target }));
+function codexCandidates(tool, servers) {
+  const a4 = /* @__PURE__ */ new Set();
+  for (const judged of servers.servers) {
+    const { server } = judged;
+    if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
+    const sameName = servers.servers.filter((other) => other !== judged && other.server.scope === "project" && other.server.enabled && other.server.name === server.name);
+    if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a4.add(server.name);
+  }
+  return make(tool, "A4", "E6", a4);
+}
 function candidatesOf(tool, skills, servers, day, self) {
-  if (tool.tool === "codex") return [];
+  if (tool.tool === "codex") return codexCandidates(tool, servers);
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   const unknownPlugin = enabledPlugins.some((plugin) => !plugin.compositionKnown) || setup.pluginsWithoutInstall.length > 0;
   const hooksUnseen = unknownPlugin || enabledPlugins.some((plugin) => plugin.hooksUnreadable);
-  const serversUnseen = unknownPlugin || enabledPlugins.some((plugin) => plugin.mcpUnreadable);
   const selfPaths = new Set(self.skillRealPaths);
   const selfPlugins = new Set(setup.plugins.filter((plugin) => self.pluginNames.includes(plugin.entryName) || self.pluginNames.includes(plugin.name)).map((plugin) => plugin.id));
   const isSelfBundle = (bundle) => bundle.positions.some(
@@ -120,16 +130,13 @@ function candidatesOf(tool, skills, servers, day, self) {
       a2.add(plugin.id);
     }
   }
-  if (!serversUnseen) {
-    for (const judged of servers.servers) {
-      const { server } = judged;
-      if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
-      const sameName = servers.servers.filter((other) => other !== judged && other.server.enabled && other.server.name === server.name);
-      if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a3.add(server.name);
-    }
+  for (const judged of servers.servers) {
+    const { server } = judged;
+    if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
+    const sameName = servers.servers.filter((other) => other !== judged && other.server.scope !== "plugin" && other.server.enabled && other.server.name === server.name);
+    if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a3.add(server.name);
   }
-  const make = (unit, rule2, targets) => [...targets].sort(byText).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule: rule2, tool: tool.tool, target }));
-  return [...make("A1", "E5", a1), ...make("A2", "E5", a2), ...make("A3", "E6", a3)];
+  return [...make(tool, "A1", "E5", a1), ...make(tool, "A2", "E5", a2), ...make(tool, "A3", "E6", a3)];
 }
 
 // src/core/installs/signals.ts
@@ -287,11 +294,11 @@ function measureInstalls(enabled, complete, minimum) {
 }
 
 // src/core/installs/same.ts
-function sameInstall(items, keyOf) {
+function sameInstall(items, keyOf2) {
   const byKey = /* @__PURE__ */ new Map();
   const groups = [];
   for (const item2 of items) {
-    const key = keyOf(item2);
+    const key = keyOf2(item2);
     const group = key === null ? void 0 : byKey.get(key);
     if (group !== void 0) {
       group.push(item2);
@@ -1421,7 +1428,11 @@ var EFFICIENCY_COPY = {
       why: "Enabled MCP servers can be connected to provide tools. Some connect at session start and others on first use.",
       fix: "Turn off unused MCP servers",
       problem: "{value} of the servers whose use was judged were confirmed uncalled.",
-      prescription: 'Turn off a server you do not call in /mcp, or block it by adding { "serverName": "<name>" } to the deniedMcpServers list in your user settings (~/.claude/settings.json).',
+      prescription: "Turn off servers you do not call. In Claude Code, use /mcp or the deniedMcpServers list in your user settings; in Codex, set enabled = false in config.toml.",
+      prescriptionByTool: {
+        "claude-code": 'In Claude Code, turn off a server you do not call in /mcp, or block it by adding { "serverName": "<name>" } to the deniedMcpServers list in your user settings (~/.claude/settings.json).',
+        codex: "In Codex, turn off a server you do not call by setting enabled = false in its [mcp_servers.<name>] table in your user config.toml. Restart Codex after the change."
+      },
       method: "Servers confirmed uncalled, divided by the sum of servers called and servers confirmed uncalled. Confirming non-use requires this tool to have watched the same definition for more than 14 days; a call in the scoring window can establish use on the first checkup. Servers whose definition is not on this PC, such as those connected through claude.ai, are left out.",
       evidence: "Turned on {enabled} \xB7 can be judged {judgeable} \xB7 judged {judged} (called {used}, uncalled {unused}) \xB7 cannot be judged by design {structural}",
       unit: "%",
@@ -1444,7 +1455,11 @@ var EFFICIENCY_COPY = {
       why: "\uCF1C \uB454 MCP \uC11C\uBC84\uB294 \uB3C4\uAD6C\uB97C \uC81C\uACF5\uD558\uAE30 \uC704\uD574 \uC5F0\uACB0\uB420 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC138\uC158\uC744 \uC2DC\uC791\uD560 \uB54C \uC5F0\uACB0\uB418\uB294 \uC11C\uBC84\uB3C4 \uC788\uACE0 \uCC98\uC74C \uBD80\uB97C \uB54C \uC5F0\uACB0\uB418\uB294 \uC11C\uBC84\uB3C4 \uC788\uC2B5\uB2C8\uB2E4.",
       fix: "\uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB044\uAE30",
       problem: "\uBD80\uB974\uB294\uC9C0 \uD310\uC815\uB41C \uC11C\uBC84 \uAC00\uC6B4\uB370 {value}\uB294 \uBD80\uB974\uC9C0 \uC54A\uC740 \uAC83\uC73C\uB85C \uD655\uC778\uB410\uC2B5\uB2C8\uB2E4.",
-      prescription: '\uBD80\uB974\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB294 /mcp\uC5D0\uC11C \uB044\uAC70\uB098, \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "<\uC774\uB984>" }\uC744 \uB354\uD574 \uB9C9\uC73C\uC138\uC694.',
+      prescription: "\uBD80\uB974\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB294 \uB044\uC138\uC694. Claude Code\uC5D0\uC11C\uB294 /mcp\uB098 \uC0AC\uC6A9\uC790 \uC124\uC815\uC758 deniedMcpServers \uBAA9\uB85D\uC73C\uB85C, Codex\uC5D0\uC11C\uB294 config.toml\uC5D0 enabled = false\uB97C \uC801\uC5B4 \uB055\uB2C8\uB2E4.",
+      prescriptionByTool: {
+        "claude-code": 'Claude Code\uC5D0\uC11C\uB294 \uBD80\uB974\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB97C /mcp\uC5D0\uC11C \uB044\uAC70\uB098, \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "<\uC774\uB984>" }\uC744 \uB354\uD574 \uB9C9\uC73C\uC138\uC694.',
+        codex: "Codex\uC5D0\uC11C\uB294 \uBD80\uB974\uC9C0 \uC54A\uB294 \uC11C\uBC84\uB97C \uC0AC\uC6A9\uC790 config.toml\uC758 [mcp_servers.<\uC774\uB984>]\uC5D0 enabled = false\uB97C \uC801\uC5B4 \uB044\uC138\uC694. \uBC14\uAFBC \uB4A4\uC5D0\uB294 Codex\uB97C \uB2E4\uC2DC \uC2DC\uC791\uD574\uC57C \uD569\uB2C8\uB2E4."
+      },
       method: "\uC548 \uBD80\uB978 \uAC83\uC774 \uD655\uC778\uB41C \uC11C\uBC84\uB97C, \uBD80\uB978 \uC11C\uBC84\uC640 \uC548 \uBD80\uB978 \uAC83\uC774 \uD655\uC778\uB41C \uC11C\uBC84\uC758 \uD569\uC73C\uB85C \uB098\uB208 \uAC12\uC785\uB2C8\uB2E4. \uC548 \uBD80\uB978 \uAC83\uC744 \uD655\uC778\uD558\uB824\uBA74 \uC774 \uB3C4\uAD6C\uAC00 \uAC19\uC740 \uC815\uC758\uC758 \uC11C\uBC84\uB97C 14\uC77C \uB118\uAC8C \uC9C0\uCF1C\uBD10\uC57C \uD558\uC9C0\uB9CC, \uC810\uC218 \uAD6C\uAC04\uC5D0 \uBD80\uB978 \uAE30\uB85D\uC774 \uC788\uC73C\uBA74 \uCCAB \uC810\uAC80\uC5D0\uC11C\uB3C4 \uBD80\uB978 \uAC83\uC73C\uB85C \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4. claude.ai\uC5D0 \uC5F0\uACB0\uD55C \uC11C\uBC84\uCC98\uB7FC \uC815\uC758\uAC00 \uC774 PC\uC5D0 \uC5C6\uB294 \uC11C\uBC84\uB294 \uBE8D\uB2C8\uB2E4.",
       evidence: "\uCF1C\uC838 \uC788\uC74C {enabled} \xB7 \uD310\uC815\uD560 \uC218 \uC788\uC74C {judgeable} \xB7 \uD310\uC815\uB428 {judged}(\uBD80\uB984 {used}, \uC548 \uBD80\uB984 {unused}) \xB7 \uAD6C\uC870\uC0C1 \uD310\uC815\uD560 \uC218 \uC5C6\uC74C {structural}",
       unit: "%",
@@ -2019,9 +2034,9 @@ function safeguardLine(safeguard, lang) {
 }
 function prescriptionOf(finding, copy2, details) {
   const byTool = copy2.prescriptionByTool;
-  if (finding.ruleId !== "S2" || byTool === void 0) return copy2.prescription;
-  const lacking = details.safeguards.filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false).map((safeguard) => safeguard.tool).sort();
-  const sentences = lacking.map((tool) => byTool[tool]).filter((sentence) => sentence !== void 0);
+  if (byTool === void 0) return copy2.prescription;
+  const pointed = finding.ruleId === "S2" ? details.safeguards.filter((safeguard) => safeguard.guardHook === false && safeguard.permissionChecks === false).map((safeguard) => safeguard.tool) : finding.ruleId === "E6" ? finding.tools.filter((value) => value.candidates.length > 0).map((value) => value.tool) : [];
+  const sentences = [...new Set(pointed)].sort().map((tool) => byTool[tool]).filter((sentence) => sentence !== void 0);
   return sentences.length > 0 ? sentences.join(" ") : copy2.prescription;
 }
 function measurementNotes(finding, details, lang) {
@@ -2649,7 +2664,7 @@ function resultUsage(input, evaluation, collected) {
 // src/core/result/assemble.ts
 var RESULT_SCHEMA = 1;
 var byText10 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-var textsOf = (make) => ({ en: make("en"), ko: make("ko") });
+var textsOf = (make2) => ({ en: make2("en"), ko: make2("ko") });
 var SCOPE_ORDER3 = ["user", "local", "project", "plugin", "claude-ai"];
 function unjudgedServers(input, evaluation) {
   const windows = makeWindows(input.clock.nowMs, input.clock.timeZone);
@@ -3535,11 +3550,11 @@ var REPO = "chunsik-garage";
 function esc(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
-var textsOf2 = (make) => ({ en: make("en"), ko: make("ko") });
+var textsOf2 = (make2) => ({ en: make2("en"), ko: make2("ko") });
 var copy = (key, values) => textsOf2((lang) => values === void 0 ? REPORT_COPY[key][lang] : fill(REPORT_COPY[key][lang], values));
 var pairHtml = (html) => LANGS.map((lang) => `<span lang="${lang}" data-l="${lang}">${html[lang]}</span>`).join("");
 var both = (texts) => pairHtml(textsOf2((lang) => esc(texts[lang])));
-var perLang = (make) => LANGS.map((lang) => make(lang).replace(/^<([a-z0-9]+)/, `<$1 lang="${lang}" data-l="${lang}"`)).join("");
+var perLang = (make2) => LANGS.map((lang) => make2(lang).replace(/^<([a-z0-9]+)/, `<$1 lang="${lang}" data-l="${lang}"`)).join("");
 var swap = (lang, attrs) => ` data-tr${Object.entries(attrs).map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`).join("")}`;
 var fillHtml = (template, values) => fill(esc(template), values);
 var dayNumber = (date) => {
@@ -7510,8 +7525,8 @@ function definitionHash(saltHex, definition) {
   return text === null ? null : createHmac("sha256", Buffer.from(saltHex, "hex")).update(text).digest("hex");
 }
 var wildcard = (pattern) => new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-function matcherHits(matcher, names2, definition) {
-  if (matcher.serverName !== void 0 && names2.includes(matcher.serverName)) return true;
+function matcherHits(matcher, names2, definition, byName = true) {
+  if (byName && matcher.serverName !== void 0 && names2.includes(matcher.serverName)) return true;
   if (matcher.serverUrl !== void 0 && definition !== null && typeof definition.url === "string" && wildcard(matcher.serverUrl).test(definition.url)) return true;
   if (matcher.serverCommand !== void 0 && definition !== null && typeof definition.command === "string") {
     const args = Array.isArray(definition.args) ? definition.args : [];
@@ -7520,10 +7535,9 @@ function matcherHits(matcher, names2, definition) {
   }
   return false;
 }
-function mcpAllowed(context, names2, definition) {
+function mcpAllowed(context, names2, definition, plugin = false) {
   for (const layer of context.layers) if (layer.deniedMcpServers.some((m) => matcherHits(m, names2, definition))) return false;
-  const allow = context.managed.allowedMcpServers;
-  if (allow !== null && !allow.some((m) => matcherHits(m, names2, definition))) return false;
+  for (const layer of context.layers) if (layer.allowedMcpServers !== null && !layer.allowedMcpServers.some((m) => matcherHits(m, names2, definition, !plugin))) return false;
   if (context.project !== null && names2.some((name) => context.project.disabledMcpServers.includes(name))) return false;
   return true;
 }
@@ -8050,7 +8064,7 @@ function overrideIn(context, names2) {
 }
 function managedHits(managed, names2, definition) {
   if (managed.allowedMcpServers !== null) return true;
-  return !mcpAllowed({ layers: [managed], managed: { ...managed, allowedMcpServers: null }, project: null }, names2, definition);
+  return !mcpAllowed({ layers: [managed], project: null }, names2, definition);
 }
 var normalizedCommand = (text) => text.replace(/\\/g, "/").toLowerCase();
 function usageOf2(times) {
@@ -8105,7 +8119,7 @@ async function scanClaudeSetup(input) {
   unparsable(managedLayer, "managed");
   if (claudeJson.status === "unparsable") problems.push({ kind: "unparsable", owner: "tool", path: claudeJsonFile, place: null });
   const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
-  const global = { ordered: [userView], managed: managedView, mcp: { layers: [userView, managedView], managed: managedView, project: null } };
+  const global = { ordered: [userView], managed: managedView, mcp: { layers: [userView, managedView], project: null } };
   const projectLayers = /* @__PURE__ */ new Map();
   const contexts = /* @__PURE__ */ new Map();
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
@@ -8123,7 +8137,7 @@ async function scanClaudeSetup(input) {
     contexts.set(ref.normRoot, {
       ordered: [userView, projectView, localView],
       managed: managedView,
-      mcp: { layers: [userView, projectView, localView, managedView], managed: managedView, project: entry }
+      mcp: { layers: [userView, projectView, localView, managedView], project: entry }
     });
   }
   const everyContext = [global, ...contexts.values()];
@@ -8238,7 +8252,7 @@ async function scanClaudeSetup(input) {
     }
     for (const server of plugin.mcpServers) {
       const recordNames = [...new Set(pluginNames.flatMap((pluginName) => mcpRecordNames(server.name, pluginName)))].sort();
-      const denyNames = [.../* @__PURE__ */ new Set([...recordNames, server.name])];
+      const denyNames = [...new Set(pluginNames.map((pluginName) => `plugin:${pluginName}:${server.name}`))].sort();
       mcpServers.push({
         scope: "plugin",
         name: server.name,
@@ -8246,7 +8260,7 @@ async function scanClaudeSetup(input) {
         projectRoot: null,
         pluginId: plugin.id,
         definitionHash: server.definition === null ? null : definitionHash(input.salt, server.definition),
-        enabled: enabledIn.some((context) => mcpAllowed(context.mcp, denyNames, server.definition)),
+        enabled: enabledIn.some((context) => mcpAllowed(context.mcp, denyNames, server.definition, true)),
         managedFixed: managedHits(managedView, denyNames, server.definition)
       });
     }
@@ -10419,6 +10433,422 @@ async function runCheckup(options) {
   return { summary: checkupSummary(result, reportPath), run: run2, result };
 }
 
+// src/commands/tune-plan.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { join as join26 } from "node:path";
+
+// src/tune/items.ts
+import { createHash as createHash6 } from "node:crypto";
+import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
+import { dirname as dirname6, join as join24 } from "node:path";
+var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
+function targetPath(candidate, home) {
+  return join24(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
+}
+async function readTarget(path) {
+  let regular;
+  try {
+    const [file, folder] = await Promise.all([lstat8(path), lstat8(dirname6(path))]);
+    regular = file.isFile() && folder.isDirectory();
+  } catch (error) {
+    const code = error?.code;
+    return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing" } : { status: "unreadable" };
+  }
+  try {
+    return { status: "ok", bytes: await readFile8(path), regular };
+  } catch {
+    return { status: "unreadable" };
+  }
+}
+var hasBom = (bytes) => bytes.length >= 3 && bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191;
+function jsonState(bytes, key) {
+  if (hasBom(bytes)) return { present: false, blocked: "byte-order-mark" };
+  let doc;
+  try {
+    doc = JSON.parse(bytes.toString("utf8"));
+  } catch {
+    return { present: false, blocked: "not-json-object" };
+  }
+  if (!isObject5(doc)) return { present: false, blocked: "not-json-object" };
+  const parent = doc[key.parent];
+  if (parent === void 0) return { present: false, blocked: null };
+  if (key.kind === "json-list-add") return { present: false, blocked: Array.isArray(parent) ? null : "parent-shape" };
+  if (!isObject5(parent)) return { present: false, blocked: "parent-shape" };
+  if (!Object.hasOwn(parent, key.name)) return { present: false, blocked: null };
+  const value = parent[key.name];
+  const ok = key.parent === "skillOverrides" ? typeof value === "string" && SKILL_OVERRIDE_MODES.has(value) : typeof value === "boolean";
+  return ok ? { present: true, value, blocked: null } : { present: false, blocked: "value-shape" };
+}
+function keyPart(text) {
+  const part = text.trim();
+  if (/^[A-Za-z0-9_-]+$/.test(part)) return part;
+  if (/^'[^']*'$/.test(part)) return part.slice(1, -1);
+  if (/^"(?:[^"\\]|\\.)*"$/.test(part)) {
+    const table = parseCodexConfig(`${part} = 0`);
+    const names2 = table === null ? [] : Object.keys(table);
+    return names2.length === 1 ? names2[0] : null;
+  }
+  return null;
+}
+function splitDotted(text) {
+  const parts = [];
+  let current = "";
+  let quote = null;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quote !== null) {
+      current += char;
+      if (char === "\\" && quote === '"') current += text[++i] ?? "";
+      else if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+    } else if (char === ".") {
+      parts.push(current);
+      current = "";
+    } else current += char;
+  }
+  if (quote !== null) return null;
+  parts.push(current);
+  const keys = parts.map(keyPart);
+  return keys.every((key) => key !== null) ? keys : null;
+}
+function headerKey(line) {
+  const start = line.search(/\S/);
+  if (start < 0 || line[start] !== "[" || line[start + 1] === "[") return null;
+  let i = start + 1;
+  while (i < line.length) {
+    const char = line[i];
+    if (char === '"' || char === "'") {
+      let j = i + 1;
+      while (j < line.length && line[j] !== char) j += char === '"' && line[j] === "\\" ? 2 : 1;
+      if (j >= line.length) return null;
+      i = j + 1;
+      continue;
+    }
+    if (char === "]") return /^\s*(?:#.*)?$/.test(line.slice(i + 1)) ? line.slice(start + 1, i) : null;
+    i++;
+  }
+  return null;
+}
+function scanLine(line, start) {
+  let state = start;
+  let i = 0;
+  while (i < line.length) {
+    if (state !== null) {
+      if (state === '"""' && line[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      if (line.startsWith(state, i)) {
+        let end = i + 3;
+        while (end < line.length && end - i < 5 && line[end] === state[0]) end++;
+        state = null;
+        i = end;
+      } else i++;
+      continue;
+    }
+    if (line[i] === "#") return null;
+    const triple = line.startsWith('"""', i) ? '"""' : line.startsWith("'''", i) ? "'''" : null;
+    if (triple !== null) {
+      state = triple;
+      i += 3;
+      continue;
+    }
+    if (line[i] === '"' || line[i] === "'") {
+      const quote = line[i];
+      let j = i + 1;
+      while (j < line.length && line[j] !== quote) j += quote === '"' && line[j] === "\\" ? 2 : 1;
+      if (j >= line.length) return void 0;
+      i = j + 1;
+      continue;
+    }
+    i++;
+  }
+  return state;
+}
+function tableHeaderCount(text, server) {
+  let count = 0;
+  let state = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (state === null) {
+      const key = headerKey(line);
+      const keys = key === null ? null : splitDotted(key);
+      if (keys !== null && keys.length === 2 && keys[0] === "mcp_servers" && keys[1] === server) count++;
+    }
+    const next = scanLine(line, state);
+    if (next === void 0) return -1;
+    state = next;
+  }
+  return state === null ? count : -1;
+}
+function tomlState(bytes, server) {
+  if (hasBom(bytes)) return { present: false, blocked: "byte-order-mark" };
+  const text = bytes.toString("utf8");
+  const doc = parseCodexConfig(text);
+  if (doc === null) return { present: false, blocked: "not-toml" };
+  const servers = doc.mcp_servers;
+  const table = isTable(servers) ? servers[server] : void 0;
+  if (!isTable(table) || tableHeaderCount(text, server) !== 1) return { present: false, blocked: "table-shape" };
+  if (!Object.hasOwn(table, "enabled")) return { present: false, blocked: null };
+  return typeof table.enabled === "boolean" ? { present: true, value: table.enabled, blocked: null } : { present: false, blocked: "value-shape" };
+}
+function keyOf(candidate) {
+  switch (candidate.unit) {
+    case "A1":
+      return { kind: "json-entry", parent: "skillOverrides", name: candidate.target };
+    case "A2":
+      return { kind: "json-entry", parent: "enabledPlugins", name: candidate.target };
+    case "A3":
+      return { kind: "json-list-add", parent: "deniedMcpServers", entry: { serverName: candidate.target } };
+    case "A4":
+      return { kind: "toml-table-key", table: candidate.target, key: "enabled" };
+  }
+}
+function nextOf(candidate) {
+  switch (candidate.unit) {
+    case "A1":
+      return "off";
+    case "A2":
+    case "A4":
+      return false;
+    case "A3":
+      return { serverName: candidate.target };
+  }
+}
+function impactOf(candidate, context) {
+  const { target } = candidate;
+  switch (candidate.unit) {
+    case "A1": {
+      const skills = { user: 0, project: 0, plugin: 0 };
+      for (const bundle of context.bundles) if (bundle.positions.some((position) => position.recordNames.includes(target))) for (const position of bundle.positions) skills[position.scope]++;
+      return { unit: "A1", skills };
+    }
+    case "A2":
+      return { unit: "A2", skills: context.bundles.filter((bundle) => bundle.positions.some((position) => position.pluginId === target)).length };
+    case "A3": {
+      const sameName = { local: 0, project: 0, claudeAi: 0 };
+      for (const { server } of context.servers) {
+        if (server.name !== target || !server.enabled) continue;
+        if (server.scope === "local") sameName.local++;
+        else if (server.scope === "project") sameName.project++;
+        else if (server.scope === "claude-ai") sameName.claudeAi++;
+      }
+      return { unit: "A3", sameName };
+    }
+    case "A4":
+      return { unit: "A4", projects: context.servers.filter(({ server }) => server.name === target && server.enabled && server.scope === "project").length };
+  }
+}
+function tuneItem(candidate, context, read) {
+  const key = keyOf(candidate);
+  let state;
+  if (!context.versionOk) state = { present: false, blocked: "unverified-version" };
+  else if (read.status === "missing") state = { present: false, blocked: "file-missing" };
+  else if (read.status === "unreadable") state = { present: false, blocked: "file-unreadable" };
+  else if (!read.regular) state = { present: false, blocked: "not-regular" };
+  else state = key.kind === "toml-table-key" ? tomlState(read.bytes, key.table) : jsonState(read.bytes, key);
+  return {
+    id: candidate.id,
+    unit: candidate.unit,
+    rule: candidate.rule,
+    tool: candidate.tool,
+    target: candidate.target,
+    file: targetPath(candidate, context.home),
+    layer: "user",
+    key,
+    ...state.present ? { current: state.value } : {},
+    next: nextOf(candidate),
+    impact: impactOf(candidate, context),
+    blocked: state.blocked
+  };
+}
+
+// src/tune/copy.ts
+var TUNE_COPY = {
+  en: {
+    title: { A1: "Turn off an unused skill: {name}", A2: "Turn off an unused plugin: {name}", A3: "Block an unused MCP server: {name}", A4: "Turn off an unused Codex MCP server: {name}" },
+    change: {
+      A1: 'In {file}, set {key} under skillOverrides to "off" ({current}).',
+      A2: "In {file}, set {key} under enabledPlugins to false ({current}).",
+      A3: 'In {file}, add { "serverName": {key} } to the deniedMcpServers list.',
+      A4: "In {file}, write enabled = false in the [mcp_servers.{key}] table ({current})."
+    },
+    current: { none: "now not set", value: "now {value}", unexpected: "now an unexpected value" },
+    impact: {
+      A1: "This name also turns off {user} {user:skill|skills} in user folders, {project} in projects and {plugin} in plugins. It applies to every project on this PC.",
+      A2: "The plugin contains only {skills} {skills:skill|skills}.",
+      A3: "Servers with the same name are blocked too: {local} local, {project} project and {claudeAi} claude.ai. It applies to every server with this name on this PC.",
+      A4: "It applies to all of Codex. {projects} trusted {projects:project|projects} that {projects:redefines|redefine} this server {projects:is|are} turned off too unless {projects:it sets|they set} enabled."
+    },
+    undo: "After applying, you can undo this with aq tune undo.",
+    blocked: {
+      "unverified-version": "This {tool} version is outside the range this tool has verified, so it is not changed automatically. Change it yourself as described above.",
+      "file-missing": "The settings file does not exist, so it is not changed automatically. Change it yourself as described above.",
+      "file-unreadable": "The settings file could not be read, so it is not changed automatically. Change it yourself as described above.",
+      "not-regular": "The settings file or its folder is a link, so it is not changed automatically. Change it yourself as described above.",
+      "byte-order-mark": "The settings file starts with a byte order mark, so it is not changed automatically. Change it yourself as described above.",
+      "not-json-object": "The settings file is not standard JSON (JSON with comments is not), so it is not changed automatically. Change it yourself as described above.",
+      "parent-shape": "{parent} in the settings file is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
+      "value-shape": "The current value is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
+      "not-toml": "config.toml could not be parsed, so it is not changed automatically. Change it yourself as described above.",
+      "table-shape": "The [mcp_servers.{key}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above."
+    },
+    notices: {
+      not_saved: "This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save.",
+      plan_unsaved: "The plan could not be written to the state folder ({code}), so it cannot be applied."
+    }
+  },
+  ko: {
+    title: { A1: "\uC548 \uC4F0\uB294 \uC2A4\uD0AC \uB044\uAE30: {name}", A2: "\uC548 \uC4F0\uB294 \uD50C\uB7EC\uADF8\uC778 \uB044\uAE30: {name}", A3: "\uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB9C9\uAE30: {name}", A4: "Codex\uC758 \uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB044\uAE30: {name}" },
+    change: {
+      A1: '{file}\uC758 skillOverrides\uC5D0\uC11C \uC774\uB984 {key}\uC758 \uAC12\uC744 "off"\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).',
+      A2: "{file}\uC758 enabledPlugins\uC5D0\uC11C \uC124\uCE58 ID {key}\uC758 \uAC12\uC744 false\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).",
+      A3: '{file}\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": {key} } \uD56D\uBAA9\uC744 \uB354\uD569\uB2C8\uB2E4.',
+      A4: "{file}\uC758 [mcp_servers.{key}] \uD45C\uC5D0 enabled = false\uB97C \uC801\uC2B5\uB2C8\uB2E4({current})."
+    },
+    current: { none: "\uC9C0\uAE08\uC740 \uC815\uD558\uC9C0 \uC54A\uC74C", value: "\uC9C0\uAE08\uC740 {value}", unexpected: "\uC9C0\uAE08\uC740 \uC608\uC0C1\uD558\uC9C0 \uBABB\uD55C \uAC12" },
+    impact: {
+      A1: "\uC774 \uC774\uB984\uC73C\uB85C \uC0AC\uC6A9\uC790 \uD3F4\uB354\uC758 \uC2A4\uD0AC {user}\uAC1C, \uD504\uB85C\uC81D\uD2B8\uC758 \uC2A4\uD0AC {project}\uAC1C, \uD50C\uB7EC\uADF8\uC778\uC758 \uC2A4\uD0AC {plugin}\uAC1C\uAC00 \uD568\uAED8 \uAEBC\uC9D1\uB2C8\uB2E4. \uC774 PC\uC758 \uBAA8\uB4E0 \uD504\uB85C\uC81D\uD2B8\uC5D0 \uB4E3\uC2B5\uB2C8\uB2E4.",
+      A2: "\uC774 \uD50C\uB7EC\uADF8\uC778\uC5D0\uB294 \uC2A4\uD0AC {skills}\uAC1C\uB9CC \uB4E4\uC5B4 \uC788\uC2B5\uB2C8\uB2E4.",
+      A3: "\uAC19\uC740 \uC774\uB984\uC758 \uB85C\uCEEC \uBC94\uC704 \uC11C\uBC84 {local}\uAC1C, \uD504\uB85C\uC81D\uD2B8 \uBC94\uC704 \uC11C\uBC84 {project}\uAC1C, claude.ai \uC5F0\uACB0 {claudeAi}\uAC1C\uB3C4 \uD568\uAED8 \uB9C9\uD799\uB2C8\uB2E4. \uC774 PC\uC5D0\uC11C \uC774 \uC774\uB984\uC73C\uB85C \uC815\uC758\uB41C \uC11C\uBC84 \uBAA8\uB450\uC5D0 \uB4E3\uC2B5\uB2C8\uB2E4.",
+      A4: "Codex \uC804\uCCB4\uC5D0 \uB4E3\uC2B5\uB2C8\uB2E4. \uC774 \uC11C\uBC84\uB97C \uB2E4\uC2DC \uC801\uC740 \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8 {projects}\uACF3\uB3C4 \uADF8 \uD504\uB85C\uC81D\uD2B8\uAC00 enabled\uB97C \uC801\uC9C0 \uC54A\uC558\uC73C\uBA74 \uD568\uAED8 \uAEBC\uC9D1\uB2C8\uB2E4."
+    },
+    undo: "\uC801\uC6A9\uD55C \uB4A4 aq tune undo\uB85C \uB418\uB3CC\uB9B4 \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+    blocked: {
+      "unverified-version": "{tool}\uC758 \uBC84\uC804\uC774 \uC774 \uB3C4\uAD6C\uAC00 \uD655\uC778\uD55C \uBC94\uC704 \uBC16\uC774\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "file-missing": "\uC124\uC815 \uD30C\uC77C\uC774 \uC5C6\uC5B4 \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "file-unreadable": "\uC124\uC815 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574 \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "not-regular": "\uC124\uC815 \uD30C\uC77C\uC774\uB098 \uADF8 \uD3F4\uB354\uAC00 \uB9C1\uD06C\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "byte-order-mark": "\uC124\uC815 \uD30C\uC77C\uC774 \uBC14\uC774\uD2B8 \uC21C\uC11C \uD45C\uC2DC\uB85C \uC2DC\uC791\uD574 \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "not-json-object": "\uC124\uC815 \uD30C\uC77C\uC774 \uD45C\uC900 JSON\uC774 \uC544\uB2C8\uC5B4\uC11C(\uC8FC\uC11D\uC774 \uB4E0 JSON\uB3C4 \uADF8\uB807\uC2B5\uB2C8\uB2E4) \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "parent-shape": "\uC124\uC815 \uD30C\uC77C\uC758 {parent}\uAC00 \uC608\uC0C1\uD55C \uAF34\uC774 \uC544\uB2C8\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "value-shape": "\uC9C0\uAE08 \uAC12\uC774 \uC608\uC0C1\uD55C \uAF34\uC774 \uC544\uB2C8\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "not-toml": "config.toml\uC744 \uD480\uC9C0 \uBABB\uD574 \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
+      "table-shape": "[mcp_servers.{key}] \uD45C\uAC00 \uBA38\uB9AC \uD558\uB098\uB85C \uC5EC\uB7EC \uC904\uC5D0 \uC801\uD600 \uC788\uC9C0 \uC54A\uC544(\uC778\uB77C\uC778 \uD45C\uB098 \uC810 \uC5F4\uC1E0\uB85C \uC801\uC740 \uAC83) \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694."
+    },
+    notices: {
+      not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uACC4\uD68D\uC774\uB77C \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uC801\uC6A9\uD558\uB824\uBA74 --no-save \uC5C6\uC774 \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      plan_unsaved: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uACC4\uD68D\uC744 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."
+    }
+  }
+};
+function impactValues(item2) {
+  const impact = item2.impact;
+  switch (impact.unit) {
+    case "A1":
+      return impact.skills;
+    case "A2":
+      return { skills: impact.skills };
+    case "A3":
+      return impact.sameName;
+    case "A4":
+      return { projects: impact.projects };
+  }
+}
+function tomlString(text) {
+  const short = { "\\": "\\\\", '"': '\\"', "\b": "\\b", "	": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r" };
+  return `"${text.replace(/[\\"\u0000-\u001f\u007f]/g, (char) => short[char] ?? `\\u${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`)}"`;
+}
+function keyText(key) {
+  switch (key.kind) {
+    case "json-entry":
+      return JSON.stringify(key.name);
+    case "json-list-add":
+      return JSON.stringify(key.entry.serverName);
+    case "toml-table-key":
+      return /^[A-Za-z0-9_-]+$/.test(key.table) ? key.table : tomlString(key.table);
+  }
+}
+function tuneItemText(item2, lang) {
+  const copy2 = TUNE_COPY[lang];
+  const current = item2.blocked === "value-shape" ? copy2.current.unexpected : "current" in item2 ? fill(copy2.current.value, { value: JSON.stringify(item2.current) }) : copy2.current.none;
+  const parent = item2.key.kind === "toml-table-key" ? "mcp_servers" : item2.key.parent;
+  const key = keyText(item2.key);
+  return {
+    title: fill(copy2.title[item2.unit], { name: item2.target }),
+    change: fill(copy2.change[item2.unit], { file: item2.file, key, current }),
+    impact: fill(copy2.impact[item2.unit], impactValues(item2)),
+    blocked: item2.blocked === null ? null : fill(copy2.blocked[item2.blocked], { tool: TOOL_NAMES[item2.tool][lang], parent, key }),
+    undo: item2.blocked === null ? copy2.undo : null
+  };
+}
+function tuneNoticeText(notice, lang) {
+  const lines = TUNE_COPY[lang].notices;
+  return notice.kind === "not_saved" ? lines.not_saved : fill(lines.plan_unsaved, { code: notice.code });
+}
+
+// src/tune/plan.ts
+import { mkdir as mkdir5 } from "node:fs/promises";
+import { join as join25 } from "node:path";
+var TUNE_VERIFIED = { "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } };
+function versionVerified(tool, version) {
+  const parsed = parseVersion(version);
+  if (parsed === null) return false;
+  const range = TUNE_VERIFIED[tool];
+  return compareVersions(parsed, parseVersion(range.from)) >= 0 && compareVersions(parsed, parseVersion(range.to)) <= 0;
+}
+function planIdOf(nowMs, random) {
+  return `${resultStamp(nowMs)}-${random}`;
+}
+var PLANS_DIR = join25("tune", "plans");
+async function writePlan(stateDir2, plan) {
+  const dir = join25(stateDir2, PLANS_DIR);
+  await mkdir5(dir, { recursive: true });
+  const path = join25(dir, `${plan.planId}.json`);
+  await writeJson(path, plan);
+  return path;
+}
+
+// src/commands/tune-plan.ts
+var codeOf2 = (error) => error?.code ?? "unknown";
+async function runTunePlan(options) {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const opened = await openState(options.stateDir);
+  const gathered = await gatherCheckupInput({
+    env: options.env,
+    homedir: options.homedir,
+    tmpdir: options.tmpdir,
+    platform: options.platform,
+    clock: options.clock,
+    cacheDir: options.save ? join26(options.stateDir, "cache") : null,
+    rescan: options.rescan,
+    state: opened.state,
+    self: await selfIdentity(options.entryFile),
+    ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
+  });
+  const evaluation = evaluate(gathered.input);
+  const reads = /* @__PURE__ */ new Map();
+  const items = [];
+  for (const candidate of evaluation.candidates) {
+    const input = gathered.input.tools.find((tool) => tool.tool === candidate.tool);
+    const judged = evaluation.tools.find((tool) => tool.tool === candidate.tool);
+    const home = input.setup.home;
+    const path = targetPath(candidate, home);
+    if (!reads.has(path)) reads.set(path, await readTarget(path));
+    const context = { home, bundles: judged.skills, servers: judged.servers, versionOk: versionVerified(candidate.tool, highestMainVersion(input.summaries)) };
+    items.push(tuneItem(candidate, context, reads.get(path)));
+  }
+  const files = [...reads].map(([path, read]) => ({ path, status: read.status, fingerprint: read.status === "ok" ? fingerprintOf(read.bytes) : null, items: items.filter((item2) => item2.file === path).map((item2) => item2.id) }));
+  const base = { createdAt: new Date(options.clock.nowMs).toISOString(), appVersion: PROGRAM_VERSION, items, files };
+  const notices2 = [];
+  let plan = { planId: null, ...base };
+  if (options.save) {
+    const planId = planIdOf(options.clock.nowMs, options.random?.() ?? randomBytes2(3).toString("hex"));
+    try {
+      await writePlan(options.stateDir, { planId, ...base });
+      plan = { planId, ...base };
+    } catch (error) {
+      notices2.push({ kind: "plan_unsaved", code: codeOf2(error) });
+    }
+  } else {
+    notices2.push({ kind: "not_saved" });
+  }
+  const text = { items: Object.fromEntries(items.map((item2) => [item2.id, tuneItemText(item2, options.lang)])), notices: notices2.map((notice) => tuneNoticeText(notice, options.lang)) };
+  return { plan, run: { durationMs: now() - started, saved: plan.planId !== null, notices: notices2, text } };
+}
+
 // src/commands/open.ts
 import { spawn } from "node:child_process";
 function openerFor(platform, path) {
@@ -10445,12 +10875,12 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 }
 
 // src/commands/clean.ts
-import { lstat as lstat8, readdir as readdir8, realpath as realpath7 } from "node:fs/promises";
-import { join as join24 } from "node:path";
+import { lstat as lstat9, readdir as readdir8, realpath as realpath7 } from "node:fs/promises";
+import { join as join27 } from "node:path";
 var isMissing5 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
-    return await lstat8(path);
+    return await lstat9(path);
   } catch (error) {
     if (isMissing5(error)) return null;
     throw error;
@@ -10461,14 +10891,14 @@ async function cleanReports(path, boundary) {
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat8(join24(path, name));
+    const info = await lstat9(join27(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join24(path, name);
-    const info = await lstat8(full);
+    const full = join27(path, name);
+    const info = await lstat9(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
       kept.bytes += info.size;
@@ -10481,7 +10911,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join24(dir, spec.name);
+  const path = join27(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -10523,16 +10953,16 @@ async function clean(dir, level) {
 }
 
 // src/commands/doctor.ts
-import { mkdir as mkdir5, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join25 } from "node:path";
+import { mkdir as mkdir6, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join28 } from "node:path";
 import * as zlib2 from "node:zlib";
 function hasZstd() {
   return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join25(dir, `.write-probe-${process.pid}`);
+  const probe = join28(dir, `.write-probe-${process.pid}`);
   try {
-    await mkdir5(dir, { recursive: true });
+    await mkdir6(dir, { recursive: true });
     await writeFile4(probe, "ok");
     await rm3(probe, { force: true });
     return true;
@@ -10562,14 +10992,14 @@ async function doctor(input) {
 }
 
 // src/commands/where.ts
-import { lstat as lstat9, readdir as readdir9 } from "node:fs/promises";
-import { join as join26 } from "node:path";
+import { lstat as lstat10, readdir as readdir9 } from "node:fs/promises";
+import { join as join29 } from "node:path";
 var isMissing6 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
-    dirInfo = await lstat9(dir);
+    dirInfo = await lstat10(dir);
   } catch (error) {
     if (!isMissing6(error)) throw error;
   }
@@ -10580,11 +11010,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat9(join26(dir, spec.name));
+        const info = await lstat10(join29(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join26(dir, spec.name));
+          const size = await treeSize(join29(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -10609,7 +11039,8 @@ function nodeMajorOk(version) {
   return Number.isInteger(major) && major >= 22;
 }
 var CHECKUP_FLAGS = /* @__PURE__ */ new Set(["--no-open", "--no-save", "--rescan"]);
-function checkupArgs(rest) {
+var TUNE_PLAN_FLAGS = /* @__PURE__ */ new Set(["--no-save", "--rescan"]);
+function checkupArgs(rest, allowed = CHECKUP_FLAGS) {
   const flags = /* @__PURE__ */ new Set();
   let lang = null;
   for (let index = 0; index < rest.length; index++) {
@@ -10619,7 +11050,7 @@ function checkupArgs(rest) {
       if (value === void 0 || value.startsWith("-")) return null;
       lang = value;
       index++;
-    } else if (CHECKUP_FLAGS.has(arg)) {
+    } else if (allowed.has(arg)) {
       flags.add(arg);
     } else {
       return null;
@@ -10650,6 +11081,26 @@ async function run(command, rest, context) {
   }
   if (command === "clean" && (rest.length === 0 || rest.length === 1 && rest[0] === "--all")) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "tune" && rest[0] === "plan") {
+    const args2 = checkupArgs(rest.slice(1), TUNE_PLAN_FLAGS);
+    if (args2 === null) return null;
+    printJson(
+      await runTunePlan({
+        env: context.env,
+        homedir: context.homedir,
+        tmpdir: context.tmpdir ?? tmpdir(),
+        platform: context.platform ?? process.platform,
+        clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        stateDir: stateDir(context.homedir),
+        save: !args2.flags.has("--no-save"),
+        rescan: args2.flags.has("--rescan"),
+        entryFile: context.entryFile ?? process.argv[1] ?? "",
+        ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
+      })
+    );
     return 0;
   }
   const args = command === "checkup" ? checkupArgs(rest) : null;

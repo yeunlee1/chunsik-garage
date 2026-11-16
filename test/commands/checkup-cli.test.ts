@@ -1,4 +1,4 @@
-// 명령 입구의 aq checkup을 시험한다. 받는 옵션, 결과 화면을 여는지, 처음 보일 언어의 차례, 표준 출력에는 요약과 실행 기록만 내는 것, 모르는 옵션을 거절하는 것이다(설계 7.4, 12.3, 13.2, 20.1)
+// 명령 입구의 aq checkup과 aq tune plan을 시험한다. 받는 옵션, 결과 화면을 여는지, 처음 보일 언어의 차례, 표준 출력에는 요약과 실행 기록만 내는 것, 모르는 옵션을 거절하는 것이다(설계 7.4, 12.3, 13.2, 20.1)
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -93,5 +93,27 @@ describe("aq checkup", () => {
     expect(await main(["checkup", "--bogus"], context)).toBe(64);
     expect(printed).toBe("");
     await expect(readdir(join(root, "home", ".chunsik-garage"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});
+
+describe("aq tune plan(「6단계 1부 계획 전 결정」 6번)", () => {
+  it("계획과 실행 기록을 JSON으로 내고 0을 돌려준다. --no-save면 계획 ID가 없고 상태 폴더를 만들지 않는다. --lang과 --rescan도 받는다", async () => {
+    expect(await main(["tune", "plan", "--no-save", "--rescan", "--lang", "ko"], context)).toBe(0);
+    const output = JSON.parse(printed);
+    expect(Object.keys(output).sort()).toEqual(["plan", "run"]);
+    expect(output.plan).toMatchObject({ planId: null, items: [] });
+    expect(output.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }] });
+    await expect(readdir(join(root, "home", ".chunsik-garage"))).rejects.toThrow();
+  });
+
+  it("저장하면 상태 폴더의 tune/plans에 그 계획이 생긴다", async () => {
+    expect(await main(["tune", "plan"], context)).toBe(0);
+    const output = JSON.parse(printed);
+    expect(await readdir(join(root, "home", ".chunsik-garage", "tune", "plans"))).toEqual([`${output.plan.planId}.json`]);
+  });
+
+  it("모르는 옵션, 값이 없는 --lang, 결과 화면의 옵션(--no-open), 하위 명령이 없는 tune은 64를 돌려주고 아무것도 쓰지 않는다", async () => {
+    for (const args of [["tune", "plan", "--all"], ["tune", "plan", "--lang"], ["tune", "plan", "--no-open"], ["tune"]]) expect(await main(args, context)).toBe(64);
+    expect(printed).toBe("");
   });
 });

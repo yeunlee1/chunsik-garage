@@ -1,4 +1,4 @@
-// 정비 후보(A1 스킬 끄기, A2 플러그인 끄기, A3 서버 막기)를 내는 조건을 시험한다. 적용은 하지 않고 후보의 유무와 목록만 본다(설계 16.1, 16.2, 21.1)
+// 정비 후보(A1 스킬 끄기, A2 플러그인 끄기, A3 서버 막기, A4 서버 끄기)를 내는 조건을 시험한다. 적용은 하지 않고 후보의 유무와 목록만 본다(설계 16.1, 16.2, 21.1, 「6단계 1부 계획 전 결정」 3번)
 import { describe, expect, it } from "vitest";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
 import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
@@ -211,17 +211,36 @@ describe("A2 플러그인 끄기", () => {
   });
 });
 
-describe("Codex(설계 「5단계 3부 계획 전 결정」 11번)", () => {
-  it("Codex 설치의 정비 후보는 6단계가 조건을 정할 때까지 내지 않는다. 안 부른 것이 확인된 서버가 있어도 없다", () => {
-    const idle = mcpServer("idle");
-    const summaries = [summary({ days: { "2026-11-10": { responses: 1 } } })];
-    const base = { day, windows, records: recordMap([{ key: idle.installKey!, firstSeen: "2026-09-01", appeared: false }]), complete: true };
-    const tool: ToolSetup = { tool: "codex", totals: toolTotals(summaries, windows, []), coverage: CODEX_COVERAGE, setup: codexFacts({ mcpServers: [idle] }), highestVersion: "0.166.0" };
+describe("A4 서버 끄기(Codex, 「6단계 1부 계획 전 결정」 3번)", () => {
+  const runCodex = (mcpServers: McpFact[], options: { called?: string[]; watched?: McpFact[] } = {}) => {
+    const summaries = [summary({ days: { "2026-11-10": { responses: 1, mcpCalls: Object.fromEntries((options.called ?? []).map((name) => [name, 1])) } } })];
+    const records = (options.watched ?? mcpServers).flatMap((fact) => (fact.installKey === null ? [] : [{ key: fact.installKey, firstSeen: "2026-09-01", appeared: false }]));
+    const base = { day, windows, records: recordMap(records), complete: true };
+    const tool: ToolSetup = { tool: "codex", totals: toolTotals(summaries, windows, []), coverage: CODEX_COVERAGE, setup: codexFacts({ mcpServers }), highestVersion: "0.166.0" };
     const skills = judgeSkills(tool, { ...base, used: usedSkillNames(summaries, windows), listings: sessionListings(summaries, "skill", {}, lookup) });
     const servers = judgeServers(tool, { ...base, used: calledMcpNames(summaries, windows), listings: sessionListings(summaries, "mcp", {}, lookup) });
-    expect(servers.servers.map((judged) => judged.verdict)).toEqual(["unused"]);
-    expect(skills).toEqual({ measurement: expect.objectContaining({ status: "unmeasured", reason: "unsupported" }), bundles: [] });
-    expect(candidatesOf(tool, skills, servers, day, NO_SELF)).toEqual([]);
+    return { skills, servers, candidates: candidatesOf(tool, skills, servers, day, NO_SELF) };
+  };
+  it("사용자 범위 서버가 안 부른 것이 확인됨이면 그 이름으로 서버 끄기 후보를 낸다. Codex에는 스킬 끄기, 플러그인 끄기, 서버 막기를 내지 않는다", () => {
+    const result = runCodex([mcpServer("idle"), mcpServer("busy")], { called: ["busy"] });
+    expect(result.skills).toEqual({ measurement: expect.objectContaining({ status: "unmeasured", reason: "unsupported" }), bundles: [] });
+    expect(result.candidates).toEqual([{ id: "A4:codex:idle", unit: "A4", rule: "E6", tool: "codex", target: "idle" }]);
+  });
+  it("같은 이름을 다시 적은 신뢰한 프로젝트의 서버가 켜져 있으면 그것도 안 부른 것이 확인됨이어야 한다. 꺼져 있으면 따지지 않는다", () => {
+    const own = mcpServer("db");
+    const inProject = mcpServer("db", { scope: "project", projectRoot: "/work/app", definitionHash: "other" });
+    expect(ids(runCodex([own, inProject]))).toEqual(["A4:codex:db"]);
+    expect(ids(runCodex([own, inProject], { watched: [own] }))).toEqual([]);
+    expect(ids(runCodex([own, { ...inProject, enabled: false }], { watched: [own] }))).toEqual(["A4:codex:db"]);
+  });
+  it("같은 이름의 플러그인 서버는 따지지 않는다. 설정의 서버가 이겨 그 서버는 원래 쓰이지 않는다", () => {
+    const own = mcpServer("db");
+    const fromPlugin = mcpServer("db", { scope: "plugin", pluginId: "p@m", definitionHash: "plugin-def" });
+    expect(ids(runCodex([own, fromPlugin], { watched: [own] }))).toEqual(["A4:codex:db"]);
+  });
+  it("프로젝트 범위와 플러그인의 서버, 꺼 둔 서버, 지켜본 지 14일이 안 된 서버는 서버 끄기 후보가 아니다", () => {
+    const mcpServers = [mcpServer("proj", { scope: "project", projectRoot: "/work/app" }), mcpServer("plug", { scope: "plugin", pluginId: "p@m" }), mcpServer("off", { enabled: false }), mcpServer("young")];
+    expect(ids(runCodex(mcpServers, { watched: mcpServers.slice(0, 3) }))).toEqual([]);
   });
 });
 
@@ -241,14 +260,14 @@ describe("A3 서버 막기", () => {
     expect(ids(run({ mcpServers: [own, inProject] }, { watched: [own] }))).toEqual([]);
     expect(ids(run({ mcpServers: [own, { ...inProject, enabled: false }] }, { watched: [own] }))).toEqual(["A3:claude-code:db"]);
   });
-  it("플러그인이 넣은 같은 이름의 서버가 쓰이고 있으면 내지 않는다. 부른 기록의 이름 꼴이 달라 사용자 범위 서버는 확인됨일 수 있다", () => {
+  it("플러그인이 넣은 같은 이름의 서버는 따지지 않는다. 막는 목록은 플러그인 서버를 등록 이름으로만 막아 그 서버가 쓰이고 있어도 막히지 않는다(「6단계 1부 계획 전 결정」 3번)", () => {
     const own = mcpServer("db");
     const fromPlugin = mcpServer("db", { scope: "plugin", pluginId: "p@m", recordNames: ["plugin:p:db", "plugin_p_db"], definitionHash: "plugin-def" });
     const setup = { mcpServers: [own, fromPlugin], plugins: [plugin("p@m", { components: ["mcpServers"] })] };
     const result = run(setup, { calledServers: ["plugin_p_db"] });
     expect(result.servers.servers.map((s) => s.verdict)).toEqual(["unused", "used"]);
-    expect(ids(result)).toEqual([]);
-    expect(ids(run(setup))).toEqual(["A3:claude-code:db"]);
+    expect(ids(result)).toEqual(["A3:claude-code:db"]);
+    expect(ids(run(setup, { watched: [own] }))).toEqual(["A3:claude-code:db"]);
   });
   it("같은 이름의 claude.ai 연결이 켜져 있으면 내지 않는다. 그 연결은 안 부른 것이 확인됨이 되지 않는다", () => {
     const mcpServers = [mcpServer("mail"), mcpServer("mail", { scope: "claude-ai", definitionHash: null })];
@@ -258,10 +277,10 @@ describe("A3 서버 막기", () => {
     ["구성을 모르는 플러그인", { plugins: [plugin("x@m", { compositionKnown: false, hooksUnreadable: true, mcpUnreadable: true })] }],
     ["MCP 정의를 읽지 못한 플러그인", { plugins: [plugin("x@m", { mcpUnreadable: true })] }],
     ["설정에 켜 두었는데 설치 기록에 없는 플러그인", { pluginsWithoutInstall: ["ghost@m"] }],
-  ] as [string, Partial<ClaudeSetupFacts>][])("같은 이름의 서버가 있는지 알 수 없으면 내지 않는다. E6은 잰다: %s", (_name, setup) => {
+  ] as [string, Partial<ClaudeSetupFacts>][])("구성을 모르거나 MCP 정의를 읽지 못한 켜진 플러그인이 있어도 서버 막기 후보를 낸다. 그 플러그인의 서버는 이름으로 막히지 않는다(「6단계 1부 계획 전 결정」 3번): %s", (_name, setup) => {
     const result = run({ mcpServers: [mcpServer("idle1"), mcpServer("idle2")], ...setup });
     expect(result.servers.measurement).toMatchObject({ status: "scored", value: 1 });
-    expect(ids(result)).toEqual([]);
+    expect(ids(result)).toEqual(["A3:claude-code:idle1", "A3:claude-code:idle2"]);
   });
   it("훅 정의만 읽지 못한 플러그인은 서버 막기와 상관없다. 스킬을 끄는 후보만 막는다", () => {
     const result = run({ skills: [skill("idle")], mcpServers: [mcpServer("idle")], plugins: [plugin("x@m", { hooksUnreadable: true })] });

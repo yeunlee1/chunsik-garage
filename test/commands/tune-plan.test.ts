@@ -59,7 +59,10 @@ describe("저장하는 계획", () => {
     const fingerprint = createHash("sha256").update(await readFile(settings)).digest("hex");
     expect(outcome.plan.files).toEqual([{ path: settings, status: "ok", fingerprint, items: ["A3:claude-code:idle-db"] }]);
     expect(JSON.parse(await readFile(join(stateDir, "tune", "plans", `${outcome.plan.planId}.json`), "utf8"))).toEqual(outcome.plan);
-    expect(outcome.run).toMatchObject({ saved: true, notices: [] });
+    expect(outcome.run).toMatchObject({ saved: true, notices: [], text: { notices: [] } });
+    // 실행 기록에 항목마다 요청한 언어의 문장이 든다. 저장한 계획에는 문장이 없다
+    expect(outcome.run.text.items["A3:claude-code:idle-db"]!.title).toBe("Block an unused MCP server: idle-db");
+    expect(JSON.stringify(JSON.parse(await readFile(join(stateDir, "tune", "plans", `${outcome.plan.planId}.json`), "utf8")))).not.toContain("Block an unused");
     expect(await readFile(join(stateDir, "state.json"))).toEqual(stateBefore);
     // 계획에는 설정 파일의 다른 내용(서버 정의의 환경 변수 값)이 없다
     expect(JSON.stringify(outcome)).not.toContain("secret-value");
@@ -80,7 +83,7 @@ describe("저장하지 않는 계획", () => {
     const outcome = await runTunePlan(options({ save: false }));
     expect(outcome.plan.planId).toBeNull();
     expect(outcome.plan.items.map((item) => item.id)).toEqual(["A3:claude-code:idle-db"]);
-    expect(outcome.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }] });
+    expect(outcome.run).toMatchObject({ saved: false, notices: [{ kind: "not_saved" }], text: { notices: ["This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save."] } });
     expect((await readdir(stateDir)).sort()).toEqual(before);
   });
 

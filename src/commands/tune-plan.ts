@@ -7,7 +7,8 @@ import { evaluate } from "../core/evaluate.ts";
 import { highestMainVersion } from "../core/metrics/setup.ts";
 import { openState } from "../state/next-state.ts";
 import { fingerprintOf, readTarget, targetPath, tuneItem, type TargetRead, type TuneItem } from "../tune/items.ts";
-import { planIdOf, versionVerified, writePlan, type TunePlan } from "../tune/plan.ts";
+import { tuneItemText, tuneNoticeText, type TuneItemText } from "../tune/copy.ts";
+import { planIdOf, versionVerified, writePlan, type TunePlan, type TuneRunNotice } from "../tune/plan.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
 import { selfIdentity } from "./self.ts";
@@ -31,12 +32,10 @@ export interface TunePlanOptions {
   random?: () => string;
 }
 
-/** 계획의 실행 알림. 저장하지 않은 계획과 저장하지 못한 계획은 적용할 수 없다 */
-export type TuneRunNotice = { kind: "not_saved" } | { kind: "plan_unsaved"; code: string };
-
 export interface TunePlanOutcome {
   plan: TunePlan;
-  run: { durationMs: number; saved: boolean; notices: TuneRunNotice[] };
+  /** 실행 기록. 문장(text)은 요청한 언어이고 저장한 계획에는 들지 않는다 */
+  run: { durationMs: number; saved: boolean; notices: TuneRunNotice[]; text: { items: Record<string, TuneItemText>; notices: string[] } };
 }
 
 const codeOf = (error: unknown): string => (error as NodeJS.ErrnoException | null)?.code ?? "unknown";
@@ -88,5 +87,6 @@ export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOut
   } else {
     notices.push({ kind: "not_saved" });
   }
-  return { plan, run: { durationMs: now() - started, saved: plan.planId !== null, notices } };
+  const text = { items: Object.fromEntries(items.map((item) => [item.id, tuneItemText(item, options.lang)])), notices: notices.map((notice) => tuneNoticeText(notice, options.lang)) };
+  return { plan, run: { durationMs: now() - started, saved: plan.planId !== null, notices, text } };
 }

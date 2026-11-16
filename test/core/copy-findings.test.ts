@@ -160,6 +160,23 @@ describe("규칙마다 덧붙는 것", () => {
     }
   });
 
+  it("E6의 처방은 정비 후보가 나온 도구마다 그 도구의 끄는 법을 도구의 차례로 잇는다. 후보가 나온 도구가 없으면 두 도구에 맞는 문장이다(「6단계 1부 계획 전 결정」 8번)", () => {
+    const e6 = (tools: ResultToolValue[]) => findingText(finding("E6", { value: 0.5, score: 0.5, category: "repair", tools }), NONE, "ko").prescription;
+    const byTool = RULE_COPY.E6.ko.prescriptionByTool!;
+    expect(e6([toolValue({ candidates: ["A3:claude-code:db"] }), toolValue({ tool: "codex" })])).toBe(byTool["claude-code"]);
+    expect(e6([toolValue({}), toolValue({ tool: "codex", candidates: ["A4:codex:db"] })])).toBe(byTool.codex);
+    expect(e6([toolValue({ tool: "codex", candidates: ["A4:codex:db"] }), toolValue({ candidates: ["A3:claude-code:db"] })])).toBe(`${byTool["claude-code"]} ${byTool.codex}`);
+    expect(e6([toolValue({}), toolValue({ tool: "codex" })])).toBe(RULE_COPY.E6.ko.prescription);
+    expect(byTool["claude-code"]).toBe('Claude Code에서는 부르지 않는 서버를 /mcp에서 끄거나, 사용자 설정(~/.claude/settings.json)의 deniedMcpServers 목록에 { "serverName": "<이름>" }을 더해 막으세요.');
+    expect(byTool.codex).toBe("Codex에서는 부르지 않는 서버를 사용자 config.toml의 [mcp_servers.<이름>]에 enabled = false를 적어 끄세요. 바꾼 뒤에는 Codex를 다시 시작해야 합니다.");
+    expect(RULE_COPY.E6.ko.prescription).toBe("부르지 않는 서버는 끄세요. Claude Code에서는 /mcp나 사용자 설정의 deniedMcpServers 목록으로, Codex에서는 config.toml에 enabled = false를 적어 끕니다.");
+    for (const lang of ["en", "ko"] as const) {
+      const texts = RULE_COPY.E6[lang].prescriptionByTool!;
+      expect(Object.keys(texts).sort()).toEqual(["claude-code", "codex"]);
+      for (const text of [...Object.values(texts), RULE_COPY.E6[lang].prescription]) expect(text, `${lang}: ${text}`).toMatch(/[.!?]$/);
+    }
+  });
+
   it("도구별 값을 대신 본 것으로 쟀으면 그 도구마다 어떻게 쟀나에 가까운 값이라는 줄을 더한다. 못 잰 도구에는 더하지 않는다(설계 9.7, 「5단계 4부 계획 전 결정」 7번)", () => {
     const tools = [toolValue({ tool: "claude-code" }), toolValue({ tool: "codex", observed: "proxy" })];
     const e3 = finding("E3", { kind: "rate", tools });

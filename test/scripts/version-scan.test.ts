@@ -1,4 +1,4 @@
-// 버전이 쓰이는 네 곳(package.json, 프로그램 안의 버전, Claude Code 플러그인 정보와 마켓 목록)을 읽어 서로 다르거나 읽지 못하면 알리는 검사를 시험한다(설계 7.1, 「4단계 계획에서 보완」)
+// 버전이 쓰이는 여섯 곳(package.json, 프로그램 안의 버전, 두 도구의 플러그인 정보와 마켓 목록)을 읽어 서로 다르거나 읽지 못하면 알리는 검사를 시험한다(설계 7.1, 「4단계 계획에서 보완」, 「5단계 5부 계획 전 결정」 4번)
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -11,24 +11,27 @@ beforeEach(async () => {
 });
 afterEach(async () => removeTemp(root));
 
-/** 네 곳에 버전을 쓴다. 바꿀 곳만 넘기면 나머지는 기본 꼴이다 */
+/** 여섯 곳에 버전을 쓴다. 바꿀 곳만 넘기면 나머지는 기본 꼴이다 */
 async function writeAll(version: string, override: Partial<Record<(typeof VERSION_FILES)[number], string>> = {}): Promise<void> {
   const files: Record<(typeof VERSION_FILES)[number], string> = {
     "package.json": JSON.stringify({ name: "chunsik-garage", version }),
     "src/version.ts": `// 프로그램 버전\nexport const PROGRAM_VERSION = "${version}";\n`,
     ".claude-plugin/plugin.json": JSON.stringify({ name: "chunsik-garage", version }),
     ".claude-plugin/marketplace.json": JSON.stringify({ name: "chunsik-garage", plugins: [{ name: "chunsik-garage", source: "./", version }] }),
+    ".codex-plugin/plugin.json": JSON.stringify({ name: "chunsik-garage", version }),
+    ".agents/plugins/marketplace.json": JSON.stringify({ name: "chunsik-garage", plugins: [{ name: "chunsik-garage", source: "./", version }] }),
     ...override,
   };
   for (const [file, text] of Object.entries(files)) await put(join(root, file), text);
 }
 
 describe("버전 읽기와 견주기", () => {
-  it("네 곳의 버전을 정한 차례로 읽고, 모두 같으면 알릴 것이 없다", async () => {
+  it("여섯 곳의 버전을 정한 차례로 읽고, 모두 같으면 알릴 것이 없다", async () => {
+    expect([...VERSION_FILES]).toEqual(["package.json", "src/version.ts", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json"]);
     await writeAll("0.2.0");
     const entries = readVersions(root);
     expect(entries.map((entry) => entry.file)).toEqual([...VERSION_FILES]);
-    expect(entries.map((entry) => entry.version)).toEqual(["0.2.0", "0.2.0", "0.2.0", "0.2.0"]);
+    expect(entries.map((entry) => entry.version)).toEqual(["0.2.0", "0.2.0", "0.2.0", "0.2.0", "0.2.0", "0.2.0"]);
     expect(versionProblems(entries)).toEqual([]);
   });
 
@@ -38,11 +41,21 @@ describe("버전 읽기와 견주기", () => {
     "src/version.ts": 'export const PROGRAM_VERSION = "0.2.1";\n',
     ".claude-plugin/plugin.json": JSON.stringify({ name: "chunsik-garage", version: "0.2.1" }),
     ".claude-plugin/marketplace.json": JSON.stringify({ name: "chunsik-garage", plugins: [{ name: "chunsik-garage", source: "./", version: "0.2.1" }] }),
+    ".codex-plugin/plugin.json": JSON.stringify({ name: "chunsik-garage", version: "0.2.1" }),
+    ".agents/plugins/marketplace.json": JSON.stringify({ name: "chunsik-garage", plugins: [{ name: "chunsik-garage", source: "./", version: "0.2.1" }] }),
   };
   it.each([...VERSION_FILES])("%s 한 곳만 달라도 어느 파일이 어떤 버전인지 모두 적어 알린다", async (file) => {
     await writeAll("0.2.0", { [file]: bumped[file] });
     const listed = VERSION_FILES.map((name) => `${name} ${name === file ? "0.2.1" : "0.2.0"}`).join(", ");
     expect(versionProblems(readVersions(root))).toEqual([`버전이 다르다: ${listed}`]);
+  });
+
+  it("Codex 마켓 목록에도 이 플러그인 항목이 하나가 아니면 찾지 못한 것으로 본다", async () => {
+    const twice = { name: "chunsik-garage", plugins: [{ name: "chunsik-garage", source: "./", version: "0.2.0" }, { name: "chunsik-garage", source: "./", version: "0.2.0" }] };
+    await writeAll("0.2.0", { ".agents/plugins/marketplace.json": JSON.stringify(twice) });
+    expect(versionProblems(readVersions(root))).toEqual([".agents/plugins/marketplace.json: 버전을 찾지 못함"]);
+    await writeAll("0.2.0", { ".agents/plugins/marketplace.json": JSON.stringify({ name: "chunsik-garage", plugins: [{ name: "other", source: "./", version: "0.2.0" }] }) });
+    expect(versionProblems(readVersions(root))).toEqual([".agents/plugins/marketplace.json: 버전을 찾지 못함"]);
   });
 
   it("마켓 목록에 이 플러그인 항목이 둘이면 버전이 같아도 찾지 못한 것으로 본다", async () => {

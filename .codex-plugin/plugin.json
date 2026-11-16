@@ -1,0 +1,20 @@
+{
+  "name": "chunsik-garage",
+  "version": "0.1.0",
+  "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
+  "keywords": [
+    "aq",
+    "checkup",
+    "claude-code",
+    "codex",
+    "ai-tools"
+  ],
+  "skills": "./skills/",
+  "hooks": {},
+  "interface": {
+    "displayName": "Chunsik's Garage",
+    "shortDescription": "AQ checkup for your AI coding tools",
+    "developerName": "yeunlee1",
+    "websiteURL": "https://github.com/yeunlee1/chunsik-garage"
+  }
+}

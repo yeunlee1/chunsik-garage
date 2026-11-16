@@ -1,0 +1,14 @@
+{
+  "name": "chunsik-garage",
+  "interface": {
+    "displayName": "Chunsik's Garage"
+  },
+  "plugins": [
+    {
+      "name": "chunsik-garage",
+      "source": "./",
+      "version": "0.1.0",
+      "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC."
+    }
+  ]
+}

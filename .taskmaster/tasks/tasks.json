@@ -594,6 +594,34 @@
           42
         ],
         "updatedAt": "2026-11-16T03:33:30.557Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 44,
+        "title": "6단계 2부 구현 계획 쓰기: 정비 적용(aq tune apply)",
+        "description": "6단계 1부가 남긴 계획 위에서 JSON과 TOML의 최소 편집, 바꾸기 전 검사 넷, 잠금, 작업 기록과 그 상태, 파일마다의 차례, 끊긴 작업 맞추기, aq tune apply, aq where와 aq clean의 정비 몫의 구현 계획을 쓰고 짝 리뷰를 받는다.",
+        "details": "6단계 계획 전 결정 1번에 따라 1부가 병합된 뒤 쓴다. 계획 앞에 「6단계 2부 계획 전 결정」을 설계 끝에 더한다. 이 PC의 실제 설정에 적용해 보는 것은 3부의 마지막 과제에서 사용자 승인 뒤에만 한다.",
+        "testStrategy": "계획의 코드를 새 복제본에 적용해 과제마다 실패에서 통과, npm run check 통과, 짝 리뷰 필수 0건.",
+        "status": "in-progress",
+        "dependencies": [
+          43
+        ],
+        "updatedAt": "2026-11-16T03:34:43.967Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 45,
+        "title": "6단계 2부 구현: 정비 적용(aq tune apply)",
+        "description": "44의 계획대로 구현하고 짝 검증을 받아 develop에 병합한다.",
+        "details": "44가 끝난 뒤 한다. 병합 요청 본문에 로컬에서 돌린 검사를 적는다(깃허브 액션을 쓰지 않는다). 적용은 임시 홈과 지어낸 설정으로만 시험한다.",
+        "testStrategy": "npm run check와 Node.js 22 통과, 임시 홈에서 적용과 끊긴 작업 맞추기를 돌려 봄, 짝 검증 필수 0건.",
+        "status": "pending",
+        "dependencies": [
+          44
+        ],
+        "updatedAt": "2026-11-16T03:34:43.967Z"
       }
     ],
     "metadata": {

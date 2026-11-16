@@ -2,7 +2,7 @@
 import { copyFile, mkdir, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-/** 산출물에 담는 것(저장소 뿌리에서의 경로). 폴더는 안의 파일을 모두 담는다. 세션 시작 훅(7단계), README 두 벌(8단계)은 그 단계에서 더한다 */
+/** 산출물에 담는 것(저장소 뿌리에서의 경로). 폴더는 안의 파일을 모두 담는다. 배포 때 main에는 이것만 올린다(설계 「8단계에서 정한 것」). README는 담지 않는다 */
 export const PLUGIN_PATHS = [".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE"];
 
 /** 한 경로 아래의 파일을 이름 차례로 늘어놓는다. 없으면 stat이 던진다 */

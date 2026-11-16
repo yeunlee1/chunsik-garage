@@ -93,8 +93,8 @@ function failClosedBoolean(value: unknown, restrictive: boolean): boolean {
   return restrictive;
 }
 
-/** skillOverrides의 값. 이 밖의 값은 정하지 않은 것으로 본다(공식 문서 settings-reference 「skillOverrides」) */
-const SKILL_OVERRIDE_MODES = new Set(["on", "name-only", "user-invocable-only", "off"]);
+/** skillOverrides의 값. 이 밖의 값은 정하지 않은 것으로 본다(공식 문서 settings-reference 「skillOverrides」). 정비 계획도 지금 값의 꼴을 이것으로 본다 */
+export const SKILL_OVERRIDE_MODES: ReadonlySet<string> = new Set(["on", "name-only", "user-invocable-only", "off"]);
 const PERMISSION_LISTS = new Set(["allow", "deny", "ask"]);
 /** 곁의 제한 목록(deny·ask)을 전혀 읽지 못하면 보류하는 허용 칸(공식 문서 managed-settings 「Keys that fail closed」) */
 const PERMISSION_GRANTS = ["allow", "additionalDirectories"];

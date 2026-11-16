@@ -2,6 +2,7 @@
 import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
 import { runCheckup } from "./commands/checkup.ts";
+import { runTunePlan } from "./commands/tune-plan.ts";
 import { openInBrowser } from "./commands/open.ts";
 import { pickLang } from "./core/copy/lang.ts";
 import { clean } from "./commands/clean.ts";
@@ -34,9 +35,11 @@ export interface CliContext {
 
 /** aq checkup이 받는 옵션. --no-open은 결과 화면을 열지 않는다. --lang은 값을 하나 받는다 */
 const CHECKUP_FLAGS: ReadonlySet<string> = new Set(["--no-open", "--no-save", "--rescan"]);
+/** aq tune plan이 받는 옵션. 결과 화면이 없어 --no-open은 받지 않는다(「6단계 1부 계획 전 결정」 6번) */
+const TUNE_PLAN_FLAGS: ReadonlySet<string> = new Set(["--no-save", "--rescan"]);
 
-/** aq checkup의 옵션을 읽는다. 모르는 옵션이 있거나 --lang 뒤에 값이 없으면(값 자리에 -로 시작하는 것이 와도) null이다. --lang이 여럿이면 마지막 것이다 */
-export function checkupArgs(rest: readonly string[]): { flags: Set<string>; lang: string | null } | null {
+/** aq checkup과 aq tune plan의 옵션을 읽는다. 받는 옵션은 allowed다. 모르는 옵션이 있거나 --lang 뒤에 값이 없으면(값 자리에 -로 시작하는 것이 와도) null이다. --lang이 여럿이면 마지막 것이다 */
+export function checkupArgs(rest: readonly string[], allowed: ReadonlySet<string> = CHECKUP_FLAGS): { flags: Set<string>; lang: string | null } | null {
   const flags = new Set<string>();
   let lang: string | null = null;
   for (let index = 0; index < rest.length; index++) {
@@ -46,7 +49,7 @@ export function checkupArgs(rest: readonly string[]): { flags: Set<string>; lang
       if (value === undefined || value.startsWith("-")) return null;
       lang = value;
       index++;
-    } else if (CHECKUP_FLAGS.has(arg)) {
+    } else if (allowed.has(arg)) {
       flags.add(arg);
     } else {
       return null;
@@ -79,6 +82,27 @@ async function run(command: string | undefined, rest: string[], context: CliCont
   }
   if (command === "clean" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--all"))) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "tune" && rest[0] === "plan") {
+    const args = checkupArgs(rest.slice(1), TUNE_PLAN_FLAGS);
+    if (args === null) return null;
+    // 계획 전체(경로, 열쇠, 전후 값, 영향 범위)를 낸다. 설정 파일의 다른 내용은 계획에 없다(설계 16.5의 2번)
+    printJson(
+      await runTunePlan({
+        env: context.env,
+        homedir: context.homedir,
+        tmpdir: context.tmpdir ?? tmpdir(),
+        platform: context.platform ?? process.platform,
+        clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        stateDir: stateDir(context.homedir),
+        save: !args.flags.has("--no-save"),
+        rescan: args.flags.has("--rescan"),
+        entryFile: context.entryFile ?? process.argv[1] ?? "",
+        ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
+      }),
+    );
     return 0;
   }
   const args = command === "checkup" ? checkupArgs(rest) : null;

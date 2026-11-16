@@ -30,7 +30,8 @@ async function writeText(path: string, text: string): Promise<void> {
   }
 }
 
-async function writeJson(path: string, value: unknown): Promise<void> {
+/** JSON 한 벌을 임시 파일에 쓰고 이름을 바꾼다. 정비 계획(6단계)도 쓴다 */
+export async function writeJson(path: string, value: unknown): Promise<void> {
   await writeText(path, `${JSON.stringify(value, null, 2)}\n`);
 }
 

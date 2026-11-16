@@ -104,8 +104,8 @@
 
    | 도구 | 설치 | 부르는 법 |
    |---|---|---|
-   | Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage` 뒤 `claude plugin install chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/chunsik-garage:aq` |
-   | Codex | `codex plugin marketplace add yeunlee1/chunsik-garage` 뒤 `codex plugin add chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/skills`에서 점검 스킬을 고른다(`$`로 스킬을 가리킬 수도 있다) |
+   | Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage#main` 뒤 `claude plugin install chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/chunsik-garage:aq` |
+   | Codex | `codex plugin marketplace add yeunlee1/chunsik-garage@main` 뒤 `codex plugin add chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/skills`에서 점검 스킬을 고른다(`$`로 스킬을 가리킬 수도 있다) |
 
    저장소는 `yeunlee1/chunsik-garage`다. 사용자가 설치로 받는 것은 `main`(배포한 버전)이어야 한다. 그러려고 위 명령에 브랜치를 적어야 하는지는 구현 때 실제로 설치해 보고 정한다(23절).
 
@@ -4705,3 +4705,10 @@ core(`src/core/`)는 경로를 풀지 않고 파일을 읽지 않는다(7.2절).
 - **`aq notify on|off|status [--lang]`.** 켤 때 언어와 알림용 이름 목록을 상태 파일의 `notify` 칸에 둔다. 알림이 켜져 있으면 저장하는 점검이 그 목록을 훅과 같은 함수로 새로 짓는다. 상태 파일이 깨졌으면 켜거나 끄지 않고 `state-broken`으로 끝낸다(새 상태로 덮으면 관측 기록이 사라진다).
 - **점검과 알림 명령이 겹칠 때.** 점검은 상태를 저장하기 바로 앞에서 상태 파일을 다시 읽어 알림 칸을 그것으로 쓴다. 점검이 도는 동안 끈 알림이 점검의 저장으로 다시 켜지던 것을 구현 검증에서 짝이 재현했다. 다시 읽고 쓰는 사이의 아주 짧은 틈은 남는다.
 - **훅.** `hooks/hooks.json`이 `SessionStart`의 `startup`에 감싸개(`hooks/run-hook.cmd`, `shell`은 `bash`, 5초)를 건다. 감싸개가 bash 스크립트(`hooks/session-start`)를 부르고, 그것이 `node`가 있으면 묶은 `hooks/session-start.mjs`를 돌린다. 어느 단계에서 실패해도 아무것도 내지 않고 0으로 끝난다. 7일이 지난 알림 표식은 훅이 새 표식을 만들 때 지운다. 작성자 PC의 깃 배시에서 감싸개로 돌려 첫 실행이 한 줄을 내고(약 0.2초), 같은 날 두 번째는 아무것도 내지 않는 것을 봤다. Claude Code에 설치해 세션을 시작해 보는 것은 하지 않았다(사용자 설정에 쓰는 일이다).
+
+### 8단계에서 정한 것(2026-11-16, 주 세션)
+
+- **배포한 버전을 받게 하는 법(23절).** 설치 명령에 브랜치를 붙인다. Claude Code는 `yeunlee1/chunsik-garage#main`, Codex는 `yeunlee1/chunsik-garage@main`이다. 빈 임시 설정 폴더(`CLAUDE_CONFIG_DIR`, `CODEX_HOME`)로 두 도구에 `develop`을 붙여 마켓을 더해 보니, 둘 다 그 브랜치를 마켓 기록에 남겼다(Claude Code 2.1.325는 `owner/repo#ref`와 git 주소의 `#ref`를, Codex 0.166.0은 `owner/repo@ref`를 받았다). 기본 브랜치는 그대로 `develop`이다. 지금 `main`에는 깃 무시 목록 커밋 하나뿐이라, 첫 배포(`develop`을 `main`에 합치기) 뒤에야 이 명령으로 설치된다.
+- **README.** 영어(`README.md`)가 기본이고 한국어(`README.ko.md`)를 따로 둔다. 23절의 첫 화면 항목을 담고, 결과 화면 캡처는 합성 기록으로 만든 결과 화면을 이고라이트로 찍었다(`docs/images/`). 둘이 큰 렌치를 든 대표 그림은 아직 없다.
+- **공개 전 점검(21.2) 가운데 한 것.** 합성 결과 화면을 이고라이트로 폭 다섯(1440, 1024, 768, 390, 320)과 언어 둘에서 열었다. 가로 넘침과 바깥으로 나가는 요청이 없었고, 깨진 그림으로 잡힌 것은 카드를 만들 때 채우는 공유 카드 창의 빈 그림 하나뿐이었다.
+- **공개 전 점검 가운데 남은 것.** 새 PC 조건에서 두 도구에 설치해 점검·정비·되돌리기까지 해 보기(Codex는 기본 샌드박스에서도), 단계 다섯의 결과 화면, 카드 PNG와 복사한 말과 키보드·화면 읽기 프로그램, 실제 기록으로 점수 대조, 세션 시작 훅을 실제 Claude Code에서 보기(창 깜빡임, 깃 배시나 Node.js가 없는 PC), macOS와 Linux, 첫 배포 뒤 설치본이 `main`의 버전인지다. 사용자 승인이나 실제 설치가 필요해 첫 배포 앞에 사용자와 함께 한다.

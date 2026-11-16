@@ -149,3 +149,24 @@ This never changes the score. Do it only when the user asks for a deep checkup o
 
 2. The program prints `{"notify": {...}, "lastCheckupAt": ..., "run": {...}}`. Relay only the `text` sentence in `run`.
 3. The notices work only in Claude Code. If the program stops with `{"error": {...}}` and `error.code` is `state-broken`, ask the user to run a checkup first.
+
+## 8. Where the files are and cleaning up
+
+1. When the user asks where the AQ checkup keeps its files, run:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" where
+   ```
+
+   Relay the folder (`dir`) and, for each entry that exists, its name, number of files, and size. Also say that the report and result files of checkups run without saving are in the OS temp folder, are not counted here, and are not removed by cleaning (`noSaveResultsInOsTemp`).
+2. When the user asks to clean up, run the first command. When the user asks to remove everything, give the warning of section 5 step 8 first, and run the second command only after the user agrees:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" clean
+   ```
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" clean --all
+   ```
+
+3. Relay what was removed and what was kept. Never delete files in that folder yourself.

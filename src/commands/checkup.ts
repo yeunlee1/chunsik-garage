@@ -9,7 +9,7 @@ import { assetsDirOf, loadArt } from "../report/assets.ts";
 import { reportHtml } from "../report/html.ts";
 import { reportView } from "../report/view.ts";
 import { pruneCache } from "../state/cache.ts";
-import { appendHistory, historyCount, historyEntry } from "../state/history.ts";
+import { appendHistory, historyCount, historyEntry, recentAq } from "../state/history.ts";
 import { nextState, openState } from "../state/next-state.ts";
 import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
 import { saveState } from "../state/state.ts";
@@ -144,7 +144,8 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
 
   // 결과 화면. 저장한 점검은 결과 폴더에, 저장하지 않았거나 결과 폴더에 쓰지 못하면 OS 임시 폴더에 쓴다. 회차는 이력의 줄 수다(설계 13.1, 13.2, 20.2)
   const round = saved ? await historyCount(options.stateDir).catch(() => null) : null;
-  const view = reportView(result, { saved, round });
+  const history = saved ? await recentAq(options.stateDir) : [];
+  const view = reportView(result, { saved, round, history });
   const repairs = view.findings.filter((finding) => finding.category === "repair").length;
   const html = reportHtml(view, await loadArt(assetsDirOf(options.entryFile), { tier: result.score.tier, unreadable: view.unreadable, repairs }));
   let reportPath: string | null = null;

@@ -262,3 +262,23 @@ describe("reportHtml", () => {
 });
 
 const pairOf = (texts: { en: string; ko: string }): string => `<span lang="en" data-l="en">${esc(texts.en)}</span><span lang="ko" data-l="ko">${esc(texts.ko)}</span>`;
+
+describe("점검 이력 그래프(7단계)", () => {
+  const history = [
+    { at: "2026-11-01T00:00:00.000Z", aq: 50 },
+    { at: "2026-11-03T00:00:00.000Z", aq: null },
+    { at: "2026-11-04T00:00:00.000Z", aq: 61 },
+  ];
+  it("AQ가 있는 저장한 점검이 둘 이상이면 선 그래프와 지난 점검과의 차이를 그리고, 같은 수를 읽기 도구용 글로 둔다", () => {
+    const html = reportHtml(viewOf(result(), { saved: true, round: 3, history }), art);
+    expect(count(html, '<svg class="histsvg"')).toBe(1);
+    expect(count(html, "<circle ")).toBeGreaterThanOrEqual(2);
+    expect(html).toContain("지난 점검보다 +11");
+    expect(html).toContain("최근 점검의 AQ는 50, 61입니다.");
+  });
+
+  it("점이 하나뿐이거나 저장하지 않은 점검이면 그리지 않는다", () => {
+    expect(count(reportHtml(viewOf(result(), { saved: true, round: 1, history: history.slice(0, 1) }), art), "<svg class=\"histsvg\"")).toBe(0);
+    expect(count(reportHtml(viewOf(result(), { saved: false, round: null, history }), art), "<svg class=\"histsvg\"")).toBe(0);
+  });
+});

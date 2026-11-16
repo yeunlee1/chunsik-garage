@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { AxisScore, Overall } from "../../src/core/scoreboard.ts";
-import { appendHistory, HISTORY_FILE, historyCount, historyEntry } from "../../src/state/history.ts";
+import { appendHistory, HISTORY_FILE, historyCount, historyEntry, recentAq } from "../../src/state/history.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 
 let root: string;
@@ -73,5 +73,23 @@ describe("이력의 줄 수(결과 화면의 회차)", () => {
     expect(await historyCount(dir)).toBe(2);
     await writeFile(join(dir, HISTORY_FILE), `${JSON.stringify(entry)}\n\n${JSON.stringify(entry)}\n  \n`);
     expect(await historyCount(dir)).toBe(2);
+  });
+});
+
+describe("최근 점검의 AQ(7단계, 점검 이력 그래프)", () => {
+  it("오래된 것부터 많아야 limit개를 내고, 깨진 줄과 꼴이 다른 줄은 건너뛴다. 파일이 없으면 빈 목록이다", async () => {
+    expect(await recentAq(dir)).toEqual([]);
+    await mkdir(dir, { recursive: true });
+    const lines = ['{"at":"2026-11-01T00:00:00.000Z","aq":50}', "{broken", '{"at":"2026-11-02T00:00:00.000Z","aq":"x"}', '{"at":"2026-11-03T00:00:00.000Z","aq":null}', '{"at":"2026-11-04T00:00:00.000Z","aq":61}'];
+    await writeFile(join(dir, HISTORY_FILE), `${lines.join("\n")}\n`);
+    expect(await recentAq(dir)).toEqual([
+      { at: "2026-11-01T00:00:00.000Z", aq: 50 },
+      { at: "2026-11-03T00:00:00.000Z", aq: null },
+      { at: "2026-11-04T00:00:00.000Z", aq: 61 },
+    ]);
+    expect(await recentAq(dir, 2)).toEqual([
+      { at: "2026-11-03T00:00:00.000Z", aq: null },
+      { at: "2026-11-04T00:00:00.000Z", aq: 61 },
+    ]);
   });
 });

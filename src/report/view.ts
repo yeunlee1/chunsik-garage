@@ -50,6 +50,8 @@ export interface ReportView {
   saved: boolean;
   /** 저장한 점검의 회차(이력의 줄 수). 저장하지 않았거나 이력을 세지 못했으면 null이다 */
   round: number | null;
+  /** 최근 점검의 시각과 AQ(오래된 것부터). 저장하지 않았으면 비어 있다(점검 이력 그래프) */
+  history: { at: string; aq: number | null }[];
   score: { aq: number | null; grade: string | null; tier: number | null; withheld: Withheld[] };
   /** AQ를 내지 않았다는 알림의 문장. AQ를 냈으면 null이다 */
   withheldText: Texts<string> | null;
@@ -76,6 +78,8 @@ export interface ReportView {
 export interface ReportRun {
   saved: boolean;
   round: number | null;
+  /** 이력의 최근 점검(이 점검을 넣은 것). 주지 않으면 없다 */
+  history?: readonly { at: string; aq: number | null }[];
 }
 
 export function reportView(result: CheckupResult, run: ReportRun): ReportView {
@@ -88,6 +92,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     tools: result.tools.filter((tool) => tool.detected).map((tool) => tool.tool),
     saved: run.saved,
     round: run.saved ? run.round : null,
+    history: run.saved ? [...(run.history ?? [])] : [],
     score: { aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: [...result.score.withheld] },
     withheldText: withheld,
     // 건너뛴 압축 파일도 읽지 못한 기록이다(설계 「5단계 계획 전 결정」 2번, 「5단계 4부 계획 전 결정」 2번)

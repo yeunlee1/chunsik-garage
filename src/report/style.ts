@@ -150,6 +150,7 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .tools small{font-size:12px;color:var(--ink2)}
 .shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}
+.hist{margin:20px 0 0}.histsvg{display:block;width:100%;max-width:420px;height:auto;color:var(--fill)}.histsvg polyline{fill:none;stroke:currentColor;stroke-width:2}.histsvg circle{fill:currentColor}.histd{margin:4px 0 0;font-size:13px;color:var(--ink2)}
 .partial{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;margin:18px 0 0;padding:10px 14px;border:1px solid #fab219;border-radius:6px;background:#fff7e0}
 .partial svg{margin-top:2px}
 .partial p{margin:0;font-size:14px;color:var(--ink)}

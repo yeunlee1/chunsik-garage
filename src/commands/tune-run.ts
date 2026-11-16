@@ -9,7 +9,7 @@ import { readTarget, sameSlot, slotOf, type Slot, type TuneItem } from "../tune/
 import { PLANS_DIR, planIdOf, type TunePlan } from "../tune/plan.ts";
 import { ID_PATTERN, LOCK_FILE, loadWork, reconcileWorks, saveWork, takeLock, type TuneWork, type WorkFile, type WorkItem } from "../tune/work.ts";
 import { PROGRAM_VERSION } from "../version.ts";
-import { judgeTune, type TunePlanOptions } from "./tune-plan.ts";
+import { judgeTune, type Judged, type TunePlanOptions } from "./tune-plan.ts";
 
 export type TuneRunOptions = Omit<TunePlanOptions, "save"> & {
   /** 시험이 파일 읽기·쓰기와 끼어듦 자리를 바꿔 끼운다 */
@@ -28,8 +28,8 @@ export interface VerifyResult {
   id: string;
   /** 그 자리의 지금 값이 이 작업이 쓴 값과 같다 */
   kept: boolean;
-  /** 다시 판정해도 같은 후보로 나온다. 다른 설정 층이 다시 켜고 있을 수 있다(16.7) */
-  stillCandidate: boolean;
+  /** 다시 한 판정에서 그 대상이 아직 켜져 있다. 사용자 층을 바꿔도 다른 층(프로젝트 설정 같은 것)이 다시 켜면 켜진 것이다(16.7) */
+  stillOn: boolean;
 }
 
 export interface TuneVerifyOutcome {
@@ -153,7 +153,24 @@ export async function runTuneUndo(options: TuneRunOptions & { workId: string; it
   });
 }
 
-/** aq tune verify <작업 ID>. 쓴 값이 그대로인지 보고, 다시 판정해 같은 후보로 나오지 않는지 본다(16.7의 바로 하는 확인). 둘 다 맞으면 확인됨으로 적는다 */
+/** 다시 한 판정에서 그 대상이 아직 켜져 있는지. 후보로 다시 나오는지가 아니라 실제 켜짐을 본다(프로젝트 층이 다시 켠 Codex 서버는 후보가 아니어도 켜져 있다, 6단계 나머지 구현 검증) */
+export function stillOn(item: Pick<WorkItem, "unit" | "tool" | "target">, judged: Pick<Judged, "evaluation" | "input">): boolean {
+  const tool = judged.evaluation.tools.find((x) => x.tool === item.tool);
+  if (tool === undefined) return false;
+  switch (item.unit) {
+    case "A1":
+      return tool.skills.some((bundle) => bundle.enabled && bundle.positions.some((position) => position.recordNames.includes(item.target)));
+    case "A2": {
+      const input = judged.input.tools.find((x) => x.tool === "claude-code");
+      return input !== undefined && input.tool === "claude-code" && input.setup.plugins.some((plugin) => plugin.id === item.target && plugin.enabled);
+    }
+    case "A3":
+    case "A4":
+      return tool.servers.some(({ server }) => server.name === item.target && server.enabled);
+  }
+}
+
+/** aq tune verify <작업 ID>. 쓴 값이 그대로인지 보고, 다시 판정해 그 대상이 어느 층에서도 켜져 있지 않은지 본다(16.7의 바로 하는 확인). 둘 다 맞으면 확인됨으로 적는다 */
 export async function runTuneVerify(options: TuneRunOptions & { workId: string }): Promise<TuneVerifyOutcome> {
   const now = options.now ?? Date.now;
   const started = now();
@@ -161,13 +178,13 @@ export async function runTuneVerify(options: TuneRunOptions & { workId: string }
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
     if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
-    const { items: fresh } = await judgeTune({ ...options, cache: true });
+    const judged = await judgeTune({ ...options, cache: true });
     const results: VerifyResult[] = [];
     for (const item of target.items) {
       if (!isUndoable(item)) continue;
       const slot = slotOf(await readTarget(item.file), item.key);
-      const result = { id: item.id, kept: slot !== null && sameSlot(slot, item.after), stillCandidate: fresh.some((x) => x.id === item.id) };
-      if (result.kept && !result.stillCandidate) item.state = "verified";
+      const result = { id: item.id, kept: slot !== null && sameSlot(slot, item.after), stillOn: stillOn(item, judged) };
+      if (result.kept && !result.stillOn) item.state = "verified";
       results.push(result);
     }
     await saveWork(options.stateDir, target);

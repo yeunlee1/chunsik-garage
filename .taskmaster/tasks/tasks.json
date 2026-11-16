@@ -706,6 +706,48 @@
           48
         ],
         "updatedAt": "2026-11-16T13:46:23.624Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 52,
+        "title": "0.2.0: AQ 배지",
+        "description": "최근 점검의 AQ와 등급으로 README·프로필에 붙일 배지 그림(SVG)을 PC에서 만든다.",
+        "details": "사용자 지시(2026-11-16) 「좋은데 이렇게 진행해보자」(추천 순서 1 → 2 → 3). 점수와 등급만 넣고 바깥 호출 없이 만든다. 저장소로 오는 링크를 붙인 마크다운 한 줄을 함께 준다.",
+        "testStrategy": "시험을 먼저 써 실패를 본 뒤 구현, npm run check, 병합 전 짝 검증 한 번.",
+        "status": "in-progress",
+        "dependencies": [
+          51
+        ],
+        "updatedAt": "2026-11-16T14:57:55.088Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 53,
+        "title": "0.2.0: 다음 등급까지 할 일",
+        "description": "고칠 것마다 오를 점수를 프로그램이 계산해 다음 등급까지의 길을 보여 준다.",
+        "details": "사용자 지시(2026-11-16) 「좋은데 이렇게 진행해보자」(추천 순서 1 → 2 → 3). 점수 계산을 그대로 다시 돌려 정한다(짐작하지 않는다).",
+        "testStrategy": "시험을 먼저 써 실패를 본 뒤 구현, npm run check, 병합 전 짝 검증 한 번.",
+        "status": "pending",
+        "dependencies": [
+          52
+        ],
+        "updatedAt": "2026-11-16T14:57:55.088Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 54,
+        "title": "0.2.0: 설정 속 비밀값 점검",
+        "description": "MCP 설정 등에 적힌 API 키·토큰의 위치만 알려 주고 환경 변수로 옮기게 안내한다.",
+        "details": "사용자 지시(2026-11-16) 「좋은데 이렇게 진행해보자」(추천 순서 1 → 2 → 3). 값은 어디에도 내지 않는다(출력, 결과 파일, 화면).",
+        "testStrategy": "시험을 먼저 써 실패를 본 뒤 구현, npm run check, 병합 전 짝 검증 한 번.",
+        "status": "pending",
+        "dependencies": [
+          53
+        ],
+        "updatedAt": "2026-11-16T14:57:55.088Z"
       }
     ],
     "metadata": {

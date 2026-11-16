@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { Candidate } from "../core/installs/candidates.ts";
 import type { JudgedServer } from "../core/installs/servers.ts";
 import type { SkillBundle } from "../core/installs/skills.ts";
@@ -52,8 +53,11 @@ export interface ItemContext {
   versionOk: boolean;
 }
 
-/** 바꿀 파일을 읽은 것. 바이트는 원본 그대로이고(바이트 순서 표시도 남긴다), regular는 파일과 그 폴더가 링크가 아닌 보통 파일과 보통 폴더라는 것이다 */
-export type TargetRead = { status: "ok"; bytes: Buffer; regular: boolean } | { status: "missing" } | { status: "unreadable" };
+/**
+ * 바꿀 파일을 읽은 것. 바이트는 원본 그대로이고(바이트 순서 표시도 남긴다), regular는 파일과 그 폴더가 링크가 아닌 보통 파일과 보통 폴더라는 것이다.
+ * 파일이 없으면 folder가 그 폴더가 링크가 아닌 보통 폴더인지다. 그러면 JSON 설정은 새로 만들 수 있다(「6단계 2부 계획 전 결정」 4번)
+ */
+export type TargetRead = { status: "ok"; bytes: Buffer; regular: boolean } | { status: "missing"; folder: boolean } | { status: "unreadable" };
 
 export const fingerprintOf = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
@@ -64,16 +68,19 @@ export function targetPath(candidate: Candidate, home: string): string {
 
 /** 바꿀 파일을 읽기만 한다. 임시 파일에 쓰고 이름을 바꾸면 링크가 보통 파일로 바뀔 수 있어 링크인지 함께 본다(16.3) */
 export async function readTarget(path: string): Promise<TargetRead> {
-  let regular: boolean;
+  const folder = await lstat(dirname(path)).then(
+    (info) => info.isDirectory(),
+    () => false,
+  );
+  let file;
   try {
-    const [file, folder] = await Promise.all([lstat(path), lstat(dirname(path))]);
-    regular = file.isFile() && folder.isDirectory();
+    file = await lstat(path);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException | null)?.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing" } : { status: "unreadable" };
+    return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing", folder } : { status: "unreadable" };
   }
   try {
-    return { status: "ok", bytes: await readFile(path), regular };
+    return { status: "ok", bytes: await readFile(path), regular: file.isFile() && folder };
   } catch {
     return { status: "unreadable" };
   }
@@ -123,7 +130,7 @@ function keyPart(text: string): string | null {
 }
 
 /** 점으로 이은 TOML 열쇠를 조각들로 나눈다. 따옴표 안의 점은 나누지 않는다 */
-function splitDotted(text: string): string[] | null {
+export function splitDotted(text: string): string[] | null {
   const parts: string[] = [];
   let current = "";
   let quote: string | null = null;
@@ -148,13 +155,13 @@ function splitDotted(text: string): string[] | null {
 }
 
 /** 여러 줄 문자열 안이면 그 구분자, 밖이면 null */
-type Multiline = '"""' | "'''" | null;
+export type Multiline = '"""' | "'''" | null;
 
 /**
  * 문자열 밖에서 시작하는 줄이 표 머리([...])면 그 안의 열쇠 글을 낸다. 따옴표 이름 안의 ]와 #는 건너뛰고, 문자열 밖의 첫 ]에서 머리를 닫는다.
  * 그 뒤에는 공백과 주석만 올 수 있다(주석 안의 대괄호도 그렇다). 표 머리가 아니면 null이다(배열 표 [[...]]도 아니다)
  */
-function headerKey(line: string): string | null {
+export function headerKey(line: string): string | null {
   const start = line.search(/\S/);
   if (start < 0 || line[start] !== "[" || line[start + 1] === "[") return null;
   let i = start + 1;
@@ -174,7 +181,7 @@ function headerKey(line: string): string | null {
 }
 
 /** 한 줄을 TOML 규칙대로 훑어 줄 끝의 상태(여러 줄 문자열 안인지)를 낸다. 주석과 한 줄 문자열은 건너뛴다. 한 줄 문자열이 그 줄에서 닫히지 않으면 undefined다(규칙에 맞지 않는다) */
-function scanLine(line: string, start: Multiline): Multiline | undefined {
+export function scanLine(line: string, start: Multiline): Multiline | undefined {
   let state = start;
   let i = 0;
   while (i < line.length) {
@@ -297,15 +304,55 @@ function impactOf(candidate: Candidate, context: ItemContext): TuneImpact {
   }
 }
 
+/** 파일의 상태와 모양으로 본 그 자리의 지금 값과 고칠 수 없는 까닭. 없는 JSON 설정은 그 폴더가 보통 폴더면 새로 만들 수 있다(2부 결정 4번) */
+function stateOf(read: TargetRead, key: TuneKey): State {
+  if (read.status === "missing") return key.kind !== "toml-table-key" && read.folder ? { present: false, blocked: null } : { present: false, blocked: "file-missing" };
+  if (read.status === "unreadable") return { present: false, blocked: "file-unreadable" };
+  if (!read.regular) return { present: false, blocked: "not-regular" };
+  return key.kind === "toml-table-key" ? tomlState(read.bytes, key.table) : jsonState(read.bytes, key);
+}
+
+/** 그 자리를 지금 바이트로 고칠 수 있는지(16.3 검사표의 앞 두 줄). 적용과 되돌리기가 바꾸기 바로 앞에서 다시 본다 */
+export function blockOf(read: TargetRead, key: TuneKey): TuneBlock | null {
+  return stateOf(read, key).blocked;
+}
+
+/** 그 자리의 지금 상태. 목록에 더하는 것은 이 도구가 더하는 항목이 목록에 있는지다 */
+export type Slot = { present: false } | { present: true; value?: unknown };
+
+/** 그 자리의 지금 상태를 읽는다. 파일이 없으면 없음이고, 읽지 못했거나 풀리지 않거나 부모의 꼴이 다르면 null이다(끊긴 작업 맞추기, 되돌리기, 확인이 쓴다) */
+export function slotOf(read: TargetRead, key: TuneKey): Slot | null {
+  if (read.status === "unreadable") return null;
+  if (read.status === "missing") return { present: false };
+  if (hasBom(read.bytes)) return null;
+  const text = read.bytes.toString("utf8");
+  if (key.kind === "toml-table-key") {
+    const servers = parseCodexConfig(text)?.mcp_servers;
+    const table = isTable(servers) ? servers[key.table] : undefined;
+    if (!isTable(table)) return null;
+    return Object.hasOwn(table, "enabled") ? { present: true, value: table.enabled } : { present: false };
+  }
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObject(doc)) return null;
+  if (!Object.hasOwn(doc, key.parent)) return { present: false };
+  const parent = doc[key.parent];
+  if (key.kind === "json-list-add") {
+    if (!Array.isArray(parent)) return null;
+    return parent.some((item) => isDeepStrictEqual(item, key.entry)) ? { present: true } : { present: false };
+  }
+  if (!isObject(parent)) return null;
+  return Object.hasOwn(parent, key.name) ? { present: true, value: parent[key.name] } : { present: false };
+}
+
 /** 후보 하나를 계획 항목 하나로 바꾼다. 고칠 수 없는 까닭은 버전, 파일의 상태, 모양의 차례로 본다 */
 export function tuneItem(candidate: Candidate, context: ItemContext, read: TargetRead): TuneItem {
   const key = keyOf(candidate);
-  let state: State;
-  if (!context.versionOk) state = { present: false, blocked: "unverified-version" };
-  else if (read.status === "missing") state = { present: false, blocked: "file-missing" };
-  else if (read.status === "unreadable") state = { present: false, blocked: "file-unreadable" };
-  else if (!read.regular) state = { present: false, blocked: "not-regular" };
-  else state = key.kind === "toml-table-key" ? tomlState(read.bytes, key.table) : jsonState(read.bytes, key);
+  const state: State = context.versionOk ? stateOf(read, key) : { present: false, blocked: "unverified-version" };
   return {
     id: candidate.id,
     unit: candidate.unit,

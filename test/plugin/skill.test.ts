@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { checkupArgs, main, type CliContext } from "../../src/cli.ts";
+import { checkupArgs, main, tuneRunArgs, type CliContext } from "../../src/cli.ts";
 import { RUN_NOTICE_KINDS } from "../../src/commands/run-notices.ts";
 import { SELF_SKILL_NAMES } from "../../src/commands/self.ts";
 import { findingText, type FindingInput } from "../../src/core/copy/findings.ts";
@@ -67,11 +67,22 @@ describe("머리말", () => {
 describe("실행 명령", () => {
   it("본문의 명령은 모두 허락 규칙과 같은 꼴로 시작하고, checkup 뒤의 인자를 프로그램이 받으며 넘긴 언어가 그대로 읽힌다", () => {
     const commands = [...body.matchAll(/^\s*(node .*)$/gm)].map((match) => match[1]!.trim());
-    expect(commands.length).toBeGreaterThan(0);
+    expect(commands.filter((command) => command.startsWith(`${COMMAND} checkup `)).length).toBeGreaterThan(0);
     for (const command of commands) {
-      expect(command.startsWith(`${COMMAND} checkup `)).toBe(true);
-      const args = command.slice(`${COMMAND} checkup `.length).replace("<lang>", "ko").split(" ");
-      expect(checkupArgs(args)).toEqual({ flags: new Set(), lang: "ko" });
+      expect(command.startsWith(`${COMMAND} `)).toBe(true);
+      // 정비 명령의 자리 표시는 받는 꼴의 값으로 바꿔 본다(6단계 정비 흐름)
+      const [sub, ...args] = command
+        .slice(`${COMMAND} `.length)
+        .replace("<lang>", "ko")
+        .replace(/<(?:plan|work) ID>/, "2026-11-12T03-00-00-000Z-abc123")
+        .replace("<item ID…>", "A1:claude-code:idle")
+        .split(" ");
+      if (sub === "checkup") expect(checkupArgs(args)).toEqual({ flags: new Set(), lang: "ko" });
+      else if (sub === "tune" && args[0] === "plan") expect(checkupArgs(args.slice(1), new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
+      else {
+        expect([sub, ["apply", "undo", "verify"].includes(args[0]!)]).toEqual(["tune", true]);
+        expect(tuneRunArgs(args[0] as "apply" | "undo" | "verify", args.slice(1))?.lang).toBe("ko");
+      }
     }
   });
 

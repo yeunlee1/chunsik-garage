@@ -4,6 +4,7 @@ import { fill } from "../core/copy/format.ts";
 import type { Lang, Texts } from "../core/copy/lang.ts";
 import type { TuneBlock, TuneItem, TuneKey } from "./items.ts";
 import type { TuneRunNotice } from "./plan.ts";
+import type { TuneWork, WorkItem } from "./work.ts";
 
 type Unit = TuneItem["unit"];
 
@@ -14,7 +15,7 @@ interface TuneCopy {
   impact: Record<Unit, string>;
   undo: string;
   blocked: Record<TuneBlock, string>;
-  notices: { not_saved: string; plan_unsaved: string };
+  notices: { not_saved: string; plan_unsaved: string; unfinished_work: string };
 }
 
 export const TUNE_COPY: Texts<TuneCopy> = {
@@ -49,6 +50,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
     notices: {
       not_saved: "This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save.",
       plan_unsaved: "The plan could not be written to the state folder ({code}), so it cannot be applied.",
+      unfinished_work: "There {count:is|are} {count} unfinished tune {count:run|runs}. The next apply reconciles {count:it|them} with the files first.",
     },
   },
   ko: {
@@ -82,6 +84,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
     notices: {
       not_saved: "저장하지 않은 계획이라 적용할 수 없습니다. 적용하려면 --no-save 없이 다시 계획하세요.",
       plan_unsaved: "상태 폴더에 계획을 쓰지 못해({code}) 적용할 수 없습니다.",
+      unfinished_work: "끝나지 않은 정비 작업이 {count}개 있습니다. 다음 적용 때 먼저 실제 파일로 맞춥니다.",
     },
   },
 };
@@ -131,22 +134,157 @@ function keyText(key: TuneKey): string {
   }
 }
 
+/** 자동으로 고칠 수 없는 까닭의 문장. 계획 항목과 작업 기록의 거절된 항목이 같이 쓴다 */
+function blockedText(block: TuneBlock, key: TuneKey, tool: TuneItem["tool"], lang: Lang): string {
+  const parent = key.kind === "toml-table-key" ? "mcp_servers" : key.parent;
+  return fill(TUNE_COPY[lang].blocked[block], { tool: TOOL_NAMES[tool][lang], parent, key: keyText(key) });
+}
+
 export function tuneItemText(item: TuneItem, lang: Lang): TuneItemText {
   const copy = TUNE_COPY[lang];
   // 예상한 꼴이 아닌 지금 값은 적지 않는다(계획에도 없다)
   const current = item.blocked === "value-shape" ? copy.current.unexpected : "current" in item ? fill(copy.current.value, { value: JSON.stringify(item.current) }) : copy.current.none;
-  const parent = item.key.kind === "toml-table-key" ? "mcp_servers" : item.key.parent;
   const key = keyText(item.key);
   return {
     title: fill(copy.title[item.unit], { name: item.target }),
     change: fill(copy.change[item.unit], { file: item.file, key, current }),
     impact: fill(copy.impact[item.unit], impactValues(item)),
-    blocked: item.blocked === null ? null : fill(copy.blocked[item.blocked], { tool: TOOL_NAMES[item.tool][lang], parent, key }),
+    blocked: item.blocked === null ? null : blockedText(item.blocked, item.key, item.tool, lang),
     undo: item.blocked === null ? copy.undo : null,
   };
 }
 
 export function tuneNoticeText(notice: TuneRunNotice, lang: Lang): string {
   const lines = TUNE_COPY[lang].notices;
-  return notice.kind === "not_saved" ? lines.not_saved : fill(lines.plan_unsaved, { code: notice.code });
+  switch (notice.kind) {
+    case "not_saved":
+      return lines.not_saved;
+    case "plan_unsaved":
+      return fill(lines.plan_unsaved, { code: notice.code });
+    case "unfinished_work":
+      return fill(lines.unfinished_work, { count: notice.count });
+  }
+}
+
+/** 적용·되돌리기·확인의 알림(16.5의 3.9, 16.7의 「적용되는 때」, 「6단계 2부 계획 전 결정」 9·10번) */
+export type WorkNotice = { kind: "reconciled"; count: number } | { kind: "overwritten"; path: string } | { kind: "replan" } | { kind: "new-session" } | { kind: "restart-codex" };
+
+/** 적용 안 됨의 까닭 가운데 문장이 따로 있는 것. 그 밖의 까닭은 쓰기의 오류 코드다 */
+type NotAppliedReason = "no-longer-candidate" | "plan-differs" | "changed-since-plan" | "changed-before-write" | "already-set" | "changed-since-apply" | "not-written" | "interrupted";
+
+interface WorkCopy {
+  written: { apply: string; undo: string };
+  verified: string;
+  undone: string;
+  writtenOnResume: string;
+  unknown: string;
+  checkFailed: string;
+  notApplied: Record<NotAppliedReason, string>;
+  writeFailed: string;
+  notices: Record<WorkNotice["kind"], string>;
+  verify: { ok: string; changed: string; still: string };
+}
+
+export const WORK_COPY: Texts<WorkCopy> = {
+  en: {
+    written: { apply: "Changed.", undo: "Undone." },
+    verified: "Verified. The value is still in place and the item is off in every layer when judged again.",
+    undone: "Undone later.",
+    writtenOnResume: "The run was interrupted, but the file shows the change was written.",
+    unknown: "The run was interrupted and the result is unknown. Check the file yourself.",
+    checkFailed: "Not written because the check before the change failed. This may be a fault in this tool.",
+    notApplied: {
+      "no-longer-candidate": "Not changed because it is no longer a candidate when judged again. Plan again.",
+      "plan-differs": "Not changed because the place or value differs from the plan now. Plan again.",
+      "changed-since-plan": "Not changed because the file changed after the plan. Plan again.",
+      "changed-before-write": "Not changed because the file changed just before the write. Plan again.",
+      "already-set": "Not changed because it already has that value.",
+      "changed-since-apply": "Not overwritten because the value changed after the apply. Look at the current value and decide yourself.",
+      "not-written": "Nothing to undo because this item was not applied.",
+      "interrupted": "The run was interrupted before the change, so it is recorded as not applied.",
+    },
+    writeFailed: "The file could not be replaced ({code}).",
+    notices: {
+      reconciled: "Reconciled {count} unfinished tune {count:run|runs} with the files.",
+      overwritten: "Another program wrote {path} again after the change. Check it with aq tune verify.",
+      replan: "Some items were not changed. Plan again with aq tune plan.",
+      "new-session": "Claude Code sessions that are already open may not pick this up. Check in a new session.",
+      "restart-codex": "Codex needs a restart to apply this.",
+    },
+    verify: {
+      ok: "Still off.",
+      changed: "The value changed after the apply. Check the current settings.",
+      still: "The file still has the value, but it is still on when judged again. Another settings layer, such as a project's settings, may turn it back on.",
+    },
+  },
+  ko: {
+    written: { apply: "바꿨습니다.", undo: "되돌렸습니다." },
+    verified: "확인했습니다. 값이 그대로이고 다시 판정해도 어느 층에서도 꺼져 있습니다.",
+    undone: "그 뒤에 되돌렸습니다.",
+    writtenOnResume: "끊긴 작업이지만 파일에 쓴 것을 확인했습니다.",
+    unknown: "끊긴 작업이라 결과를 모릅니다. 파일을 직접 확인하세요.",
+    checkFailed: "바꾸기 전 검사에서 걸려 쓰지 않았습니다. 이 도구의 잘못일 수 있습니다.",
+    notApplied: {
+      "no-longer-candidate": "다시 판정하니 더는 후보가 아니어서 바꾸지 않았습니다. 다시 계획하세요.",
+      "plan-differs": "계획한 뒤 바꿀 자리나 값이 달라져 바꾸지 않았습니다. 다시 계획하세요.",
+      "changed-since-plan": "계획한 뒤 파일이 바뀌어 바꾸지 않았습니다. 다시 계획하세요.",
+      "changed-before-write": "바꾸기 바로 앞에서 파일이 바뀌어 바꾸지 않았습니다. 다시 계획하세요.",
+      "already-set": "이미 그 값이라 바꾸지 않았습니다.",
+      "changed-since-apply": "적용한 뒤 그 값이 바뀌어 덮어쓰지 않았습니다. 지금 값을 보고 직접 정하세요.",
+      "not-written": "적용되지 않은 항목이라 되돌릴 것이 없습니다.",
+      "interrupted": "바꾸기 전에 끊긴 작업이라 적용 안 됨으로 맞췄습니다.",
+    },
+    writeFailed: "파일을 갈아 끼우지 못했습니다({code}).",
+    notices: {
+      reconciled: "끝나지 않은 정비 작업 {count}개를 실제 파일로 맞췄습니다.",
+      overwritten: "{path}를 바꾼 뒤 다른 프로그램이 다시 썼습니다. aq tune verify로 확인하세요.",
+      replan: "바꾸지 않은 항목이 있습니다. aq tune plan으로 다시 계획하세요.",
+      "new-session": "Claude Code는 지금 떠 있는 세션에는 바로 적용되지 않을 수 있습니다. 새 세션에서 확인하세요.",
+      "restart-codex": "Codex는 다시 시작해야 적용됩니다.",
+    },
+    verify: {
+      ok: "그대로 꺼져 있습니다.",
+      changed: "바꾼 값이 그 뒤에 달라졌습니다. 지금 설정을 확인하세요.",
+      still: "파일에는 그대로지만 다시 판정해도 켜져 있습니다. 다른 설정 층(프로젝트 설정 같은 것)이 다시 켜고 있을 수 있습니다.",
+    },
+  },
+};
+
+const isNotAppliedReason = (reason: string | null): reason is NotAppliedReason => reason !== null && Object.hasOwn(WORK_COPY.en.notApplied, reason);
+const isBlock = (reason: string | null): reason is TuneBlock => reason !== null && Object.hasOwn(TUNE_COPY.en.blocked, reason);
+
+/** 작업 기록의 항목 하나가 어떻게 됐는지 */
+export function workItemText(item: WorkItem, kind: TuneWork["kind"], lang: Lang): string {
+  const copy = WORK_COPY[lang];
+  switch (item.state) {
+    case "written":
+      return item.reason === "interrupted" ? copy.writtenOnResume : copy.written[kind];
+    case "verified":
+      return copy.verified;
+    case "undone":
+      return copy.undone;
+    case "unknown":
+      return copy.unknown;
+    case "rejected":
+      return isBlock(item.reason) ? blockedText(item.reason, item.key, item.tool, lang) : copy.checkFailed;
+    case "not_applied":
+      return isNotAppliedReason(item.reason) ? copy.notApplied[item.reason] : fill(copy.writeFailed, { code: item.reason ?? "unknown" });
+    case "planned":
+    case "writing":
+      return copy.unknown;
+  }
+}
+
+export function workNoticeText(notice: WorkNotice, lang: Lang): string {
+  const lines = WORK_COPY[lang].notices;
+  if (notice.kind === "reconciled") return fill(lines.reconciled, { count: notice.count });
+  if (notice.kind === "overwritten") return fill(lines.overwritten, { path: notice.path });
+  return lines[notice.kind];
+}
+
+/** 확인의 결과 하나. 값이 그대로이고 다시 판정해도 어느 층에서도 켜져 있지 않으면 꺼진 것이다 */
+export function verifyText(result: { kept: boolean; stillOn: boolean }, lang: Lang): string {
+  const copy = WORK_COPY[lang].verify;
+  if (!result.kept) return copy.changed;
+  return result.stillOn ? copy.still : copy.ok;
 }

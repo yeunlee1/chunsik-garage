@@ -3,12 +3,14 @@ import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
 import { runCheckup } from "./commands/checkup.ts";
 import { runTunePlan } from "./commands/tune-plan.ts";
+import { runTuneApply, runTuneUndo, runTuneVerify, type TuneRunOptions } from "./commands/tune-run.ts";
 import { openInBrowser } from "./commands/open.ts";
 import { pickLang } from "./core/copy/lang.ts";
 import { clean } from "./commands/clean.ts";
 import { doctor } from "./commands/doctor.ts";
 import { where } from "./commands/where.ts";
 import { stateDir } from "./state/folder.ts";
+import { ID_PATTERN } from "./tune/work.ts";
 import { PROGRAM_VERSION } from "./version.ts";
 
 export function nodeMajorOk(version: string): boolean {
@@ -62,6 +64,31 @@ const printJson = (value: unknown): void => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 };
 
+/**
+ * aq tune apply·undo·verify의 인자. --lang <언어>와 --rescan 말고는 위치 인자다. 첫 위치 인자는 계획이나 작업 ID의 꼴이어야 하고, 항목 ID는 겹치지 않아야 한다.
+ * apply는 항목이 하나 이상, verify는 항목이 없어야 한다. 아니면 null이다(「6단계 2부 계획 전 결정」 10번)
+ */
+export function tuneRunArgs(command: "apply" | "undo" | "verify", rest: readonly string[]): { lang: string | null; rescan: boolean; id: string; items: string[] } | null {
+  let lang: string | null = null;
+  let rescan = false;
+  const positional: string[] = [];
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index]!;
+    if (arg === "--lang") {
+      const value = rest[index + 1];
+      if (value === undefined || value.startsWith("-")) return null;
+      lang = value;
+      index++;
+    } else if (arg === "--rescan") rescan = true;
+    else if (arg.startsWith("-")) return null;
+    else positional.push(arg);
+  }
+  const [id, ...items] = positional;
+  if (id === undefined || !ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
+  if ((command === "apply" && items.length === 0) || (command === "verify" && items.length > 0)) return null;
+  return { lang, rescan, id, items };
+}
+
 /** 하위 명령을 돌린다. 모르는 명령이면 null이다. */
 async function run(command: string | undefined, rest: string[], context: CliContext): Promise<number | null> {
   if (command === "doctor") {
@@ -103,6 +130,27 @@ async function run(command: string | undefined, rest: string[], context: CliCont
         ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
       }),
     );
+    return 0;
+  }
+  if (command === "tune" && (rest[0] === "apply" || rest[0] === "undo" || rest[0] === "verify")) {
+    const which = rest[0];
+    const args = tuneRunArgs(which, rest.slice(1));
+    if (args === null) return null;
+    const options: TuneRunOptions = {
+      env: context.env,
+      homedir: context.homedir,
+      tmpdir: context.tmpdir ?? tmpdir(),
+      platform: context.platform ?? process.platform,
+      clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+      stateDir: stateDir(context.homedir),
+      rescan: args.rescan,
+      entryFile: context.entryFile ?? process.argv[1] ?? "",
+      ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
+    };
+    if (which === "apply") printJson(await runTuneApply({ ...options, planId: args.id, itemIds: args.items }));
+    else if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args.id, itemIds: args.items }));
+    else printJson(await runTuneVerify({ ...options, workId: args.id }));
     return 0;
   }
   const args = command === "checkup" ? checkupArgs(rest) : null;

@@ -2,7 +2,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { main, type CliContext } from "../../src/cli.ts";
+import { main, tuneRunArgs, type CliContext } from "../../src/cli.ts";
 import { makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
 let root: string;
@@ -115,5 +115,23 @@ describe("aq tune plan(「6단계 1부 계획 전 결정」 6번)", () => {
   it("모르는 옵션, 값이 없는 --lang, 결과 화면의 옵션(--no-open), 하위 명령이 없는 tune은 64를 돌려주고 아무것도 쓰지 않는다", async () => {
     for (const args of [["tune", "plan", "--all"], ["tune", "plan", "--lang"], ["tune", "plan", "--no-open"], ["tune"]]) expect(await main(args, context)).toBe(64);
     expect(printed).toBe("");
+  });
+});
+
+describe("aq tune apply·undo·verify의 인자(6단계 2부 계획 전 결정 10번)", () => {
+  const ID = "2026-11-12T03-00-00-000Z-abc123";
+  it("첫 위치 인자는 ID 꼴이고, apply는 항목이 하나 이상, verify는 항목이 없으며, 항목은 겹치지 않는다", () => {
+    expect(tuneRunArgs("apply", [ID, "A1:claude-code:idle", "--lang", "ko", "--rescan"])).toEqual({ lang: "ko", rescan: true, id: ID, items: ["A1:claude-code:idle"] });
+    expect(tuneRunArgs("undo", [ID])).toEqual({ lang: null, rescan: false, id: ID, items: [] });
+    expect(tuneRunArgs("verify", [ID, "--lang", "en"])).toEqual({ lang: "en", rescan: false, id: ID, items: [] });
+    for (const [command, args] of [
+      ["apply", [ID]],
+      ["apply", ["../x", "A1:claude-code:idle"]],
+      ["apply", [ID, "a", "a"]],
+      ["verify", [ID, "a"]],
+      ["undo", [ID, "--no-save"]],
+      ["undo", [ID, "--lang"]],
+      ["undo", []],
+    ] as const) expect(tuneRunArgs(command, args)).toBeNull();
   });
 });

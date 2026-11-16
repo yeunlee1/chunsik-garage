@@ -2,7 +2,7 @@
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Candidate } from "../../src/core/installs/candidates.ts";
-import { fingerprintOf, readTarget, tableHeaderCount, targetPath, tuneItem, type ItemContext, type TargetRead } from "../../src/tune/items.ts";
+import { blockOf, fingerprintOf, readTarget, slotOf, tableHeaderCount, targetPath, tuneItem, type ItemContext, type TargetRead } from "../../src/tune/items.ts";
 import { CODEX_HOME, HOME, mcpServer, skill } from "../helpers/facts.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -75,14 +75,16 @@ describe("자동으로 고칠 수 없는 까닭", () => {
   const blockedOf = (unit: Candidate["unit"], read: TargetRead, versionOk = true): string | null => tuneItem(candidate(unit, unit === "A2" ? "p@m" : "db"), context({ home: unit === "A4" ? CODEX_HOME : HOME, versionOk }), read).blocked;
 
   it("파일이 없거나 읽지 못했거나, 파일이나 그 폴더가 링크면 고치지 않는다", () => {
-    expect(blockedOf("A1", { status: "missing" })).toBe("file-missing");
+    expect(blockedOf("A1", { status: "missing", folder: false })).toBe("file-missing");
+    // 없는 JSON 설정은 그 폴더가 보통 폴더면 새로 만든다. Codex 설정은 만들지 않는다(6단계 2부 계획 전 결정 4번)
+    expect([blockedOf("A1", { status: "missing", folder: true }), blockedOf("A3", { status: "missing", folder: true }), blockedOf("A4", { status: "missing", folder: true })]).toEqual([null, null, "file-missing"]);
     expect(blockedOf("A1", { status: "unreadable" })).toBe("file-unreadable");
     expect(blockedOf("A1", { status: "ok", bytes: Buffer.from("{}\n"), regular: false })).toBe("not-regular");
   });
 
   it("확인한 범위 밖 버전이면 파일의 모양보다 먼저 그 까닭으로 막는다", () => {
     expect(blockedOf("A1", ok("{}\n"), false)).toBe("unverified-version");
-    expect(blockedOf("A4", { status: "missing" }, false)).toBe("unverified-version");
+    expect(blockedOf("A4", { status: "missing", folder: true }, false)).toBe("unverified-version");
   });
 
   it("JSON은 바이트 순서 표시가 없고, 주석이 없는 표준 JSON이며, 맨 바깥과 바꿀 열쇠의 부모가 맞는 꼴이어야 한다", () => {
@@ -163,6 +165,32 @@ describe("표 이름의 따옴표와 이스케이프(6단계 1부 구현 검증)
   });
 });
 
+describe("지금 자리와 다시 보는 까닭(6단계 2부)", () => {
+  it("그 자리의 지금 상태를 읽는다. 목록은 이 도구가 더하는 항목이 있는지이고, 풀리지 않거나 부모의 꼴이 다르면 null이다", () => {
+    const skillKey = { kind: "json-entry", parent: "skillOverrides", name: "idle" } as const;
+    const denyKey = { kind: "json-list-add", parent: "deniedMcpServers", entry: { serverName: "db" } } as const;
+    const tomlKey = { kind: "toml-table-key", table: "db", key: "enabled" } as const;
+    expect(slotOf(ok('{"skillOverrides": {"idle": "off"}}'), skillKey)).toEqual({ present: true, value: "off" });
+    expect(slotOf(ok('{"x": 1}'), skillKey)).toEqual({ present: false });
+    expect(slotOf({ status: "missing", folder: true }, skillKey)).toEqual({ present: false });
+    expect(slotOf(ok('{"skillOverrides": []}'), skillKey)).toBeNull();
+    expect(slotOf(ok("{"), skillKey)).toBeNull();
+    expect(slotOf(ok('{"deniedMcpServers": [{"serverName": "db"}]}'), denyKey)).toEqual({ present: true });
+    expect(slotOf(ok('{"deniedMcpServers": [{"serverName": "db", "x": 1}]}'), denyKey)).toEqual({ present: false });
+    expect(slotOf(ok('[mcp_servers.db]\nenabled = false\n'), tomlKey)).toEqual({ present: true, value: false });
+    expect(slotOf(ok('[mcp_servers.db]\ncommand = "x"\n'), tomlKey)).toEqual({ present: false });
+    expect(slotOf(ok('[mcp_servers.other]\ncommand = "x"\n'), tomlKey)).toBeNull();
+    expect(slotOf({ status: "unreadable" }, tomlKey)).toBeNull();
+  });
+
+  it("바꾸기 바로 앞에서 그 바이트로 고칠 수 없는 까닭을 다시 본다", () => {
+    const skillKey = { kind: "json-entry", parent: "skillOverrides", name: "idle" } as const;
+    expect(blockOf(ok('{"skillOverrides": {"idle": "on"}}'), skillKey)).toBeNull();
+    expect(blockOf(ok('{"skillOverrides": {"idle": 3}}'), skillKey)).toBe("value-shape");
+    expect(blockOf({ status: "ok", bytes: Buffer.from("{}"), regular: false }, skillKey)).toBe("not-regular");
+  });
+});
+
 describe("지문과 파일 읽기", () => {
   let root: string;
   beforeEach(async () => {
@@ -182,8 +210,8 @@ describe("지문과 파일 읽기", () => {
     const read = await readTarget(path);
     expect(read.status).toBe("ok");
     if (read.status === "ok") expect([read.bytes.subarray(0, 3).toString("hex"), read.regular]).toEqual(["efbbbf", true]);
-    expect(await readTarget(join(root, "cfg", "none.json"))).toEqual({ status: "missing" });
-    expect(await readTarget(join(root, "nodir", "none.json"))).toEqual({ status: "missing" });
+    expect(await readTarget(join(root, "cfg", "none.json"))).toEqual({ status: "missing", folder: true });
+    expect(await readTarget(join(root, "nodir", "none.json"))).toEqual({ status: "missing", folder: false });
   });
 
   it("그 폴더가 링크면 보통 파일이 아니다", async () => {

@@ -4906,7 +4906,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.1.0";
+var PROGRAM_VERSION = "0.1.1";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {

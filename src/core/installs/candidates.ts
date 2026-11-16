@@ -1,4 +1,4 @@
-// 정비 후보를 낸다. A1 스킬 끄기, A2 플러그인 끄기, A3 서버 막기다. 판정만으로 내지 않고 꺼도 되는지를 따로 본다. 적용은 하지 않는다(순수 함수, 설계 16.1, 16.2)
+// 정비 후보를 낸다. A1 스킬 끄기, A2 플러그인 끄기, A3 서버 막기, A4 서버 끄기(Codex)다. 판정만으로 내지 않고 꺼도 되는지를 따로 본다. 적용은 하지 않는다(순수 함수, 설계 16.1, 16.2, 「6단계 1부 계획 전 결정」 3번)
 import type { ToolId } from "../../adapters/types.ts";
 import type { PluginFact } from "../../scan/types.ts";
 import type { ToolSetup } from "../metrics/setup.ts";
@@ -21,27 +21,43 @@ export const NO_SELF: SelfIdentity = { skillNames: [], pluginNames: [], skillRea
 export interface Candidate {
   /** '<단위>:<도구>:<바꾸는 열쇠>' */
   id: string;
-  unit: "A1" | "A2" | "A3";
+  unit: "A1" | "A2" | "A3" | "A4";
   /** 이 후보가 나온 규칙 */
   rule: "E5" | "E6";
   tool: ToolId;
-  /** 바꾸는 열쇠. A1은 스킬 이름(skillOverrides), A2는 설치 ID(enabledPlugins), A3은 서버 이름(deniedMcpServers) */
+  /** 바꾸는 열쇠. A1은 스킬 이름(skillOverrides), A2는 설치 ID(enabledPlugins), A3은 서버 이름(deniedMcpServers), A4는 서버 이름(Codex의 mcp_servers.<이름>.enabled) */
   target: string;
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
+const make = (tool: ToolSetup, unit: Candidate["unit"], rule: Candidate["rule"], targets: ReadonlySet<string>): Candidate[] =>
+  [...targets].sort(byText).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule, tool: tool.tool, target }));
+
+/**
+ * Codex의 서버 끄기(A4). 사용자 층의 그 서버에 enabled = false를 적는다. 신뢰한 프로젝트 층이 같은 이름을 다시 적었으면 깊이 합쳐져 그 프로젝트의 서버도 꺼질 수 있어서,
+ * 그 서버도 안 부른 것이 확인됨이어야 한다. 같은 이름의 플러그인 서버는 설정의 서버에 져서 원래 쓰이지 않으므로 따지지 않는다(「6단계 계획 전 결정」 3번)
+ */
+function codexCandidates(tool: ToolSetup, servers: ServerJudgement): Candidate[] {
+  const a4 = new Set<string>();
+  for (const judged of servers.servers) {
+    const { server } = judged;
+    if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
+    const sameName = servers.servers.filter((other) => other !== judged && other.server.scope === "project" && other.server.enabled && other.server.name === server.name);
+    if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a4.add(server.name);
+  }
+  return make(tool, "A4", "E6", a4);
+}
+
 export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: ServerJudgement, day: EvalDay, self: SelfIdentity): Candidate[] {
-  // Codex 설치의 정비는 6단계가 그 조건을 정할 때까지 내지 않는다(설계 「5단계 3부 계획 전 결정」 11번)
-  if (tool.tool === "codex") return [];
+  // Codex는 서버 끄기만 낸다. 스킬은 사용을 기록하지 않아 안 쓴 것이 확인되지 않고, 플러그인과 플러그인의 서버는 정비하지 않는다(「6단계 계획 전 결정」 4번)
+  if (tool.tool === "codex") return codexCandidates(tool, servers);
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   // 설정에 켜 두었는데 설치 기록에 없는 플러그인도 구성을 모르는 플러그인이다
   const unknownPlugin = enabledPlugins.some((plugin) => !plugin.compositionKnown) || setup.pluginsWithoutInstall.length > 0;
   // 훅을 볼 수 없는 켜진 플러그인이 있으면 그 훅이 어느 스킬의 경로를 가리키는지 모른다. 스킬을 끄는 후보를 내지 않는다
   const hooksUnseen = unknownPlugin || enabledPlugins.some((plugin) => plugin.hooksUnreadable);
-  // 서버 막기는 이름으로 듣는다. 같은 이름의 서버가 있는지 알 수 없으면 내지 않는다
-  const serversUnseen = unknownPlugin || enabledPlugins.some((plugin) => plugin.mcpUnreadable);
   const selfPaths = new Set(self.skillRealPaths);
   const selfPlugins = new Set(setup.plugins.filter((plugin) => self.pluginNames.includes(plugin.entryName) || self.pluginNames.includes(plugin.name)).map((plugin) => plugin.id));
   /** 이 도구 자신의 스킬이 든 묶음. 위치 가운데 하나라도 실제 경로, 이름 꼴(폴더 이름과 머리말 이름), 플러그인으로 이 도구의 것이면 그렇다 */
@@ -97,17 +113,14 @@ export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: S
     }
   }
 
-  if (!serversUnseen) {
-    // A3. 사용자 범위 서버를 이름으로 막는다. 같은 이름의 서버가 다른 범위에 켜져 있으면 그것도 안 부른 것이 확인됨이어야 한다
-    for (const judged of servers.servers) {
-      const { server } = judged;
-      if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
-      const sameName = servers.servers.filter((other) => other !== judged && other.server.enabled && other.server.name === server.name);
-      if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a3.add(server.name);
-    }
+  // A3. 사용자 범위 서버를 이름으로 막는다. 같은 이름의 서버가 다른 범위에 켜져 있으면 그것도 안 부른 것이 확인됨이어야 한다.
+  // 플러그인 서버는 막는 목록이 등록 이름으로만 막아 같이 막히지 않으므로 따지지 않는다. 구성을 모르는 플러그인도 그래서 막지 않는다(「6단계 계획 전 결정」 2번)
+  for (const judged of servers.servers) {
+    const { server } = judged;
+    if (server.scope !== "user" || !server.enabled || server.managedFixed || judged.verdict !== "unused" || judged.excluded !== null) continue;
+    const sameName = servers.servers.filter((other) => other !== judged && other.server.scope !== "plugin" && other.server.enabled && other.server.name === server.name);
+    if (sameName.every((other) => other.verdict === "unused" && other.excluded === null)) a3.add(server.name);
   }
 
-  const make = (unit: Candidate["unit"], rule: Candidate["rule"], targets: ReadonlySet<string>): Candidate[] =>
-    [...targets].sort(byText).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule, tool: tool.tool, target }));
-  return [...make("A1", "E5", a1), ...make("A2", "E5", a2), ...make("A3", "E6", a3)];
+  return [...make(tool, "A1", "E5", a1), ...make(tool, "A2", "E5", a2), ...make(tool, "A3", "E6", a3)];
 }

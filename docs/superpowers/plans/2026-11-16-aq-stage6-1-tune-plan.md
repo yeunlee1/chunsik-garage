@@ -10,7 +10,7 @@
 
 **Tech Stack:** TypeScript, Node.js 22 이상(시험은 22와 24), esbuild(묶기), Vitest(시험), smol-toml(이미 묶은 TOML 해석기). 새 의존성은 없다.
 
-**Spec:** `docs/superpowers/specs/2026-11-12-aq-checkup-design.md`(이하 설계). 이 계획은 설계 끝의 「6단계 계획 전 결정」(1~10번)의 1부 몫, 「6단계 1부 계획 전 결정」(1~10번), 「6단계 1부 계획에서 보완」(1~4번)과, 그것이 기대는 7.4, 10, 11.3, 16.1, 16.2, 16.3, 16.5의 1번을 구현한다.
+**Spec:** `docs/superpowers/specs/2026-11-12-aq-checkup-design.md`(이하 설계). 이 계획은 설계 끝의 「6단계 계획 전 결정」(1~10번)의 1부 몫, 「6단계 1부 계획 전 결정」(1~10번), 「6단계 1부 계획에서 보완」(1~4번), 「6단계 1부 계획 리뷰 1차에서 보완」(1·2번)과, 그것이 기대는 7.4, 10, 11.3, 16.1, 16.2, 16.3, 16.5의 1번을 구현한다.
 
 ## 6단계 1부의 범위
 
@@ -32,7 +32,7 @@
 
 ## 이 계획이 기대는 설계 보완
 
-이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `3C20B912AA1881F97882041FD22B7312E1D2A5671031F2C923424547D9C0B8B2`, 4,577줄)이다. 설계 끝에 「6단계 계획 전 결정」과 「6단계 1부 계획 전 결정」을 더했고(앞 커밋), 27절의 서버 막기 줄에 실측 결과를 덧붙였다. 연습 작업 폴더에서 구현하며 정하거나 고친 것(E6의 도구별 처방, 후보가 없을 때, 출력의 문장, 이 PC에서 돌려 본 것)을 「6단계 1부 계획에서 보완」으로 더했다.
+이 계획이 기준으로 삼는 설계는 이 계획과 같은 커밋에 든 것(SHA256 `E1D4102174F884765D2A739A829A40F97DE8A2EED1E8DD9DFC99456A0D0AA128`, 4,584줄)이다. 설계 끝에 「6단계 계획 전 결정」과 「6단계 1부 계획 전 결정」을 더했고(앞 커밋), 27절의 서버 막기 줄에 실측 결과를 덧붙였다. 연습 작업 폴더에서 구현하며 정하거나 고친 것(E6의 도구별 처방, 후보가 없을 때, 출력의 문장, 이 PC에서 돌려 본 것)을 「6단계 1부 계획에서 보완」으로 더했다. 계획 리뷰 1차에서 지금 값의 꼴과 TOML 표 머리 세기를 고치고 「6단계 1부 계획 리뷰 1차에서 보완」을 더했다.
 
 ## 파일 구조
 
@@ -607,6 +607,7 @@ git commit -m "feat: 서버 막기 조건을 고치고 Codex 서버 끄기를 �
 
 **Files:**
 - Create: `src/tune/items.ts`
+- Modify: `src/scan/settings.ts`
 - Test: `test/tune/items.test.ts`
 
 **Interfaces:**
@@ -617,7 +618,9 @@ git commit -m "feat: 서버 막기 조건을 고치고 Codex 서버 끄기를 �
 
 - 항목은 바꿀 파일(그 도구의 설정 홈 아래 사용자 설정), 자리(JSON 묶음 안의 열쇠, JSON 목록에 더하는 항목, Codex 서버 표 안의 `enabled`), 지금 값, 바꿀 값, 영향 범위, 자동으로 고칠 수 없는 까닭이다. 지금 값이 없으면 그 칸을 두지 않는다. 2부가 되돌릴 때 "없었다"를 그대로 되살리려는 것이다.
 - 바꿀 파일은 원본 바이트로 읽는다(바이트 순서 표시도 남긴다). 스캐너의 글 읽기는 그것을 떼어 쓰지 않는다. 파일과 그 폴더가 링크인지 함께 본다.
-- 고칠 수 없는 까닭은 버전, 파일의 상태, 모양의 차례로 본다. JSON은 바이트 순서 표시가 없고 주석이 없는 표준 JSON이며 맨 바깥과 바꿀 열쇠의 부모가 맞는 꼴이어야 한다. TOML은 풀려야 하고 그 서버의 표가 머리 하나로 여러 줄에 적혀 있어야 한다. 표 머리를 셀 때 여러 줄 문자열 안의 줄은 세지 않는다. 그 셈이 틀리면 머리가 0이나 2로 세어져 고치지 않는 쪽으로 빠진다.
+- 고칠 수 없는 까닭은 버전, 파일의 상태, 모양의 차례로 본다. JSON은 바이트 순서 표시가 없고 주석이 없는 표준 JSON이며 맨 바깥과 바꿀 열쇠의 부모가 맞는 꼴이어야 한다. TOML은 풀려야 하고 그 서버의 표가 머리 하나로 여러 줄에 적혀 있어야 한다.
+- 지금 값은 그 단위가 받는 꼴(스킬 끄기는 네 모드의 글, 플러그인 끄기와 서버 끄기는 참거짓)일 때만 싣는다. 그 밖의 값은 설정의 다른 값일 수 있어 싣지 않고 `value-shape`로 고치지 않는다(계획 리뷰 1차). 스킬 끄기의 네 모드는 스캐너의 것(`SKILL_OVERRIDE_MODES`, `src/scan/settings.ts`)을 공개해 같이 쓴다.
+- 표 머리를 셀 때는 줄을 TOML 규칙대로 글자 단위로 훑어 주석, 한 줄 문자열(기본과 리터럴, 이스케이프), 여러 줄 문자열을 건너뛰고 문자열 밖에서 시작하는 줄만 센다. 규칙에 맞지 않거나 문서가 여러 줄 문자열 안에서 끝나면 -1이라 고치지 않는다(계획 리뷰 1차. 줄 단위로만 따라가면 주석의 세 따옴표 때문에 문자열 안의 가짜 머리를 실제 표로 셌다).
 - 영향 범위는 문장이 아니라 수로 둔다. 문장은 과제 5가 짓는다.
 
 - [ ] **Step 1: 실패하는 시험을 쓴다**
@@ -629,7 +632,7 @@ git commit -m "feat: 서버 막기 조건을 고치고 Codex 서버 끄기를 �
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Candidate } from "../../src/core/installs/candidates.ts";
-import { fingerprintOf, readTarget, targetPath, tuneItem, type ItemContext, type TargetRead } from "../../src/tune/items.ts";
+import { fingerprintOf, readTarget, tableHeaderCount, targetPath, tuneItem, type ItemContext, type TargetRead } from "../../src/tune/items.ts";
 import { CODEX_HOME, HOME, mcpServer, skill } from "../helpers/facts.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -739,6 +742,38 @@ describe("자동으로 고칠 수 없는 까닭", () => {
   });
 });
 
+describe("지금 값의 꼴과 TOML의 문자열(6단계 1부 계획 리뷰 1차)", () => {
+  it("지금 값이 그 단위가 받는 꼴이 아니면 계획에 싣지 않고 고치지 않는다. 스킬 끄기는 네 모드의 글, 플러그인 끄기와 서버 끄기는 참거짓이다", () => {
+    const a1 = (value: unknown) => tuneItem(candidate("A1", "idle"), context(), ok(json({ skillOverrides: { idle: value } })));
+    const secret = a1({ env: { TOKEN: "SYNTHETIC-SECRET-VALUE" } });
+    expect([secret.blocked, "current" in secret, JSON.stringify(secret).includes("SYNTHETIC-SECRET-VALUE")]).toEqual(["value-shape", false, false]);
+    expect(["weird", 1, null, ["off"]].map((value) => a1(value).blocked)).toEqual(["value-shape", "value-shape", "value-shape", "value-shape"]);
+    expect(["on", "name-only", "user-invocable-only"].map((value) => [a1(value).blocked, a1(value).current])).toEqual([
+      [null, "on"],
+      [null, "name-only"],
+      [null, "user-invocable-only"],
+    ]);
+    expect(tuneItem(candidate("A2", "p@m"), context(), ok(json({ enabledPlugins: { "p@m": "true" } }))).blocked).toBe("value-shape");
+    const a4 = (enabled: string) => tuneItem(candidate("A4", "db"), context({ home: CODEX_HOME }), ok(`[mcp_servers.db]\ncommand = "x"\nenabled = ${enabled}\n`));
+    expect([a4('"yes"').blocked, a4("1").blocked, a4("false").blocked, a4("false").current]).toEqual(["value-shape", "value-shape", null, false]);
+  });
+
+  it("주석과 한 줄 문자열 안의 세 따옴표는 여러 줄 문자열로 보지 않는다. 문자열 밖에서 시작하는 줄의 표 머리만 센다", () => {
+    const tail = '[mcp_servers.db]\ncommand = "x"\n';
+    expect(tableHeaderCount('mcp_servers.db = {command="x"}\n# """\nnote = """\n[mcp_servers.db]\n"""\n', "db")).toBe(0);
+    expect(tableHeaderCount(`note = "triple marker" # """\n${tail}`, "db")).toBe(1);
+    expect(tableHeaderCount(`x = '"""'\n${tail}`, "db")).toBe(1);
+    expect(tableHeaderCount(`x = "a\\"\\"\\"b"\n${tail}`, "db")).toBe(1);
+    expect(tableHeaderCount(`x = """a""""\n${tail}`, "db")).toBe(1);
+    expect(tableHeaderCount('[mcp_servers."d#b"]\ncommand = "x"\n', "d#b")).toBe(1);
+    // 문서가 여러 줄 문자열 안에서 끝나면 모른다
+    expect(tableHeaderCount(`${tail}x = """\n`, "db")).toBe(-1);
+    // 주석에 세 따옴표가 있는 인라인 표는 계획에서 고치지 않는 표다
+    const inline = tuneItem(candidate("A4", "db"), context({ home: CODEX_HOME }), ok('mcp_servers.db = {command="x"}\n# """\nnote = """\n[mcp_servers.db]\n"""\n'));
+    expect(inline.blocked).toBe("table-shape");
+  });
+});
+
 describe("지문과 파일 읽기", () => {
   let root: string;
   beforeEach(async () => {
@@ -778,6 +813,20 @@ Expected: FAIL. 새 시험 파일이 그 모듈(`src/tune/items.ts`)이 없어 �
 
 - [ ] **Step 3: 구현한다**
 
+`src/scan/settings.ts`(찾을 곳):
+
+```ts
+/** skillOverrides의 값. 이 밖의 값은 정하지 않은 것으로 본다(공식 문서 settings-reference 「skillOverrides」) */
+const SKILL_OVERRIDE_MODES = new Set(["on", "name-only", "user-invocable-only", "off"]);
+```
+
+`src/scan/settings.ts`(바꾼 뒤):
+
+```ts
+/** skillOverrides의 값. 이 밖의 값은 정하지 않은 것으로 본다(공식 문서 settings-reference 「skillOverrides」). 정비 계획도 지금 값의 꼴을 이것으로 본다 */
+export const SKILL_OVERRIDE_MODES: ReadonlySet<string> = new Set(["on", "name-only", "user-invocable-only", "off"]);
+```
+
 `src/tune/items.ts`(새 파일):
 
 ```ts
@@ -790,6 +839,7 @@ import type { JudgedServer } from "../core/installs/servers.ts";
 import type { SkillBundle } from "../core/installs/skills.ts";
 import { isTable, parseCodexConfig } from "../scan/codex-config.ts";
 import { isObject } from "../scan/json.ts";
+import { SKILL_OVERRIDE_MODES } from "../scan/settings.ts";
 
 /** 바꾸는 자리. JSON 묶음 안의 열쇠, JSON 목록에 더하는 항목, Codex 서버 표(mcp_servers.<table>) 안의 열쇠다 */
 export type TuneKey =
@@ -804,8 +854,8 @@ export type TuneImpact =
   | { unit: "A3"; sameName: { local: number; project: number; claudeAi: number } }
   | { unit: "A4"; projects: number };
 
-/** 자동으로 고칠 수 없는 까닭(16.3 검사표의 앞 두 줄과 16.2 끝의 버전) */
-export type TuneBlock = "unverified-version" | "file-missing" | "file-unreadable" | "not-regular" | "byte-order-mark" | "not-json-object" | "parent-shape" | "not-toml" | "table-shape";
+/** 자동으로 고칠 수 없는 까닭(16.3 검사표의 앞 두 줄과 16.2 끝의 버전). value-shape는 지금 값이 그 단위가 받는 꼴이 아닌 것이고, 그 값은 계획에 싣지 않는다 */
+export type TuneBlock = "unverified-version" | "file-missing" | "file-unreadable" | "not-regular" | "byte-order-mark" | "not-json-object" | "parent-shape" | "value-shape" | "not-toml" | "table-shape";
 
 export interface TuneItem {
   id: string;
@@ -883,7 +933,11 @@ function jsonState(bytes: Buffer, key: Extract<TuneKey, { kind: "json-entry" | "
   if (parent === undefined) return { present: false, blocked: null };
   if (key.kind === "json-list-add") return { present: false, blocked: Array.isArray(parent) ? null : "parent-shape" };
   if (!isObject(parent)) return { present: false, blocked: "parent-shape" };
-  return Object.hasOwn(parent, key.name) ? { present: true, value: parent[key.name], blocked: null } : { present: false, blocked: null };
+  if (!Object.hasOwn(parent, key.name)) return { present: false, blocked: null };
+  // 지금 값은 그 단위가 받는 꼴(스킬 끄기는 네 모드의 글, 플러그인 끄기는 참거짓)일 때만 싣는다. 그 밖의 값은 설정의 다른 값일 수 있어 싣지 않고 고치지 않는다(16.3, 16.5의 2번)
+  const value = parent[key.name];
+  const ok = key.parent === "skillOverrides" ? typeof value === "string" && SKILL_OVERRIDE_MODES.has(value) : typeof value === "boolean";
+  return ok ? { present: true, value, blocked: null } : { present: false, blocked: "value-shape" };
 }
 
 /** TOML 열쇠 한 조각(맨 열쇠, 큰따옴표 문자열, 작은따옴표 문자열)을 풀어 낸다. 풀지 못하면 null */
@@ -926,24 +980,66 @@ function splitDotted(text: string): string[] | null {
   return keys.every((key) => key !== null) ? (keys as string[]) : null;
 }
 
-/** 그 서버의 표 머리([mcp_servers.<이름>])가 몇 번 나오는지. 여러 줄 문자열 안의 줄은 세지 않는다 */
+/** 여러 줄 문자열 안이면 그 구분자, 밖이면 null */
+type Multiline = '"""' | "'''" | null;
+
+/** 한 줄을 TOML 규칙대로 훑어 줄 끝의 상태(여러 줄 문자열 안인지)를 낸다. 주석과 한 줄 문자열은 건너뛴다. 한 줄 문자열이 그 줄에서 닫히지 않으면 undefined다(규칙에 맞지 않는다) */
+function scanLine(line: string, start: Multiline): Multiline | undefined {
+  let state = start;
+  let i = 0;
+  while (i < line.length) {
+    if (state !== null) {
+      // 여러 줄 기본 문자열은 \ 뒤의 글자를 건너뛴다. 끝 구분자 뒤에 같은 따옴표가 두 개까지 더 붙을 수 있다(그것은 내용이다)
+      if (state === '"""' && line[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      if (line.startsWith(state, i)) {
+        let end = i + 3;
+        while (end < line.length && end - i < 5 && line[end] === state[0]) end++;
+        state = null;
+        i = end;
+      } else i++;
+      continue;
+    }
+    if (line[i] === "#") return null;
+    const triple = line.startsWith('"""', i) ? '"""' : line.startsWith("'''", i) ? "'''" : null;
+    if (triple !== null) {
+      state = triple;
+      i += 3;
+      continue;
+    }
+    if (line[i] === '"' || line[i] === "'") {
+      const quote = line[i]!;
+      let j = i + 1;
+      while (j < line.length && line[j] !== quote) j += quote === '"' && line[j] === "\\" ? 2 : 1;
+      if (j >= line.length) return undefined;
+      i = j + 1;
+      continue;
+    }
+    i++;
+  }
+  return state;
+}
+
+/**
+ * 그 서버의 표 머리([mcp_servers.<이름>])가 몇 번 나오는지. 주석과 문자열(한 줄·여러 줄, 기본·리터럴)을 TOML 규칙대로 건너뛰고, 문자열 밖에서 시작하는 줄만 표 머리로 본다.
+ * 규칙에 맞지 않는 곳이 있거나 문서가 여러 줄 문자열 안에서 끝나면 -1이다(그 표는 고치지 않는다, 6단계 1부 계획 리뷰 1차)
+ */
 export function tableHeaderCount(text: string, server: string): number {
   let count = 0;
-  let inMultiline: string | null = null;
+  let state: Multiline = null;
   for (const line of text.split(/\r?\n/)) {
-    if (inMultiline !== null) {
-      if (line.split(inMultiline).length % 2 === 0) inMultiline = null;
-      continue;
-    }
-    const header = /^\s*\[(?!\[)(.*)\]\s*(?:#.*)?$/.exec(line);
-    if (header !== null) {
-      const keys = splitDotted(header[1]!);
+    if (state === null) {
+      const header = /^\s*\[(?!\[)(.*)\]\s*(?:#.*)?$/.exec(line);
+      const keys = header === null ? null : splitDotted(header[1]!);
       if (keys !== null && keys.length === 2 && keys[0] === "mcp_servers" && keys[1] === server) count++;
-      continue;
     }
-    for (const delimiter of ['"""', "'''"]) if (line.split(delimiter).length % 2 === 0) inMultiline = delimiter;
+    const next = scanLine(line, state);
+    if (next === undefined) return -1;
+    state = next;
   }
-  return count;
+  return state === null ? count : -1;
 }
 
 /** Codex 설정에서 그 서버 표의 enabled 지금 값과 고칠 수 있는 모양인지. 표가 머리 하나로 여러 줄에 적혀 있어야 한다(16.3) */
@@ -955,7 +1051,9 @@ function tomlState(bytes: Buffer, server: string): State {
   const servers = doc.mcp_servers;
   const table = isTable(servers) ? servers[server] : undefined;
   if (!isTable(table) || tableHeaderCount(text, server) !== 1) return { present: false, blocked: "table-shape" };
-  return Object.hasOwn(table, "enabled") ? { present: true, value: table.enabled, blocked: null } : { present: false, blocked: null };
+  if (!Object.hasOwn(table, "enabled")) return { present: false, blocked: null };
+  // 지금 값은 참거짓일 때만 싣는다
+  return typeof table.enabled === "boolean" ? { present: true, value: table.enabled, blocked: null } : { present: false, blocked: "value-shape" };
 }
 
 function keyOf(candidate: Candidate): TuneKey {
@@ -1038,12 +1136,12 @@ export function tuneItem(candidate: Candidate, context: ItemContext, read: Targe
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/tune/items.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 16개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 1개, 시험 18개.
 
 - [ ] **Step 5: 커밋한다**
 
 ```bash
-git add test/tune/items.test.ts src/tune/items.ts
+git add test/tune/items.test.ts src/scan/settings.ts src/tune/items.ts
 git commit -m "feat: 정비 계획 항목과 바꿀 파일 읽기를 더함"
 ```
 
@@ -1573,7 +1671,7 @@ git commit -m "feat: 정비 계획을 저장하는 aq tune plan을 더함"
 
 설계 「6단계 1부 계획 전 결정」 8번과 「6단계 1부 계획에서 보완」 1·3번이다.
 
-- 계획 항목마다 두 언어의 제목, 바꾸는 것(파일, 자리, 바꿀 값, 지금 값), 영향 범위, 자동으로 고칠 수 없는 까닭, 되돌리는 법을 짓는다. 고칠 수 없는 항목에는 되돌리는 법이 없다. 실행 알림 둘에도 문장을 짓는다. 문장은 실행 기록에만 싣고 저장한 계획에는 싣지 않는다.
+- 계획 항목마다 두 언어의 제목, 바꾸는 것(파일, 자리, 바꿀 값, 지금 값), 영향 범위, 자동으로 고칠 수 없는 까닭, 되돌리는 법을 짓는다. 고칠 수 없는 항목에는 되돌리는 법이 없다. 지금 값이 예상한 꼴이 아닌 항목(`value-shape`)은 그 값을 적지 않고 "지금은 예상하지 못한 값"이라고만 적는다(계획 리뷰 1차). 실행 알림 둘에도 문장을 짓는다. 문장은 실행 기록에만 싣고 저장한 계획에는 싣지 않는다.
 - 한국어 문장은 영어 이름 뒤의 조사를 피해 "이름 "<이름>"의 값을"처럼 조사를 낱말 뒤에 붙인다.
 - E6의 처방은 S2처럼 그 규칙이 가리키는 도구(정비 후보가 나온 도구)마다의 문장을 도구의 차례로 잇는다. 가리키는 도구가 없으면 두 도구의 끄는 법을 함께 말하는 문장이다. Claude Code의 서버 막기만 말하던 처방이 Codex의 서버 끄기 후보에도 맞게 하려는 것이다.
 - 실행 알림 타입은 문구가 명령 쪽을 거꾸로 부르지 않게 `src/tune/plan.ts`로 옮긴다.
@@ -1662,7 +1760,7 @@ const item = (input: Partial<TuneItem> = {}): TuneItem => ({
   blocked: null,
   ...input,
 });
-const BLOCKS: TuneBlock[] = ["unverified-version", "file-missing", "file-unreadable", "not-regular", "byte-order-mark", "not-json-object", "parent-shape", "not-toml", "table-shape"];
+const BLOCKS: TuneBlock[] = ["unverified-version", "file-missing", "file-unreadable", "not-regular", "byte-order-mark", "not-json-object", "parent-shape", "value-shape", "not-toml", "table-shape"];
 
 describe("항목의 문장", () => {
   it("스킬 끄기는 무엇을, 어디를, 영향 범위, 되돌리는 법을 말한다. 지금 값이 없으면 정하지 않았다고 적는다", () => {
@@ -1704,6 +1802,15 @@ describe("항목의 문장", () => {
       }
       for (const unit of ["A1", "A2", "A3", "A4"] as const) expect(TUNE_COPY[lang].title[unit]).toMatch(/: \{name\}$/);
     }
+  });
+});
+
+describe("예상한 꼴이 아닌 지금 값", () => {
+  it("지금 값이 예상한 꼴이 아닌 항목은 지금 값을 적지 않고 그 까닭을 말한다(6단계 1부 계획 리뷰 1차)", () => {
+    const text = tuneItemText(item({ blocked: "value-shape" }), "ko");
+    expect(text.change).toBe(`${FILE}의 skillOverrides에서 이름 "idle"의 값을 "off"로 바꿉니다(지금은 예상하지 못한 값).`);
+    expect([text.blocked, text.undo]).toEqual(["지금 값이 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.", null]);
+    expect(tuneItemText(item({ blocked: "value-shape" }), "en").change).toBe(`In ${FILE}, set "idle" under skillOverrides to "off" (now an unexpected value).`);
   });
 });
 
@@ -1861,7 +1968,7 @@ type Unit = TuneItem["unit"];
 interface TuneCopy {
   title: Record<Unit, string>;
   change: Record<Unit, string>;
-  current: { none: string; value: string };
+  current: { none: string; value: string; unexpected: string };
   impact: Record<Unit, string>;
   undo: string;
   blocked: Record<TuneBlock, string>;
@@ -1877,7 +1984,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       A3: 'In {file}, add { "serverName": "{name}" } to the deniedMcpServers list.',
       A4: "In {file}, write enabled = false in the [mcp_servers.{name}] table ({current}).",
     },
-    current: { none: "now not set", value: "now {value}" },
+    current: { none: "now not set", value: "now {value}", unexpected: "now an unexpected value" },
     impact: {
       A1: "This name also turns off {user} {user:skill|skills} in user folders, {project} in projects and {plugin} in plugins. It applies to every project on this PC.",
       A2: "The plugin contains only {skills} {skills:skill|skills}.",
@@ -1893,6 +2000,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       "byte-order-mark": "The settings file starts with a byte order mark, so it is not changed automatically. Change it yourself as described above.",
       "not-json-object": "The settings file is not standard JSON (JSON with comments is not), so it is not changed automatically. Change it yourself as described above.",
       "parent-shape": "{parent} in the settings file is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
+      "value-shape": "The current value is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
       "not-toml": "config.toml could not be parsed, so it is not changed automatically. Change it yourself as described above.",
       "table-shape": "The [mcp_servers.{name}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above.",
     },
@@ -1909,7 +2017,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       A3: '{file}의 deniedMcpServers 목록에 { "serverName": "{name}" } 항목을 더합니다.',
       A4: "{file}의 [mcp_servers.{name}] 표에 enabled = false를 적습니다({current}).",
     },
-    current: { none: "지금은 정하지 않음", value: "지금은 {value}" },
+    current: { none: "지금은 정하지 않음", value: "지금은 {value}", unexpected: "지금은 예상하지 못한 값" },
     impact: {
       A1: "이 이름으로 사용자 폴더의 스킬 {user}개, 프로젝트의 스킬 {project}개, 플러그인의 스킬 {plugin}개가 함께 꺼집니다. 이 PC의 모든 프로젝트에 듣습니다.",
       A2: "이 플러그인에는 스킬 {skills}개만 들어 있습니다.",
@@ -1925,6 +2033,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       "byte-order-mark": "설정 파일이 바이트 순서 표시로 시작해 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "not-json-object": "설정 파일이 표준 JSON이 아니어서(주석이 든 JSON도 그렇습니다) 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "parent-shape": "설정 파일의 {parent}가 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
+      "value-shape": "지금 값이 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "not-toml": "config.toml을 풀지 못해 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "table-shape": "[mcp_servers.{name}] 표가 머리 하나로 여러 줄에 적혀 있지 않아(인라인 표나 점 열쇠로 적은 것) 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
     },
@@ -1961,7 +2070,8 @@ function impactValues(item: TuneItem): Record<string, number> {
 
 export function tuneItemText(item: TuneItem, lang: Lang): TuneItemText {
   const copy = TUNE_COPY[lang];
-  const current = "current" in item ? fill(copy.current.value, { value: JSON.stringify(item.current) }) : copy.current.none;
+  // 예상한 꼴이 아닌 지금 값은 적지 않는다(계획에도 없다)
+  const current = item.blocked === "value-shape" ? copy.current.unexpected : "current" in item ? fill(copy.current.value, { value: JSON.stringify(item.current) }) : copy.current.none;
   const parent = item.key.kind === "toml-table-key" ? "mcp_servers" : item.key.parent;
   return {
     title: fill(copy.title[item.unit], { name: item.target }),
@@ -1998,7 +2108,7 @@ export type TuneRunNotice = { kind: "not_saved" } | { kind: "plan_unsaved"; code
 - [ ] **Step 4: 시험과 타입 검사가 통과하는지 확인한다**
 
 Run: `npx tsc --noEmit && npx vitest run test/core/copy-findings.test.ts test/tune/copy.test.ts test/commands/tune-plan.test.ts`
-Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 29개.
+Expected: PASS. 타입 검사 오류 없음, 시험 파일 3개, 시험 30개.
 
 - [ ] **Step 5: 커밋한다**
 
@@ -2029,7 +2139,7 @@ git commit -m "feat: 정비 계획의 문장과 E6 도구별 처방을 더함"
 - [ ] **Step 2: 전체 검사가 통과하는지 확인한다**
 
 Run: `npm run build && npm run check`
-Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 109개·시험 1,832개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
+Expected: `npm run build`가 `묶음 완료`를 내고, `npm run check`가 타입 검사 통과, 시험 파일 109개·시험 1,835개 통과(파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다), `묶음 검사 통과`, `버전 검사 통과`를 낸다.
 
 - [ ] **Step 3: 커밋한다**
 
@@ -2058,7 +2168,7 @@ Expected: 빌드가 `묶음 완료: skills/aq/scripts/aq.mjs`를 내며 성공�
 
 Run: `npx -y -p node@22 -- node --version` → `v22.`로 시작하는지 본다.
 Run: `npx -y -p node@22 -- node node_modules/vitest/vitest.mjs run`
-Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 109개·시험 1,832개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
+Expected: 24에서와 같은 수의 시험이 모두 PASS(시험 파일 109개·시험 1,835개. 파일 링크를 만들 수 없는 Windows에서는 하나를 건너뛴다. 받은 22가 22.15.0보다 낮으면 1부의 압축 기록 시험 묶음 둘을 건너뛴 수만큼 적다). 막히면 짝 검증에 넘기고 병합 요청 본문에 "22에서는 돌리지 못했다"고 적는다.
 
 - [ ] **Step 3: 이 PC로 정비 계획을 저장하지 않고 돌려 본다**
 
@@ -2140,7 +2250,7 @@ git push origin develop
 | 「6단계 1부 계획 전 결정」 1번 | 한 계획, 과제 나눔 | 이 문서 |
 | 2번, 「6단계 계획 전 결정」 2번 | 막는 목록의 등록 이름, 모든 층의 허용 목록, 플러그인 서버의 이름 항목 | 1 |
 | 3번, 「6단계 계획 전 결정」 2·3·4번 | 서버 막기의 조건, Codex 서버 끄기, Codex는 서버 끄기만 | 2 |
-| 4번, 16.1, 16.3 | 계획 항목의 칸, 지금 값, 자동으로 고칠 수 없는 까닭(앞 두 줄) | 3 |
+| 4번, 16.1, 16.3, 「6단계 1부 계획 리뷰 1차에서 보완」 | 계획 항목의 칸, 지금 값과 그 꼴, 자동으로 고칠 수 없는 까닭(앞 두 줄), TOML 표 머리 세기 | 3, 5 |
 | 5번, 「6단계 계획 전 결정」 6번 | 계획의 저장과 계획 ID, 저장하지 않는 계획, 상태와 관측 기록을 고치지 않음 | 4 |
 | 6번, 7.4 | `aq tune plan`의 옵션과 출력 | 4 |
 | 7번, 16.2 끝 | 확인한 버전 범위 | 3, 4 |
@@ -2157,10 +2267,10 @@ git push origin develop
 
 ### 이 계획을 돌려 본 것
 
-이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`d15589e`)에서 과제 1부터 6까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1부터 5까지는 시험만 놓고 돌리면 실패하고, 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 6의 `npm run build && npm run check`는 시험 파일 109개·시험 1,832개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,831개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 272개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다.
+이 문서에서 코드 블록을 기계로 뽑아(저장소 밖의 도구) `develop`의 새 복제본(`d15589e`)에서 과제 1부터 6까지 차례대로 만들었다(Windows 11, Node.js 24.18). 의존성은 복제본에 `npm ci`로 깔았다. 새 파일은 통째로 쓰고, 고친 파일은 찾을 곳이 한 번만 나오는지 확인한 뒤 바꿨다. 과제 1부터 5까지는 시험만 놓고 돌리면 실패하고, 구현을 놓으면 그 과제의 시험과 타입 검사가 통과했다. 과제 6의 `npm run build && npm run check`는 시험 파일 109개·시험 1,835개(Windows에서 파일 링크 시험 하나를 건너뛰어 1,834개 통과)와 묶음 검사, 버전 검사가 통과했다. 묶음을 다시 만들어도 작업 트리가 그대로였고, 만든 복제본의 파일 272개(문서와 원장 빼고)가 연습 작업 폴더와 바이트까지 같았다.
 
-연습 작업 폴더에서 따로 확인한 것은 이렇다. 시험 커밋 다섯을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 세 시험, 과제 2는 일곱 시험, 과제 3은 새 시험 파일을 불러오지 못함, 과제 4는 두 시험과 불러오지 못한 파일 둘, 과제 5는 세 시험과 불러오지 못한 파일 하나), 구현 커밋 여섯을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 「6단계 1부 계획에서 보완」의 넷을 정했다. 통합 시험이 기대는 경우(20일 전 점검 뒤에 계획하면 지켜본 지 14일이 넘은 사용자 서버가 서버 막기 후보가 된다)는 임시 시험으로 먼저 돌려 확인했다.
+연습 작업 폴더에서 따로 확인한 것은 이렇다. 시험 커밋 다섯을 하나씩 꺼내 그 커밋이 고친 시험 파일만 돌리면 모두 실패했고(과제 1은 세 시험, 과제 2는 일곱 시험, 과제 3은 새 시험 파일을 불러오지 못함, 과제 4는 두 시험과 불러오지 못한 파일 둘, 과제 5는 세 시험과 불러오지 못한 파일 하나), 구현 커밋 여섯을 하나씩 꺼내 타입 검사와 전체 시험을 돌리면 모두 타입 오류 없이 통과했다. 계획을 쓰는 동안 「6단계 1부 계획에서 보완」의 넷을 정했다. 통합 시험이 기대는 경우(20일 전 점검 뒤에 계획하면 지켜본 지 14일이 넘은 사용자 서버가 서버 막기 후보가 된다)는 임시 시험으로 먼저 돌려 확인했다. 계획 리뷰 1차가 찾은 둘(지금 값이 설정의 다른 값을 싣는 것, TOML 문자열 안의 가짜 표 머리)은 과제 3과 5의 그 자리에서 고쳤고, 고치기 전의 코드에 새 시험을 놓으면 넷이 실패하는 것을 봤다.
 
-이 PC의 기록과 셋팅(읽기만)으로 Task 7 Step 3을 미리 돌렸다. 저장하지 않는 계획이 오류 없이 약 1분에 끝났고, 계획 ID가 없고 실행 알림이 저장하지 않음 하나였다. 나온 항목은 모두 자동으로 고칠 수 있는 모양이었고 항목마다 문장이 있었다. 사용자 `config.toml`의 MCP 서버 값은 출력에 없었고, 돌리기 앞뒤로 두 도구의 설정과 상태 폴더의 수정 시각과 지문이 그대로였다. 값과 개수는 저장소 밖 작업 기록에 두었다.
+이 PC의 기록과 셋팅(읽기만)으로 Task 7 Step 3을 미리 돌렸다(고친 뒤에 다시 돌려 항목과 까닭이 같았다). 저장하지 않는 계획이 오류 없이 약 1분에 끝났고, 계획 ID가 없고 실행 알림이 저장하지 않음 하나였다. 나온 항목은 모두 자동으로 고칠 수 있는 모양이었고 항목마다 문장이 있었다. 사용자 `config.toml`의 MCP 서버 값은 출력에 없었고, 돌리기 앞뒤로 두 도구의 설정과 상태 폴더의 수정 시각과 지문이 그대로였다. 값과 개수는 저장소 밖 작업 기록에 두었다.
 
 확인하지 못한 것은 이렇다. Node.js 22에서 돌리는 것은 Task 7 Step 2에서 한다. 설정 파일을 실제로 고치는 것은 2부다. 서버 막힘의 실측은 사용자 설정 층에서 플러그인 서버와 사용자 범위 서버만 봤다(관리 정책 파일, claude.ai에 연결한 서버, 로컬·프로젝트 범위 서버, 여러 층의 허용 목록을 합치는 규칙은 보지 않았다). Codex의 서버 끄기와 자동으로 고칠 수 없는 항목은 시험으로만 봤다. macOS와 Linux는 보지 않았다. Windows의 파일 링크 시험은 이 PC에서 건너뛰었다.

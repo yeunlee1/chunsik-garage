@@ -2,12 +2,19 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** 버전을 읽는 곳(저장소 뿌리에서의 경로)과 차례. Codex 매니페스트 둘은 5단계에서 더한다 */
-export const VERSION_FILES = ["package.json", "src/version.ts", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"];
+/** 버전을 읽는 곳(저장소 뿌리에서의 경로)과 차례 */
+export const VERSION_FILES = ["package.json", "src/version.ts", ".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json"];
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
 /** 프로그램 안의 버전 줄. 줄의 맨 앞에서 시작해야 해서 주석에 적힌 꼴은 읽지 않는다 */
 const PROGRAM_VERSION_LINE = /^export const PROGRAM_VERSION = "([^"]*)";\r?$/gm;
+
+/** 마켓 목록에서 이름이 chunsik-garage인 플러그인 항목의 버전. 그 항목이 하나가 아니면 undefined다 */
+function marketVersion(text) {
+  const plugins = JSON.parse(text).plugins;
+  const own = Array.isArray(plugins) ? plugins.filter((plugin) => plugin?.name === "chunsik-garage") : [];
+  return own.length === 1 ? own[0].version : undefined;
+}
 
 /** 파일의 글에서 버전을 뽑는다. 찾지 못하면 undefined이고, JSON이 풀리지 않으면 던진다 */
 const READERS = {
@@ -17,11 +24,9 @@ const READERS = {
     return found.length === 1 ? found[0][1] : undefined;
   },
   ".claude-plugin/plugin.json": (text) => JSON.parse(text).version,
-  ".claude-plugin/marketplace.json": (text) => {
-    const plugins = JSON.parse(text).plugins;
-    const own = Array.isArray(plugins) ? plugins.filter((plugin) => plugin?.name === "chunsik-garage") : [];
-    return own.length === 1 ? own[0].version : undefined;
-  },
+  ".claude-plugin/marketplace.json": marketVersion,
+  ".codex-plugin/plugin.json": (text) => JSON.parse(text).version,
+  ".agents/plugins/marketplace.json": marketVersion,
 };
 
 /** 뿌리 폴더에서 정한 차례로 버전을 읽는다. 읽지 못하면 version이 null이고 problem에 까닭을 적는다 */

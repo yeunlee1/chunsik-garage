@@ -26,8 +26,10 @@ async function filesUnder(dir: string, prefix = ""): Promise<string[]> {
 
 /** 이 저장소의 산출물에 들어야 할 파일 */
 const EXPECTED = [
+  ".agents/plugins/marketplace.json",
   ".claude-plugin/marketplace.json",
   ".claude-plugin/plugin.json",
+  ".codex-plugin/plugin.json",
   "LICENSE",
   "skills/aq/SKILL.md",
   "skills/aq/assets/ART-LICENSE.md",
@@ -36,8 +38,8 @@ const EXPECTED = [
 ].sort();
 
 describe("플러그인 산출물", () => {
-  it("담는 곳은 매니페스트 둘, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스다", () => {
-    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "LICENSE"]);
+  it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스다(「5단계 5부 계획 전 결정」 5번)", () => {
+    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "LICENSE"]);
   });
 
   it("이 저장소에서 모으면 그 파일만 같은 자리에 같은 내용으로 담고, 담은 파일의 목록을 돌려준다", async () => {

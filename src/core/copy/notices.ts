@@ -64,6 +64,7 @@ const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
     record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
     record_partial: "{tool}: only the first part of {files} record {files:file|files} could be read. Only what was read is counted, so the unread share is at least what is shown.",
@@ -89,6 +90,7 @@ const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & {
   ko: {
     withheld: "AQ를 내지 않았습니다. {reasons}",
     state_reset: "상태 파일이 깨져 새로 시작했습니다. 설치를 지켜본 기록이 처음부터 다시 쌓입니다.",
+    credentials_in_config: "{tool} 설정 {count}곳에 API 키나 토큰이 그대로 적혀 있습니다. 환경 변수로 옮기세요. 값은 보여 주거나 저장하지 않았습니다.",
     record_unreadable: "{tool} 기록 가운데 읽지 못한 파일 {files}개와 폴더 {dirs}개가 있습니다. 읽은 것만으로 계산했습니다.",
     record_skipped: "{tool} 기록 가운데 이 Node.js가 zstd 압축을 풀지 못해 건너뛴 파일이 {files}개 있습니다. Node.js 22는 22.15.0 이상, 23은 23.8.0 이상, 24부터는 모든 버전에서 읽힙니다.",
     record_partial: "{tool} 기록 가운데 앞부분만 읽은 파일이 {files}개 있습니다. 읽은 부분만 계산해서 읽지 못한 비율은 적어도 보이는 값입니다.",
@@ -131,6 +133,8 @@ export function noticeText(notice: Notice, lang: Lang): string {
       return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY[reason][lang]).join(" ") });
     case "state_reset":
       return lines.state_reset;
+    case "credentials_in_config":
+      return fill(lines.credentials_in_config, { tool, count: notice.places.length });
     case "record_unreadable":
       return fill(lines.record_unreadable, { tool, files: notice.files.length, dirs: notice.dirs.length });
     case "record_skipped":

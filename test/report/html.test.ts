@@ -138,7 +138,8 @@ describe("reportHtml", () => {
       setupProblems: [{ tool: "claude-code", kind: "unparsable", place: evil("place") }],
       missingInstructions: [evil("missing")],
       worstOverlap: evil("overlap"),
-      notices: [{ kind: "record_unreadable", text: hostile("notice") }],
+      notices: [{ kind: "record_unreadable", tool: "claude-code", text: hostile("notice") }, { kind: "credentials_in_config", tool: "claude-code", text: hostile("secrets") }],
+      credentialPlaces: [{ tool: "claude-code", scope: "local", server: evil("spot-server"), projectName: evil("spot-project"), field: "env", key: evil("spot-key") }],
       text: { en: { ...base.text.en, grade: evil("grade-en"), diagnosis: evil("diagnosis-en") }, ko: { ...base.text.ko, grade: evil("grade-ko"), diagnosis: evil("diagnosis-ko") } },
     };
     const html = reportHtml(view, art);
@@ -146,7 +147,7 @@ describe("reportHtml", () => {
     expect(html).not.toContain("<b>&");
     expect(count(html, "<script")).toBe(2);
     expect(count(html, "</script>")).toBe(2);
-    const marks = ["target", "server", "server-project", "connector", "place", "missing", "overlap", "notice-en", "notice-ko", "grade-en", "grade-ko", "diagnosis-en", "diagnosis-ko", "title-ko", "name-ko", "description-ko", "prescription-ko", "method-ko", "note-ko"];
+    const marks = ["target", "server", "server-project", "connector", "place", "missing", "overlap", "notice-en", "notice-ko", "secrets-ko", "spot-server", "spot-project", "spot-key", "grade-en", "grade-ko", "diagnosis-en", "diagnosis-ko", "title-ko", "name-ko", "description-ko", "prescription-ko", "method-ko", "note-ko"];
     for (const mark of marks) expect(html, mark).toContain(esc(evil(mark)));
     expect(html).toContain(`data-phrase-ko="${esc(REPORT_COPY.phrase.ko.replace("{name}", evil("name-ko")))}"`);
     expect(html).toContain(esc(JSON.stringify(evil("connector"))));
@@ -171,6 +172,33 @@ describe("reportHtml", () => {
     expect(html).toContain(`<b>${checked.score.grade}</b>`);
     const repairs = view.findings.filter((finding) => finding.category === "repair");
     expect(html.includes(REPORT_COPY.fixFirst.ko)).toBe(repairs.length > 0);
+  });
+
+  it("설정 속 비밀값 알림 아래에 그 도구의 자리를 두 언어로 늘어놓는다. 값은 없다(0.2.0)", () => {
+    const checked = result({ setup: { projects: [project("/work/shop")], secrets: [{ scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" }, { scope: "project", server: "pj", projectRoot: "/work/shop", field: "headers", key: "Authorization" }] } });
+    const html = reportHtml(viewOf(checked), art);
+    const notices = between(html, '<section class="notices"', "</section>");
+    expect(count(notices, '<ul class="spots">')).toBe(1);
+    expect(notices).toContain('<li><span lang="en" data-l="en">ctx · env API_TOKEN</span><span lang="ko" data-l="ko">ctx · env API_TOKEN</span></li>');
+    expect(notices).toContain('<li><span lang="en" data-l="en">pj (shop) · header Authorization</span><span lang="ko" data-l="ko">pj (shop) · 머리말 Authorization</span></li>');
+    expect(reportHtml(viewOf(result()), art)).not.toContain('class="spots"');
+  });
+
+  it("다음 등급까지의 문장을 진단 칸의 먼저 고칠 것 아래에 두 언어로 그리고, 없으면 그리지 않는다(0.2.0)", () => {
+    const checked = result();
+    expect(checked.nextGrade).not.toBeNull();
+    const html = reportHtml(viewOf(checked), art);
+    const verdict = between(html, '<div class="verdict">', "</section>");
+    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${esc(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${esc(checked.nextGrade!.text.ko)}</span></span>`);
+    expect(count(html, 'class="nx"')).toBe(1);
+    // 정비할 것이 없어도 다음 등급이 있으면 그 칸에 따로 보인다
+    const view = viewOf(checked);
+    const noRepairs: ReportView = { ...view, findings: view.findings.map((finding) => (finding.category === "repair" ? { ...finding, category: "average" as const } : finding)) };
+    const alone = reportHtml(noRepairs, art);
+    expect(alone).not.toContain(REPORT_COPY.fixFirst.ko);
+    expect(between(alone, '<div class="verdict">', "</section>")).toContain(REPORT_COPY.nextGrade.ko);
+    expect(count(alone, 'class="nx"')).toBe(1);
+    expect(reportHtml({ ...view, nextGrade: null }, art)).not.toContain('class="nx"');
   });
 
   it("AQ를 내지 않았으면 점수 없음과 장면 아래의 까닭을 보이고, 먼저 고칠 것과 예상 효과 꼬리표와 카드 단추를 그리지 않는다", () => {

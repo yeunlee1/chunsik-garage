@@ -65,6 +65,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
@@ -158,6 +159,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
+.notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
+.notices .spots li{display:block;font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
 .ft{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 24px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--ink2)}
 .ft .lock{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
 .ft .lock svg{margin-top:2px}

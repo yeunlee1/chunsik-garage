@@ -3,8 +3,325 @@
 // src/cli.ts
 import { homedir, tmpdir } from "node:os";
 
+// src/commands/badge.ts
+import { mkdir as mkdir2, rename, rm, writeFile } from "node:fs/promises";
+import { join as join2 } from "node:path";
+
+// src/core/score.ts
+function settleScore(value) {
+  return Math.round(value * 1e12) / 1e12;
+}
+function ruleScore(value, zeroAt, fullAt) {
+  const position = (value - zeroAt) / (fullAt - zeroAt);
+  return position <= 0 ? 0 : position >= 1 ? 1 : position;
+}
+function roundHalfUp(value) {
+  return Math.floor(Math.round(value * 1e9) / 1e9 + 0.5);
+}
+function gradeOf(aq) {
+  if (aq >= 90) return { grade: "S", tier: 5 };
+  if (aq >= 80) return { grade: "A", tier: 4 };
+  if (aq >= 65) return { grade: "B", tier: 3 };
+  if (aq >= 50) return { grade: "C", tier: 2 };
+  return { grade: "D", tier: 1 };
+}
+
+// src/core/copy/format.ts
+var UNCOUNTED = "\u2014";
+function groupDigits(value) {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+function oneDecimal(value) {
+  const tenths = roundHalfUp(value * 10);
+  const whole = groupDigits(Math.floor(tenths / 10));
+  const rest = tenths % 10;
+  return rest === 0 ? whole : `${whole}.${rest}`;
+}
+function formatValue(kind, value) {
+  if (kind === "share") return oneDecimal(value * 100);
+  if (kind === "rate") return oneDecimal(value);
+  return groupDigits(roundHalfUp(value));
+}
+var SLOT = /\{([A-Za-z]+)(?::([^|{}]*)\|([^|{}]*))?\}/g;
+function slots(template) {
+  return [...new Set([...template.matchAll(SLOT)].map((match) => match[1]))];
+}
+function fill(template, values) {
+  return template.replace(SLOT, (_match, name, one, other) => {
+    if (!(name in values)) throw new Error(`no value for {${name}} in "${template}"`);
+    const value = values[name];
+    if (one !== void 0 && other !== void 0) return value === 1 ? one : other;
+    if (value === null) return UNCOUNTED;
+    return typeof value === "number" ? groupDigits(value) : value;
+  });
+}
+
+// src/report/badge.ts
+var BADGE_COLORS = { S: "#1f883d", A: "#4d7c0f", B: "#8a6d00", C: "#c2410c", D: "#b91c1c" };
+var LABEL_COLOR = "#555";
+var PAD = 6;
+var charWidth = (char) => /[0-9]/.test(char) ? 7 : /[A-Z]/.test(char) ? 8 : char === " " || char === "\xB7" ? 4 : 7;
+var textWidth = (text) => [...text].reduce((sum2, char) => sum2 + charWidth(char), 0);
+function badgeSvg(score) {
+  const label = "AQ";
+  const message = `${score.aq} \xB7 ${score.grade}`;
+  const name = `${label} ${message}`;
+  const left = textWidth(label) + PAD * 2;
+  const right = textWidth(message) + PAD * 2;
+  const width = left + right;
+  const color = BADGE_COLORS[score.grade];
+  return `${[
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="20" viewBox="0 0 ${width} 20" role="img" aria-label="${name}">`,
+    `<title>${name}</title>`,
+    `<rect width="${width}" height="20" rx="3" fill="${LABEL_COLOR}"/>`,
+    `<rect x="${left}" width="${right}" height="20" rx="3" fill="${color}"/>`,
+    // 오른쪽 칸의 왼쪽 모서리는 각지게 덮는다
+    `<rect x="${left}" width="4" height="20" fill="${color}"/>`,
+    `<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">`,
+    `<text x="${left / 2}" y="14">${label}</text>`,
+    `<text x="${left + right / 2}" y="14">${message}</text>`,
+    "</g>",
+    "</svg>"
+  ].join("")}
+`;
+}
+
+// src/state/history.ts
+import { appendFile, mkdir, open, readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+// src/core/reasons.ts
+var REASONS = ["unsupported", "unreadable", "not_applicable", "incomplete", "no_data", "too_little", "watching"];
+var RESOLVABLE = /* @__PURE__ */ new Set(["unreadable", "incomplete", "no_data", "too_little", "watching"]);
+var rank = (reason) => REASONS.indexOf(reason);
+function ruleReason(toolReasons) {
+  if (toolReasons.length === 0) return "no_data";
+  const resolvable = toolReasons.filter((reason) => RESOLVABLE.has(reason));
+  const pool = resolvable.length > 0 ? resolvable : toolReasons;
+  return pool.reduce((last, reason) => rank(reason) > rank(last) ? reason : last);
+}
+
+// src/core/rules.ts
+var RULES_VERSION = "1.0.0";
+var rule = (id, axis, kind, zeroAt, fullAt, weight, unit, tunable = false) => ({ id, axis, kind, zeroAt, fullAt, weight, unit, tunable });
+var RULES = [
+  rule("S1", "setup", "share", 0, 1, 3, "merged"),
+  rule("S2", "setup", "share", 0, 1, 3, "merged"),
+  rule("S3", "setup", "count", 3, 0, 2, "merged"),
+  rule("S4", "setup", "share", 0.1, 0.01, 2, "perTool"),
+  rule("S5", "setup", "share", 0.3, 0.02, 2, "perTool"),
+  rule("E1", "efficiency", "share", 0.5, 0.9, 3, "perTool"),
+  rule("E2", "efficiency", "share", 0.12, 0.02, 3, "perTool"),
+  rule("E3", "efficiency", "rate", 3, 0.2, 3, "perTool"),
+  rule("E4", "efficiency", "amount", 16e3, 4e3, 2, "perTool"),
+  rule("E5", "efficiency", "share", 0.8, 0.2, 2, "perTool", true),
+  rule("E6", "efficiency", "share", 0.7, 0.1, 2, "perTool", true),
+  rule("E7", "efficiency", "rate", 0.15, 0.02, 1, "perTool"),
+  rule("F1", "fit", "share", 0.95, 0.6, 1, "perTool"),
+  rule("F2", "fit", "share", 0.1, 0.6, 1, "perTool"),
+  rule("F3", "fit", "share", 0.2, 0.8, 3, "merged"),
+  rule("F4", "fit", "share", 0.25, 0.02, 2, "merged"),
+  rule("F5", "fit", "rate", 0.4, 0, 2, "perTool"),
+  rule("F6", "fit", "count", 3, 0, 2, "merged"),
+  rule("I1", "intensity", "count", 2, 20, 3, "merged"),
+  rule("I2", "intensity", "rate", 3, 40, 3, "merged"),
+  rule("I3", "intensity", "rate", 1, 8, 2, "merged"),
+  rule("I4", "intensity", "count", 1, 4, 1, "merged")
+];
+function ruleSpec(id) {
+  const found = RULES.find((spec) => spec.id === id);
+  if (found === void 0) throw new Error(`unknown rule: ${id}`);
+  return found;
+}
+
+// src/core/scoreboard.ts
+var isMerged = (id) => RULES.some((spec) => spec.id === id && spec.unit === "merged");
+var MERGED_RULES = RULES.map((spec) => spec.id).filter(isMerged);
+var TOOL_RULES = RULES.map((spec) => spec.id).filter((id) => !isMerged(id));
+var AXES = ["setup", "efficiency", "fit", "intensity"];
+var CATEGORY_ORDER = ["strength", "average", "repair", "unmeasured"];
+var SEVERITY_ORDER = ["critical", "caution", "info"];
+var byText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function rateMerged(spec, measurement) {
+  if (measurement.status === "unmeasured") return { status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, tools: [] };
+  return { status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, tools: [] };
+}
+function rateTools(spec, id, tools2) {
+  const responses = new Map(tools2.map((tool) => [tool.tool, tool.responses]));
+  const values = tools2.map((tool) => {
+    const measurement = tool.rules[id];
+    const candidates = tool.candidates.filter((candidate) => candidate.rule === id).map((candidate) => candidate.id);
+    if (measurement.status === "unmeasured") return { tool: tool.tool, status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, candidates };
+    return { tool: tool.tool, status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, candidates };
+  });
+  const measured2 = values.filter((value) => value.status === "scored");
+  if (measured2.length === 0) return { status: "unmeasured", reason: ruleReason(values.map((value) => value.reason)), value: null, score: null, evidence: {}, tools: values };
+  const weight = measured2.reduce((sum2, value) => sum2 + responses.get(value.tool), 0);
+  const mean = (pick) => measured2.reduce((sum2, value) => sum2 + pick(value) * responses.get(value.tool), 0) / weight;
+  return { status: "scored", reason: null, value: mean((value) => value.value), score: mean((value) => value.score), evidence: {}, tools: values };
+}
+var settled = (score) => score === null ? null : settleScore(score);
+function categoryOf(spec, rated, candidates) {
+  const score = settled(rated.score);
+  const fromUnmeasuredTool = rated.tools.some((tool) => tool.status === "unmeasured" && tool.candidates.length > 0);
+  if (spec.tunable && (fromUnmeasuredTool || score !== null && score < 1 && candidates.length > 0)) return "repair";
+  if (score === null) return "unmeasured";
+  return score >= 0.8 ? "strength" : score >= 0.6 ? "average" : "repair";
+}
+function severityOf(category, rawScore, weight) {
+  const score = settled(rawScore);
+  if (category !== "repair") return null;
+  if (score === null) return "info";
+  if (score < 0.3 && weight === 3) return "critical";
+  return score < 0.6 && weight >= 2 ? "caution" : "info";
+}
+function axisScore(rules) {
+  const measured2 = rules.filter((rule2) => rule2.score !== null);
+  if (measured2.length === 0) return null;
+  const weight = measured2.reduce((sum2, rule2) => sum2 + rule2.weight, 0);
+  return roundHalfUp(measured2.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / weight * 100);
+}
+function compareFindings(a, b, order) {
+  const byTable = order.get(a.ruleId) - order.get(b.ruleId);
+  const byCategory = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
+  if (byCategory !== 0) return byCategory;
+  if (a.category === "strength") return settleScore(b.weight * b.score) - settleScore(a.weight * a.score) || byTable;
+  if (a.category === "repair") {
+    if (a.gain === null || b.gain === null) return (a.gain === null ? 1 : 0) - (b.gain === null ? 1 : 0) || byTable;
+    return b.gain - a.gain || SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity) || byTable;
+  }
+  return byTable;
+}
+function scoreboard(measured2) {
+  const tools2 = [...measured2.tools].sort((a, b) => byText(a.tool, b.tool));
+  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured2.merged[spec.id]) : rateTools(spec, spec.id, tools2)]));
+  const scores = new Map(AXES.map((axis) => [axis, axisScore(RULES.filter((spec) => spec.axis === axis).map((spec) => ({ weight: spec.weight, score: rated.get(spec.id).score })))]));
+  const findings = RULES.map((spec) => {
+    const rule2 = rated.get(spec.id);
+    const candidates = rule2.tools.flatMap((tool) => tool.candidates);
+    const category = categoryOf(spec, rule2, candidates);
+    const raised = RULES.filter((other) => other.axis === spec.axis).map((other) => ({ weight: other.weight, score: other.id === spec.id ? 1 : rated.get(other.id).score }));
+    const gain = rule2.score !== null && settleScore(rule2.score) < 1 ? axisScore(raised) - scores.get(spec.axis) : null;
+    return { ruleId: spec.id, axis: spec.axis, kind: spec.kind, weight: spec.weight, status: rule2.status, reason: rule2.reason, value: rule2.value, score: rule2.score, category, severity: severityOf(category, rule2.score, spec.weight), gain, evidence: rule2.evidence, tools: rule2.tools, candidates };
+  });
+  const axes = AXES.map((axis) => {
+    const own = findings.filter((finding) => finding.axis === axis);
+    return { axis, score: scores.get(axis), strengths: own.filter((finding) => finding.category === "strength").length, repairs: own.filter((finding) => finding.category === "repair").length };
+  });
+  const order = new Map(RULES.map((spec, index) => [spec.id, index]));
+  return { axes, findings: findings.sort((a, b) => compareFindings(a, b, order)) };
+}
+var MIN_REQUESTS_FOR_AQ = 20;
+var MIN_DAYS_FOR_AQ = 3;
+function aqOfAxes(scores) {
+  return roundHalfUp(scores.reduce((sum2, score) => sum2 + score, 0) / scores.length);
+}
+function overall(axes, humanRequests, activeDays2) {
+  const measured2 = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
+  const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
+  const withheld = [];
+  if (humanRequests < MIN_REQUESTS_FOR_AQ) withheld.push("too_few_requests");
+  if (activeDays2 < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
+  if (measured2.length === 0) withheld.push("no_axes");
+  if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
+  const aq = aqOfAxes(measured2);
+  return { aq, ...gradeOf(aq), withheld, missingAxes };
+}
+
+// src/state/history.ts
+var HISTORY_FILE = "history.jsonl";
+function historyEntry(evaluation, nowMs) {
+  const byAxis = new Map(evaluation.axes.map((axis) => [axis.axis, axis.score]));
+  const axes = Object.fromEntries(AXES.map((axis) => [axis, byAxis.get(axis) ?? null]));
+  return { at: new Date(nowMs).toISOString(), aq: evaluation.score.aq, axes, missingAxes: [...evaluation.score.missingAxes], rulesVersion: evaluation.rulesVersion };
+}
+async function endsMidLine(path) {
+  let handle;
+  try {
+    handle = await open(path, "r");
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+  try {
+    const { size } = await handle.stat();
+    if (size === 0) return false;
+    const last = Buffer.alloc(1);
+    await handle.read(last, 0, 1, size - 1);
+    return last[0] !== 10;
+  } finally {
+    await handle.close();
+  }
+}
+async function appendHistory(stateDir2, entry) {
+  await mkdir(stateDir2, { recursive: true });
+  const path = join(stateDir2, HISTORY_FILE);
+  const prefix = await endsMidLine(path) ? "\n" : "";
+  await appendFile(path, `${prefix}${JSON.stringify(entry)}
+`);
+}
+async function historyCount(stateDir2) {
+  let text;
+  try {
+    text = await readFile(join(stateDir2, HISTORY_FILE), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return 0;
+    throw error;
+  }
+  return text.split("\n").filter((line) => line.trim() !== "").length;
+}
+async function recentAq(stateDir2, limit = 12) {
+  let text;
+  try {
+    text = await readFile(join(stateDir2, HISTORY_FILE), "utf8");
+  } catch {
+    return [];
+  }
+  const entries = [];
+  for (const line of text.split("\n")) {
+    if (line.trim() === "") continue;
+    try {
+      const value = JSON.parse(line);
+      if (typeof value.at === "string" && (value.aq === null || typeof value.aq === "number")) entries.push({ at: value.at, aq: value.aq });
+    } catch {
+    }
+  }
+  return entries.slice(-limit);
+}
+
+// src/commands/badge.ts
+var BADGE_FILE = "badge.svg";
+var BADGE_LINK = "https://github.com/yeunlee1/chunsik-garage";
+var COPY = {
+  en: { made: "Made the AQ {aq} \xB7 {grade} badge from the checkup of {date}. The file is at {path}.", howTo: "Put this file next to your README and add the line below to the README." },
+  ko: { made: "{date} \uC810\uAC80\uC758 AQ {aq} \xB7 {grade}\uB85C \uBC30\uC9C0\uB97C \uB9CC\uB4E4\uC5C8\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC740 {path}\uC5D0 \uC788\uC2B5\uB2C8\uB2E4.", howTo: "\uC774 \uD30C\uC77C\uC744 README\uC640 \uAC19\uC740 \uD3F4\uB354\uC5D0 \uB450\uACE0 \uC544\uB798 \uC904\uC744 README\uC5D0 \uBD99\uC774\uC138\uC694." }
+};
+var failure = (code, message) => Object.assign(new Error(message), { code });
+var localDate = (iso, timeZone) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+async function runBadge(options) {
+  const scored2 = (await recentAq(options.stateDir, Number.MAX_SAFE_INTEGER)).filter((entry) => entry.aq !== null && Number.isInteger(entry.aq) && entry.aq >= 0 && entry.aq <= 100 && !Number.isNaN(Date.parse(entry.at)));
+  const latest = scored2.at(-1);
+  if (latest === void 0) throw failure("no-score", "no saved checkup has an AQ");
+  const { grade } = gradeOf(latest.aq);
+  const path = join2(options.stateDir, BADGE_FILE);
+  const temp = `${path}.${process.pid}.tmp`;
+  try {
+    await mkdir2(options.stateDir, { recursive: true });
+    await writeFile(temp, badgeSvg({ aq: latest.aq, grade }));
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true }).catch(() => void 0);
+    throw failure("badge-unwritten", `could not write the badge (${error.code ?? "unknown"})`);
+  }
+  const copy2 = COPY[options.lang];
+  return {
+    badge: { path, aq: latest.aq, grade, at: latest.at, markdown: `[![AQ ${latest.aq} \xB7 ${grade}](${BADGE_FILE})](${BADGE_LINK})` },
+    run: { text: { made: fill(copy2.made, { aq: latest.aq, grade, date: localDate(latest.at, options.timeZone), path }), howTo: copy2.howTo } }
+  };
+}
+
 // src/commands/checkup.ts
-import { join as join24 } from "node:path";
+import { join as join25 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -76,8 +393,8 @@ function msOlderThan(day, epochMs, days) {
 }
 
 // src/core/installs/candidates.ts
-var byText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-var make = (tool, unit, rule2, targets) => [...targets].sort(byText).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule: rule2, tool: tool.tool, target }));
+var byText2 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var make = (tool, unit, rule2, targets) => [...targets].sort(byText2).map((target) => ({ id: `${unit}:${tool.tool}:${target}`, unit, rule: rule2, tool: tool.tool, target }));
 function codexCandidates(tool, servers) {
   const a4 = /* @__PURE__ */ new Set();
   for (const judged of servers.servers) {
@@ -176,7 +493,7 @@ function anyIn(recordNames, names2) {
 
 // src/core/installs/listing.ts
 function sessionListings(summaries, kind, normalizedCwds, lookup) {
-  const normalized = new Map(Object.entries(normalizedCwds));
+  const normalized2 = new Map(Object.entries(normalizedCwds));
   const out = [];
   for (const summary of summaries) {
     if (summary.kind !== "main") continue;
@@ -190,7 +507,7 @@ function sessionListings(summaries, kind, normalizedCwds, lookup) {
       days.push({ date, responses: cell.responses, loaded, reloaded: new Set(kind === "skill" ? cell.reloadedSkills : cell.reloadedMcpServers) });
     }
     out.push({
-      cwdKey: summary.cwd === null ? null : normalized.get(summary.cwd) ?? summary.cwd,
+      cwdKey: summary.cwd === null ? null : normalized2.get(summary.cwd) ?? summary.cwd,
       projectRoot: lookup(summary.cwd)?.normRoot ?? null,
       firstDate: summary.firstDate,
       initial: initialNames === null ? null : new Set(initialNames),
@@ -371,8 +688,8 @@ function serverVerdict(server, context) {
 // src/core/installs/servers.ts
 var MIN_JUDGED_SERVERS = 2;
 var SCOPE_ORDER = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
-var byText2 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-var byServer = (a, b) => byText2(a.name, b.name) || SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope] || byText2(a.projectRoot ?? "", b.projectRoot ?? "") || byText2(a.pluginId ?? "", b.pluginId ?? "") || byText2(a.definitionHash ?? "", b.definitionHash ?? "") || // 같은 플러그인을 두 길로 찾으면 켜짐만 다른 서버 사실 둘이 온다. 내용까지 견줘 차례를 끝까지 정한다
+var byText3 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var byServer = (a, b) => byText3(a.name, b.name) || SCOPE_ORDER[a.scope] - SCOPE_ORDER[b.scope] || byText3(a.projectRoot ?? "", b.projectRoot ?? "") || byText3(a.pluginId ?? "", b.pluginId ?? "") || byText3(a.definitionHash ?? "", b.definitionHash ?? "") || // 같은 플러그인을 두 길로 찾으면 켜짐만 다른 서버 사실 둘이 온다. 내용까지 견줘 차례를 끝까지 정한다
 byContent(a, b);
 function serversUnread(tool) {
   if (tool.tool === "codex") return codexSettingsUnread(tool.setup);
@@ -402,8 +719,8 @@ function judgeServers(tool, context) {
 // src/core/installs/skills.ts
 var MIN_JUDGED_SKILLS = 5;
 var SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
-var byText3 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-var byPosition = (a, b) => byText3(a.name, b.name) || SCOPE_ORDER2[a.scope] - SCOPE_ORDER2[b.scope] || byText3(a.realPath ?? a.path, b.realPath ?? b.path) || byText3(a.installKey, b.installKey) || byText3(a.pluginId ?? "", b.pluginId ?? "") || byText3(a.path, b.path) || byContent(a, b);
+var byText4 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var byPosition = (a, b) => byText4(a.name, b.name) || SCOPE_ORDER2[a.scope] - SCOPE_ORDER2[b.scope] || byText4(a.realPath ?? a.path, b.realPath ?? b.path) || byText4(a.installKey, b.installKey) || byText4(a.pluginId ?? "", b.pluginId ?? "") || byText4(a.path, b.path) || byContent(a, b);
 function skillsUnread(tool) {
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
@@ -435,11 +752,11 @@ function judgeSkills(tool, context) {
 
 // src/core/metrics/fit.ts
 var FREQUENT_SESSIONS = 3;
-var byText4 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var byText5 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var scanned = (project) => project.exists && !project.excluded;
 function toolProjects(tool) {
   const projects = tool.tool === "codex" ? tool.setup.projects.filter((project) => project.scanned).map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.configStatus !== null && project.configStatus !== "missing" })) : tool.setup.projects.filter(scanned).map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
-  return projects.sort((a, b) => byText4(a.normRoot, b.normRoot));
+  return projects.sort((a, b) => byText5(a.normRoot, b.normRoot));
 }
 function hasInstructionFiles(set) {
   return set.files.length > 0 || set.unreadable.length > 0 || set.unreadableDirs.length > 0;
@@ -472,7 +789,7 @@ function f4(tools2, names2) {
   let globalLines = 0;
   let comparedProjects = 0;
   let worst = null;
-  for (const tool of [...tools2].sort((a, b) => byText4(a.tool, b.tool))) {
+  for (const tool of [...tools2].sort((a, b) => byText5(a.tool, b.tool))) {
     const global = tool.setup.globalInstructions;
     const projects = toolProjects(tool);
     if (instructionsUnread(global) || projects.some((project) => instructionsUnread(project.instructions))) unreadable = true;
@@ -556,66 +873,66 @@ function median(values) {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
-function s4(totals, coverage) {
-  const evidence = { failures: totals.hookFailures, runs: totals.hookRuns, unclassifiedBlocks: totals.hookUnclassified };
-  return countGate(sees(coverage, "mcpFailuresAndHooks"), totals.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals.hookFailures / totals.hookRuns, evidence);
+function s4(totals2, coverage) {
+  const evidence = { failures: totals2.hookFailures, runs: totals2.hookRuns, unclassifiedBlocks: totals2.hookUnclassified };
+  return countGate(sees(coverage, "mcpFailuresAndHooks"), totals2.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals2.hookFailures / totals2.hookRuns, evidence);
 }
-function e1(totals, coverage, tool) {
-  const { input, cacheRead, cacheWrite } = totals.tokens;
+function e1(totals2, coverage, tool) {
+  const { input, cacheRead, cacheWrite } = totals2.tokens;
   const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }
-function e2(totals, coverage) {
-  const evidence = { errors: totals.nonShellErrors, results: totals.nonShellResults };
-  return countGate(sees(coverage, "toolErrors"), totals.nonShellResults, MIN_TOOL_RESULTS, evidence) ?? scored(totals.nonShellErrors / totals.nonShellResults, evidence);
+function e2(totals2, coverage) {
+  const evidence = { errors: totals2.nonShellErrors, results: totals2.nonShellResults };
+  return countGate(sees(coverage, "toolErrors"), totals2.nonShellResults, MIN_TOOL_RESULTS, evidence) ?? scored(totals2.nonShellErrors / totals2.nonShellResults, evidence);
 }
-function e3(totals, coverage) {
-  const autoCompactions = totals.mainSessions.reduce((sum2, session) => sum2 + session.autoCompactions, 0);
-  const evidence = { autoCompactions, mainSessions: totals.mainSessions.length };
-  return countGate(sees(coverage, "autoCompaction"), totals.mainSessions.length, MIN_MAIN_SESSIONS, evidence) ?? scored(autoCompactions / totals.mainSessions.length, evidence);
+function e3(totals2, coverage) {
+  const autoCompactions = totals2.mainSessions.reduce((sum2, session) => sum2 + session.autoCompactions, 0);
+  const evidence = { autoCompactions, mainSessions: totals2.mainSessions.length };
+  return countGate(sees(coverage, "autoCompaction"), totals2.mainSessions.length, MIN_MAIN_SESSIONS, evidence) ?? scored(autoCompactions / totals2.mainSessions.length, evidence);
 }
-function e4(totals, coverage) {
-  const sample = totals.mainSessions.flatMap((session) => session.instructionTokens === null ? [] : [session.instructionTokens]);
-  const evidence = { sampledSessions: sample.length, skippedSessions: totals.mainSessions.length - sample.length };
+function e4(totals2, coverage) {
+  const sample = totals2.mainSessions.flatMap((session) => session.instructionTokens === null ? [] : [session.instructionTokens]);
+  const evidence = { sampledSessions: sample.length, skippedSessions: totals2.mainSessions.length - sample.length };
   return countGate(sees(coverage, "instructionSize"), sample.length, 1, evidence) ?? scored(median(sample), evidence);
 }
-function e7(totals, coverage) {
-  const evidence = { denied: totals.denied, humanRequests: totals.humanRequests, interruptedTurns: totals.interruptedTurns, lengthStops: totals.lengthStops };
-  const stopped = totals.denied + totals.interruptedTurns + totals.lengthStops;
-  return countGate(sees(coverage, "deniedAndLengthStops", "interruptedTurns"), totals.humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(stopped / totals.humanRequests, evidence);
+function e7(totals2, coverage) {
+  const evidence = { denied: totals2.denied, humanRequests: totals2.humanRequests, interruptedTurns: totals2.interruptedTurns, lengthStops: totals2.lengthStops };
+  const stopped = totals2.denied + totals2.interruptedTurns + totals2.lengthStops;
+  return countGate(sees(coverage, "deniedAndLengthStops", "interruptedTurns"), totals2.humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(stopped / totals2.humanRequests, evidence);
 }
-function f1(totals, coverage) {
+function f1(totals2, coverage) {
   let knownEffort = 0;
   let highEffort = 0;
   let unknownLevel = 0;
   const levels = new Set(EFFORT_LEVELS);
-  for (const [level, count] of Object.entries(totals.efforts)) {
+  for (const [level, count] of Object.entries(totals2.efforts)) {
     if (!levels.has(level)) unknownLevel += count;
     else {
       knownEffort += count;
       if (HIGH_EFFORT.has(level)) highEffort += count;
     }
   }
-  const evidence = { highEffort, knownEffort, unknownEffort: totals.unknownEffort, unknownLevel };
+  const evidence = { highEffort, knownEffort, unknownEffort: totals2.unknownEffort, unknownLevel };
   return countGate(sees(coverage, "effort"), knownEffort, MIN_KNOWN_EFFORT, evidence) ?? scored(highEffort / knownEffort, evidence);
 }
-function f2(totals, coverage) {
-  const compacted = totals.mainSessions.filter((session) => session.autoCompactions > 0);
+function f2(totals2, coverage) {
+  const compacted = totals2.mainSessions.filter((session) => session.autoCompactions > 0);
   const delegatedSessions = compacted.filter((session) => session.subagentCalls > 0).length;
   const evidence = { compactedSessions: compacted.length, delegatedSessions };
   return countGate(sees(coverage, "subagents", "autoCompaction"), compacted.length, MIN_COMPACTED_SESSIONS, evidence) ?? scored(delegatedSessions / compacted.length, evidence);
 }
-function usageRules(totals, coverage, tool) {
+function usageRules(totals2, coverage, tool) {
   return {
-    S4: s4(totals, coverage),
-    E1: e1(totals, coverage, tool),
-    E2: e2(totals, coverage),
-    E3: e3(totals, coverage),
-    E4: e4(totals, coverage),
-    E7: e7(totals, coverage),
-    F1: f1(totals, coverage),
-    F2: f2(totals, coverage)
+    S4: s4(totals2, coverage),
+    E1: e1(totals2, coverage, tool),
+    E2: e2(totals2, coverage),
+    E3: e3(totals2, coverage),
+    E4: e4(totals2, coverage),
+    E7: e7(totals2, coverage),
+    F1: f1(totals2, coverage),
+    F2: f2(totals2, coverage)
   };
 }
 
@@ -743,16 +1060,16 @@ function s3(problems) {
   return scored(problems.length, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: problems.length, unparsable: counts.unparsable });
 }
 function s5(tool) {
-  const { totals } = tool;
+  const { totals: totals2 } = tool;
   const enabledServers = sameInstall(tool.setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
-  const failedSessions = totals.mainSessions.filter((session) => session.mcpConnectionFailure).length;
-  const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
+  const failedSessions = totals2.mainSessions.filter((session) => session.mcpConnectionFailure).length;
+  const evidence = { enabledServers, failedSessions, mainSessions: totals2.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
   const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
   const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
   if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
   if (enabledServers === 0) return placesUnknown ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
-  return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
+  return countGate(true, totals2.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals2.mainSessions.length, evidence);
 }
 function mergedSetupRules(tools2) {
   const safeguards = tools2.map(safeguardOf);
@@ -768,18 +1085,18 @@ function projectLookup(projects, normalizedCwds) {
   const byNormCwd = /* @__PURE__ */ new Map();
   for (const project of projects) for (const cwd of project.cwds) byNormCwd.set(cwd, project);
   const byRawCwd = /* @__PURE__ */ new Map();
-  for (const [raw, normalized] of Object.entries(normalizedCwds)) {
-    const project = byNormCwd.get(normalized);
+  for (const [raw, normalized2] of Object.entries(normalizedCwds)) {
+    const project = byNormCwd.get(normalized2);
     if (project !== void 0) byRawCwd.set(raw, project);
   }
   return (cwd) => cwd === null ? null : byRawCwd.get(cwd) ?? null;
 }
-var byText5 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+var byText6 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function projectUsage(tools2, lookup) {
   const counts = /* @__PURE__ */ new Map();
   let unlinkedSessions = 0;
-  for (const { tool, totals } of tools2) {
-    for (const session of totals.mainSessions) {
+  for (const { tool, totals: totals2 } of tools2) {
+    for (const session of totals2.mainSessions) {
       const project = lookup(session.cwd);
       if (project === null) {
         unlinkedSessions++;
@@ -790,171 +1107,17 @@ function projectUsage(tools2, lookup) {
       entry.byTool.set(tool, (entry.byTool.get(tool) ?? 0) + 1);
     }
   }
-  const projects = [...counts.keys()].sort(byText5).map((normRoot) => {
+  const projects = [...counts.keys()].sort(byText6).map((normRoot) => {
     const { project, byTool } = counts.get(normRoot);
     const sessions = {};
     let total = 0;
-    for (const tool of [...byTool.keys()].sort(byText5)) {
+    for (const tool of [...byTool.keys()].sort(byText6)) {
       sessions[tool] = byTool.get(tool);
       total += byTool.get(tool);
     }
     return { project, sessions, total };
   });
   return { projects, unlinkedSessions };
-}
-
-// src/core/rules.ts
-var RULES_VERSION = "1.0.0";
-var rule = (id, axis, kind, zeroAt, fullAt, weight, unit, tunable = false) => ({ id, axis, kind, zeroAt, fullAt, weight, unit, tunable });
-var RULES = [
-  rule("S1", "setup", "share", 0, 1, 3, "merged"),
-  rule("S2", "setup", "share", 0, 1, 3, "merged"),
-  rule("S3", "setup", "count", 3, 0, 2, "merged"),
-  rule("S4", "setup", "share", 0.1, 0.01, 2, "perTool"),
-  rule("S5", "setup", "share", 0.3, 0.02, 2, "perTool"),
-  rule("E1", "efficiency", "share", 0.5, 0.9, 3, "perTool"),
-  rule("E2", "efficiency", "share", 0.12, 0.02, 3, "perTool"),
-  rule("E3", "efficiency", "rate", 3, 0.2, 3, "perTool"),
-  rule("E4", "efficiency", "amount", 16e3, 4e3, 2, "perTool"),
-  rule("E5", "efficiency", "share", 0.8, 0.2, 2, "perTool", true),
-  rule("E6", "efficiency", "share", 0.7, 0.1, 2, "perTool", true),
-  rule("E7", "efficiency", "rate", 0.15, 0.02, 1, "perTool"),
-  rule("F1", "fit", "share", 0.95, 0.6, 1, "perTool"),
-  rule("F2", "fit", "share", 0.1, 0.6, 1, "perTool"),
-  rule("F3", "fit", "share", 0.2, 0.8, 3, "merged"),
-  rule("F4", "fit", "share", 0.25, 0.02, 2, "merged"),
-  rule("F5", "fit", "rate", 0.4, 0, 2, "perTool"),
-  rule("F6", "fit", "count", 3, 0, 2, "merged"),
-  rule("I1", "intensity", "count", 2, 20, 3, "merged"),
-  rule("I2", "intensity", "rate", 3, 40, 3, "merged"),
-  rule("I3", "intensity", "rate", 1, 8, 2, "merged"),
-  rule("I4", "intensity", "count", 1, 4, 1, "merged")
-];
-function ruleSpec(id) {
-  const found = RULES.find((spec) => spec.id === id);
-  if (found === void 0) throw new Error(`unknown rule: ${id}`);
-  return found;
-}
-
-// src/core/reasons.ts
-var REASONS = ["unsupported", "unreadable", "not_applicable", "incomplete", "no_data", "too_little", "watching"];
-var RESOLVABLE = /* @__PURE__ */ new Set(["unreadable", "incomplete", "no_data", "too_little", "watching"]);
-var rank = (reason) => REASONS.indexOf(reason);
-function ruleReason(toolReasons) {
-  if (toolReasons.length === 0) return "no_data";
-  const resolvable = toolReasons.filter((reason) => RESOLVABLE.has(reason));
-  const pool = resolvable.length > 0 ? resolvable : toolReasons;
-  return pool.reduce((last, reason) => rank(reason) > rank(last) ? reason : last);
-}
-
-// src/core/score.ts
-function settleScore(value) {
-  return Math.round(value * 1e12) / 1e12;
-}
-function ruleScore(value, zeroAt, fullAt) {
-  const position = (value - zeroAt) / (fullAt - zeroAt);
-  return position <= 0 ? 0 : position >= 1 ? 1 : position;
-}
-function roundHalfUp(value) {
-  return Math.floor(Math.round(value * 1e9) / 1e9 + 0.5);
-}
-function gradeOf(aq) {
-  if (aq >= 90) return { grade: "S", tier: 5 };
-  if (aq >= 80) return { grade: "A", tier: 4 };
-  if (aq >= 65) return { grade: "B", tier: 3 };
-  if (aq >= 50) return { grade: "C", tier: 2 };
-  return { grade: "D", tier: 1 };
-}
-
-// src/core/scoreboard.ts
-var isMerged = (id) => RULES.some((spec) => spec.id === id && spec.unit === "merged");
-var MERGED_RULES = RULES.map((spec) => spec.id).filter(isMerged);
-var TOOL_RULES = RULES.map((spec) => spec.id).filter((id) => !isMerged(id));
-var AXES = ["setup", "efficiency", "fit", "intensity"];
-var CATEGORY_ORDER = ["strength", "average", "repair", "unmeasured"];
-var SEVERITY_ORDER = ["critical", "caution", "info"];
-var byText6 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
-function rateMerged(spec, measurement) {
-  if (measurement.status === "unmeasured") return { status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, tools: [] };
-  return { status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, tools: [] };
-}
-function rateTools(spec, id, tools2) {
-  const responses = new Map(tools2.map((tool) => [tool.tool, tool.responses]));
-  const values = tools2.map((tool) => {
-    const measurement = tool.rules[id];
-    const candidates = tool.candidates.filter((candidate) => candidate.rule === id).map((candidate) => candidate.id);
-    if (measurement.status === "unmeasured") return { tool: tool.tool, status: "unmeasured", reason: measurement.reason, value: null, score: null, evidence: measurement.evidence, candidates };
-    return { tool: tool.tool, status: "scored", reason: null, value: measurement.value, score: ruleScore(measurement.value, spec.zeroAt, spec.fullAt), evidence: measurement.evidence, candidates };
-  });
-  const measured2 = values.filter((value) => value.status === "scored");
-  if (measured2.length === 0) return { status: "unmeasured", reason: ruleReason(values.map((value) => value.reason)), value: null, score: null, evidence: {}, tools: values };
-  const weight = measured2.reduce((sum2, value) => sum2 + responses.get(value.tool), 0);
-  const mean = (pick) => measured2.reduce((sum2, value) => sum2 + pick(value) * responses.get(value.tool), 0) / weight;
-  return { status: "scored", reason: null, value: mean((value) => value.value), score: mean((value) => value.score), evidence: {}, tools: values };
-}
-var settled = (score) => score === null ? null : settleScore(score);
-function categoryOf(spec, rated, candidates) {
-  const score = settled(rated.score);
-  const fromUnmeasuredTool = rated.tools.some((tool) => tool.status === "unmeasured" && tool.candidates.length > 0);
-  if (spec.tunable && (fromUnmeasuredTool || score !== null && score < 1 && candidates.length > 0)) return "repair";
-  if (score === null) return "unmeasured";
-  return score >= 0.8 ? "strength" : score >= 0.6 ? "average" : "repair";
-}
-function severityOf(category, rawScore, weight) {
-  const score = settled(rawScore);
-  if (category !== "repair") return null;
-  if (score === null) return "info";
-  if (score < 0.3 && weight === 3) return "critical";
-  return score < 0.6 && weight >= 2 ? "caution" : "info";
-}
-function axisScore(rules) {
-  const measured2 = rules.filter((rule2) => rule2.score !== null);
-  if (measured2.length === 0) return null;
-  const weight = measured2.reduce((sum2, rule2) => sum2 + rule2.weight, 0);
-  return roundHalfUp(measured2.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / weight * 100);
-}
-function compareFindings(a, b, order) {
-  const byTable = order.get(a.ruleId) - order.get(b.ruleId);
-  const byCategory = CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
-  if (byCategory !== 0) return byCategory;
-  if (a.category === "strength") return settleScore(b.weight * b.score) - settleScore(a.weight * a.score) || byTable;
-  if (a.category === "repair") {
-    if (a.gain === null || b.gain === null) return (a.gain === null ? 1 : 0) - (b.gain === null ? 1 : 0) || byTable;
-    return b.gain - a.gain || SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity) || byTable;
-  }
-  return byTable;
-}
-function scoreboard(measured2) {
-  const tools2 = [...measured2.tools].sort((a, b) => byText6(a.tool, b.tool));
-  const rated = new Map(RULES.map((spec) => [spec.id, isMerged(spec.id) ? rateMerged(spec, measured2.merged[spec.id]) : rateTools(spec, spec.id, tools2)]));
-  const scores = new Map(AXES.map((axis) => [axis, axisScore(RULES.filter((spec) => spec.axis === axis).map((spec) => ({ weight: spec.weight, score: rated.get(spec.id).score })))]));
-  const findings = RULES.map((spec) => {
-    const rule2 = rated.get(spec.id);
-    const candidates = rule2.tools.flatMap((tool) => tool.candidates);
-    const category = categoryOf(spec, rule2, candidates);
-    const raised = RULES.filter((other) => other.axis === spec.axis).map((other) => ({ weight: other.weight, score: other.id === spec.id ? 1 : rated.get(other.id).score }));
-    const gain = rule2.score !== null && settleScore(rule2.score) < 1 ? axisScore(raised) - scores.get(spec.axis) : null;
-    return { ruleId: spec.id, axis: spec.axis, kind: spec.kind, weight: spec.weight, status: rule2.status, reason: rule2.reason, value: rule2.value, score: rule2.score, category, severity: severityOf(category, rule2.score, spec.weight), gain, evidence: rule2.evidence, tools: rule2.tools, candidates };
-  });
-  const axes = AXES.map((axis) => {
-    const own = findings.filter((finding) => finding.axis === axis);
-    return { axis, score: scores.get(axis), strengths: own.filter((finding) => finding.category === "strength").length, repairs: own.filter((finding) => finding.category === "repair").length };
-  });
-  const order = new Map(RULES.map((spec, index) => [spec.id, index]));
-  return { axes, findings: findings.sort((a, b) => compareFindings(a, b, order)) };
-}
-var MIN_REQUESTS_FOR_AQ = 20;
-var MIN_DAYS_FOR_AQ = 3;
-function overall(axes, humanRequests, activeDays2) {
-  const measured2 = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
-  const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
-  const withheld = [];
-  if (humanRequests < MIN_REQUESTS_FOR_AQ) withheld.push("too_few_requests");
-  if (activeDays2 < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
-  if (measured2.length === 0) withheld.push("no_axes");
-  if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
-  const aq = roundHalfUp(measured2.reduce((sum2, score) => sum2 + score, 0) / measured2.length);
-  return { aq, ...gradeOf(aq), withheld, missingAxes };
 }
 
 // src/core/totals.ts
@@ -966,7 +1129,7 @@ function toolTotals(summaries, windows, shellTools) {
   const score = new Set(windows.scoreDates);
   const collect = new Set(windows.collectDates);
   const shell = new Set(shellTools);
-  const totals = {
+  const totals2 = {
     responses: 0,
     collectResponses: 0,
     tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0 },
@@ -998,43 +1161,43 @@ function toolTotals(summaries, windows, shellTools) {
     };
     let sessionResponses = 0;
     for (const [date, cell] of Object.entries(summary.days)) {
-      if (collect.has(date)) totals.collectResponses += cell.responses;
+      if (collect.has(date)) totals2.collectResponses += cell.responses;
       if (!score.has(date)) continue;
-      totals.responses += cell.responses;
+      totals2.responses += cell.responses;
       sessionResponses += cell.responses;
       if (cell.responses > 0) active.add(date);
-      totals.tokens.input += cell.tokens.input;
-      totals.tokens.cacheRead += cell.tokens.cacheRead;
-      totals.tokens.cacheWrite += cell.tokens.cacheWrite;
-      totals.tokens.output += cell.tokens.output;
-      totals.tokens.thinking += cell.tokens.thinking;
-      if (summary.kind === "main") totals.humanRequests += cell.humanRequests;
+      totals2.tokens.input += cell.tokens.input;
+      totals2.tokens.cacheRead += cell.tokens.cacheRead;
+      totals2.tokens.cacheWrite += cell.tokens.cacheWrite;
+      totals2.tokens.output += cell.tokens.output;
+      totals2.tokens.thinking += cell.tokens.thinking;
+      if (summary.kind === "main") totals2.humanRequests += cell.humanRequests;
       for (const [name, counts] of Object.entries(cell.tools)) {
-        totals.toolCalls += counts.calls;
-        totals.denied += counts.deniedByUser + counts.deniedByHook + counts.deniedByPermission;
+        totals2.toolCalls += counts.calls;
+        totals2.denied += counts.deniedByUser + counts.deniedByHook + counts.deniedByPermission;
         if (shell.has(name)) continue;
-        totals.nonShellResults += counts.results;
-        totals.nonShellErrors += counts.errors;
+        totals2.nonShellResults += counts.results;
+        totals2.nonShellErrors += counts.errors;
       }
-      totals.interruptedTurns += cell.interruptedTurns;
-      totals.lengthStops += cell.lengthStops;
+      totals2.interruptedTurns += cell.interruptedTurns;
+      totals2.lengthStops += cell.lengthStops;
       for (const [name, count] of Object.entries(cell.efforts)) efforts.set(name, (efforts.get(name) ?? 0) + count);
-      totals.unknownEffort += cell.unknownEffort;
+      totals2.unknownEffort += cell.unknownEffort;
       for (const counts of Object.values(cell.hooks)) {
-        totals.hookRuns += counts.runs;
-        totals.hookFailures += counts.failures;
-        totals.hookUnclassified += counts.unclassifiedBlocks;
+        totals2.hookRuns += counts.runs;
+        totals2.hookFailures += counts.failures;
+        totals2.hookUnclassified += counts.unclassifiedBlocks;
       }
       session.autoCompactions += cell.autoCompactions;
       session.subagentCalls += cell.subagentCalls;
       if (cell.mcpConnectionFailure) session.mcpConnectionFailure = true;
     }
-    if (summary.kind === "main" && sessionResponses > 0) totals.mainSessions.push(session);
+    if (summary.kind === "main" && sessionResponses > 0) totals2.mainSessions.push(session);
   }
-  for (const name of [...efforts.keys()].sort()) totals.efforts[name] = efforts.get(name);
-  totals.activeDates = [...active].sort();
-  totals.mainSessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0) || byContent(a, b));
-  return totals;
+  for (const name of [...efforts.keys()].sort()) totals2.efforts[name] = efforts.get(name);
+  totals2.activeDates = [...active].sort();
+  totals2.mainSessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0) || byContent(a, b));
+  return totals2;
 }
 
 // src/core/evaluate.ts
@@ -1047,8 +1210,8 @@ function evaluate(input) {
   const records = recordMap(input.installs);
   const all = [...input.tools].sort((a, b) => byText7(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
-  const setups = scored2.map(({ input: tool, totals }) => {
-    const common = { totals, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
+  const setups = scored2.map(({ input: tool, totals: totals2 }) => {
+    const common = { totals: totals2, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
     return tool.tool === "codex" ? { ...common, tool: "codex", setup: tool.setup } : { ...common, tool: "claude-code", setup: tool.setup };
   });
   const usage2 = projectUsage(setups, lookup);
@@ -1104,8 +1267,8 @@ var AXIS_NAMES = {
   intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
 };
 var SUMMARY_COPY = {
-  en: { best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
 };
 var REASON_COPY = {
   unsupported: {
@@ -1205,36 +1368,6 @@ var UNJUDGED_COPY = {
     deny: 'Claude Code\uAC00 \uC9C1\uC811 \uAC00\uC838\uC624\uB294 claude.ai \uC5F0\uACB0\uC744 \uB9C9\uC73C\uB824\uBA74 \uC0AC\uC6A9\uC790 \uC124\uC815(~/.claude/settings.json)\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "<\uC774\uB984>" }\uC744 \uB354\uD558\uC138\uC694. \uB370\uC2A4\uD06C\uD1B1 \uC571\uC774 \uC9C1\uC811 \uB118\uAE30\uB294 \uC5F0\uACB0\uC740 \uC774\uB807\uAC8C \uB9C9\uD788\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uADF8\uB7F0 \uC5F0\uACB0\uC740 claude.ai/customize/connectors\uC5D0\uC11C \uB04A\uC73C\uC138\uC694.'
   }
 };
-
-// src/core/copy/format.ts
-var UNCOUNTED = "\u2014";
-function groupDigits(value) {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-function oneDecimal(value) {
-  const tenths = roundHalfUp(value * 10);
-  const whole = groupDigits(Math.floor(tenths / 10));
-  const rest = tenths % 10;
-  return rest === 0 ? whole : `${whole}.${rest}`;
-}
-function formatValue(kind, value) {
-  if (kind === "share") return oneDecimal(value * 100);
-  if (kind === "rate") return oneDecimal(value);
-  return groupDigits(roundHalfUp(value));
-}
-var SLOT = /\{([A-Za-z]+)(?::([^|{}]*)\|([^|{}]*))?\}/g;
-function slots(template) {
-  return [...new Set([...template.matchAll(SLOT)].map((match) => match[1]))];
-}
-function fill(template, values) {
-  return template.replace(SLOT, (_match, name, one, other) => {
-    if (!(name in values)) throw new Error(`no value for {${name}} in "${template}"`);
-    const value = values[name];
-    if (one !== void 0 && other !== void 0) return value === 1 ? one : other;
-    if (value === null) return UNCOUNTED;
-    return typeof value === "number" ? groupDigits(value) : value;
-  });
-}
 
 // src/core/copy/rules-efficiency.ts
 var WATCHING = {
@@ -2122,6 +2255,28 @@ function resultText(score, categories, lang) {
   };
 }
 
+// src/core/copy/next-grade.ts
+var COPY2 = {
+  en: {
+    reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
+    partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
+    // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이다(화면에서 둘이 떨어지지 않게)
+    step: "{name} (\u2192\xA0{aq})",
+    join: ", "
+  },
+  ko: {
+    reaches: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}.",
+    partial: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}. \uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4.",
+    step: "{name}(\u2192\xA0{aq})",
+    join: ", "
+  }
+};
+function nextGradeText(next, nameOf, lang) {
+  const copy2 = COPY2[lang];
+  const steps = next.steps.map((step) => fill(copy2.step, { name: nameOf(step.ruleId), aq: step.aq })).join(copy2.join);
+  return fill(next.reaches ? copy2.reaches : copy2.partial, { need: next.need, grade: next.grade, steps, last: next.steps.at(-1).aq });
+}
+
 // src/core/copy/notices.ts
 var WITHHELD_COPY2 = {
   too_few_requests: { en: "There were fewer than 20 requests from you in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC758 \uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
@@ -2172,6 +2327,7 @@ var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
     record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
     record_partial: "{tool}: only the first part of {files} record {files:file|files} could be read. Only what was read is counted, so the unread share is at least what is shown.",
@@ -2197,6 +2353,7 @@ var LINES = {
   ko: {
     withheld: "AQ\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. {reasons}",
     state_reset: "\uC0C1\uD0DC \uD30C\uC77C\uC774 \uAE68\uC838 \uC0C8\uB85C \uC2DC\uC791\uD588\uC2B5\uB2C8\uB2E4. \uC124\uCE58\uB97C \uC9C0\uCF1C\uBCF8 \uAE30\uB85D\uC774 \uCC98\uC74C\uBD80\uD130 \uB2E4\uC2DC \uC313\uC785\uB2C8\uB2E4.",
+    credentials_in_config: "{tool} \uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694. \uAC12\uC740 \uBCF4\uC5EC \uC8FC\uAC70\uB098 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
     record_skipped: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC774 Node.js\uAC00 zstd \uC555\uCD95\uC744 \uD480\uC9C0 \uBABB\uD574 \uAC74\uB108\uB6F4 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. Node.js 22\uB294 22.15.0 \uC774\uC0C1, 23\uC740 23.8.0 \uC774\uC0C1, 24\uBD80\uD130\uB294 \uBAA8\uB4E0 \uBC84\uC804\uC5D0\uC11C \uC77D\uD799\uB2C8\uB2E4.",
     record_partial: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC55E\uBD80\uBD84\uB9CC \uC77D\uC740 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uBD80\uBD84\uB9CC \uACC4\uC0B0\uD574\uC11C \uC77D\uC9C0 \uBABB\uD55C \uBE44\uC728\uC740 \uC801\uC5B4\uB3C4 \uBCF4\uC774\uB294 \uAC12\uC785\uB2C8\uB2E4.",
@@ -2233,6 +2390,8 @@ function noticeText(notice, lang) {
       return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY2[reason][lang]).join(" ") });
     case "state_reset":
       return lines.state_reset;
+    case "credentials_in_config":
+      return fill(lines.credentials_in_config, { tool, count: notice.places.length });
     case "record_unreadable":
       return fill(lines.record_unreadable, { tool, files: notice.files.length, dirs: notice.dirs.length });
     case "record_skipped":
@@ -2270,6 +2429,46 @@ function noticeText(notice, lang) {
     case "unnamed_files":
       return fill(lines[notice.kind], { tool, count: notice.count });
   }
+}
+
+// src/core/next-grade.ts
+var NEXT_GRADE_STEPS = 5;
+var NEXT = { D: { grade: "C", at: 50 }, C: { grade: "B", at: 65 }, B: { grade: "A", at: 80 }, A: { grade: "S", at: 90 } };
+function totals(rules, fixed2) {
+  const rounded = [];
+  let raw = 0;
+  for (const axis of AXES) {
+    const own = rules.filter((rule2) => rule2.axis === axis).map((rule2) => ({ weight: rule2.weight, score: fixed2.has(rule2.ruleId) ? 1 : rule2.score }));
+    const score = axisScore(own);
+    if (score === null) continue;
+    rounded.push(score);
+    const measured2 = own.filter((rule2) => rule2.score !== null);
+    raw += measured2.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / measured2.reduce((sum2, rule2) => sum2 + rule2.weight, 0) * 100;
+  }
+  return { rounded, raw };
+}
+function nextGrade(rules, score) {
+  if (score.aq === null || score.grade === null || score.grade === "S") return null;
+  const target = NEXT[score.grade];
+  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1);
+  const fixed2 = /* @__PURE__ */ new Set();
+  const steps = [];
+  while (steps.length < NEXT_GRADE_STEPS && (steps.at(-1)?.aq ?? score.aq) < target.at) {
+    let best = null;
+    for (const rule2 of candidates) {
+      if (fixed2.has(rule2.ruleId)) continue;
+      const after = totals(rules, /* @__PURE__ */ new Set([...fixed2, rule2.ruleId]));
+      const rounded = after.rounded.reduce((sum2, value) => sum2 + value, 0);
+      const better = best === null || rounded > best.rounded || rounded === best.rounded && (after.raw > best.raw + 1e-9 || Math.abs(after.raw - best.raw) <= 1e-9 && (rule2.gain ?? -1) > (best.rule.gain ?? -1));
+      if (better) best = { rule: rule2, rounded, raw: after.raw };
+    }
+    if (best === null) break;
+    fixed2.add(best.rule.ruleId);
+    const aq = aqOfAxes(totals(rules, fixed2).rounded);
+    steps.push({ ruleId: best.rule.ruleId, axis: best.rule.axis, aq, grade: gradeOf(aq).grade });
+  }
+  if (steps.length === 0) return null;
+  return { grade: target.grade, need: target.at - score.aq, steps, reaches: steps.at(-1).aq >= target.at };
 }
 
 // src/core/result/coverage.ts
@@ -2396,6 +2595,7 @@ var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
   "state_reset",
+  "credentials_in_config",
   "record_unreadable",
   "record_skipped",
   "record_partial",
@@ -2460,6 +2660,7 @@ function setupNotices(input, evaluation, run2) {
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run2.stateBroken) notices2.push({ kind: "state_reset" });
   for (const tool of input.tools) {
+    if (tool.setup.secrets.length > 0) notices2.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices2.push(...codexSetupNotices(tool.setup, input.projects));
       continue;
@@ -2699,10 +2900,14 @@ function unjudgedServers(input, evaluation) {
   }
   return servers.sort((a, b) => byText10(a.name, b.name) || SCOPE_ORDER3.indexOf(a.scope) - SCOPE_ORDER3.indexOf(b.scope) || byText10(a.projectRoot ?? "", b.projectRoot ?? "") || byText10(a.pluginId ?? "", b.pluginId ?? "") || byText10(a.tool, b.tool));
 }
+function credentialPlaces(input) {
+  const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
+  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key })));
+}
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool) }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding) => {
@@ -2711,6 +2916,8 @@ function checkupResult(source) {
   });
   const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const nameOf = (lang) => (ruleId) => findings.find((finding) => finding.ruleId === ruleId).text[lang].name;
   return {
     schema: RESULT_SCHEMA,
     rulesVersion: evaluation.rulesVersion,
@@ -2729,7 +2936,8 @@ function checkupResult(source) {
     usage: resultUsage(input, evaluation, collected),
     deepHints: deepHints(input),
     notices: notices2.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
-    details
+    details,
+    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) }
   };
 }
 
@@ -2741,6 +2949,8 @@ function summaryNotice(notice) {
     case "score_withheld":
     case "state_reset":
       return { kind: notice.kind, tool, detail: null, count: null };
+    case "credentials_in_config":
+      return { kind: notice.kind, tool, detail: null, count: notice.places.length };
     case "record_unreadable":
       return { kind: notice.kind, tool, detail: null, count: notice.files.length + notice.dirs.length };
     case "record_skipped":
@@ -2784,6 +2994,7 @@ function fixDetail(fix, lang) {
 }
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
+  const secretCount = result.notices.reduce((sum2, notice) => sum2 + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
   const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding) => ({
@@ -2802,6 +3013,7 @@ function checkupSummary(result, reportPath) {
     axes: result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })),
     best: strength === null ? null : { ruleId: strength.ruleId, axis: strength.axis, kind: strength.kind, value: strength.value },
     fixFirst,
+    nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     reportPath,
     lang,
@@ -2812,14 +3024,16 @@ function checkupSummary(result, reportPath) {
       noBest: result.text[lang].noStrengths,
       fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index], lang) })),
       noFixFirst: result.text[lang].noRepairs,
+      nextGrade: result.nextGrade?.text[lang] ?? null,
+      credentials: secretCount === 0 ? null : fill(SUMMARY_COPY[lang].credentials, { count: secretCount }),
       notices: result.notices.map((notice) => notice.text[lang])
     }
   };
 }
 
 // src/report/assets.ts
-import { readFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { readFile as readFile2 } from "node:fs/promises";
+import { basename, dirname, join as join3 } from "node:path";
 var ART_FILES = {
   "scene-1": "scene-1.webp",
   "scene-2": "scene-2.webp",
@@ -2842,12 +3056,12 @@ function stickerFor(repairs) {
 }
 function assetsDirOf(entryFile) {
   if (basename(entryFile) !== "aq.mjs" || basename(dirname(entryFile)) !== "scripts") return null;
-  return join(dirname(dirname(entryFile)), "assets");
+  return join3(dirname(dirname(entryFile)), "assets");
 }
 async function dataUri(dir, name) {
   if (dir === null) return null;
   try {
-    return `data:image/webp;base64,${(await readFile(join(dir, ART_FILES[name]))).toString("base64")}`;
+    return `data:image/webp;base64,${(await readFile2(join3(dir, ART_FILES[name]))).toString("base64")}`;
   } catch {
     return null;
   }
@@ -2906,6 +3120,13 @@ var REPORT_COPY = {
   verdict: { en: "Verdict", ko: "\uC9C4\uB2E8" },
   best: { en: "Best at", ko: "\uAC00\uC7A5 \uC798\uD558\uB294 \uAC83" },
   fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
+  nextGrade: { en: "Next grade", ko: "\uB2E4\uC74C \uB4F1\uAE09\uAE4C\uC9C0" },
+  spotSettings: { en: "Settings", ko: "\uC124\uC815" },
+  spotEnv: { en: "env", ko: "env" },
+  spotHeaders: { en: "header", ko: "\uBA38\uB9AC\uB9D0" },
+  spotField: { en: "field", ko: "\uCE78" },
+  spotArgs: { en: "argument", ko: "\uC778\uC790" },
+  spotUrl: { en: "address", ko: "\uC8FC\uC18C" },
   colGood: { en: "What you do well", ko: "\uC798\uD558\uACE0 \uC788\uB294 \uAC83" },
   colFix: { en: "What to tune up", ko: "\uC815\uBE44\uD560 \uAC83" },
   how: { en: "How it was measured", ko: "\uC5B4\uB5BB\uAC8C \uC7C0\uB098" },
@@ -3425,6 +3646,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
@@ -3518,6 +3740,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
+.notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
+.notices .spots li{display:block;font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
 .ft{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 24px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--ink2)}
 .ft .lock{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
 .ft .lock svg{margin-top:2px}
@@ -3676,9 +3900,10 @@ function hero(view, art, lang) {
       return `${text.title} \xB7 ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
     })
   )}</span></div>`;
-  const fixLine = first === null ? "" : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
+  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
     textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
-  )}</span></div>`;
+  )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
 function columns(view, art, lang) {
@@ -3770,9 +3995,16 @@ function partialBand(view) {
   });
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
+var SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl };
+var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
 function notices(view) {
   if (view.notices.length === 0) return "";
-  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
+  const spots = (notice) => {
+    if (notice.kind !== "credentials_in_config") return "";
+    const places = view.credentialPlaces.filter((place) => place.tool === notice.tool);
+    return places.length === 0 ? "" : `<ul class="spots">${places.map((place) => `<li>${both(textsOf2((l) => spotLabel(place, l)))}</li>`).join("")}</ul>`;
+  };
+  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span>${spots(notice)}</li>`).join("")}</ul></section>`;
 }
 function footer(hasCard) {
   const share2 = hasCard ? `<button type="button" class="share" data-act="card" aria-haspopup="dialog">${both(REPORT_COPY.cardBtn)}</button>` : "<span></span>";
@@ -3862,7 +4094,8 @@ function reportView(result, run2) {
       text: finding.text
     })),
     usage: result.usage,
-    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, text: notice.text })),
+    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
+    credentialPlaces: result.details.credentialPlaces,
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -3874,21 +4107,22 @@ function reportView(result, run2) {
     setupProblems: result.details.setupProblems,
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
+    nextGrade: result.nextGrade?.text ?? null,
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
   };
 }
 
 // src/state/cache.ts
 import { createHash as createHash3 } from "node:crypto";
-import { lstat as lstat2, mkdir, open, readdir as readdir3, readFile as readFile2, realpath as realpath2, rename, writeFile } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { lstat as lstat2, mkdir as mkdir3, open as open2, readdir as readdir3, readFile as readFile3, realpath as realpath2, rename as rename2, writeFile as writeFile2 } from "node:fs/promises";
+import { join as join6 } from "node:path";
 
 // src/adapters/claude/locate.ts
 import { readdir, stat } from "node:fs/promises";
-import { join as join2, resolve } from "node:path";
+import { join as join4, resolve } from "node:path";
 function claudeHome(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? resolve(fromEnv) : join2(homedir2, ".claude");
+  return fromEnv ? resolve(fromEnv) : join4(homedir2, ".claude");
 }
 function normalizePath(path, platform = process.platform) {
   const absolute = resolve(path).replace(/\\/g, "/");
@@ -3896,7 +4130,7 @@ function normalizePath(path, platform = process.platform) {
 }
 var isMissing = (error) => error?.code === "ENOENT";
 async function listClaudeFiles(home, minMtimeMs) {
-  const projects = join2(home, "projects");
+  const projects = join4(home, "projects");
   const files = [];
   const unreadableDirs = [];
   const unreadableFiles = [];
@@ -3922,7 +4156,7 @@ async function listClaudeFiles(home, minMtimeMs) {
   };
   for (const project of projectEntries) {
     if (!project.isDirectory()) continue;
-    const projectDir = join2(projects, project.name);
+    const projectDir = join4(projects, project.name);
     let entries;
     try {
       entries = await readdir(projectDir, { withFileTypes: true });
@@ -3932,11 +4166,11 @@ async function listClaudeFiles(home, minMtimeMs) {
     }
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith(".jsonl")) {
-        await consider(join2(projectDir, entry.name), entry.name.slice(0, -".jsonl".length), "main", null);
+        await consider(join4(projectDir, entry.name), entry.name.slice(0, -".jsonl".length), "main", null);
         continue;
       }
       if (!entry.isDirectory()) continue;
-      const subDir = join2(projectDir, entry.name, "subagents");
+      const subDir = join4(projectDir, entry.name, "subagents");
       let subs;
       try {
         subs = await readdir(subDir, { withFileTypes: true });
@@ -3946,7 +4180,7 @@ async function listClaudeFiles(home, minMtimeMs) {
       }
       for (const sub of subs) {
         if (sub.isFile() && sub.name.endsWith(".jsonl")) {
-          await consider(join2(subDir, sub.name), sub.name.slice(0, -".jsonl".length), "sub", entry.name);
+          await consider(join4(subDir, sub.name), sub.name.slice(0, -".jsonl".length), "sub", entry.name);
         }
       }
     }
@@ -4252,10 +4486,10 @@ function reviveSummary(value) {
 
 // src/state/folder.ts
 import { lstat, readdir as readdir2, realpath, rmdir, unlink } from "node:fs/promises";
-import { basename as basename2, dirname as dirname2, join as join3, relative } from "node:path";
+import { basename as basename2, dirname as dirname2, join as join5, relative } from "node:path";
 var STATE_DIR_NAME = ".chunsik-garage";
 function stateDir(homedir2) {
-  return join3(homedir2, STATE_DIR_NAME);
+  return join5(homedir2, STATE_DIR_NAME);
 }
 var STATE_ENTRIES = [
   { name: "cache", kind: "dir", removedBy: "clean" },
@@ -4263,7 +4497,9 @@ var STATE_ENTRIES = [
   { name: "history.jsonl", kind: "file", removedBy: "all" },
   { name: "state.json", kind: "file", removedBy: "all" },
   { name: "notified", kind: "dir", removedBy: "all" },
-  { name: "tune", kind: "dir", removedBy: "all" }
+  { name: "tune", kind: "dir", removedBy: "all" },
+  // AQ 배지 그림(0.2.0). 가장 최근 것 하나만 둔다
+  { name: "badge.svg", kind: "file", removedBy: "all" }
 ];
 var isMissing2 = (error) => error?.code === "ENOENT";
 async function treeSize(path) {
@@ -4281,7 +4517,7 @@ async function treeSize(path) {
       return;
     }
     if (info.isDirectory()) {
-      for (const name of (await readdir2(current)).sort()) await walk(join3(current, name));
+      for (const name of (await readdir2(current)).sort()) await walk(join5(current, name));
       return;
     }
     total.files++;
@@ -4303,7 +4539,7 @@ async function removeLink(path) {
   }
 }
 async function expectedRealDir(dir) {
-  return normalizePath(join3(await realpath(dirname2(dir)), basename2(dir)));
+  return normalizePath(join5(await realpath(dirname2(dir)), basename2(dir)));
 }
 var outside = (path) => Object.assign(new Error(`outside of the state folder: ${path}`), { code: "EOUTSIDE" });
 async function assertInside(path, boundary, allowEqual) {
@@ -4324,7 +4560,7 @@ async function removeFiles(paths, root, boundary) {
     if (!info.isFile()) continue;
     const parent = dirname2(path);
     await assertInside(parent, boundary, true);
-    if (normalizePath(await realpath(parent)) !== normalizePath(join3(boundary, relative(root, parent)))) {
+    if (normalizePath(await realpath(parent)) !== normalizePath(join5(boundary, relative(root, parent)))) {
       report.linked++;
       continue;
     }
@@ -4351,7 +4587,7 @@ async function removeTree(path, boundary) {
     }
     if (info.isDirectory()) {
       await assertInside(current, boundary, false);
-      for (const name of await readdir2(current)) await walk(join3(current, name));
+      for (const name of await readdir2(current)) await walk(join5(current, name));
       await assertInside(current, boundary, false);
       await rmdir(current);
       return;
@@ -4370,7 +4606,7 @@ var CACHE_FORMAT_VERSION = 1;
 var EDGE_BYTES = 4096;
 var sha256 = (data) => createHash3("sha256").update(data).digest("hex");
 async function cacheKeyFor(file, parser, timeZone) {
-  const handle = await open(file.path, "r");
+  const handle = await open2(file.path, "r");
   try {
     const length = Math.min(EDGE_BYTES, file.size);
     const head = Buffer.alloc(length);
@@ -4408,11 +4644,11 @@ async function keyStillMatches(path, key) {
   return now !== null && sameKey(now, key);
 }
 function entryPath(dir, normPath) {
-  return join4(dir, `${sha256(normPath).slice(0, 32)}.json`);
+  return join6(dir, `${sha256(normPath).slice(0, 32)}.json`);
 }
 async function loadCached(dir, key) {
   try {
-    const entry = JSON.parse(await readFile2(entryPath(dir, key.normPath), "utf8"));
+    const entry = JSON.parse(await readFile3(entryPath(dir, key.normPath), "utf8"));
     if (entry.key === void 0 || typeof entry.bytesRead !== "number" || !Number.isSafeInteger(entry.bytesRead) || entry.bytesRead < 0 || entry.bytesRead > key.size || !sameKey(entry.key, key)) return null;
     const summary = reviveSummary(entry.summary);
     if (summary === null) return null;
@@ -4424,17 +4660,17 @@ async function loadCached(dir, key) {
   }
 }
 async function storeCached(dir, entry) {
-  await mkdir(dir, { recursive: true });
+  await mkdir3(dir, { recursive: true });
   const target = entryPath(dir, entry.key.normPath);
   const temporary = `${target}.${process.pid}.tmp`;
-  await writeFile(temporary, JSON.stringify(entry));
-  await rename(temporary, target);
+  await writeFile2(temporary, JSON.stringify(entry));
+  await rename2(temporary, target);
 }
 var ENTRY_NAME = /^[0-9a-f]{32}\.json$/;
 async function readCacheEntry(path) {
   let text;
   try {
-    text = await readFile2(path, "utf8");
+    text = await readFile3(path, "utf8");
   } catch {
     return { status: "unreadable" };
   }
@@ -4467,7 +4703,7 @@ async function staleCacheEntries(stateDir2) {
   }
   const boundary = await expectedRealDir(stateDir2);
   if (dirInfo.isSymbolicLink() || normalizePath(await realpath2(stateDir2)) !== boundary) return { skipped: "state", boundary: null, paths: [] };
-  const cacheDir = join4(stateDir2, "cache");
+  const cacheDir = join6(stateDir2, "cache");
   let info;
   try {
     info = await lstat2(cacheDir);
@@ -4479,11 +4715,11 @@ async function staleCacheEntries(stateDir2) {
   if (!info.isDirectory()) return { skipped: null, boundary, paths: [] };
   const paths = [];
   for (const tool of (await readdir3(cacheDir)).sort()) {
-    const toolDir = join4(cacheDir, tool);
+    const toolDir = join6(cacheDir, tool);
     if (!(await lstat2(toolDir)).isDirectory()) continue;
     for (const name of (await readdir3(toolDir)).sort()) {
       if (!ENTRY_NAME.test(name)) continue;
-      const path = join4(toolDir, name);
+      const path = join6(toolDir, name);
       if (!(await lstat2(path)).isFile()) continue;
       if (await isStaleCacheEntry(path)) paths.push(path);
     }
@@ -4497,71 +4733,8 @@ async function pruneCache(stateDir2) {
   return { removed: result.removed, skipped: result.linked > 0 ? "cache" : null };
 }
 
-// src/state/history.ts
-import { appendFile, mkdir as mkdir2, open as open2, readFile as readFile3 } from "node:fs/promises";
-import { join as join5 } from "node:path";
-var HISTORY_FILE = "history.jsonl";
-function historyEntry(evaluation, nowMs) {
-  const byAxis = new Map(evaluation.axes.map((axis) => [axis.axis, axis.score]));
-  const axes = Object.fromEntries(AXES.map((axis) => [axis, byAxis.get(axis) ?? null]));
-  return { at: new Date(nowMs).toISOString(), aq: evaluation.score.aq, axes, missingAxes: [...evaluation.score.missingAxes], rulesVersion: evaluation.rulesVersion };
-}
-async function endsMidLine(path) {
-  let handle;
-  try {
-    handle = await open2(path, "r");
-  } catch (error) {
-    if (error.code === "ENOENT") return false;
-    throw error;
-  }
-  try {
-    const { size } = await handle.stat();
-    if (size === 0) return false;
-    const last = Buffer.alloc(1);
-    await handle.read(last, 0, 1, size - 1);
-    return last[0] !== 10;
-  } finally {
-    await handle.close();
-  }
-}
-async function appendHistory(stateDir2, entry) {
-  await mkdir2(stateDir2, { recursive: true });
-  const path = join5(stateDir2, HISTORY_FILE);
-  const prefix = await endsMidLine(path) ? "\n" : "";
-  await appendFile(path, `${prefix}${JSON.stringify(entry)}
-`);
-}
-async function historyCount(stateDir2) {
-  let text;
-  try {
-    text = await readFile3(join5(stateDir2, HISTORY_FILE), "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return 0;
-    throw error;
-  }
-  return text.split("\n").filter((line) => line.trim() !== "").length;
-}
-async function recentAq(stateDir2, limit = 12) {
-  let text;
-  try {
-    text = await readFile3(join5(stateDir2, HISTORY_FILE), "utf8");
-  } catch {
-    return [];
-  }
-  const entries = [];
-  for (const line of text.split("\n")) {
-    if (line.trim() === "") continue;
-    try {
-      const value = JSON.parse(line);
-      if (typeof value.at === "string" && (value.aq === null || typeof value.aq === "number")) entries.push({ at: value.at, aq: value.aq });
-    } catch {
-    }
-  }
-  return entries.slice(-limit);
-}
-
 // src/scan/identity.ts
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 
 // src/state/observations.ts
 function installKey(parts) {
@@ -4610,7 +4783,7 @@ function unseenInUnreadablePlace(facts) {
     return plugin.installRealPath === null || plugin.installRealPath === shown ? [] : [{ shown, real: plugin.installRealPath }];
   });
   const unreadablePluginDirs = unreadableDirs.flatMap((dir) => [dir, ...linkedRoots.filter((root) => inside(dir, root.shown)).map((root) => `${root.real}${dir.slice(root.shown.length)}`)]);
-  const userSkillsDir = normalizePath(join6(facts.home, "skills"));
+  const userSkillsDir = normalizePath(join7(facts.home, "skills"));
   const scanned2 = new Map(facts.projects.filter((project) => project.exists && !project.excluded).map((project) => [project.normRoot, project]));
   const claudeJsonUnread = unread3(facts.claudeJson);
   const pluginsFileUnread = unread3(facts.pluginsFile);
@@ -4631,7 +4804,7 @@ function unseenInUnreadablePlace(facts) {
       if (scope === "user") return unreadableDirs.includes(userSkillsDir);
       if (scope === "project") {
         const project = scanned2.get(projectRoot);
-        return project !== void 0 && unreadableDirs.includes(normalizePath(join6(project.root, ".claude", "skills")));
+        return project !== void 0 && unreadableDirs.includes(normalizePath(join7(project.root, ".claude", "skills")));
       }
       if (scope === "plugin") return pluginsFileUnread || unknownPluginRoots.some((root) => inside(realPath, root)) || unreadablePluginDirs.some((dir) => inside(realPath, dir));
       return false;
@@ -4685,8 +4858,8 @@ function codexUnseenInUnreadablePlace(facts) {
 
 // src/state/state.ts
 import { randomBytes } from "node:crypto";
-import { mkdir as mkdir3, readFile as readFile4, rename as rename2, rm, writeFile as writeFile2 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { mkdir as mkdir4, readFile as readFile4, rename as rename3, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
+import { join as join8 } from "node:path";
 var STATE_SCHEMA = 1;
 var STATE_FILE = "state.json";
 var DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -4731,7 +4904,7 @@ function reviveState(value) {
 async function loadState(dir) {
   let text;
   try {
-    text = await readFile4(join7(dir, STATE_FILE), "utf8");
+    text = await readFile4(join8(dir, STATE_FILE), "utf8");
   } catch (error) {
     const code = error.code;
     if (code === "ENOENT" || code === "ENOTDIR") return { status: "missing" };
@@ -4745,15 +4918,15 @@ async function loadState(dir) {
   }
 }
 async function saveState(dir, state) {
-  await mkdir3(dir, { recursive: true });
-  const target = join7(dir, STATE_FILE);
+  await mkdir4(dir, { recursive: true });
+  const target = join8(dir, STATE_FILE);
   const temporary = `${target}.${process.pid}.tmp`;
   try {
-    await writeFile2(temporary, `${JSON.stringify(state, null, 2)}
+    await writeFile3(temporary, `${JSON.stringify(state, null, 2)}
 `);
-    await rename2(temporary, target);
+    await rename3(temporary, target);
   } catch (error) {
-    await rm(temporary, { force: true }).catch(() => void 0);
+    await rm2(temporary, { force: true }).catch(() => void 0);
     throw error;
   }
 }
@@ -4781,8 +4954,8 @@ function nextState(state, facts, today, startedAt) {
 }
 
 // src/state/reports.ts
-import { lstat as lstat3, mkdir as mkdir4, readdir as readdir4, realpath as realpath3, rename as rename3, rm as rm2, writeFile as writeFile3 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { lstat as lstat3, mkdir as mkdir5, readdir as readdir4, realpath as realpath3, rename as rename4, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join9 } from "node:path";
 var REPORTS_DIR = "reports";
 var KEEP_REPORTS = 20;
 var TEMP_PREFIX = "chunsik-garage-result-";
@@ -4794,10 +4967,10 @@ function resultStamp(nowMs) {
 async function writeText(path, text) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    await writeFile3(temporary, text);
-    await rename3(temporary, path);
+    await writeFile4(temporary, text);
+    await rename4(temporary, path);
   } catch (error) {
-    await rm2(temporary, { force: true }).catch(() => void 0);
+    await rm3(temporary, { force: true }).catch(() => void 0);
     throw error;
   }
 }
@@ -4806,26 +4979,26 @@ async function writeJson(path, value) {
 `);
 }
 async function writeResult(stateDir2, stamp, result) {
-  const reports = join8(stateDir2, REPORTS_DIR);
-  await mkdir4(reports, { recursive: true });
-  const path = join8(reports, `${stamp}.json`);
+  const reports = join9(stateDir2, REPORTS_DIR);
+  await mkdir5(reports, { recursive: true });
+  const path = join9(reports, `${stamp}.json`);
   await writeJson(path, result);
   return path;
 }
 async function writeTempResult(tmpdir2, stamp, result) {
-  const path = join8(tmpdir2, `${TEMP_PREFIX}${stamp}.json`);
+  const path = join9(tmpdir2, `${TEMP_PREFIX}${stamp}.json`);
   await writeJson(path, result);
   return path;
 }
 async function writeReport(stateDir2, stamp, html) {
-  const reports = join8(stateDir2, REPORTS_DIR);
-  await mkdir4(reports, { recursive: true });
-  const path = join8(reports, `${stamp}.html`);
+  const reports = join9(stateDir2, REPORTS_DIR);
+  await mkdir5(reports, { recursive: true });
+  const path = join9(reports, `${stamp}.html`);
   await writeText(path, html);
   return path;
 }
 async function writeTempReport(tmpdir2, stamp, html) {
-  const path = join8(tmpdir2, `${TEMP_REPORT_PREFIX}${stamp}.html`);
+  const path = join9(tmpdir2, `${TEMP_REPORT_PREFIX}${stamp}.html`);
   await writeText(path, html);
   return path;
 }
@@ -4839,7 +5012,7 @@ async function staleReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   }
   const boundary = await expectedRealDir(stateDir2);
   if (dirInfo.isSymbolicLink() || normalizePath(await realpath3(stateDir2)) !== boundary) return { skipped: "state", boundary: null, paths: [] };
-  const reports = join8(stateDir2, REPORTS_DIR);
+  const reports = join9(stateDir2, REPORTS_DIR);
   let info;
   try {
     info = await lstat3(reports);
@@ -4853,12 +5026,12 @@ async function staleReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   for (const name of await readdir4(reports)) {
     const match = STAMPED.exec(name);
     if (match === null) continue;
-    if ((await lstat3(join8(reports, name))).isFile()) files.push({ name, stamp: match[1] });
+    if ((await lstat3(join9(reports, name))).isFile()) files.push({ name, stamp: match[1] });
   }
   const stamps = new Set(files.map((file) => file.stamp));
   const others = [...stamps].filter((stamp) => stamp !== keepStamp).sort().reverse();
   const kept = new Set(keepStamp !== null && stamps.has(keepStamp) ? [keepStamp, ...others.slice(0, Math.max(keep - 1, 0))] : others.slice(0, keep));
-  const paths = files.filter((file) => !kept.has(file.stamp)).map((file) => join8(reports, file.name)).sort();
+  const paths = files.filter((file) => !kept.has(file.stamp)).map((file) => join9(reports, file.name)).sort();
   return { skipped: null, boundary, paths };
 }
 async function pruneReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
@@ -4870,7 +5043,7 @@ async function pruneReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
 
 // src/hook/notify.ts
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 var isMissing3 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -4885,18 +5058,18 @@ function readObject(path) {
 }
 var keysOf = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? Object.keys(value) : [];
 function notifyNames(env, homedir2) {
-  const configDir = env.CLAUDE_CONFIG_DIR || join9(homedir2, ".claude");
+  const configDir = env.CLAUDE_CONFIG_DIR || join10(homedir2, ".claude");
   const names2 = /* @__PURE__ */ new Set();
   let complete = true;
   try {
-    for (const entry of readdirSync(join9(configDir, "skills"), { withFileTypes: true })) if (entry.isDirectory() || entry.isSymbolicLink()) names2.add(`skill:${entry.name}`);
+    for (const entry of readdirSync(join10(configDir, "skills"), { withFileTypes: true })) if (entry.isDirectory() || entry.isSymbolicLink()) names2.add(`skill:${entry.name}`);
   } catch (error) {
     if (!isMissing3(error)) complete = false;
   }
-  const settings = readObject(join9(configDir, "settings.json"));
+  const settings = readObject(join10(configDir, "settings.json"));
   if (settings === void 0) complete = false;
   for (const id of keysOf(settings?.enabledPlugins)) names2.add(`plugin:${id}`);
-  const global = readObject(env.CLAUDE_CONFIG_DIR ? join9(env.CLAUDE_CONFIG_DIR, ".claude.json") : join9(homedir2, ".claude.json"));
+  const global = readObject(env.CLAUDE_CONFIG_DIR ? join10(env.CLAUDE_CONFIG_DIR, ".claude.json") : join10(homedir2, ".claude.json"));
   if (global === void 0) complete = false;
   for (const name of keysOf(global?.mcpServers)) names2.add(`mcp:${name}`);
   return { names: [...names2].sort(), complete };
@@ -4906,7 +5079,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.1.1";
+var PROGRAM_VERSION = "0.2.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {
@@ -6123,7 +6296,7 @@ var CodexSessionParser = class {
 };
 
 // src/collect/claude.ts
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 
 // src/adapters/common/lines.ts
 import { open as open3, stat as stat2 } from "node:fs/promises";
@@ -6221,7 +6394,7 @@ async function collectClaude(options) {
 }
 async function collectFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const cacheDir = options.cacheDir === null ? null : join10(options.cacheDir, "claude-code");
+  const cacheDir = options.cacheDir === null ? null : join11(options.cacheDir, "claude-code");
   const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
   const summaries = [];
   const unreadableFiles = [...list.unreadableFiles];
@@ -6328,20 +6501,20 @@ function overlappingSessions(summaries) {
 }
 
 // src/collect/codex.ts
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 
 // src/adapters/codex/locate.ts
 import { readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { join as join11, resolve as resolve2 } from "node:path";
+import { join as join12, resolve as resolve2 } from "node:path";
 function codexHome(env, homedir2) {
   const fromEnv = env.CODEX_HOME?.trim();
-  return fromEnv ? resolve2(fromEnv) : join11(homedir2, ".codex");
+  return fromEnv ? resolve2(fromEnv) : join12(homedir2, ".codex");
 }
 var isMissing4 = (error) => error?.code === "ENOENT";
 var DIGITS = /^\d+$/;
 var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
 async function listCodexFiles(home, minChangedMs, statFile = stat3) {
-  const sessions = join11(home, "sessions");
+  const sessions = join12(home, "sessions");
   const files = [];
   const unreadableDirs = [];
   let olderThanWindow = 0;
@@ -6356,7 +6529,7 @@ async function listCodexFiles(home, minChangedMs, statFile = stat3) {
       return true;
     }
     for (const entry of entries) {
-      const path = join11(dir, entry.name);
+      const path = join12(dir, entry.name);
       if (depth < 3) {
         if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
         else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
@@ -6671,14 +6844,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure3 = null;
+  let failure4 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure3 ??= "unknown-size";
+      failure4 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure3 ??= "skipped";
+      failure4 ??= "skipped";
       continue;
     }
     try {
@@ -6696,10 +6869,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure3 ??= "failed";
+      failure4 ??= "failed";
     }
   }
-  return failure3 ?? "failed";
+  return failure4 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -6708,7 +6881,7 @@ async function collectCodex(options) {
 async function collectCodexFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const lowerBound = options.rescan ? null : windows.collectStartLowerBoundMs;
-  const cacheDir = options.cacheDir === null ? null : join12(options.cacheDir, "codex");
+  const cacheDir = options.cacheDir === null ? null : join13(options.cacheDir, "codex");
   const zstd = options.zstd ?? zstdAvailable();
   const groups = groupCopies(list.files).map((group) => ({ ...group, copies: [...group.copies] })).sort((a, b) => byPath(a.copies[0], b.copies[0]));
   const inWindow = groups.filter((group) => lowerBound === null || group.copies[0].changedMs === null || group.copies[0].changedMs >= lowerBound);
@@ -6905,10 +7078,10 @@ async function collectCodexFromList(home, list, options) {
 }
 
 // src/scan/claude.ts
-import { basename as basename6, join as join19, relative as relative3 } from "node:path";
+import { basename as basename6, join as join20, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join14, resolve as resolve4 } from "node:path";
+import { join as join15, resolve as resolve4 } from "node:path";
 
 // src/scan/fs.ts
 import { lstat as lstat4, readdir as readdir6, readFile as readFile5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
@@ -6980,7 +7153,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename3, join as join13, resolve as resolve3 } from "node:path";
+import { basename as basename3, join as join14, resolve as resolve3 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -7135,7 +7308,7 @@ function declarationsOf(value) {
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join13(root, name));
+  const info = await entryInfo(join14(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -7157,7 +7330,7 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known = await readJson(join13(claudeHome2, "plugins", "known_marketplaces.json"));
+  const known = await readJson(join14(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known.status === "missing") return { file: "missing", markets };
   if (known.status !== "ok" || !isObject5(known.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known.value)) {
@@ -7166,7 +7339,7 @@ async function readMarketplaceEntries(claudeHome2) {
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join13(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join14(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -7235,7 +7408,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join13(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join14(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -7330,7 +7503,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join13(installPath, "hooks", "hooks.json");
+  const defaultHooks = join14(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -7362,7 +7535,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join13(installPath, ".mcp.json"), false);
+  await addMcpFile(join14(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -7388,7 +7561,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join13(installPath, "skills");
+  const defaultSkills = join14(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -7399,7 +7572,7 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join13(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join14(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
     const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
@@ -7408,7 +7581,7 @@ async function readSkillsDirPlugins(refs) {
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join13(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join14(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -7437,7 +7610,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join14(resolve4(fromEnv), ".claude.json") : join14(homedir2, ".claude.json");
+  return fromEnv ? join15(resolve4(fromEnv), ".claude.json") : join15(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -7495,7 +7668,7 @@ async function readClaudeJson(path) {
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
 import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, join as join15 } from "node:path";
+import { basename as basename4, join as join16 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 function emptyInstructionSet() {
@@ -7529,7 +7702,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join15(current, name);
+      const path = join16(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -7589,15 +7762,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join15(claudeHome2, "rules"));
-  return { paths: [join15(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join16(claudeHome2, "rules"));
+  return { paths: [join16(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join15(root, "CLAUDE.md"), join15(root, ".claude", "CLAUDE.md"), join15(root, "CLAUDE.local.md")];
+  const claudeFiles = [join16(root, "CLAUDE.md"), join16(root, ".claude", "CLAUDE.md"), join16(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join15(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join15(root, "AGENTS.md"), join15(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join16(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join16(root, "AGENTS.md"), join16(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets) {
@@ -7649,6 +7822,140 @@ function projectServerApproved(context, name) {
   return enabled.has(name);
 }
 
+// src/scan/secrets.ts
+var KNOWN = [
+  /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{30,}/,
+  /\bxox[abeprs]-[A-Za-z0-9-]{10,}/,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
+  /\bAIza[0-9A-Za-z_-]{30,}/,
+  /\bglpat-[A-Za-z0-9_-]{20,}/,
+  /\bhf_[A-Za-z0-9]{30,}/,
+  /\bya29\.[A-Za-z0-9_-]{20,}/,
+  /\bntn_[A-Za-z0-9]{30,}/,
+  /\bsecret_[A-Za-z0-9]{30,}/,
+  /\bfigd_[A-Za-z0-9_-]{30,}/,
+  /\blin_api_[A-Za-z0-9]{30,}/,
+  /\b[sr]k_live_[A-Za-z0-9]{20,}/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/
+];
+var SECRET_WORDS = ["token", "secret", "password", "passwd", "apikey", "accesskey", "privatekey", "authorization", "bearer", "credential", "cookie"];
+var NOT_VALUE_ENDINGS = ["envvar", "var", "name", "path", "file", "dir", "url", "uri", "type", "id", "mode", "count", "length", "ttl", "expiry", "expires", "timeout"];
+var PLAIN_FIELDS = /* @__PURE__ */ new Set(["command", "type", "url", "cwd", "transport", "enabled"]);
+var MIN_LENGTH = 8;
+var isObject7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var normalized = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+function secretName(name) {
+  const n = normalized(name);
+  if (NOT_VALUE_ENDINGS.some((ending) => n.endsWith(ending))) return false;
+  return SECRET_WORDS.some((word) => n.includes(word)) || n.endsWith("key");
+}
+var isReference = (value) => /\$\{[^}]*\}/.test(value) || /(?:^|\s)(?:\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)(?=\s|$)/.test(value);
+var safeDecode = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+var isPlaceholder = (value) => /^(<[^>]*>|\[[^\]]*\]|\{[^}]*\}|your[\s_-].*|.*placeholder.*|(.)\2{5,}|change[\s_-]?me|example|test|dummy|none|null|undefined|true|false|todo|tbd)$/i.test(value.trim());
+var isKnown = (value) => KNOWN.some((pattern) => pattern.test(value));
+function literalSecret(value) {
+  const text = value.trim();
+  if (text.length < MIN_LENGTH || isReference(text) || isPlaceholder(text)) return false;
+  if (/^[A-Z][A-Z0-9_]*$/.test(text)) return false;
+  if (/^(\/|~|[A-Za-z]:[\\/]|\.{1,2}[\\/]|https?:\/\/)/.test(text)) return false;
+  return true;
+}
+var secretPair = (name, value) => typeof value === "string" && !isReference(value) && (isKnown(value) || secretName(name) && literalSecret(value));
+function tableSpots(field, table) {
+  if (!isObject7(table)) return [];
+  return Object.entries(table).filter(([name, value]) => secretPair(name, value)).map(([name]) => ({ field, key: name }));
+}
+var HEADER_FLAGS = /* @__PURE__ */ new Set(["--header", "--headers", "-H"]);
+function headerForm(text) {
+  const match = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.+)$/.exec(text);
+  return match === null ? null : { name: match[1], value: match[2].trim() };
+}
+function headerSecret(text) {
+  const header2 = headerForm(text);
+  return header2 !== null && secretName(header2.name) && secretPair(header2.name, header2.value) ? header2.name : null;
+}
+function argSpots(args) {
+  if (!Array.isArray(args)) return [];
+  const spots = [];
+  args.forEach((arg, index) => {
+    if (typeof arg !== "string") return;
+    const flag = /^(--?[A-Za-z][A-Za-z0-9_-]*)=(.*)$/.exec(arg);
+    if (flag !== null) {
+      const header3 = HEADER_FLAGS.has(flag[1]) ? headerSecret(flag[2]) : null;
+      if (header3 !== null) spots.push({ field: "args", key: header3 });
+      else if (secretPair(flag[1], flag[2])) spots.push({ field: "args", key: flag[1] });
+      return;
+    }
+    const header2 = headerSecret(arg);
+    if (header2 !== null) {
+      spots.push({ field: "args", key: header2 });
+      return;
+    }
+    const previous = index > 0 ? args[index - 1] : void 0;
+    if (typeof previous === "string" && /^--?[A-Za-z]/.test(previous) && !previous.includes("=") && !arg.startsWith("-") && secretName(previous) && literalSecret(arg) && !isReference(arg)) {
+      spots.push({ field: "args", key: previous });
+      return;
+    }
+    if (!isReference(arg) && isKnown(arg)) spots.push({ field: "args", key: `#${index + 1}` });
+  });
+  return spots;
+}
+function urlSpots(url) {
+  if (typeof url !== "string") return [];
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [];
+  }
+  const spots = [];
+  if (parsed.username !== "" && isKnown(safeDecode(parsed.username))) spots.push({ field: "url", key: "username" });
+  if (parsed.password !== "" && !isReference(parsed.password) && !isReference(safeDecode(parsed.password))) spots.push({ field: "url", key: "password" });
+  for (const [name, value] of parsed.searchParams) if (secretPair(name, value) || normalized(name) === "key" && literalSecret(value)) spots.push({ field: "url", key: name });
+  return spots;
+}
+function secretSpots(definition) {
+  try {
+    return spotsOf(definition);
+  } catch {
+    return [];
+  }
+}
+function spotsOf(definition) {
+  if (definition === null || !isObject7(definition)) return [];
+  const fields = Object.entries(definition).filter(([name, value]) => !PLAIN_FIELDS.has(name) && typeof value === "string" && secretPair(name, value)).map(([name]) => ({ field: "field", key: name }));
+  const all = [...tableSpots("env", definition.env), ...tableSpots("headers", definition.headers), ...tableSpots("headers", definition.http_headers), ...fields, ...argSpots(definition.args), ...urlSpots(definition.url)];
+  const seen = /* @__PURE__ */ new Set();
+  return all.filter((spot) => {
+    const id = `${spot.field}\0${spot.key}`;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+var SCOPE_ORDER4 = { settings: 0, user: 1, local: 2, project: 3 };
+var FIELD_ORDER = { env: 0, headers: 1, field: 2, args: 3, url: 4 };
+var byText11 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
+function sortSecrets(list) {
+  return [...list].sort((a, b) => SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || byText11(a.projectRoot, b.projectRoot) || byText11(a.server, b.server) || FIELD_ORDER[a.field] - FIELD_ORDER[b.field] || byText11(a.key, b.key));
+}
+function envSecretKeys(env) {
+  try {
+    return tableSpots("env", env).map((spot) => spot.key);
+  } catch {
+    return [];
+  }
+}
+
 // src/scan/names.ts
 function toolForm(name) {
   return name.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -7678,14 +7985,14 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname3, isAbsolute, join as join16, parse, resolve as resolve5 } from "node:path";
+import { dirname as dirname3, isAbsolute, join as join17, parse, resolve as resolve5 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
   const gitDir = isAbsolute(match[1]) ? match[1] : resolve5(dir, match[1]);
-  const common = await readText(join16(gitDir, "commondir"));
+  const common = await readText(join17(gitDir, "commondir"));
   if (common.status !== "ok") return null;
   const commonDir = resolve5(gitDir, common.text.trim());
   return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
@@ -7693,7 +8000,7 @@ async function mainRootFromGitFile(dir, dotGit) {
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join16(dir, ".git");
+    const dotGit = join17(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
@@ -7705,7 +8012,7 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join16(context.homedir, "Desktop"), join16(context.homedir, "Documents"), join16(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join17(context.homedir, "Desktop"), join17(context.homedir, "Documents"), join17(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
@@ -7746,7 +8053,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join17 } from "node:path";
+import { join as join18 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -7848,12 +8155,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join17(dir, "managed-settings.json"));
-  const dropIns = await listDir(join17(dir, "managed-settings.d"));
+  await take(join18(dir, "managed-settings.json"));
+  const dropIns = await listDir(join18(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join17(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join18(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join17(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join18(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -7905,7 +8212,7 @@ function viewOf(value) {
 // src/scan/skills.ts
 import { createHash as createHash5 } from "node:crypto";
 import { lstat as lstat6, readdir as readdir7, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename5, join as join18, relative as relative2 } from "node:path";
+import { basename as basename5, join as join19, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -8048,7 +8355,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       return false;
     }
     for (const name of names2) {
-      const path = join18(current, name);
+      const path = join19(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -8080,7 +8387,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join18(path, "SKILL.md"));
+  const skillMd = await readText(join19(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -8107,13 +8414,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join18(dir, name);
+    const path = join19(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join18(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join19(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -8123,7 +8430,7 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join18(path, "SKILL.md"))).isFile) {
+  if ((await entryInfo(join19(path, "SKILL.md"))).isFile) {
     const single = await readSkillFolder(path, basename5(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
@@ -8201,7 +8508,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join19(home, "settings.json"));
+  const userLayer = await readLayer(join20(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -8224,8 +8531,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join19(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join19(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join20(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join20(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -8240,9 +8547,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active);
-  const userSkillScan = await scanSkillRoot(join19(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join20(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join19(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join20(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -8314,7 +8621,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join19(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join20(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -8392,8 +8699,11 @@ async function scanClaudeSetup(input) {
   const mentionedIds = new Set(Object.keys(managedView.enabledPlugins));
   for (const context of everyContext) for (const layer of context.ordered) for (const id of Object.keys(layer.enabledPlugins)) mentionedIds.add(id);
   const pluginsWithoutInstall = [...mentionedIds].filter((id) => !installedIds.has(id) && !id.endsWith("@builtin")).filter((id) => everyContext.some((context) => pluginEnabledIn(context, id, false))).sort();
+  const userSettings = userLayer.value;
+  const secrets = envSecretKeys(typeof userSettings === "object" && userSettings !== null ? userSettings.env : void 0).map((key) => ({ scope: "settings", server: null, projectRoot: null, field: "env", key }));
   const addServer = (scope, entry, projectRoot, enabled) => {
     const names2 = mcpRecordNames(entry.name, null);
+    for (const spot of secretSpots(entry.definition)) secrets.push({ scope, server: entry.name, projectRoot, ...spot });
     mcpServers.push({
       scope,
       name: entry.name,
@@ -8419,7 +8729,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join19(ref.root, ".mcp.json");
+    const file = join20(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -8514,13 +8824,14 @@ async function scanClaudeSetup(input) {
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
+    secrets: sortSecrets(secrets),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute2, join as join23, relative as relative5, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute2, join as join24, relative as relative5, resolve as resolve8 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -9606,12 +9917,12 @@ function tomlToJson(value) {
 }
 
 // src/scan/codex-instructions.ts
-import { join as join20 } from "node:path";
+import { join as join21 } from "node:path";
 var NAMES = ["AGENTS.override.md", "AGENTS.md"];
 async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
   const unreadable = [];
   for (const name of NAMES) {
-    const path = join20(codexHome2, name);
+    const path = join21(codexHome2, name);
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "unreadable") unreadable.push(path);
@@ -9626,7 +9937,7 @@ async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
 }
 async function readCodexProjectInstructions(root, fallback) {
   for (const name of [...NAMES, ...fallback]) {
-    const path = join20(root, name);
+    const path = join21(root, name);
     if ((await entryInfo(path)).isFile) return (await readInstructionSet([path])).set;
   }
   return emptyInstructionSet();
@@ -9635,7 +9946,7 @@ async function readCodexProjectInstructions(root, fallback) {
 // src/scan/codex-mcp.ts
 var serversOf = (layer) => isTable(layer.mcp_servers) ? layer.mcp_servers : {};
 var cmp3 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
-var SCOPE_ORDER4 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
+var SCOPE_ORDER5 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
 function hashOf(salt, definition) {
   if (!isTable(definition)) return null;
   const copy2 = /* @__PURE__ */ Object.create(null);
@@ -9648,6 +9959,18 @@ function pluginServerOn(context, id, name, declared) {
   const policies = isTable(entry) && isTable(entry.mcp_servers) ? entry.mcp_servers : {};
   const policy = policies[name];
   return isTable(policy) ? policy.enabled !== false && !Object.hasOwn(policy, "ema_auth") : declared.enabled !== false;
+}
+function codexMcpSecrets(user, projects) {
+  const secrets = [];
+  const add = (scope, projectRoot, layer) => {
+    for (const [name, definition] of Object.entries(serversOf(layer))) {
+      if (!isTable(definition)) continue;
+      for (const spot of secretSpots(tomlToJson(definition))) secrets.push({ scope, server: name, projectRoot, ...spot });
+    }
+  };
+  add("user", null, user);
+  for (const project of projects) add("project", project.normRoot, project.layer);
+  return sortSecrets(secrets);
 }
 function codexMcpFacts(input) {
   const facts = [];
@@ -9673,16 +9996,16 @@ function codexMcpFacts(input) {
       facts.push({ ...base, scope: "plugin", name: server.name, recordNames: [server.name], projectRoot: null, pluginId: id, definitionHash: hashOf(input.salt, server.definition), enabled });
     }
   }
-  return facts.sort((a, b) => cmp3(a.name, b.name) || SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || cmp3(a.projectRoot, b.projectRoot) || cmp3(a.pluginId, b.pluginId) || cmp3(a.definitionHash, b.definitionHash));
+  return facts.sort((a, b) => cmp3(a.name, b.name) || SCOPE_ORDER5[a.scope] - SCOPE_ORDER5[b.scope] || cmp3(a.projectRoot, b.projectRoot) || cmp3(a.pluginId, b.pluginId) || cmp3(a.definitionHash, b.definitionHash));
 }
 
 // src/scan/codex-plugins.ts
-import { join as join22, relative as relative4, resolve as resolve6, sep } from "node:path";
+import { join as join23, relative as relative4, resolve as resolve6, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
 import { readFile as readFile7 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname4, join as join21 } from "node:path";
+import { basename as basename7, dirname as dirname4, join as join22 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -9697,7 +10020,7 @@ function codexFrontmatterOk(bytes) {
 }
 async function manifestNamespace(pluginRoot) {
   for (const relative6 of CODEX_MANIFEST_PATHS) {
-    const path = join21(pluginRoot, ...relative6.split("/"));
+    const path = join22(pluginRoot, ...relative6.split("/"));
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status !== "ok") return null;
@@ -9734,7 +10057,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
         break walk;
       }
       entries++;
-      const path = join21(dir, name);
+      const path = join22(dir, name);
       const info = await entryInfo(path);
       if (info.dangling) {
         out.danglingLinks.push(path);
@@ -9772,7 +10095,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
   for (const { dir, viaLink } of found) {
     const folder = await readSkillFolder(dir, basename7(dir));
     if (folder === null) continue;
-    const skillFile = join21(dir, "SKILL.md");
+    const skillFile = join22(dir, "SKILL.md");
     let bytes = null;
     try {
       bytes = await readFile7(skillFile);
@@ -9870,12 +10193,12 @@ async function installRoot(base) {
   const versions = [];
   for (const name of listing.names) {
     if (name === "." || name === ".." || !VERSION_SEGMENT.test(name)) continue;
-    const info = await entryInfo(join22(base, name));
+    const info = await entryInfo(join23(base, name));
     if (info.isDir && !info.isLink) versions.push(name);
   }
   if (versions.length === 0) return { install: "missing", root: null };
   const chosen = versions.includes("local") ? "local" : versions.reduce((best, version) => compareCodexPluginVersions(version, best) > 0 ? version : best);
-  return { install: "ok", root: join22(base, chosen) };
+  return { install: "ok", root: join23(base, chosen) };
 }
 async function findManifest(root) {
   const own = async (path) => {
@@ -9886,7 +10209,7 @@ async function findManifest(root) {
       return error.code === "ENOENT" ? { kind: "none" } : null;
     }
   };
-  const agentPath = join22(root, "plugin.json");
+  const agentPath = join23(root, "plugin.json");
   const agent = await own(agentPath);
   if (agent === null) return { status: "unreadable" };
   if (agent.kind === "dir" || agent.kind === "other") return { status: "missing" };
@@ -9903,11 +10226,11 @@ async function findManifest(root) {
   }
   for (const relativePath of CODEX_MANIFEST_PATHS) {
     const [dir, file] = relativePath.split("/");
-    const parent = await own(join22(root, dir));
+    const parent = await own(join23(root, dir));
     if (parent === null) return { status: "unreadable" };
     if (parent.kind === "none") continue;
     if (parent.kind !== "dir") return { status: "missing" };
-    const path = join22(root, dir, file);
+    const path = join23(root, dir, file);
     const manifest = await own(path);
     if (manifest === null) return { status: "unreadable" };
     if (manifest.kind === "none") continue;
@@ -9944,7 +10267,7 @@ async function readCodexPlugin(codexHome2, id) {
   const out = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
   if (!out.idValid) return out;
   const at = id.lastIndexOf("@");
-  const located = await installRoot(join22(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
+  const located = await installRoot(join23(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
   out.install = located.install;
   out.root = located.root;
   out.compositionKnown = located.install !== "unreadable";
@@ -9984,15 +10307,15 @@ async function readCodexPlugin(codexHome2, id) {
   }
   const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item2) => typeof item2 === "string") ? manifest.skills : [];
   const declared = listed.map((raw) => manifestPath(root, raw)).filter((path) => path !== null);
-  const roots = declared.length > 0 ? declared : (await entryInfo(join22(root, "skills"))).isDir ? [join22(root, "skills")] : [];
-  if ((await entryInfo(join22(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join22(root, ".codex-plugin", "migrated-command-skills"));
+  const roots = declared.length > 0 ? declared : (await entryInfo(join23(root, "skills"))).isDir ? [join23(root, "skills")] : [];
+  if ((await entryInfo(join23(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join23(root, ".codex-plugin", "migrated-command-skills"));
   out.skillRoots = [...new Set(roots)].sort();
   if (isObject5(manifest.mcpServers)) {
     out.mcpServers = serversOf2(manifest.mcpServers);
     return out;
   }
   const declaredFile = manifestPath(root, manifest.mcpServers);
-  const file = declaredFile ?? ((await entryInfo(join22(root, ".mcp.json"))).isFile ? join22(root, ".mcp.json") : null);
+  const file = declaredFile ?? ((await entryInfo(join23(root, ".mcp.json"))).isFile ? join23(root, ".mcp.json") : null);
   if (file === null) return out;
   const text = await readText(file);
   if (text.status === "missing") return out;
@@ -10075,7 +10398,7 @@ var cmp4 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
 var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
-  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join23(homedir2, raw.slice(2)) : raw;
+  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join24(homedir2, raw.slice(2)) : raw;
   const absolute = isAbsolute2(expanded) ? expanded : resolve8(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
@@ -10108,7 +10431,7 @@ function configuredIn(merged, id) {
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
-  const userFile = join23(home, "config.toml");
+  const userFile = join24(home, "config.toml");
   const userRead = await readCodexConfig(userFile);
   const user = userRead.status === "ok" ? userRead.value : {};
   const problems = [];
@@ -10126,11 +10449,11 @@ async function scanCodexSetup(input) {
   const perProject = /* @__PURE__ */ new Map();
   for (const ref of active) {
     const trust = trustOf(user, ref.root, input.platform);
-    if (trust !== "trusted" || await sameAsHome(join23(ref.root, ".codex"))) {
+    if (trust !== "trusted" || await sameAsHome(join24(ref.root, ".codex"))) {
       perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
       continue;
     }
-    const file = join23(ref.root, ".codex", "config.toml");
+    const file = join24(ref.root, ".codex", "config.toml");
     const text = await readText(file);
     const layer = text.status === "ok" ? parseCodexConfig(text.text) : null;
     let status = text.status === "ok" ? layer === null ? "unparsable" : "ok" : text.status;
@@ -10202,13 +10525,13 @@ async function scanCodexSetup(input) {
     }
   };
   const userRoots = [
-    { dir: join23(home, "skills"), place: codexPlace },
-    { dir: join23(input.homedir, ".agents", "skills"), place: homePlace }
+    { dir: join24(home, "skills"), place: codexPlace },
+    { dir: join24(input.homedir, ".agents", "skills"), place: homePlace }
   ].filter((root, index, all) => all.findIndex((other) => normalizePath(other.dir) === normalizePath(root.dir)) === index);
   for (const root of userRoots) addScan(root.dir, await scanCodexSkillRoot(root.dir), root.place, { scope: "user" });
   for (const ref of active) {
-    const dirs = [join23(ref.root, ".agents", "skills")];
-    if (!await sameAsHome(join23(ref.root, ".codex"))) dirs.push(join23(ref.root, ".codex", "skills"));
+    const dirs = [join24(ref.root, ".agents", "skills")];
+    if (!await sameAsHome(join24(ref.root, ".codex"))) dirs.push(join24(ref.root, ".codex", "skills"));
     for (const dir of dirs) addScan(dir, await scanCodexSkillRoot(dir), (path) => projectPlace(ref, path), { scope: "project", projectRoot: ref.normRoot });
   }
   for (const plugin of reads) {
@@ -10260,6 +10583,7 @@ async function scanCodexSetup(input) {
     plugins,
     projects,
     problems: uniqueProblems,
+    secrets: codexMcpSecrets(user, trustedLayers),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
@@ -10463,7 +10787,7 @@ async function runCheckup(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join24(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join25(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -10540,7 +10864,7 @@ async function withLatestNotify(next, stateDir2, env, homedir2) {
 }
 
 // src/commands/deep-hints.ts
-import { join as join25 } from "node:path";
+import { join as join26 } from "node:path";
 
 // src/core/copy/deep-hints.ts
 var DEEP_HINT_COPY = {
@@ -10582,7 +10906,7 @@ async function runDeepHints(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join25(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join26(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -10593,7 +10917,7 @@ async function runDeepHints(options) {
 }
 
 // src/commands/notify.ts
-var COPY = {
+var COPY3 = {
   en: {
     on: "Session start notices are on. When 7 days pass after the last checkup or something new is installed, a Claude Code session shows one line when it starts. Codex has no notices.",
     off: "Session start notices are off.",
@@ -10607,10 +10931,10 @@ var COPY = {
     statusOff: "\uC138\uC158 \uC2DC\uC791 \uC54C\uB9BC\uC774 \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4."
   }
 };
-var failure = (code, message) => Object.assign(new Error(message), { code });
+var failure2 = (code, message) => Object.assign(new Error(message), { code });
 async function runNotify(action, options) {
   const opened = await openState(options.stateDir);
-  if (opened.broken && action !== "status") throw failure("state-broken", "the state file could not be read; run a checkup first");
+  if (opened.broken && action !== "status") throw failure2("state-broken", "the state file could not be read; run a checkup first");
   const { state } = opened;
   if (action === "on") {
     state.notify = { on: true, lang: options.lang, names: nextNames(state.notify?.names ?? null, notifyNames(options.env, options.homedir)) };
@@ -10620,22 +10944,22 @@ async function runNotify(action, options) {
     await saveState(options.stateDir, state);
   }
   const on = state.notify?.on === true;
-  const text = action === "on" ? COPY[options.lang].on : action === "off" ? COPY[options.lang].off : on ? COPY[options.lang].statusOn : COPY[options.lang].statusOff;
+  const text = action === "on" ? COPY3[options.lang].on : action === "off" ? COPY3[options.lang].off : on ? COPY3[options.lang].statusOn : COPY3[options.lang].statusOff;
   return { notify: { on, lang: state.notify?.lang ?? options.lang }, lastCheckupAt: state.lastCheckupAt, run: { text } };
 }
 
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { join as join29 } from "node:path";
+import { join as join30 } from "node:path";
 
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join26 } from "node:path";
+import { dirname as dirname6, join as join27 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
-  return join26(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
+  return join27(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
   const folder = await lstat8(dirname6(path)).then(
@@ -11115,8 +11439,8 @@ function verifyText(result, lang) {
 }
 
 // src/tune/plan.ts
-import { mkdir as mkdir5 } from "node:fs/promises";
-import { join as join27 } from "node:path";
+import { mkdir as mkdir6 } from "node:fs/promises";
+import { join as join28 } from "node:path";
 var TUNE_VERIFIED = { "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } };
 function versionVerified(tool, version) {
   const parsed = parseVersion(version);
@@ -11127,21 +11451,21 @@ function versionVerified(tool, version) {
 function planIdOf(nowMs, random) {
   return `${resultStamp(nowMs)}-${random}`;
 }
-var PLANS_DIR = join27("tune", "plans");
+var PLANS_DIR = join28("tune", "plans");
 async function writePlan(stateDir2, plan) {
-  const dir = join27(stateDir2, PLANS_DIR);
-  await mkdir5(dir, { recursive: true });
-  const path = join27(dir, `${plan.planId}.json`);
+  const dir = join28(stateDir2, PLANS_DIR);
+  await mkdir6(dir, { recursive: true });
+  const path = join28(dir, `${plan.planId}.json`);
   await writeJson(path, plan);
   return path;
 }
 
 // src/tune/work.ts
-import { chmod, mkdir as mkdir6, open as open5, readdir as readdir8, readFile as readFile9, rename as rename4, rm as rm3, unlink as unlink2 } from "node:fs/promises";
-import { join as join28 } from "node:path";
+import { chmod, mkdir as mkdir7, open as open5, readdir as readdir8, readFile as readFile9, rename as rename5, rm as rm4, unlink as unlink2 } from "node:fs/promises";
+import { join as join29 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
-var LOCK_FILE = join28(TUNE_DIR, "lock");
+var LOCK_FILE = join29(TUNE_DIR, "lock");
 async function writeDurable(path, data, mode) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
@@ -11153,15 +11477,15 @@ async function writeDurable(path, data, mode) {
       await handle.close();
     }
     if (mode !== void 0 && process.platform !== "win32") await chmod(temporary, mode);
-    await rename4(temporary, path);
+    await rename5(temporary, path);
   } catch (error) {
-    await rm3(temporary, { force: true }).catch(() => void 0);
+    await rm4(temporary, { force: true }).catch(() => void 0);
     throw error;
   }
 }
-var workPath = (stateDir2, workId) => join28(stateDir2, TUNE_DIR, `${workId}.json`);
+var workPath = (stateDir2, workId) => join29(stateDir2, TUNE_DIR, `${workId}.json`);
 async function saveWork(stateDir2, work) {
-  await mkdir6(join28(stateDir2, TUNE_DIR), { recursive: true });
+  await mkdir7(join29(stateDir2, TUNE_DIR), { recursive: true });
   await writeDurable(workPath(stateDir2, work.workId), `${JSON.stringify(work, null, 2)}
 `);
 }
@@ -11181,7 +11505,7 @@ async function loadWork(stateDir2, workId) {
 async function listWorks(stateDir2) {
   let names2;
   try {
-    names2 = await readdir8(join28(stateDir2, TUNE_DIR));
+    names2 = await readdir8(join29(stateDir2, TUNE_DIR));
   } catch {
     return [];
   }
@@ -11203,8 +11527,8 @@ function isAlive(pid) {
   }
 }
 async function takeLock(stateDir2, alive = isAlive) {
-  const path = join28(stateDir2, LOCK_FILE);
-  await mkdir6(join28(stateDir2, TUNE_DIR), { recursive: true });
+  const path = join29(stateDir2, LOCK_FILE);
+  await mkdir7(join29(stateDir2, TUNE_DIR), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const handle = await open5(path, "wx");
@@ -11267,7 +11591,7 @@ async function judgeTune(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.cache ? join29(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join30(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -11315,7 +11639,7 @@ async function runTunePlan(options) {
 // src/commands/tune-run.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { readFile as readFile10 } from "node:fs/promises";
-import { join as join30 } from "node:path";
+import { join as join31 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
 // src/tune/engine.ts
@@ -11707,10 +12031,10 @@ async function runFiles(work, io, planned) {
 }
 
 // src/commands/tune-run.ts
-var failure2 = (code, message) => Object.assign(new Error(message), { code });
+var failure3 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure2("locked", `another tune run holds the lock: ${join30(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure3("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -11720,7 +12044,7 @@ async function withLock(options, body) {
 async function loadPlan(stateDir2, planId) {
   if (!ID_PATTERN.test(planId)) return null;
   try {
-    const plan = JSON.parse(await readFile10(join30(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
+    const plan = JSON.parse(await readFile10(join31(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
     return plan !== null && plan.planId === planId && Array.isArray(plan.items) && Array.isArray(plan.files) ? plan : null;
   } catch {
     return null;
@@ -11761,9 +12085,9 @@ async function runTuneApply(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const plan = await loadPlan(options.stateDir, options.planId);
-    if (plan === null) throw failure2("plan-not-found", `no saved plan: ${options.planId}`);
+    if (plan === null) throw failure3("plan-not-found", `no saved plan: ${options.planId}`);
     const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure2("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure3("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
     const { items: fresh } = await judgeTune({ ...options, cache: true });
     const work = newWork(options, "apply", plan.planId, null);
     for (const id of options.itemIds) {
@@ -11791,10 +12115,10 @@ async function runTuneUndo(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
-    if (target === null && options.workId === null) throw failure2("nothing-to-undo", "no apply run has changes left to undo");
-    if (target === null || target.kind !== "apply") throw failure2("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null && options.workId === null) throw failure3("nothing-to-undo", "no apply run has changes left to undo");
+    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure2("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure3("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
     const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
     const work = newWork(options, "undo", null, target.workId);
     work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
@@ -11831,7 +12155,7 @@ async function runTuneVerify(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure2("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
     const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
@@ -11875,7 +12199,7 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 
 // src/commands/clean.ts
 import { lstat as lstat9, readdir as readdir9, realpath as realpath7 } from "node:fs/promises";
-import { join as join31 } from "node:path";
+import { join as join32 } from "node:path";
 var isMissing6 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
@@ -11890,13 +12214,13 @@ async function cleanReports(path, boundary) {
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat9(join31(path, name));
+    const info = await lstat9(join32(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join31(path, name);
+    const full = join32(path, name);
     const info = await lstat9(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
@@ -11910,7 +12234,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join31(dir, spec.name);
+  const path = join32(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -11952,18 +12276,18 @@ async function clean(dir, level) {
 }
 
 // src/commands/doctor.ts
-import { mkdir as mkdir7, rm as rm4, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join32 } from "node:path";
+import { mkdir as mkdir8, rm as rm5, writeFile as writeFile5 } from "node:fs/promises";
+import { join as join33 } from "node:path";
 import * as zlib2 from "node:zlib";
 function hasZstd() {
   return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join32(dir, `.write-probe-${process.pid}`);
+  const probe = join33(dir, `.write-probe-${process.pid}`);
   try {
-    await mkdir7(dir, { recursive: true });
-    await writeFile4(probe, "ok");
-    await rm4(probe, { force: true });
+    await mkdir8(dir, { recursive: true });
+    await writeFile5(probe, "ok");
+    await rm5(probe, { force: true });
     return true;
   } catch {
     return false;
@@ -11992,7 +12316,7 @@ async function doctor(input) {
 
 // src/commands/where.ts
 import { lstat as lstat10, readdir as readdir10 } from "node:fs/promises";
-import { join as join33 } from "node:path";
+import { join as join34 } from "node:path";
 var isMissing7 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
@@ -12009,11 +12333,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat10(join33(dir, spec.name));
+        const info = await lstat10(join34(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join33(dir, spec.name));
+          const size = await treeSize(join34(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -12101,6 +12425,18 @@ async function run(command, rest, context) {
   }
   if (command === "clean" && (rest.length === 0 || rest.length === 1 && rest[0] === "--all")) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "badge") {
+    const args2 = checkupArgs(rest, /* @__PURE__ */ new Set());
+    if (args2 === null) return null;
+    printJson(
+      await runBadge({
+        stateDir: stateDir(context.homedir),
+        lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        timeZone: context.clock?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+      })
+    );
     return 0;
   }
   if (command === "notify" && (rest[0] === "on" || rest[0] === "off" || rest[0] === "status")) {

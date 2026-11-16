@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, or to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘").
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, or to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), or to make an AQ badge for a README ("AQ 배지 만들어 줘").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -31,7 +31,7 @@ A program on this PC computes the AQ score. Run it and relay its summary. The pr
 
 ## 3. What to tell the user
 
-Write the result in the language of `summary.lang`, as plain lines, not inside a code block. Use at most six lines. The report page has the details.
+Write the result in the language of `summary.lang`, as plain lines, not inside a code block. Use at most eight lines. The report page has the details.
 
 Speakers: 📋 Chunsam (춘삼이) checks and reports. 🔧 Chunsik (춘식이) talks about fixing. Put the face right after the name.
 
@@ -53,8 +53,10 @@ Lines, in this order. Copy every value you take from the summary and the run rec
    - Without an AQ: `📋 춘삼이 (o_o)  점검 끝! <the summary.text.notices sentence whose summary.notices kind is score_withheld>` or the same with `Chunsam` and `Checkup done!`. Then, indented, `summary.text.diagnosis`.
 3. Best, indented: `가장 잘하는 것  <summary.text.best.title> (<summary.text.best.detail>)` or `Best at  <summary.text.best.title> (<summary.text.best.detail>)`. If `summary.text.best` is null, write `summary.text.noBest` instead, or nothing if that is null too.
 4. Fix first: only the first item of `summary.text.fixFirst`, as `🔧 춘식이 (-_-)9 먼저 고칠 것  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)` or `🔧 Chunsik (-_-)9 Fix first  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)`. If `summary.text.fixFirst` is empty and `summary.text.noFixFirst` is not null, write `📋 춘삼이 (^_^)b <summary.text.noFixFirst>` or `📋 Chunsam (^_^)b <summary.text.noFixFirst>`. If both are empty, skip this line.
-5. Report line, indented, from section 4.
-6. Notice line, indented, from section 4. At most one.
+5. Next grade, indented under Chunsik: `summary.text.nextGrade`. Skip this line if it is null.
+6. Secrets: `🔧 춘식이 (-_-)9 <summary.text.credentials>` or `🔧 Chunsik (-_-)9 <summary.text.credentials>`. Skip this line if it is null.
+7. Report line, indented, from section 4.
+8. Notice line, indented, from section 4. At most one.
 
 ## 4. The report page and notices
 
@@ -170,3 +172,14 @@ This never changes the score. Do it only when the user asks for a deep checkup o
    ```
 
 3. Relay what was removed and what was kept. Never delete files in that folder yourself.
+
+## 9. AQ badge
+
+1. When the user asks for an AQ badge for a README or a profile, run:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" badge --lang <lang>
+   ```
+
+2. The program prints `{"badge": {...}, "run": {...}}`. Relay the `made` and `howTo` sentences in the `text` of `run`, then show `badge.markdown` in a code block so the user can copy it. The badge has only the AQ and the grade of the latest saved checkup that had an AQ.
+3. If the program stops with `{"error": {...}}`, `no-score` means no saved checkup has an AQ yet, so offer a checkup first. `badge-unwritten` means the badge file could not be written, for example in a sandbox, so tell the user it needs permission to write the folder.

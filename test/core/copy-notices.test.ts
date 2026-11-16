@@ -1,13 +1,21 @@
-// 평가 결과의 알림 스물두 종류의 문장을 본다. 두 언어로 만들고, 수와 정해진 값만 넣고 이름과 경로는 넣지 않는다(설계 12.2, 19.1, 20.1)
+// 평가 결과의 알림 스물세 종류의 문장을 본다. 두 언어로 만들고, 수와 정해진 값만 넣고 이름과 경로는 넣지 않는다(설계 12.2, 19.1, 20.1)
 import { describe, expect, it } from "vitest";
 import { noticeText } from "../../src/core/copy/notices.ts";
 import { LANGS } from "../../src/core/copy/lang.ts";
 import { NOTICE_KINDS, type Notice } from "../../src/core/result/notices.ts";
 
-/** 알림 스물두 종류. 경로와 이름에는 secret을 넣어 문장에 새지 않는지 본다 */
+/** 알림 스물세 종류. 경로와 이름에는 secret을 넣어 문장에 새지 않는지 본다 */
 const ALL: Notice[] = [
   { kind: "score_withheld", reasons: ["too_few_requests", "too_few_days"] },
   { kind: "state_reset" },
+  {
+    kind: "credentials_in_config",
+    tool: "claude-code",
+    places: [
+      { scope: "user", server: "secret-server", projectRoot: null, field: "env", key: "SECRET_TOKEN" },
+      { scope: "project", server: "secret-two", projectRoot: "/secret/p", field: "headers", key: "Authorization" },
+    ],
+  },
   { kind: "record_unreadable", tool: "claude-code", files: ["/secret/a.jsonl", "/secret/b.jsonl"], dirs: ["/secret/dir"] },
   { kind: "record_skipped", tool: "codex", files: ["/secret/a.jsonl.zst"] },
   { kind: "record_partial", tool: "codex", files: ["/secret/p.jsonl.zst", "/secret/q.jsonl.zst"] },
@@ -33,7 +41,7 @@ const of = (kind: Notice["kind"]): Notice => ALL.find((notice) => notice.kind ==
 const numbers = (text: string): string[] => (text.match(/\d+(?:\.\d+)*/g) ?? []).sort();
 
 describe("알림의 문장", () => {
-  it("스물두 종류를 모두 담았다", () => {
+  it("스물세 종류를 모두 담았다", () => {
     expect(ALL.map((notice) => notice.kind)).toEqual(NOTICE_KINDS);
   });
 

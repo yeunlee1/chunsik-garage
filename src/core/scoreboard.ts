@@ -134,8 +134,8 @@ function severityOf(category: Category, rawScore: number | null, weight: number)
   return score < 0.6 && weight >= 2 ? "caution" : "info";
 }
 
-/** 정수로 반올림한 기준 점수. 잰 규칙이 없으면 null이다. */
-function axisScore(rules: readonly { weight: number; score: number | null }[]): number | null {
+/** 정수로 반올림한 기준 점수. 잰 규칙이 없으면 null이다. 다음 등급까지 할 일(next-grade.ts)도 이것으로 다시 계산한다 */
+export function axisScore(rules: readonly { weight: number; score: number | null }[]): number | null {
   const measured = rules.filter((rule): rule is { weight: number; score: number } => rule.score !== null);
   if (measured.length === 0) return null;
   const weight = measured.reduce((sum, rule) => sum + rule.weight, 0);
@@ -195,6 +195,11 @@ export interface Overall {
   missingAxes: Axis[];
 }
 
+/** 잰 기준 점수(정수)의 평균을 정수로 반올림한 AQ. 다음 등급까지 할 일도 이것으로 다시 계산한다 */
+export function aqOfAxes(scores: readonly number[]): number {
+  return roundHalfUp(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+}
+
 /** 화면에 보이는 기준 점수(정수)의 평균을 정수로 반올림한다. 사용자가 화면의 숫자로 검산할 수 있다. */
 export function overall(axes: readonly AxisScore[], humanRequests: number, activeDays: number): Overall {
   const measured = axes.flatMap((axis) => (axis.score === null ? [] : [axis.score]));
@@ -204,6 +209,6 @@ export function overall(axes: readonly AxisScore[], humanRequests: number, activ
   if (activeDays < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
   if (measured.length === 0) withheld.push("no_axes");
   if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
-  const aq = roundHalfUp(measured.reduce((sum, score) => sum + score, 0) / measured.length);
+  const aq = aqOfAxes(measured);
   return { aq, ...gradeOf(aq), withheld, missingAxes };
 }

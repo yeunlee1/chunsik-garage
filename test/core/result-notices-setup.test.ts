@@ -11,6 +11,22 @@ const noticesOf = (tool: ClaudeToolInput, run = { stateBroken: false }) => {
   return setupNotices(input, evaluate(input), run);
 };
 
+describe("설정 속 비밀값 알림(0.2.0)", () => {
+  it("도구마다 그대로 적힌 비밀값의 자리를 알리고, 없으면 알리지 않는다", () => {
+    const places = [
+      { scope: "settings" as const, server: null, projectRoot: null, field: "env" as const, key: "ANTHROPIC_API_KEY" },
+      { scope: "user" as const, server: "ctx", projectRoot: null, field: "env" as const, key: "API_TOKEN" },
+    ];
+    const input = evaluationInput([claudeTool({ sessions: enough, setup: { secrets: places } }), codexTool({ sessions: enough, setup: { secrets: [] } })]);
+    const notices = setupNotices(input, evaluate(input), { stateBroken: false }).filter((notice) => notice.kind === "credentials_in_config");
+    expect(notices).toEqual([{ kind: "credentials_in_config", tool: "claude-code", places }]);
+  });
+
+  it("알림 차례에서 상태 파일을 새로 만들었다는 알림 바로 다음이다", () => {
+    expect(NOTICE_KINDS.indexOf("credentials_in_config")).toBe(NOTICE_KINDS.indexOf("state_reset") + 1);
+  });
+});
+
 describe("셋팅 쪽 알림의 Codex 몫(설계 「5단계 4부 계획 전 결정」 5번)", () => {
   const codexNoticesOf = (setup: NonNullable<Parameters<typeof codexTool>[0]>["setup"], projects = [project("/work/a")]) => {
     const input = evaluationInput([claudeTool({ sessions: enough, setup: { projects } }), codexTool({ sessions: enough, setup })]);
@@ -173,6 +189,7 @@ describe("실행 입력 알림과 차례", () => {
     expect(NOTICE_KINDS).toEqual([
       "score_withheld",
       "state_reset",
+      "credentials_in_config",
       "record_unreadable",
       "record_skipped",
       "record_partial",

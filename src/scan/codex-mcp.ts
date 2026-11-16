@@ -1,7 +1,8 @@
 // Codex의 MCP 서버를 맥락마다 합쳐 서버 사실로 낸다. 설정의 서버(사용자 층과 신뢰한 프로젝트 층을 깊이 합친 것)가 플러그인의 서버를 이기고, 플러그인끼리는 ID의 사전순으로 앞선 것이 이기며, 이긴 등록이 꺼져 있으면 그 이름이 꺼진다. 정의는 enabled를 뺀 전부를 지문으로만 남긴다(설계 「5단계 2부 계획 전 결정」 7번)
 import { isTable, tomlToJson, type TomlTable } from "./codex-config.ts";
 import { definitionHash } from "./mcp.ts";
-import type { McpFact } from "./types.ts";
+import { secretSpots, sortSecrets } from "./secrets.ts";
+import type { McpFact, SecretFact } from "./types.ts";
 
 type Json = Record<string, unknown>;
 
@@ -47,6 +48,20 @@ function pluginServerOn(context: CodexMcpContext, id: string, name: string, decl
   const policy = policies[name];
   // 그 묶음에 ema_auth가 있으면 값과 상관없이 서버를 끈다(폐기된 인증 정책이 사라지며 켜지지 않게 한다. 공개 소스 config/src/types.rs의 has_unsupported_ema_auth, 계획 리뷰 1차)
   return isTable(policy) ? policy.enabled !== false && !Object.hasOwn(policy, "ema_auth") : declared.enabled !== false;
+}
+
+/** 사용자 층과 신뢰한 프로젝트 층의 서버 정의에 그대로 적힌 비밀값의 자리(0.2.0). 플러그인 서버는 세지 않고, 값은 여기서 버린다 */
+export function codexMcpSecrets(user: TomlTable, projects: readonly { normRoot: string; layer: TomlTable }[]): SecretFact[] {
+  const secrets: SecretFact[] = [];
+  const add = (scope: "user" | "project", projectRoot: string | null, layer: TomlTable): void => {
+    for (const [name, definition] of Object.entries(serversOf(layer))) {
+      if (!isTable(definition)) continue;
+      for (const spot of secretSpots(tomlToJson(definition) as Json)) secrets.push({ scope, server: name, projectRoot, ...spot });
+    }
+  };
+  add("user", null, user);
+  for (const project of projects) add("project", project.normRoot, project.layer);
+  return sortSecrets(secrets);
 }
 
 export function codexMcpFacts(input: CodexMcpInput): Omit<McpFact, "installKey">[] {

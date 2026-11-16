@@ -182,12 +182,16 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
             return `${text.title} · ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
           }),
         )}</span></div>`;
+  // 다음 등급까지 할 일은 먼저 고칠 것 아래에 한 줄로 둔다. 먼저 고칠 것이 없으면 그 칸에 따로 둔다(0.2.0)
+  const next = scored && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
   const fixLine =
     first === null
-      ? ""
+      ? next === ""
+        ? ""
+        : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>`
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
           textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`),
-        )}</span></div>`;
+        )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
 
@@ -296,9 +300,18 @@ function partialBand(view: ReportView): string {
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
 
+const SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl } as const;
+/** 비밀값의 자리 한 줄. 「서버(프로젝트) · 칸 항목」이고, 설정의 env는 서버 자리에 「설정」이다. 값은 없다(0.2.0) */
+const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+
 function notices(view: ReportView): string {
   if (view.notices.length === 0) return "";
-  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
+  const spots = (notice: ReportView["notices"][number]): string => {
+    if (notice.kind !== "credentials_in_config") return "";
+    const places = view.credentialPlaces.filter((place) => place.tool === notice.tool);
+    return places.length === 0 ? "" : `<ul class="spots">${places.map((place) => `<li>${both(textsOf((l) => spotLabel(place, l)))}</li>`).join("")}</ul>`;
+  };
+  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span>${spots(notice)}</li>`).join("")}</ul></section>`;
 }
 
 /** hasCard는 카드 자료가 있는지다. 카드 단추와 창은 자료가 있을 때만 둔다 */

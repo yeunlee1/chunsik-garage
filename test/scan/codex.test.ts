@@ -111,6 +111,27 @@ afterEach(async () => {
 const scan =(): Promise<CodexSetupFacts> => scanCodexSetup(input);
 const projectFact = (facts: CodexSetupFacts, path: string) => facts.projects.find((p) => p.normRoot === normalizePath(path))!;
 
+describe("scanCodexSetup의 비밀값(0.2.0)", () => {
+  it("사용자 층과 신뢰한 프로젝트 층의 서버 정의에 그대로 적힌 값의 자리만 내고, 플러그인 서버와 신뢰하지 않은 프로젝트는 빼며, 값은 내지 않는다", async () => {
+    // 기본 준비물에는 ctx의 env.API_TOKEN, 꺼 둔 off 주소의 ?key=, 플러그인 서버 pa-srv의 env.SECRET이 있다
+    const facts = await scan();
+    expect(facts.secrets).toEqual([
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" },
+      { scope: "user", server: "off", projectRoot: null, field: "url", key: "key" },
+    ]);
+    await put(join(proj, ".codex", "config.toml"), '[mcp_servers.ctx]\nargs = ["ctx", "--project"]\n[mcp_servers.pjs]\nurl = "https://pjs.example/mcp"\nhttp_headers = { "X-API-Key" = "pjs-header-value-1" }\n');
+    await put(join(other, ".codex", "config.toml"), '[mcp_servers.untrusted]\ncommand = "u"\nenv = { API_TOKEN = "untrusted-value-1" }\n');
+    const again = await scan();
+    expect(again.secrets).toEqual([
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" },
+      { scope: "user", server: "off", projectRoot: null, field: "url", key: "key" },
+      { scope: "project", server: "pjs", projectRoot: normalizePath(proj), field: "headers", key: "X-API-Key" },
+    ]);
+    const text = JSON.stringify(again);
+    for (const value of ["TOKEN-VALUE-123", "QUERY-SECRET", "PLUGIN-SECRET", "pjs-header-value-1", "untrusted-value-1"]) expect(text).not.toContain(value);
+  });
+});
+
 describe("scanCodexSetup", () => {
   it("사용자 설정, 전역 지침, 전역 맥락의 승인과 샌드박스를 낸다", async () => {
     const facts = await scan();

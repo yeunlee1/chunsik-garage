@@ -32,9 +32,33 @@ describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
     const result = baseResult();
     const summary = checkupSummary(result, null);
-    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "notices", "reportPath", "lang", "text"]);
+    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "reportPath", "lang", "text"]);
     expect(summary).toMatchObject({ aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: result.score.withheld, reportPath: null });
     expect(summary.axes).toEqual(result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })));
+  });
+
+  it("다음 등급까지는 결과의 것을 규칙과 숫자로만 싣고, 문장은 결과의 언어 하나다(0.2.0)", () => {
+    const result = baseResult();
+    const next = { grade: "A" as const, need: 3, reaches: true, steps: [{ ruleId: "E3" as const, axis: "efficiency" as const, aq: 81, grade: "A" as const }], text: { en: "3 points to grade A. Fix in this order: x (→ 81).", ko: "A등급까지 3점입니다. 고칠 차례: x(→ 81)." } };
+    const summary = checkupSummary({ ...result, nextGrade: next }, null);
+    expect(summary.nextGrade).toEqual({ grade: "A", need: 3, reaches: true, steps: [{ ruleId: "E3", axis: "efficiency", aq: 81, grade: "A" }] });
+    expect(summary.text.nextGrade).toBe(next.text.en);
+    expect(checkupSummary({ ...result, nextGrade: null }, null)).toMatchObject({ nextGrade: null, text: { nextGrade: null } });
+  });
+
+  it("설정 속 비밀값은 두 도구의 자리 수를 더한 한 문장으로 싣고, 이름은 싣지 않는다. 없으면 null이다(0.2.0)", () => {
+    const place = (server: string) => ({ scope: "user" as const, server, projectRoot: null, field: "env" as const, key: "API_TOKEN" });
+    const notices: Notice[] = [
+      { kind: "credentials_in_config", tool: "claude-code", places: [place("secret-a"), place("secret-b")] },
+      { kind: "credentials_in_config", tool: "codex", places: [place("secret-c")] },
+    ];
+    const withText = notices.map((notice) => ({ ...notice, text: { en: noticeText(notice, "en"), ko: noticeText(notice, "ko") } }));
+    const en = checkupSummary({ ...baseResult(), notices: withText }, null);
+    expect(en.text.credentials).toBe("3 places in your settings have an API key or token written as it is. See where in the report page and move them into environment variables.");
+    const ko = checkupSummary({ ...baseResult(), lang: "ko", notices: withText }, null);
+    expect(ko.text.credentials).toBe("설정 3곳에 API 키나 토큰이 그대로 적혀 있습니다. 결과 화면에서 위치를 보고 환경 변수로 옮기세요.");
+    expect(JSON.stringify(en)).not.toContain("secret-");
+    expect(checkupSummary(baseResult(), null).text.credentials).toBeNull();
   });
 
   it("가장 잘하는 것은 잘하고 있는 것의 첫 항목이고, 없으면 null이다", () => {
@@ -62,10 +86,11 @@ describe("요약", () => {
     ]);
   });
 
-  it("알림 스물두 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {
+  it("알림 스물세 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {
     const notices: Notice[] = [
       { kind: "score_withheld", reasons: ["too_few_days"] },
       { kind: "state_reset" },
+      { kind: "credentials_in_config", tool: "claude-code", places: [{ scope: "user", server: "secret-server", projectRoot: null, field: "env", key: "SECRET_KEY" }, { scope: "local", server: "secret-local", projectRoot: "/secret/p", field: "args", key: "--secret-token" }] },
       { kind: "record_unreadable", tool: "claude-code", files: ["/secret/a.jsonl"], dirs: ["/secret/d"] },
       { kind: "record_skipped", tool: "codex", files: ["/secret/a.jsonl.zst", "/secret/b.jsonl.zst"] },
       { kind: "record_partial", tool: "codex", files: ["/secret/p.jsonl.zst"] },
@@ -92,6 +117,7 @@ describe("요약", () => {
     expect(summary.notices).toEqual([
       { kind: "score_withheld", tool: null, detail: null, count: null },
       { kind: "state_reset", tool: null, detail: null, count: null },
+      { kind: "credentials_in_config", tool: "claude-code", detail: null, count: 2 },
       { kind: "record_unreadable", tool: "claude-code", detail: null, count: 2 },
       { kind: "record_skipped", tool: "codex", detail: null, count: 2 },
       { kind: "record_partial", tool: "codex", detail: null, count: 1 },

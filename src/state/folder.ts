@@ -26,6 +26,8 @@ export const STATE_ENTRIES: readonly StateEntrySpec[] = [
   { name: "state.json", kind: "file", removedBy: "all" },
   { name: "notified", kind: "dir", removedBy: "all" },
   { name: "tune", kind: "dir", removedBy: "all" },
+  // AQ 배지 그림(0.2.0). 가장 최근 것 하나만 둔다
+  { name: "badge.svg", kind: "file", removedBy: "all" },
 ];
 
 export interface TreeSize {

@@ -5,6 +5,7 @@ import { joinValue } from "../copy/findings.ts";
 import { fill } from "../copy/format.ts";
 import type { Lang } from "../copy/lang.ts";
 import type { Axis, RuleId, ValueKind } from "../rules.ts";
+import type { NextGrade } from "../next-grade.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { Grade } from "../score.ts";
 import type { CheckupResult } from "./assemble.ts";
@@ -48,6 +49,10 @@ export interface SummaryText {
   fixFirst: { title: string; detail: string }[];
   /** 먼저 고칠 것이 없을 때의 문장 */
   noFixFirst: string | null;
+  /** 다음 등급까지 할 일의 한 문장(0.2.0). 없으면 null이다 */
+  nextGrade: string | null;
+  /** 설정에 그대로 적힌 비밀값의 자리 수(두 도구를 더한 것)의 한 문장(0.2.0). 없으면 null이다 */
+  credentials: string | null;
   /** 알림의 문장(notices와 같은 차례) */
   notices: string[];
 }
@@ -61,6 +66,8 @@ export interface CheckupSummary {
   /** 가장 잘하는 것(잘하고 있는 것의 첫 항목). 없으면 null */
   best: { ruleId: RuleId; axis: Axis; kind: ValueKind; value: number } | null;
   fixFirst: SummaryFix[];
+  /** 다음 등급까지 할 일(규칙과 숫자만). AQ가 없거나 S등급이면 null이다 */
+  nextGrade: NextGrade | null;
   notices: SummaryNotice[];
   /** 결과 화면의 경로. 결과 화면을 만들지 않았으면 null */
   reportPath: string | null;
@@ -74,6 +81,8 @@ function summaryNotice(notice: Notice): SummaryNotice {
     case "score_withheld":
     case "state_reset":
       return { kind: notice.kind, tool, detail: null, count: null };
+    case "credentials_in_config":
+      return { kind: notice.kind, tool, detail: null, count: notice.places.length };
     case "record_unreadable":
       return { kind: notice.kind, tool, detail: null, count: notice.files.length + notice.dirs.length };
     case "record_skipped":
@@ -120,6 +129,7 @@ export function fixDetail(fix: SummaryFix, lang: Lang): string {
 
 export function checkupSummary(result: CheckupResult, reportPath: string | null): CheckupSummary {
   const lang = result.lang;
+  const secretCount = result.notices.reduce((sum, notice) => sum + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
   // AQ를 내지 않았으면 먼저 고칠 것을 보이지 않는다. 칸은 그대로 두고 비운다. 빈 목록의 문장(noFixFirst)은 결과의 것 그대로라 정비할 것이 실제로 없을 때만 있다(설계 12.3, 「3단계 계획 전 결정」의 6번)
   const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
@@ -139,6 +149,7 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
     axes: result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })),
     best: strength === null ? null : { ruleId: strength.ruleId, axis: strength.axis, kind: strength.kind, value: strength.value! },
     fixFirst,
+    nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     reportPath,
     lang,
@@ -149,6 +160,8 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
       noBest: result.text[lang].noStrengths,
       fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index]!, lang) })),
       noFixFirst: result.text[lang].noRepairs,
+      nextGrade: result.nextGrade?.text[lang] ?? null,
+      credentials: secretCount === 0 ? null : fill(SUMMARY_COPY[lang].credentials, { count: secretCount }),
       notices: result.notices.map((notice) => notice.text[lang]),
     },
   };

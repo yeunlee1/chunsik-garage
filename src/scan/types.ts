@@ -3,6 +3,7 @@ import type { CodexSafetyFact, CodexTrust } from "./codex-settings.ts";
 import type { ShellGuard } from "./hooks.ts";
 import type { InstructionSet } from "./instructions.ts";
 import type { ComponentKind } from "./plugins.ts";
+import type { SecretField } from "./secrets.ts";
 import type { ModeFact } from "./settings.ts";
 
 export type FileStatus = "ok" | "missing" | "unparsable" | "unreadable";
@@ -42,6 +43,20 @@ export interface SkillFact {
   usageUndated: boolean;
   /** 설치의 정체 열쇠(identity.ts의 skillInstallKey). 관측 기록의 열쇠와 같다(설계 11.3 「설치의 정체」, 18.1) */
   installKey: string;
+}
+
+/**
+ * 설정에 그대로 적힌 비밀값의 자리(0.2.0). 값은 담지 않는다.
+ * scope의 settings는 Claude Code 사용자 설정의 env이고, 그 밖은 MCP 서버 정의의 범위다(플러그인 서버는 세지 않는다)
+ */
+export interface SecretFact {
+  scope: "settings" | "user" | "local" | "project";
+  /** 서버 이름. 설정의 env이면 null이다 */
+  server: string | null;
+  projectRoot: string | null;
+  field: SecretField;
+  /** 항목의 이름(환경 변수나 머리말의 이름, 인자의 옵션이나 「#몇 번째」, 주소의 password나 질의 이름) */
+  key: string;
 }
 
 export interface McpFact {
@@ -186,6 +201,8 @@ export interface ClaudeSetupFacts {
   projects: ProjectFact[];
   /** S3의 재료(종류, 주인, 경로 차례) */
   problems: SetupProblem[];
+  /** 설정에 그대로 적힌 비밀값의 자리(0.2.0) */
+  secrets: SecretFact[];
   /** 목록을 읽지 못한 스킬 폴더 */
   unreadableDirs: string[];
   /**
@@ -247,6 +264,8 @@ export interface CodexSetupFacts {
   plugins: CodexPluginFact[];
   projects: CodexProjectFact[];
   problems: SetupProblem[];
+  /** 설정에 그대로 적힌 비밀값의 자리(0.2.0) */
+  secrets: SecretFact[];
   /** 목록을 읽지 못했거나 상한에 닿아 다 보지 못한 스킬 폴더 */
   unreadableDirs: string[];
   unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };

@@ -6,7 +6,7 @@ import type { ResultText } from "../core/copy/grades.ts";
 import type { Lang, Texts } from "../core/copy/lang.ts";
 import { daysBefore } from "../core/installs/age.ts";
 import type { CountedProblem } from "../core/metrics/setup.ts";
-import type { CheckupResult, ResultFinding, UnjudgedServer } from "../core/result/assemble.ts";
+import type { CheckupResult, ResultFinding, SecretPlace, UnjudgedServer } from "../core/result/assemble.ts";
 import type { ResultUsage } from "../core/result/usage.ts";
 import type { AxisScore, Withheld } from "../core/scoreboard.ts";
 
@@ -63,13 +63,17 @@ export interface ReportView {
   findings: ViewFinding[];
   usage: ResultUsage;
   /** 알림의 종류와 문장. AQ를 내지 않았다는 알림은 점수 띠에 따로 보이므로 뺀다 */
-  notices: { kind: string; text: Texts<string> }[];
+  notices: { kind: string; tool: ToolId | null; text: Texts<string> }[];
+  /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 그 도구의 알림 아래에 보인다 */
+  credentialPlaces: SecretPlace[];
   servers: ViewServer[];
   setupProblems: CountedProblem[];
   /** F3에서 지침이 없다고 센 프로젝트의 폴더 이름 */
   missingInstructions: string[];
   /** F4에서 전역 지침과 가장 많이 겹친 프로젝트의 폴더 이름 */
   worstOverlap: string | null;
+  /** 다음 등급까지 할 일의 문장(0.2.0). 없으면 null이다 */
+  nextGrade: Texts<string> | null;
   /** 「일부만 읽었다」 띠를 띄울 도구마다 읽지 못한 비율(낼 수 없으면 null)과 그 비율이 아래 경계인지다(설계 9.8, 20.1) */
   partialReads: { tool: ToolId; share: number | null; lowerBound: boolean }[];
 }
@@ -111,7 +115,8 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
       text: finding.text,
     })),
     usage: result.usage,
-    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, text: notice.text })),
+    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
+    credentialPlaces: result.details.credentialPlaces,
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -123,6 +128,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     setupProblems: result.details.setupProblems,
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
+    nextGrade: result.nextGrade?.text ?? null,
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound })),
   };
 }

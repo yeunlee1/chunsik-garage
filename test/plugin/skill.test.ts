@@ -58,7 +58,7 @@ describe("머리말", () => {
     expect(head.description).toContain("AQ checkup");
     expect(head.description).toContain("AQ 점검해 줘");
     // 알림, 정밀 점검, 파일 위치와 정리도 이 스킬이 맡으니 그 말로도 불려야 한다(0.1.1)
-    for (const words of ["session start notices", "deep checkup", "clean up", "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?"]) expect(head.description).toContain(words);
+    for (const words of ["session start notices", "deep checkup", "clean up", "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ badge", "AQ 배지 만들어 줘"]) expect(head.description).toContain(words);
   });
 
   it("허락 규칙은 실행 파일 명령 하나만 묻지 않고 돌게 한다", () => {
@@ -82,6 +82,7 @@ describe("실행 명령", () => {
       if (sub === "checkup") expect(checkupArgs(args)).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "deep-hints") expect(checkupArgs(args, new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "where") expect(args).toEqual([]);
+      else if (sub === "badge") expect(checkupArgs(args, new Set())).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "clean") expect([[], ["--all"]]).toContainEqual(args);
       else if (sub === "notify") {
         expect(["on", "off", "status"]).toContain(args[0]);
@@ -232,8 +233,10 @@ describe("틀 그대로", () => {
     "   - Without an AQ: `📋 춘삼이 (o_o)  점검 끝! <the summary.text.notices sentence whose summary.notices kind is score_withheld>` or the same with `Chunsam` and `Checkup done!`. Then, indented, `summary.text.diagnosis`.",
     "3. Best, indented: `가장 잘하는 것  <summary.text.best.title> (<summary.text.best.detail>)` or `Best at  <summary.text.best.title> (<summary.text.best.detail>)`. If `summary.text.best` is null, write `summary.text.noBest` instead, or nothing if that is null too.",
     "4. Fix first: only the first item of `summary.text.fixFirst`, as `🔧 춘식이 (-_-)9 먼저 고칠 것  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)` or `🔧 Chunsik (-_-)9 Fix first  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)`. If `summary.text.fixFirst` is empty and `summary.text.noFixFirst` is not null, write `📋 춘삼이 (^_^)b <summary.text.noFixFirst>` or `📋 Chunsam (^_^)b <summary.text.noFixFirst>`. If both are empty, skip this line.",
-    "5. Report line, indented, from section 4.",
-    "6. Notice line, indented, from section 4. At most one.",
+    "5. Next grade, indented under Chunsik: `summary.text.nextGrade`. Skip this line if it is null.",
+    "6. Secrets: `🔧 춘식이 (-_-)9 <summary.text.credentials>` or `🔧 Chunsik (-_-)9 <summary.text.credentials>`. Skip this line if it is null.",
+    "7. Report line, indented, from section 4.",
+    "8. Notice line, indented, from section 4. At most one.",
   ].join("\n");
   const TABLES = [
     "Report line. Use the first row that applies.",
@@ -377,5 +380,16 @@ describe("정비의 되돌리기(0.1.1)", () => {
     // 같은 줄 안에서 조건(작업 ID가 없음)과 할 일(ID 없이 돌림)이 이어져야 한다
     expect(tune).toMatch(/no work ID[^\n]*run the same command without the work ID/);
     expect(tune).toMatch(/`nothing-to-undo` means/);
+  });
+});
+
+describe("AQ 배지(0.2.0)", () => {
+  it("배지 명령을 돌리고, 만든 문장과 붙일 줄을 전하며, 두 오류의 뜻을 안다", () => {
+    const badge = section("## 9. AQ badge");
+    expect(badge).toContain(`${COMMAND} badge --lang <lang>`);
+    expect(badge).toContain("the `made` and `howTo` sentences in the `text` of `run`");
+    expect(badge).toContain("`badge.markdown` in a code block");
+    expect(badge).toMatch(/`no-score` means/);
+    expect(badge).toMatch(/`badge-unwritten` means/);
   });
 });

@@ -2260,13 +2260,14 @@ var COPY2 = {
   en: {
     reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
     partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
-    step: "{name} (\u2192 {aq})",
+    // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이다(화면에서 둘이 떨어지지 않게)
+    step: "{name} (\u2192\xA0{aq})",
     join: ", "
   },
   ko: {
     reaches: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}.",
     partial: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}. \uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4.",
-    step: "{name}(\u2192 {aq})",
+    step: "{name}(\u2192\xA0{aq})",
     join: ", "
   }
 };

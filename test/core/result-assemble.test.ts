@@ -57,7 +57,8 @@ describe("다음 등급까지 할 일(0.2.0)", () => {
     for (const lang of ["en", "ko"] as const) {
       for (const step of expected.steps) {
         const name = result.findings.find((f) => f.ruleId === step.ruleId)!.text[lang].name;
-        expect(text[lang]).toContain(lang === "ko" ? `${name}(→ ${step.aq})` : `${name} (→ ${step.aq})`);
+        // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이라 화면에서 둘이 떨어지지 않는다
+        expect(text[lang]).toContain(lang === "ko" ? `${name}(→ ${step.aq})` : `${name} (→ ${step.aq})`);
       }
       expect(text[lang]).toContain(String(expected.need));
     }

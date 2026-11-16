@@ -11666,7 +11666,7 @@ async function runFiles(work, io, planned) {
       if (block !== null || slot === null) {
         item2.state = "rejected";
         item2.reason = block ?? "parent-shape";
-      } else if (planned !== null && sameSlot(slot, item2.after)) {
+      } else if (sameSlot(slot, item2.after)) {
         item2.state = "not_applied";
         item2.reason = "already-set";
       } else if (planned === null && !sameSlot(slot, item2.before)) {
@@ -11802,7 +11802,7 @@ async function runTuneUndo(options) {
     await saveWork(options.stateDir, work);
     const engine = await runFiles(work, engineIo(options), null);
     for (const item2 of work.items) {
-      if (item2.state !== "written") continue;
+      if (item2.state !== "written" && item2.reason !== "already-set") continue;
       const original = target.items.find((x) => x.id === item2.id);
       original.state = "undone";
     }

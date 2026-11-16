@@ -151,9 +151,9 @@ export async function runTuneUndo(options: TuneRunOptions & { workId: string | n
     work.files = filesOf(work.items);
     await saveWork(options.stateDir, work);
     const engine = await runFiles(work, engineIo(options), null);
-    // 되돌린 항목은 적용의 기록에도 되돌림으로 적는다
+    // 되돌린 항목은 적용의 기록에도 되돌림으로 적는다. 이미 원래 값이던 항목도 그 적용은 더 남아 있지 않으므로 같게 적어, 번호 없는 되돌리기가 그 앞 정비로 가게 한다(0.1.1)
     for (const item of work.items) {
-      if (item.state !== "written") continue;
+      if (item.state !== "written" && item.reason !== "already-set") continue;
       const original = target.items.find((x) => x.id === item.id)!;
       original.state = "undone";
     }

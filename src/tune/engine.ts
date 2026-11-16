@@ -93,7 +93,8 @@ export async function runFiles(work: TuneWork, io: EngineIo, planned: ReadonlyMa
       if (block !== null || slot === null) {
         item.state = "rejected";
         item.reason = block ?? "parent-shape";
-      } else if (planned !== null && sameSlot(slot, item.after)) {
+      } else if (sameSlot(slot, item.after)) {
+        // 이미 바꿀 값이면 쓰지 않는다. 되돌리기에서는 사용자가 직접 원래 값으로 돌려놓은 경우다(0.1.1)
         item.state = "not_applied";
         item.reason = "already-set";
       } else if (planned === null && !sameSlot(slot, item.before)) {

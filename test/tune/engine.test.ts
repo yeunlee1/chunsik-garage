@@ -144,4 +144,13 @@ describe("되돌리기(16.6)", () => {
     expect([changed.items[0]!.state, changed.items[0]!.reason]).toEqual(["not_applied", "changed-since-apply"]);
     expect(await readFile(settings, "utf8")).toBe(SETTINGS);
   });
+
+  it("지금 값이 이미 원래 값이면 쓰지 않고 이미 그 값으로 적는다(사용자가 직접 되돌린 경우, 0.1.1)", async () => {
+    const original = '{\n  "skillOverrides": {}\n}\n';
+    await put(settings, original);
+    const undo = workOf([skillItem(settings, { before: { present: true, value: "off" }, after: { present: false } })], "undo");
+    await runFiles(undo, io(), null);
+    expect([undo.items[0]!.state, undo.items[0]!.reason]).toEqual(["not_applied", "already-set"]);
+    expect(await readFile(settings, "utf8")).toBe(original);
+  });
 });

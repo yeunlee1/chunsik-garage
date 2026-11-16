@@ -75,6 +75,58 @@ describe("계획부터 되돌리기까지", () => {
     expect((await loadWork(stateDir, applied.work.workId))!.items[0]!.state).toBe("undone");
   });
 
+  it("작업 ID 없이 되돌리면 아직 되돌릴 것이 남은 가장 최근 적용을 되돌리고, 남은 것이 없으면 오류로 끝낸다(0.1.1)", async () => {
+    const planId = await planned();
+    const applied = await runTuneApply({ ...run(), planId, itemIds: [ITEM] });
+    // 같은 항목을 바꾼 더 이른 적용과, 더 늦은 되돌림 기록을 둔다. 되돌림 기록은 고르지 않는다
+    const older = { ...structuredClone(applied.work), workId: "2026-11-12T02-00-00-000Z-aaaaaa", createdAt: "2026-11-12T02:00:00.000Z" };
+    const later = { ...structuredClone(applied.work), workId: "2026-11-12T04-00-00-000Z-bbbbbb", createdAt: "2026-11-12T04:00:00.000Z", kind: "undo" as const, planId: null, of: older.workId };
+    await saveWork(stateDir, older);
+    await saveWork(stateDir, later);
+    expect((await loadWork(stateDir, older.workId))?.kind).toBe("apply");
+    expect((await loadWork(stateDir, later.workId))?.kind).toBe("undo");
+
+    const first = await runTuneUndo({ ...run({ random: () => "000002" }), workId: null, itemIds: [] });
+    expect(first.work.of).toBe(applied.work.workId);
+    expect(first.run.text.items[ITEM]).toBe("되돌렸습니다.");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": []\n}\n');
+    expect((await loadWork(stateDir, applied.work.workId))!.items[0]!.state).toBe("undone");
+
+    // 가장 최근 적용을 다 되돌렸으니 그 앞의 적용을 고른다. 이미 원래 값이라 쓰지 않고, 그 적용도 되돌림으로 적는다
+    const second = await runTuneUndo({ ...run({ random: () => "000003" }), workId: null, itemIds: [] });
+    expect(second.work.of).toBe(older.workId);
+    expect([second.work.items[0]!.state, second.work.items[0]!.reason]).toEqual(["not_applied", "already-set"]);
+    expect(second.run.text.items[ITEM]).toBe("이미 그 값이라 바꾸지 않았습니다.");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": []\n}\n');
+    expect((await loadWork(stateDir, older.workId))!.items[0]!.state).toBe("undone");
+
+    await expect(runTuneUndo({ ...run({ random: () => "000004" }), workId: null, itemIds: [] })).rejects.toMatchObject({ code: "nothing-to-undo" });
+  });
+
+  it("최근 정비를 사용자가 직접 되돌려 놓았으면 그 정비를 되돌림으로 적고, 다음 번호 없는 되돌리기는 그 앞 정비를 되돌린다(0.1.1 짝 검토)", async () => {
+    const planId = await planned();
+    const recent = await runTuneApply({ ...run(), planId, itemIds: [ITEM] });
+    // 더 이른 정비가 다른 서버를 꺼 두었다. 기록의 이름을 그 서버로 바꿔 둔다
+    const other = ITEM.replace("idle-db", "other-db");
+    const older = { ...JSON.parse(JSON.stringify(recent.work).replaceAll("idle-db", "other-db")), workId: "2026-11-12T02-00-00-000Z-aaaaaa", createdAt: "2026-11-12T02:00:00.000Z" };
+    await saveWork(stateDir, older);
+    expect((await loadWork(stateDir, older.workId))?.items.map((item) => item.id)).toEqual([other]);
+    // 사용자가 최근 정비의 서버만 직접 다시 켰다. 더 이른 정비의 서버는 아직 꺼져 있다
+    await writeFile(settings, '{\n  "permissions": {},\n  "deniedMcpServers": [\n    { "serverName": "other-db" }\n  ]\n}\n');
+
+    const first = await runTuneUndo({ ...run({ random: () => "000002" }), workId: null, itemIds: [] });
+    expect(first.work.of).toBe(recent.work.workId);
+    expect(first.run.text.items[ITEM]).toBe("이미 그 값이라 바꾸지 않았습니다.");
+    expect((await loadWork(stateDir, recent.work.workId))!.items[0]!.state).toBe("undone");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": [\n    { "serverName": "other-db" }\n  ]\n}\n');
+
+    const second = await runTuneUndo({ ...run({ random: () => "000003" }), workId: null, itemIds: [] });
+    expect(second.work.of).toBe(older.workId);
+    expect(second.run.text.items[other]).toBe("되돌렸습니다.");
+    expect(await readFile(settings, "utf8")).toBe('{\n  "permissions": {},\n  "deniedMcpServers": []\n}\n');
+    await expect(runTuneUndo({ ...run({ random: () => "000004" }), workId: null, itemIds: [] })).rejects.toMatchObject({ code: "nothing-to-undo" });
+  });
+
   it("계획 뒤 설정 파일이 바뀌었으면 바꾸지 않고 다시 계획하라고 알린다", async () => {
     const planId = await planned();
     await writeFile(settings, '{\n  "permissions": {"allow": []}\n}\n');

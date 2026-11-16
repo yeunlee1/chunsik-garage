@@ -68,9 +68,10 @@ const printJson = (value: unknown): void => {
 
 /**
  * aq tune apply·undo·verify의 인자. --lang <언어>와 --rescan 말고는 위치 인자다. 첫 위치 인자는 계획이나 작업 ID의 꼴이어야 하고, 항목 ID는 겹치지 않아야 한다.
- * apply는 항목이 하나 이상, verify는 항목이 없어야 한다. 아니면 null이다(「6단계 2부 계획 전 결정」 10번)
+ * apply는 항목이 하나 이상, verify는 항목이 없어야 한다. 아니면 null이다(「6단계 2부 계획 전 결정」 10번).
+ * undo만 위치 인자를 다 빼도 되고, 그때 id는 null이다(작업 번호를 모르는 새 세션의 되돌리기, 0.1.1)
  */
-export function tuneRunArgs(command: "apply" | "undo" | "verify", rest: readonly string[]): { lang: string | null; rescan: boolean; id: string; items: string[] } | null {
+export function tuneRunArgs(command: "apply" | "undo" | "verify", rest: readonly string[]): { lang: string | null; rescan: boolean; id: string | null; items: string[] } | null {
   let lang: string | null = null;
   let rescan = false;
   const positional: string[] = [];
@@ -86,7 +87,8 @@ export function tuneRunArgs(command: "apply" | "undo" | "verify", rest: readonly
     else positional.push(arg);
   }
   const [id, ...items] = positional;
-  if (id === undefined || !ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
+  if (id === undefined) return command === "undo" ? { lang, rescan, id: null, items: [] } : null;
+  if (!ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
   if ((command === "apply" && items.length === 0) || (command === "verify" && items.length > 0)) return null;
   return { lang, rescan, id, items };
 }
@@ -177,8 +179,10 @@ async function run(command: string | undefined, rest: string[], context: CliCont
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...(context.managedDir === undefined ? {} : { managedDir: context.managedDir }),
     };
-    if (which === "apply") printJson(await runTuneApply({ ...options, planId: args.id, itemIds: args.items }));
-    else if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args.id, itemIds: args.items }));
+    if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args.id, itemIds: args.items }));
+    // apply와 verify는 tuneRunArgs가 ID 없이는 null을 돌려주므로 여기서 id는 늘 있다
+    else if (args.id === null) return null;
+    else if (which === "apply") printJson(await runTuneApply({ ...options, planId: args.id, itemIds: args.items }));
     else printJson(await runTuneVerify({ ...options, workId: args.id }));
     return 0;
   }

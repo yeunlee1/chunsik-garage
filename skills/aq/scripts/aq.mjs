@@ -4906,7 +4906,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.1.0";
+var PROGRAM_VERSION = "0.1.1";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {
@@ -11666,7 +11666,7 @@ async function runFiles(work, io, planned) {
       if (block !== null || slot === null) {
         item2.state = "rejected";
         item2.reason = block ?? "parent-shape";
-      } else if (planned !== null && sameSlot(slot, item2.after)) {
+      } else if (sameSlot(slot, item2.after)) {
         item2.state = "not_applied";
         item2.reason = "already-set";
       } else if (planned === null && !sameSlot(slot, item2.before)) {
@@ -11783,11 +11783,15 @@ async function runTuneApply(options) {
     return outcomeOf(options, started, work, noticesOf(work, engine, reconciled));
   });
 }
+async function latestUndoable(stateDir2) {
+  return (await listWorks(stateDir2)).filter((work) => work.kind === "apply" && work.items.some(isUndoable)).at(-1) ?? null;
+}
 async function runTuneUndo(options) {
   const started = (options.now ?? Date.now)();
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
-    const target = await loadWork(options.stateDir, options.workId);
+    const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
+    if (target === null && options.workId === null) throw failure2("nothing-to-undo", "no apply run has changes left to undo");
     if (target === null || target.kind !== "apply") throw failure2("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
     if (unknown.length > 0) throw failure2("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
@@ -11798,7 +11802,7 @@ async function runTuneUndo(options) {
     await saveWork(options.stateDir, work);
     const engine = await runFiles(work, engineIo(options), null);
     for (const item2 of work.items) {
-      if (item2.state !== "written") continue;
+      if (item2.state !== "written" && item2.reason !== "already-set") continue;
       const original = target.items.find((x) => x.id === item2.id);
       original.state = "undone";
     }
@@ -12073,7 +12077,8 @@ function tuneRunArgs(command, rest) {
     else positional.push(arg);
   }
   const [id, ...items] = positional;
-  if (id === void 0 || !ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
+  if (id === void 0) return command === "undo" ? { lang, rescan, id: null, items: [] } : null;
+  if (!ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
   if (command === "apply" && items.length === 0 || command === "verify" && items.length > 0) return null;
   return { lang, rescan, id, items };
 }
@@ -12160,8 +12165,9 @@ async function run(command, rest, context) {
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
     };
-    if (which === "apply") printJson(await runTuneApply({ ...options, planId: args2.id, itemIds: args2.items }));
-    else if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args2.id, itemIds: args2.items }));
+    if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args2.id, itemIds: args2.items }));
+    else if (args2.id === null) return null;
+    else if (which === "apply") printJson(await runTuneApply({ ...options, planId: args2.id, itemIds: args2.items }));
     else printJson(await runTuneVerify({ ...options, workId: args2.id }));
     return 0;
   }

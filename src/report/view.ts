@@ -70,6 +70,8 @@ export interface ReportView {
   missingInstructions: string[];
   /** F4에서 전역 지침과 가장 많이 겹친 프로젝트의 폴더 이름 */
   worstOverlap: string | null;
+  /** 다음 등급까지 할 일의 문장(0.2.0). 없으면 null이다 */
+  nextGrade: Texts<string> | null;
   /** 「일부만 읽었다」 띠를 띄울 도구마다 읽지 못한 비율(낼 수 없으면 null)과 그 비율이 아래 경계인지다(설계 9.8, 20.1) */
   partialReads: { tool: ToolId; share: number | null; lowerBound: boolean }[];
 }
@@ -123,6 +125,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     setupProblems: result.details.setupProblems,
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
+    nextGrade: result.nextGrade?.text ?? null,
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound })),
   };
 }

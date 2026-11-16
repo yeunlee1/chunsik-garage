@@ -4,11 +4,13 @@ import type { Coverage, ToolId } from "../../adapters/types.ts";
 import { findingText, type FindingText } from "../copy/findings.ts";
 import { resultText, type ResultText } from "../copy/grades.ts";
 import type { Lang, Texts } from "../copy/lang.ts";
+import { nextGradeText } from "../copy/next-grade.ts";
 import { noticeText } from "../copy/notices.ts";
 import type { McpFact } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Candidate } from "../installs/candidates.ts";
 import { anyIn, calledMcpNames } from "../installs/signals.ts";
+import { nextGrade, type NextGrade } from "../next-grade.ts";
 import type { MissingInstructions, WorstOverlap } from "../metrics/fit.ts";
 import type { CountedProblem, ToolSafeguard } from "../metrics/setup.ts";
 import type { AxisScore, Finding, Overall, ToolRuleId, ToolValue } from "../scoreboard.ts";
@@ -83,6 +85,8 @@ export interface CheckupResult {
     /** S3가 센 문제의 도구, 종류, 위치(절대 경로가 아니다). 결과 화면이 S3 항목에 보인다 */
     setupProblems: CountedProblem[];
   };
+  /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다 */
+  nextGrade: (NextGrade & { text: Texts<string> }) | null;
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -121,6 +125,9 @@ export function checkupResult(source: ResultInput): CheckupResult {
   });
   const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
+  // 점수판의 규칙 점수(맞추지 않은 값)로 다시 계산한다. 문장의 규칙 이름은 결과 항목의 것이다
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const nameOf = (lang: Lang) => (ruleId: Finding["ruleId"]): string => findings.find((finding) => finding.ruleId === ruleId)!.text[lang].name;
   return {
     schema: RESULT_SCHEMA,
     rulesVersion: evaluation.rulesVersion,
@@ -140,5 +147,6 @@ export function checkupResult(source: ResultInput): CheckupResult {
     deepHints: deepHints(input),
     notices: notices.map((notice): ResultNotice => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details,
+    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) },
   };
 }

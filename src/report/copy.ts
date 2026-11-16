@@ -31,6 +31,7 @@ export const REPORT_COPY = {
   verdict: { en: "Verdict", ko: "진단" },
   best: { en: "Best at", ko: "가장 잘하는 것" },
   fixFirst: { en: "Fix first", ko: "먼저 고칠 것" },
+  nextGrade: { en: "Next grade", ko: "다음 등급까지" },
   colGood: { en: "What you do well", ko: "잘하고 있는 것" },
   colFix: { en: "What to tune up", ko: "정비할 것" },
   how: { en: "How it was measured", ko: "어떻게 쟀나" },

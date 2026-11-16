@@ -182,12 +182,16 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
             return `${text.title} · ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
           }),
         )}</span></div>`;
+  // 다음 등급까지 할 일은 먼저 고칠 것 아래에 한 줄로 둔다. 먼저 고칠 것이 없으면 그 칸에 따로 둔다(0.2.0)
+  const next = scored && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
   const fixLine =
     first === null
-      ? ""
+      ? next === ""
+        ? ""
+        : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>`
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
           textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`),
-        )}</span></div>`;
+        )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
 

@@ -173,6 +173,23 @@ describe("reportHtml", () => {
     expect(html.includes(REPORT_COPY.fixFirst.ko)).toBe(repairs.length > 0);
   });
 
+  it("다음 등급까지의 문장을 진단 칸의 먼저 고칠 것 아래에 두 언어로 그리고, 없으면 그리지 않는다(0.2.0)", () => {
+    const checked = result();
+    expect(checked.nextGrade).not.toBeNull();
+    const html = reportHtml(viewOf(checked), art);
+    const verdict = between(html, '<div class="verdict">', "</section>");
+    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${esc(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${esc(checked.nextGrade!.text.ko)}</span></span>`);
+    expect(count(html, 'class="nx"')).toBe(1);
+    // 정비할 것이 없어도 다음 등급이 있으면 그 칸에 따로 보인다
+    const view = viewOf(checked);
+    const noRepairs: ReportView = { ...view, findings: view.findings.map((finding) => (finding.category === "repair" ? { ...finding, category: "average" as const } : finding)) };
+    const alone = reportHtml(noRepairs, art);
+    expect(alone).not.toContain(REPORT_COPY.fixFirst.ko);
+    expect(between(alone, '<div class="verdict">', "</section>")).toContain(REPORT_COPY.nextGrade.ko);
+    expect(count(alone, 'class="nx"')).toBe(1);
+    expect(reportHtml({ ...view, nextGrade: null }, art)).not.toContain('class="nx"');
+  });
+
   it("AQ를 내지 않았으면 점수 없음과 장면 아래의 까닭을 보이고, 먼저 고칠 것과 예상 효과 꼬리표와 카드 단추를 그리지 않는다", () => {
     const thin = result({ sessions: thinSessions });
     const view = viewOf(thin, { saved: false, round: null });

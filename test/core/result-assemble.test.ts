@@ -5,6 +5,7 @@ import { findingText } from "../../src/core/copy/findings.ts";
 import { resultText } from "../../src/core/copy/grades.ts";
 import { noticeText } from "../../src/core/copy/notices.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
+import { nextGrade } from "../../src/core/next-grade.ts";
 import { checkupResult, RESULT_SCHEMA, type ResultInput } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
 import type { SetupProblem } from "../../src/scan/types.ts";
@@ -25,6 +26,34 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   const input = evaluationInput([claudeTool({ sessions: enough, ...tool })]);
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
+
+describe("다음 등급까지 할 일(0.2.0)", () => {
+  it("평가의 규칙 점수로 다시 계산한 차례를 싣고, 두 언어의 문장에 차례마다 규칙 이름과 그때의 AQ가 든다", () => {
+    const source = resultInput({});
+    const result = checkupResult(source);
+    // 이 시험이 헛돌지 않게, 보기 홈의 등급이 S가 아님을 먼저 본다
+    expect(result.score.aq).not.toBeNull();
+    expect(result.score.grade).not.toBe("S");
+    const expected = nextGrade(source.evaluation.findings.map((f) => ({ ruleId: f.ruleId, axis: f.axis, weight: f.weight, score: f.score, gain: f.gain })), source.evaluation.score)!;
+    expect(expected.steps.length).toBeGreaterThan(0);
+    const { text, ...plan } = result.nextGrade!;
+    expect(plan).toEqual(expected);
+    for (const lang of ["en", "ko"] as const) {
+      for (const step of expected.steps) {
+        const name = result.findings.find((f) => f.ruleId === step.ruleId)!.text[lang].name;
+        expect(text[lang]).toContain(lang === "ko" ? `${name}(→ ${step.aq})` : `${name} (→ ${step.aq})`);
+      }
+      expect(text[lang]).toContain(String(expected.need));
+    }
+  });
+
+  it("AQ를 내지 않았으면 없다", () => {
+    const input = evaluationInput([claudeTool({ sessions: [{ days: { "2026-11-10": { responses: 1, humanRequests: 1 } } }] })]);
+    const result = checkupResult({ input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    expect(result.score.aq).toBeNull();
+    expect(result.nextGrade).toBeNull();
+  });
+});
 
 describe("합침 규칙의 어떻게 쟀나(설계 9.7, 「5단계 4부 계획 전 결정」 7번, 4부 계획 리뷰 1차)", () => {
   it("두 도구로 잰 I3과 I2에는 Codex의 가까운 값 줄이, I3에는 도구 호출을 세는 굵기의 줄이 붙는다. 한 도구만이면 굵기의 줄이 없다", () => {
@@ -50,7 +79,7 @@ describe("평가 결과의 조립", () => {
   it("필드를 정해진 차례로 싣고 형식 버전, 규칙 버전, 프로그램 버전, 평가 시계, 시간대, 구간을 담는다", () => {
     const input = resultInput({});
     const result = checkupResult(input);
-    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details"]);
+    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details", "nextGrade"]);
     expect(RESULT_SCHEMA).toBe(1);
     expect(result).toMatchObject({ schema: 1, rulesVersion: "1.0.0", appVersion: "0.1.0", evaluatedAt: "2026-11-13T03:00:00.000Z", timezone: "Asia/Seoul", lang: "ko", window: input.evaluation.windows });
     expect(result.score).toEqual(input.evaluation.score);

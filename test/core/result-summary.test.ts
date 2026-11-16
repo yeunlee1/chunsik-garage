@@ -32,9 +32,18 @@ describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
     const result = baseResult();
     const summary = checkupSummary(result, null);
-    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "notices", "reportPath", "lang", "text"]);
+    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "reportPath", "lang", "text"]);
     expect(summary).toMatchObject({ aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: result.score.withheld, reportPath: null });
     expect(summary.axes).toEqual(result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })));
+  });
+
+  it("다음 등급까지는 결과의 것을 규칙과 숫자로만 싣고, 문장은 결과의 언어 하나다(0.2.0)", () => {
+    const result = baseResult();
+    const next = { grade: "A" as const, need: 3, reaches: true, steps: [{ ruleId: "E3" as const, axis: "efficiency" as const, aq: 81, grade: "A" as const }], text: { en: "3 points to grade A. Fix in this order: x (→ 81).", ko: "A등급까지 3점입니다. 고칠 차례: x(→ 81)." } };
+    const summary = checkupSummary({ ...result, nextGrade: next }, null);
+    expect(summary.nextGrade).toEqual({ grade: "A", need: 3, reaches: true, steps: [{ ruleId: "E3", axis: "efficiency", aq: 81, grade: "A" }] });
+    expect(summary.text.nextGrade).toBe(next.text.en);
+    expect(checkupSummary({ ...result, nextGrade: null }, null)).toMatchObject({ nextGrade: null, text: { nextGrade: null } });
   });
 
   it("가장 잘하는 것은 잘하고 있는 것의 첫 항목이고, 없으면 null이다", () => {

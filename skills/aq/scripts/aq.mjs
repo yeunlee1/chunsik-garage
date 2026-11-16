@@ -213,6 +213,9 @@ function scoreboard(measured2) {
 }
 var MIN_REQUESTS_FOR_AQ = 20;
 var MIN_DAYS_FOR_AQ = 3;
+function aqOfAxes(scores) {
+  return roundHalfUp(scores.reduce((sum2, score) => sum2 + score, 0) / scores.length);
+}
 function overall(axes, humanRequests, activeDays2) {
   const measured2 = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
   const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
@@ -221,7 +224,7 @@ function overall(axes, humanRequests, activeDays2) {
   if (activeDays2 < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
   if (measured2.length === 0) withheld.push("no_axes");
   if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
-  const aq = roundHalfUp(measured2.reduce((sum2, score) => sum2 + score, 0) / measured2.length);
+  const aq = aqOfAxes(measured2);
   return { aq, ...gradeOf(aq), withheld, missingAxes };
 }
 
@@ -870,66 +873,66 @@ function median(values) {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
-function s4(totals, coverage) {
-  const evidence = { failures: totals.hookFailures, runs: totals.hookRuns, unclassifiedBlocks: totals.hookUnclassified };
-  return countGate(sees(coverage, "mcpFailuresAndHooks"), totals.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals.hookFailures / totals.hookRuns, evidence);
+function s4(totals2, coverage) {
+  const evidence = { failures: totals2.hookFailures, runs: totals2.hookRuns, unclassifiedBlocks: totals2.hookUnclassified };
+  return countGate(sees(coverage, "mcpFailuresAndHooks"), totals2.hookRuns, MIN_HOOK_RUNS, evidence) ?? scored(totals2.hookFailures / totals2.hookRuns, evidence);
 }
-function e1(totals, coverage, tool) {
-  const { input, cacheRead, cacheWrite } = totals.tokens;
+function e1(totals2, coverage, tool) {
+  const { input, cacheRead, cacheWrite } = totals2.tokens;
   const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }
-function e2(totals, coverage) {
-  const evidence = { errors: totals.nonShellErrors, results: totals.nonShellResults };
-  return countGate(sees(coverage, "toolErrors"), totals.nonShellResults, MIN_TOOL_RESULTS, evidence) ?? scored(totals.nonShellErrors / totals.nonShellResults, evidence);
+function e2(totals2, coverage) {
+  const evidence = { errors: totals2.nonShellErrors, results: totals2.nonShellResults };
+  return countGate(sees(coverage, "toolErrors"), totals2.nonShellResults, MIN_TOOL_RESULTS, evidence) ?? scored(totals2.nonShellErrors / totals2.nonShellResults, evidence);
 }
-function e3(totals, coverage) {
-  const autoCompactions = totals.mainSessions.reduce((sum2, session) => sum2 + session.autoCompactions, 0);
-  const evidence = { autoCompactions, mainSessions: totals.mainSessions.length };
-  return countGate(sees(coverage, "autoCompaction"), totals.mainSessions.length, MIN_MAIN_SESSIONS, evidence) ?? scored(autoCompactions / totals.mainSessions.length, evidence);
+function e3(totals2, coverage) {
+  const autoCompactions = totals2.mainSessions.reduce((sum2, session) => sum2 + session.autoCompactions, 0);
+  const evidence = { autoCompactions, mainSessions: totals2.mainSessions.length };
+  return countGate(sees(coverage, "autoCompaction"), totals2.mainSessions.length, MIN_MAIN_SESSIONS, evidence) ?? scored(autoCompactions / totals2.mainSessions.length, evidence);
 }
-function e4(totals, coverage) {
-  const sample = totals.mainSessions.flatMap((session) => session.instructionTokens === null ? [] : [session.instructionTokens]);
-  const evidence = { sampledSessions: sample.length, skippedSessions: totals.mainSessions.length - sample.length };
+function e4(totals2, coverage) {
+  const sample = totals2.mainSessions.flatMap((session) => session.instructionTokens === null ? [] : [session.instructionTokens]);
+  const evidence = { sampledSessions: sample.length, skippedSessions: totals2.mainSessions.length - sample.length };
   return countGate(sees(coverage, "instructionSize"), sample.length, 1, evidence) ?? scored(median(sample), evidence);
 }
-function e7(totals, coverage) {
-  const evidence = { denied: totals.denied, humanRequests: totals.humanRequests, interruptedTurns: totals.interruptedTurns, lengthStops: totals.lengthStops };
-  const stopped = totals.denied + totals.interruptedTurns + totals.lengthStops;
-  return countGate(sees(coverage, "deniedAndLengthStops", "interruptedTurns"), totals.humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(stopped / totals.humanRequests, evidence);
+function e7(totals2, coverage) {
+  const evidence = { denied: totals2.denied, humanRequests: totals2.humanRequests, interruptedTurns: totals2.interruptedTurns, lengthStops: totals2.lengthStops };
+  const stopped = totals2.denied + totals2.interruptedTurns + totals2.lengthStops;
+  return countGate(sees(coverage, "deniedAndLengthStops", "interruptedTurns"), totals2.humanRequests, MIN_HUMAN_REQUESTS, evidence) ?? scored(stopped / totals2.humanRequests, evidence);
 }
-function f1(totals, coverage) {
+function f1(totals2, coverage) {
   let knownEffort = 0;
   let highEffort = 0;
   let unknownLevel = 0;
   const levels = new Set(EFFORT_LEVELS);
-  for (const [level, count] of Object.entries(totals.efforts)) {
+  for (const [level, count] of Object.entries(totals2.efforts)) {
     if (!levels.has(level)) unknownLevel += count;
     else {
       knownEffort += count;
       if (HIGH_EFFORT.has(level)) highEffort += count;
     }
   }
-  const evidence = { highEffort, knownEffort, unknownEffort: totals.unknownEffort, unknownLevel };
+  const evidence = { highEffort, knownEffort, unknownEffort: totals2.unknownEffort, unknownLevel };
   return countGate(sees(coverage, "effort"), knownEffort, MIN_KNOWN_EFFORT, evidence) ?? scored(highEffort / knownEffort, evidence);
 }
-function f2(totals, coverage) {
-  const compacted = totals.mainSessions.filter((session) => session.autoCompactions > 0);
+function f2(totals2, coverage) {
+  const compacted = totals2.mainSessions.filter((session) => session.autoCompactions > 0);
   const delegatedSessions = compacted.filter((session) => session.subagentCalls > 0).length;
   const evidence = { compactedSessions: compacted.length, delegatedSessions };
   return countGate(sees(coverage, "subagents", "autoCompaction"), compacted.length, MIN_COMPACTED_SESSIONS, evidence) ?? scored(delegatedSessions / compacted.length, evidence);
 }
-function usageRules(totals, coverage, tool) {
+function usageRules(totals2, coverage, tool) {
   return {
-    S4: s4(totals, coverage),
-    E1: e1(totals, coverage, tool),
-    E2: e2(totals, coverage),
-    E3: e3(totals, coverage),
-    E4: e4(totals, coverage),
-    E7: e7(totals, coverage),
-    F1: f1(totals, coverage),
-    F2: f2(totals, coverage)
+    S4: s4(totals2, coverage),
+    E1: e1(totals2, coverage, tool),
+    E2: e2(totals2, coverage),
+    E3: e3(totals2, coverage),
+    E4: e4(totals2, coverage),
+    E7: e7(totals2, coverage),
+    F1: f1(totals2, coverage),
+    F2: f2(totals2, coverage)
   };
 }
 
@@ -1057,16 +1060,16 @@ function s3(problems) {
   return scored(problems.length, { danglingLinks: counts.danglingLinks, noFrontmatter: counts.noFrontmatter, problems: problems.length, unparsable: counts.unparsable });
 }
 function s5(tool) {
-  const { totals } = tool;
+  const { totals: totals2 } = tool;
   const enabledServers = sameInstall(tool.setup.mcpServers.filter((server) => server.enabled), (server) => server.installKey).length;
-  const failedSessions = totals.mainSessions.filter((session) => session.mcpConnectionFailure).length;
-  const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
+  const failedSessions = totals2.mainSessions.filter((session) => session.mcpConnectionFailure).length;
+  const evidence = { enabledServers, failedSessions, mainSessions: totals2.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
   const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
   const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
   if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
   if (enabledServers === 0) return placesUnknown ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
-  return countGate(true, totals.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals.mainSessions.length, evidence);
+  return countGate(true, totals2.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals2.mainSessions.length, evidence);
 }
 function mergedSetupRules(tools2) {
   const safeguards = tools2.map(safeguardOf);
@@ -1092,8 +1095,8 @@ var byText6 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function projectUsage(tools2, lookup) {
   const counts = /* @__PURE__ */ new Map();
   let unlinkedSessions = 0;
-  for (const { tool, totals } of tools2) {
-    for (const session of totals.mainSessions) {
+  for (const { tool, totals: totals2 } of tools2) {
+    for (const session of totals2.mainSessions) {
       const project = lookup(session.cwd);
       if (project === null) {
         unlinkedSessions++;
@@ -1126,7 +1129,7 @@ function toolTotals(summaries, windows, shellTools) {
   const score = new Set(windows.scoreDates);
   const collect = new Set(windows.collectDates);
   const shell = new Set(shellTools);
-  const totals = {
+  const totals2 = {
     responses: 0,
     collectResponses: 0,
     tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0, thinking: 0 },
@@ -1158,43 +1161,43 @@ function toolTotals(summaries, windows, shellTools) {
     };
     let sessionResponses = 0;
     for (const [date, cell] of Object.entries(summary.days)) {
-      if (collect.has(date)) totals.collectResponses += cell.responses;
+      if (collect.has(date)) totals2.collectResponses += cell.responses;
       if (!score.has(date)) continue;
-      totals.responses += cell.responses;
+      totals2.responses += cell.responses;
       sessionResponses += cell.responses;
       if (cell.responses > 0) active.add(date);
-      totals.tokens.input += cell.tokens.input;
-      totals.tokens.cacheRead += cell.tokens.cacheRead;
-      totals.tokens.cacheWrite += cell.tokens.cacheWrite;
-      totals.tokens.output += cell.tokens.output;
-      totals.tokens.thinking += cell.tokens.thinking;
-      if (summary.kind === "main") totals.humanRequests += cell.humanRequests;
+      totals2.tokens.input += cell.tokens.input;
+      totals2.tokens.cacheRead += cell.tokens.cacheRead;
+      totals2.tokens.cacheWrite += cell.tokens.cacheWrite;
+      totals2.tokens.output += cell.tokens.output;
+      totals2.tokens.thinking += cell.tokens.thinking;
+      if (summary.kind === "main") totals2.humanRequests += cell.humanRequests;
       for (const [name, counts] of Object.entries(cell.tools)) {
-        totals.toolCalls += counts.calls;
-        totals.denied += counts.deniedByUser + counts.deniedByHook + counts.deniedByPermission;
+        totals2.toolCalls += counts.calls;
+        totals2.denied += counts.deniedByUser + counts.deniedByHook + counts.deniedByPermission;
         if (shell.has(name)) continue;
-        totals.nonShellResults += counts.results;
-        totals.nonShellErrors += counts.errors;
+        totals2.nonShellResults += counts.results;
+        totals2.nonShellErrors += counts.errors;
       }
-      totals.interruptedTurns += cell.interruptedTurns;
-      totals.lengthStops += cell.lengthStops;
+      totals2.interruptedTurns += cell.interruptedTurns;
+      totals2.lengthStops += cell.lengthStops;
       for (const [name, count] of Object.entries(cell.efforts)) efforts.set(name, (efforts.get(name) ?? 0) + count);
-      totals.unknownEffort += cell.unknownEffort;
+      totals2.unknownEffort += cell.unknownEffort;
       for (const counts of Object.values(cell.hooks)) {
-        totals.hookRuns += counts.runs;
-        totals.hookFailures += counts.failures;
-        totals.hookUnclassified += counts.unclassifiedBlocks;
+        totals2.hookRuns += counts.runs;
+        totals2.hookFailures += counts.failures;
+        totals2.hookUnclassified += counts.unclassifiedBlocks;
       }
       session.autoCompactions += cell.autoCompactions;
       session.subagentCalls += cell.subagentCalls;
       if (cell.mcpConnectionFailure) session.mcpConnectionFailure = true;
     }
-    if (summary.kind === "main" && sessionResponses > 0) totals.mainSessions.push(session);
+    if (summary.kind === "main" && sessionResponses > 0) totals2.mainSessions.push(session);
   }
-  for (const name of [...efforts.keys()].sort()) totals.efforts[name] = efforts.get(name);
-  totals.activeDates = [...active].sort();
-  totals.mainSessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0) || byContent(a, b));
-  return totals;
+  for (const name of [...efforts.keys()].sort()) totals2.efforts[name] = efforts.get(name);
+  totals2.activeDates = [...active].sort();
+  totals2.mainSessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0) || byContent(a, b));
+  return totals2;
 }
 
 // src/core/evaluate.ts
@@ -1207,8 +1210,8 @@ function evaluate(input) {
   const records = recordMap(input.installs);
   const all = [...input.tools].sort((a, b) => byText7(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
-  const setups = scored2.map(({ input: tool, totals }) => {
-    const common = { totals, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
+  const setups = scored2.map(({ input: tool, totals: totals2 }) => {
+    const common = { totals: totals2, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
     return tool.tool === "codex" ? { ...common, tool: "codex", setup: tool.setup } : { ...common, tool: "claude-code", setup: tool.setup };
   });
   const usage2 = projectUsage(setups, lookup);
@@ -2252,6 +2255,27 @@ function resultText(score, categories, lang) {
   };
 }
 
+// src/core/copy/next-grade.ts
+var COPY2 = {
+  en: {
+    reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
+    partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
+    step: "{name} (\u2192 {aq})",
+    join: ", "
+  },
+  ko: {
+    reaches: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}.",
+    partial: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}. \uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4.",
+    step: "{name}(\u2192 {aq})",
+    join: ", "
+  }
+};
+function nextGradeText(next, nameOf, lang) {
+  const copy2 = COPY2[lang];
+  const steps = next.steps.map((step) => fill(copy2.step, { name: nameOf(step.ruleId), aq: step.aq })).join(copy2.join);
+  return fill(next.reaches ? copy2.reaches : copy2.partial, { need: next.need, grade: next.grade, steps, last: next.steps.at(-1).aq });
+}
+
 // src/core/copy/notices.ts
 var WITHHELD_COPY2 = {
   too_few_requests: { en: "There were fewer than 20 requests from you in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC758 \uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
@@ -2400,6 +2424,46 @@ function noticeText(notice, lang) {
     case "unnamed_files":
       return fill(lines[notice.kind], { tool, count: notice.count });
   }
+}
+
+// src/core/next-grade.ts
+var NEXT_GRADE_STEPS = 5;
+var NEXT = { D: { grade: "C", at: 50 }, C: { grade: "B", at: 65 }, B: { grade: "A", at: 80 }, A: { grade: "S", at: 90 } };
+function totals(rules, fixed2) {
+  const rounded = [];
+  let raw = 0;
+  for (const axis of AXES) {
+    const own = rules.filter((rule2) => rule2.axis === axis).map((rule2) => ({ weight: rule2.weight, score: fixed2.has(rule2.ruleId) ? 1 : rule2.score }));
+    const score = axisScore(own);
+    if (score === null) continue;
+    rounded.push(score);
+    const measured2 = own.filter((rule2) => rule2.score !== null);
+    raw += measured2.reduce((sum2, rule2) => sum2 + rule2.weight * rule2.score, 0) / measured2.reduce((sum2, rule2) => sum2 + rule2.weight, 0) * 100;
+  }
+  return { rounded, raw };
+}
+function nextGrade(rules, score) {
+  if (score.aq === null || score.grade === null || score.grade === "S") return null;
+  const target = NEXT[score.grade];
+  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1);
+  const fixed2 = /* @__PURE__ */ new Set();
+  const steps = [];
+  while (steps.length < NEXT_GRADE_STEPS && (steps.at(-1)?.aq ?? score.aq) < target.at) {
+    let best = null;
+    for (const rule2 of candidates) {
+      if (fixed2.has(rule2.ruleId)) continue;
+      const after = totals(rules, /* @__PURE__ */ new Set([...fixed2, rule2.ruleId]));
+      const rounded = after.rounded.reduce((sum2, value) => sum2 + value, 0);
+      const better = best === null || rounded > best.rounded || rounded === best.rounded && (after.raw > best.raw + 1e-9 || Math.abs(after.raw - best.raw) <= 1e-9 && (rule2.gain ?? -1) > (best.rule.gain ?? -1));
+      if (better) best = { rule: rule2, rounded, raw: after.raw };
+    }
+    if (best === null) break;
+    fixed2.add(best.rule.ruleId);
+    const aq = aqOfAxes(totals(rules, fixed2).rounded);
+    steps.push({ ruleId: best.rule.ruleId, axis: best.rule.axis, aq, grade: gradeOf(aq).grade });
+  }
+  if (steps.length === 0) return null;
+  return { grade: target.grade, need: target.at - score.aq, steps, reaches: steps.at(-1).aq >= target.at };
 }
 
 // src/core/result/coverage.ts
@@ -2841,6 +2905,8 @@ function checkupResult(source) {
   });
   const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const nameOf = (lang) => (ruleId) => findings.find((finding) => finding.ruleId === ruleId).text[lang].name;
   return {
     schema: RESULT_SCHEMA,
     rulesVersion: evaluation.rulesVersion,
@@ -2859,7 +2925,8 @@ function checkupResult(source) {
     usage: resultUsage(input, evaluation, collected),
     deepHints: deepHints(input),
     notices: notices2.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
-    details
+    details,
+    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) }
   };
 }
 
@@ -2932,6 +2999,7 @@ function checkupSummary(result, reportPath) {
     axes: result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })),
     best: strength === null ? null : { ruleId: strength.ruleId, axis: strength.axis, kind: strength.kind, value: strength.value },
     fixFirst,
+    nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     reportPath,
     lang,
@@ -2942,6 +3010,7 @@ function checkupSummary(result, reportPath) {
       noBest: result.text[lang].noStrengths,
       fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index], lang) })),
       noFixFirst: result.text[lang].noRepairs,
+      nextGrade: result.nextGrade?.text[lang] ?? null,
       notices: result.notices.map((notice) => notice.text[lang])
     }
   };
@@ -3036,6 +3105,7 @@ var REPORT_COPY = {
   verdict: { en: "Verdict", ko: "\uC9C4\uB2E8" },
   best: { en: "Best at", ko: "\uAC00\uC7A5 \uC798\uD558\uB294 \uAC83" },
   fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
+  nextGrade: { en: "Next grade", ko: "\uB2E4\uC74C \uB4F1\uAE09\uAE4C\uC9C0" },
   colGood: { en: "What you do well", ko: "\uC798\uD558\uACE0 \uC788\uB294 \uAC83" },
   colFix: { en: "What to tune up", ko: "\uC815\uBE44\uD560 \uAC83" },
   how: { en: "How it was measured", ko: "\uC5B4\uB5BB\uAC8C \uC7C0\uB098" },
@@ -3555,6 +3625,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
@@ -3806,9 +3877,10 @@ function hero(view, art, lang) {
       return `${text.title} \xB7 ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
     })
   )}</span></div>`;
-  const fixLine = first === null ? "" : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
+  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
     textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
-  )}</span></div>`;
+  )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
 function columns(view, art, lang) {
@@ -4004,6 +4076,7 @@ function reportView(result, run2) {
     setupProblems: result.details.setupProblems,
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
+    nextGrade: result.nextGrade?.text ?? null,
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
   };
 }
@@ -10662,7 +10735,7 @@ async function runDeepHints(options) {
 }
 
 // src/commands/notify.ts
-var COPY2 = {
+var COPY3 = {
   en: {
     on: "Session start notices are on. When 7 days pass after the last checkup or something new is installed, a Claude Code session shows one line when it starts. Codex has no notices.",
     off: "Session start notices are off.",
@@ -10689,7 +10762,7 @@ async function runNotify(action, options) {
     await saveState(options.stateDir, state);
   }
   const on = state.notify?.on === true;
-  const text = action === "on" ? COPY2[options.lang].on : action === "off" ? COPY2[options.lang].off : on ? COPY2[options.lang].statusOn : COPY2[options.lang].statusOff;
+  const text = action === "on" ? COPY3[options.lang].on : action === "off" ? COPY3[options.lang].off : on ? COPY3[options.lang].statusOn : COPY3[options.lang].statusOff;
   return { notify: { on, lang: state.notify?.lang ?? options.lang }, lastCheckupAt: state.lastCheckupAt, run: { text } };
 }
 

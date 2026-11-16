@@ -31,7 +31,7 @@ A program on this PC computes the AQ score. Run it and relay its summary. The pr
 
 ## 3. What to tell the user
 
-Write the result in the language of `summary.lang`, as plain lines, not inside a code block. Use at most six lines. The report page has the details.
+Write the result in the language of `summary.lang`, as plain lines, not inside a code block. Use at most seven lines. The report page has the details.
 
 Speakers: 📋 Chunsam (춘삼이) checks and reports. 🔧 Chunsik (춘식이) talks about fixing. Put the face right after the name.
 
@@ -53,8 +53,9 @@ Lines, in this order. Copy every value you take from the summary and the run rec
    - Without an AQ: `📋 춘삼이 (o_o)  점검 끝! <the summary.text.notices sentence whose summary.notices kind is score_withheld>` or the same with `Chunsam` and `Checkup done!`. Then, indented, `summary.text.diagnosis`.
 3. Best, indented: `가장 잘하는 것  <summary.text.best.title> (<summary.text.best.detail>)` or `Best at  <summary.text.best.title> (<summary.text.best.detail>)`. If `summary.text.best` is null, write `summary.text.noBest` instead, or nothing if that is null too.
 4. Fix first: only the first item of `summary.text.fixFirst`, as `🔧 춘식이 (-_-)9 먼저 고칠 것  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)` or `🔧 Chunsik (-_-)9 Fix first  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)`. If `summary.text.fixFirst` is empty and `summary.text.noFixFirst` is not null, write `📋 춘삼이 (^_^)b <summary.text.noFixFirst>` or `📋 Chunsam (^_^)b <summary.text.noFixFirst>`. If both are empty, skip this line.
-5. Report line, indented, from section 4.
-6. Notice line, indented, from section 4. At most one.
+5. Next grade, indented under Chunsik: `summary.text.nextGrade`. Skip this line if it is null.
+6. Report line, indented, from section 4.
+7. Notice line, indented, from section 4. At most one.
 
 ## 4. The report page and notices
 

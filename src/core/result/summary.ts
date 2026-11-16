@@ -5,6 +5,7 @@ import { joinValue } from "../copy/findings.ts";
 import { fill } from "../copy/format.ts";
 import type { Lang } from "../copy/lang.ts";
 import type { Axis, RuleId, ValueKind } from "../rules.ts";
+import type { NextGrade } from "../next-grade.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { Grade } from "../score.ts";
 import type { CheckupResult } from "./assemble.ts";
@@ -48,6 +49,8 @@ export interface SummaryText {
   fixFirst: { title: string; detail: string }[];
   /** 먼저 고칠 것이 없을 때의 문장 */
   noFixFirst: string | null;
+  /** 다음 등급까지 할 일의 한 문장(0.2.0). 없으면 null이다 */
+  nextGrade: string | null;
   /** 알림의 문장(notices와 같은 차례) */
   notices: string[];
 }
@@ -61,6 +64,8 @@ export interface CheckupSummary {
   /** 가장 잘하는 것(잘하고 있는 것의 첫 항목). 없으면 null */
   best: { ruleId: RuleId; axis: Axis; kind: ValueKind; value: number } | null;
   fixFirst: SummaryFix[];
+  /** 다음 등급까지 할 일(규칙과 숫자만). AQ가 없거나 S등급이면 null이다 */
+  nextGrade: NextGrade | null;
   notices: SummaryNotice[];
   /** 결과 화면의 경로. 결과 화면을 만들지 않았으면 null */
   reportPath: string | null;
@@ -139,6 +144,7 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
     axes: result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })),
     best: strength === null ? null : { ruleId: strength.ruleId, axis: strength.axis, kind: strength.kind, value: strength.value! },
     fixFirst,
+    nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     reportPath,
     lang,
@@ -149,6 +155,7 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
       noBest: result.text[lang].noStrengths,
       fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index]!, lang) })),
       noFixFirst: result.text[lang].noRepairs,
+      nextGrade: result.nextGrade?.text[lang] ?? null,
       notices: result.notices.map((notice) => notice.text[lang]),
     },
   };

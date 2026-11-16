@@ -18,9 +18,9 @@ export function definitionHash(saltHex: string, definition: Json): string | null
 
 const wildcard = (pattern: string): RegExp => new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
 
-/** 막는 목록·허용 목록의 한 항목이 서버에 맞는지. 이름은 기록에 남는 꼴들 가운데 하나와 맞으면 된다. */
-export function matcherHits(matcher: McpMatcher, names: readonly string[], definition: Json | null): boolean {
-  if (matcher.serverName !== undefined && names.includes(matcher.serverName)) return true;
+/** 막는 목록·허용 목록의 한 항목이 서버에 맞는지. 이름은 기록에 남는 꼴들 가운데 하나와 맞으면 된다. byName이 거짓이면 이름 항목은 보지 않는다(플러그인 서버의 허용 목록) */
+export function matcherHits(matcher: McpMatcher, names: readonly string[], definition: Json | null, byName = true): boolean {
+  if (byName && matcher.serverName !== undefined && names.includes(matcher.serverName)) return true;
   if (matcher.serverUrl !== undefined && definition !== null && typeof definition.url === "string" && wildcard(matcher.serverUrl).test(definition.url)) return true;
   if (matcher.serverCommand !== undefined && definition !== null && typeof definition.command === "string") {
     const args = Array.isArray(definition.args) ? definition.args : [];
@@ -34,15 +34,16 @@ export function matcherHits(matcher: McpMatcher, names: readonly string[], defin
 export interface McpContext {
   /** 이 맥락에서 듣는 설정 층(사용자, 프로젝트, 로컬, 관리 정책) */
   layers: readonly SettingsView[];
-  managed: SettingsView;
   project: ClaudeJsonProject | null;
 }
 
-/** 이 맥락에서 막히지 않았는지. 어느 층의 deniedMcpServers에 걸리거나, 관리 정책의 허용 목록 밖이거나, 그 프로젝트에서 끈 서버면 막힌 것이다. */
-export function mcpAllowed(context: McpContext, names: readonly string[], definition: Json | null): boolean {
+/**
+ * 이 맥락에서 막히지 않았는지. 어느 층의 deniedMcpServers에 걸리거나, 어느 층의 허용 목록 밖이거나, 그 프로젝트에서 끈 서버면 막힌 것이다.
+ * 허용 목록이 둘 이상이면 그 모두에 들어야 한다. 플러그인 서버(plugin)는 허용 목록의 이름 항목으로는 허용되지 않는다(Claude Code 2.1.325 실측, 「6단계 1부 계획 전 결정」 2번)
+ */
+export function mcpAllowed(context: McpContext, names: readonly string[], definition: Json | null, plugin = false): boolean {
   for (const layer of context.layers) if (layer.deniedMcpServers.some((m) => matcherHits(m, names, definition))) return false;
-  const allow = context.managed.allowedMcpServers;
-  if (allow !== null && !allow.some((m) => matcherHits(m, names, definition))) return false;
+  for (const layer of context.layers) if (layer.allowedMcpServers !== null && !layer.allowedMcpServers.some((m) => matcherHits(m, names, definition, !plugin))) return false;
   if (context.project !== null && names.some((name) => context.project!.disabledMcpServers.includes(name))) return false;
   return true;
 }

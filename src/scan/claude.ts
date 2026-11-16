@@ -76,7 +76,7 @@ function overrideIn(context: Context, names: readonly string[]): string | null {
 /** 관리 정책이 그 서버를 막거나 허용 목록으로 정하는지(사용자가 바꿀 수 없다). */
 function managedHits(managed: SettingsView, names: readonly string[], definition: Record<string, unknown> | null): boolean {
   if (managed.allowedMcpServers !== null) return true;
-  return !mcpAllowed({ layers: [managed], managed: { ...managed, allowedMcpServers: null }, project: null }, names, definition);
+  return !mcpAllowed({ layers: [managed], project: null }, names, definition);
 }
 
 const normalizedCommand = (text: string): string => text.replace(/\\/g, "/").toLowerCase();
@@ -156,7 +156,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
 
   // 프로젝트와 맥락
   const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
-  const global: Context = { ordered: [userView], managed: managedView, mcp: { layers: [userView, managedView], managed: managedView, project: null } };
+  const global: Context = { ordered: [userView], managed: managedView, mcp: { layers: [userView, managedView], project: null } };
   const projectLayers = new Map<string, { project: SettingsLayer; local: SettingsLayer }>();
   const contexts = new Map<string, Context>();
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
@@ -176,7 +176,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     contexts.set(ref.normRoot, {
       ordered: [userView, projectView, localView],
       managed: managedView,
-      mcp: { layers: [userView, projectView, localView, managedView], managed: managedView, project: entry },
+      mcp: { layers: [userView, projectView, localView, managedView], project: entry },
     });
   }
   const everyContext = [global, ...contexts.values()];
@@ -310,8 +310,8 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     }
     for (const server of plugin.mcpServers) {
       const recordNames = [...new Set(pluginNames.flatMap((pluginName) => mcpRecordNames(server.name, pluginName)))].sort();
-      // 막는 목록은 서버 열쇠 그대로 적었을 수도 있어서 그 이름도 함께 견준다
-      const denyNames = [...new Set([...recordNames, server.name])];
+      // 막는 목록과 허용 목록은 플러그인 서버를 등록 이름(plugin:<플러그인>:<서버>)으로만 견준다. 플러그인 안의 서버 이름과 도구 이름 꼴로는 막히지 않는다(Claude Code 2.1.325 실측, 「6단계 1부 계획 전 결정」 2번)
+      const denyNames = [...new Set(pluginNames.map((pluginName) => `plugin:${pluginName}:${server.name}`))].sort();
       mcpServers.push({
         scope: "plugin",
         name: server.name,
@@ -319,7 +319,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
         projectRoot: null,
         pluginId: plugin.id,
         definitionHash: server.definition === null ? null : definitionHash(input.salt, server.definition),
-        enabled: enabledIn.some((context) => mcpAllowed(context.mcp, denyNames, server.definition)),
+        enabled: enabledIn.some((context) => mcpAllowed(context.mcp, denyNames, server.definition, true)),
         managedFixed: managedHits(managedView, denyNames, server.definition),
       });
     }

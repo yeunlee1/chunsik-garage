@@ -149,8 +149,7 @@ describe("정의의 지문", () => {
 describe("막음과 승인", () => {
   const view = (value: Record<string, unknown> | null) => viewOf(value);
   const context = (layers: Record<string, unknown>[], managed: Record<string, unknown> | null = null, project: McpContext["project"] = null): McpContext => {
-    const managedView = view(managed);
-    return { layers: [...layers.map(view), managedView], managed: managedView, project };
+    return { layers: [...layers.map(view), view(managed)], project };
   };
 
   it("이름(기록의 꼴 가운데 하나), 주소의 와일드카드, 명령 전체로 맞춘다", () => {
@@ -195,5 +194,27 @@ describe("막음과 승인", () => {
     expect(projectServerApproved(context([{ enableAllProjectMcpServers: true }, {}, {}], {}), "s")).toBe(true);
     // 일괄 승인이 꺼져도 켠 목록에 있으면 승인이다
     expect(projectServerApproved(context([{ enabledMcpjsonServers: ["s"] }], { enableAllProjectMcpServers: false }), "s")).toBe(true);
+  });
+
+  it("허용 목록은 듣는 층 모두에서 본다. 어느 층의 허용 목록 밖이면 막힌 것이고, 둘 이상이면 그 모두에 들어야 허용이다(「6단계 1부 계획 전 결정」 2번)", () => {
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "b" }] }]), ["a"], null)).toBe(false);
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "a" }] }]), ["a"], null)).toBe(true);
+    expect(mcpAllowed(context([{}, { allowedMcpServers: [{ serverName: "b" }] }, {}]), ["a"], null)).toBe(false);
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "a" }] }, { allowedMcpServers: [{ serverName: "b" }] }]), ["a"], null)).toBe(false);
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "a" }] }], { allowedMcpServers: [{ serverName: "a" }] }), ["a"], null)).toBe(true);
+    expect(mcpAllowed(context([{ allowedMcpServers: [] }]), ["a"], null)).toBe(false);
+  });
+
+  it("플러그인 서버는 허용 목록의 이름 항목으로는 허용되지 않고 명령과 주소의 항목으로만 견준다. 막는 목록은 등록 이름으로 막는다(「6단계 1부 계획 전 결정」 2번)", () => {
+    const names = ["plugin:p:db"];
+    const definition = { command: "npx", args: ["srv"] };
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "plugin:p:db" }] }]), names, definition, true)).toBe(false);
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "db" }] }]), names, definition, true)).toBe(false);
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverCommand: ["npx", "srv"] }] }]), names, definition, true)).toBe(true);
+    expect(mcpAllowed(context([{}], { allowedMcpServers: [{ serverName: "plugin:p:db" }] }), names, definition, true)).toBe(false);
+    expect(mcpAllowed(context([{}]), names, definition, true)).toBe(true);
+    expect(mcpAllowed(context([{ deniedMcpServers: [{ serverName: "plugin:p:db" }] }]), names, definition, true)).toBe(false);
+    // 일반 서버는 지금처럼 이름 항목으로 허용된다
+    expect(mcpAllowed(context([{ allowedMcpServers: [{ serverName: "plugin:p:db" }] }]), names, definition)).toBe(true);
   });
 });

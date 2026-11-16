@@ -277,6 +277,28 @@ describe("scanClaudeSetup", () => {
     expect(find(facts.mcpServers, "ctx").definitionHash).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it("플러그인 서버는 막는 목록의 등록 이름으로만 막히고, 사용자 설정의 허용 목록은 일반 서버와 플러그인 서버에 듣는다(「6단계 1부 계획 전 결정」 2번)", async () => {
+    const userSettings = join(input.homedir, ".claude", "settings.json");
+    const managedSettings = join(root, "managed", "managed-settings.json");
+    const userBase = JSON.parse(await readFile(userSettings, "utf8")) as Record<string, unknown>;
+    const managedBase = JSON.parse(await readFile(managedSettings, "utf8")) as Record<string, unknown>;
+    const scanWith = async (user: Record<string, unknown>, managed: Record<string, unknown> = {}) => {
+      await put(userSettings, json({ ...userBase, ...user }));
+      await put(managedSettings, json({ ...managedBase, ...managed }));
+      return (await scanClaudeSetup(input)).mcpServers;
+    };
+    // 막는 목록. 플러그인 안의 서버 이름과 도구 이름 꼴로는 막히지 않고 등록 이름으로 막힌다
+    for (const name of ["db", "plugin_pa_db"]) expect(find(await scanWith({ deniedMcpServers: [{ serverName: name }] }), "db").enabled).toBe(true);
+    expect(find(await scanWith({ deniedMcpServers: [{ serverName: "plugin:pa:db" }] }), "db").enabled).toBe(false);
+    // 관리 정책의 막는 목록도 같다. 등록 이름일 때만 관리 정책이 정한 것이다
+    expect(find(await scanWith({}, { deniedMcpServers: [{ serverName: "db" }] }), "db")).toMatchObject({ enabled: true, managedFixed: false });
+    expect(find(await scanWith({}, { deniedMcpServers: [{ serverName: "plugin:pa:db" }] }), "db")).toMatchObject({ enabled: false, managedFixed: true });
+    // 사용자 설정의 허용 목록. 든 서버만 켜지고, 플러그인 서버는 이름 항목으로 허용되지 않는다
+    const allowCtx = await scanWith({ allowedMcpServers: [{ serverName: "ctx" }] });
+    expect(["ctx", "loc", "db"].map((name) => find(allowCtx, name).enabled)).toEqual([true, false, false]);
+    for (const name of ["db", "plugin:pa:db"]) expect(find(await scanWith({ allowedMcpServers: [{ serverName: name }] }), "db").enabled).toBe(false);
+  });
+
   it("같은 뿌리를 다르게 적은 열쇠 둘에 정의가 같은 로컬 서버는 열쇠의 차례와 상관없이 하나다", () => {
     expect(facts.mcpServers.filter((s) => s.name === "twin")).toHaveLength(1);
   });

@@ -98,3 +98,32 @@ export function deepHints(input: EvaluationInput): DeepHint[] {
   if (differ !== null) hints.push(differ);
   return hints;
 }
+
+/** 정밀 점검에서 읽을 수 있는 지침 파일 하나(설계 17). 전역 지침은 처음부터 골라 두고, 프로젝트 지침은 사용자가 고른 것만 읽는다 */
+export interface DeepFile {
+  tool: ToolId;
+  scope: "global" | "project";
+  /** 프로젝트 지침이면 그 프로젝트의 뿌리다 */
+  project: string | null;
+  path: string;
+  bytes: number;
+  selected: boolean;
+}
+
+/** 내용이 있는 지침 파일의 목록. 전역과 같은 프로젝트 파일은 빼고, 두 도구가 같은 파일을 읽으면 앞의 것 하나만 둔다 */
+export function deepFiles(input: EvaluationInput): DeepFile[] {
+  const files: DeepFile[] = [];
+  const seen = new Set<string>();
+  const add = (file: InstructionSet["files"][number], entry: Omit<DeepFile, "path" | "bytes">): void => {
+    const key = file.realPath ?? file.path;
+    if (!file.hasContent || seen.has(key)) return;
+    seen.add(key);
+    files.push({ ...entry, path: file.path, bytes: file.bytes });
+  };
+  for (const tool of [...input.tools].sort((a, b) => byText(a.tool, b.tool))) {
+    const setup = hintSetup(tool, input);
+    for (const file of setup.globalInstructions.files) add(file, { tool: tool.tool, scope: "global", project: null, selected: true });
+    for (const project of setup.projects) for (const file of project.instructions.files) if (!file.sameAsGlobal) add(file, { tool: tool.tool, scope: "project", project: project.root, selected: false });
+  }
+  return files;
+}

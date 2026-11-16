@@ -6573,14 +6573,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure = null;
+  let failure2 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure ??= "unknown-size";
+      failure2 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure ??= "skipped";
+      failure2 ??= "skipped";
       continue;
     }
     try {
@@ -6598,10 +6598,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure ??= "failed";
+      failure2 ??= "failed";
     }
   }
-  return failure ?? "failed";
+  return failure2 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -10435,27 +10435,31 @@ async function runCheckup(options) {
 
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { join as join26 } from "node:path";
+import { join as join27 } from "node:path";
 
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
 import { dirname as dirname6, join as join24 } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
   return join24(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
-  let regular;
+  const folder = await lstat8(dirname6(path)).then(
+    (info) => info.isDirectory(),
+    () => false
+  );
+  let file;
   try {
-    const [file, folder] = await Promise.all([lstat8(path), lstat8(dirname6(path))]);
-    regular = file.isFile() && folder.isDirectory();
+    file = await lstat8(path);
   } catch (error) {
     const code = error?.code;
-    return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing" } : { status: "unreadable" };
+    return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing", folder } : { status: "unreadable" };
   }
   try {
-    return { status: "ok", bytes: await readFile8(path), regular };
+    return { status: "ok", bytes: await readFile8(path), regular: file.isFile() && folder };
   } catch {
     return { status: "unreadable" };
   }
@@ -10640,14 +10644,46 @@ function impactOf(candidate, context) {
       return { unit: "A4", projects: context.servers.filter(({ server }) => server.name === target && server.enabled && server.scope === "project").length };
   }
 }
+function stateOf(read, key) {
+  if (read.status === "missing") return key.kind !== "toml-table-key" && read.folder ? { present: false, blocked: null } : { present: false, blocked: "file-missing" };
+  if (read.status === "unreadable") return { present: false, blocked: "file-unreadable" };
+  if (!read.regular) return { present: false, blocked: "not-regular" };
+  return key.kind === "toml-table-key" ? tomlState(read.bytes, key.table) : jsonState(read.bytes, key);
+}
+function blockOf(read, key) {
+  return stateOf(read, key).blocked;
+}
+var sameSlot = (a, b) => a.present === b.present && isDeepStrictEqual(a.present ? a.value : void 0, b.present ? b.value : void 0);
+function slotOf(read, key) {
+  if (read.status === "unreadable") return null;
+  if (read.status === "missing") return { present: false };
+  if (hasBom(read.bytes)) return null;
+  const text = read.bytes.toString("utf8");
+  if (key.kind === "toml-table-key") {
+    const servers = parseCodexConfig(text)?.mcp_servers;
+    const table = isTable(servers) ? servers[key.table] : void 0;
+    if (!isTable(table)) return null;
+    return Object.hasOwn(table, "enabled") ? { present: true, value: table.enabled } : { present: false };
+  }
+  let doc;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObject5(doc)) return null;
+  if (!Object.hasOwn(doc, key.parent)) return { present: false };
+  const parent = doc[key.parent];
+  if (key.kind === "json-list-add") {
+    if (!Array.isArray(parent)) return null;
+    return parent.some((item2) => isDeepStrictEqual(item2, key.entry)) ? { present: true } : { present: false };
+  }
+  if (!isObject5(parent)) return null;
+  return Object.hasOwn(parent, key.name) ? { present: true, value: parent[key.name] } : { present: false };
+}
 function tuneItem(candidate, context, read) {
   const key = keyOf(candidate);
-  let state;
-  if (!context.versionOk) state = { present: false, blocked: "unverified-version" };
-  else if (read.status === "missing") state = { present: false, blocked: "file-missing" };
-  else if (read.status === "unreadable") state = { present: false, blocked: "file-unreadable" };
-  else if (!read.regular) state = { present: false, blocked: "not-regular" };
-  else state = key.kind === "toml-table-key" ? tomlState(read.bytes, key.table) : jsonState(read.bytes, key);
+  const state = context.versionOk ? stateOf(read, key) : { present: false, blocked: "unverified-version" };
   return {
     id: candidate.id,
     unit: candidate.unit,
@@ -10696,7 +10732,8 @@ var TUNE_COPY = {
     },
     notices: {
       not_saved: "This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save.",
-      plan_unsaved: "The plan could not be written to the state folder ({code}), so it cannot be applied."
+      plan_unsaved: "The plan could not be written to the state folder ({code}), so it cannot be applied.",
+      unfinished_work: "There {count:is|are} {count} unfinished tune {count:run|runs}. The next apply reconciles {count:it|them} with the files first."
     }
   },
   ko: {
@@ -10729,7 +10766,8 @@ var TUNE_COPY = {
     },
     notices: {
       not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uACC4\uD68D\uC774\uB77C \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uC801\uC6A9\uD558\uB824\uBA74 --no-save \uC5C6\uC774 \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
-      plan_unsaved: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uACC4\uD68D\uC744 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."
+      plan_unsaved: "\uC0C1\uD0DC \uD3F4\uB354\uC5D0 \uACC4\uD68D\uC744 \uC4F0\uC9C0 \uBABB\uD574({code}) \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      unfinished_work: "\uB05D\uB098\uC9C0 \uC54A\uC740 \uC815\uBE44 \uC791\uC5C5\uC774 {count}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uB2E4\uC74C \uC801\uC6A9 \uB54C \uBA3C\uC800 \uC2E4\uC81C \uD30C\uC77C\uB85C \uB9DE\uCDA5\uB2C8\uB2E4."
     }
   }
 };
@@ -10760,22 +10798,129 @@ function keyText(key) {
       return /^[A-Za-z0-9_-]+$/.test(key.table) ? key.table : tomlString(key.table);
   }
 }
+function blockedText(block, key, tool, lang) {
+  const parent = key.kind === "toml-table-key" ? "mcp_servers" : key.parent;
+  return fill(TUNE_COPY[lang].blocked[block], { tool: TOOL_NAMES[tool][lang], parent, key: keyText(key) });
+}
 function tuneItemText(item2, lang) {
   const copy2 = TUNE_COPY[lang];
   const current = item2.blocked === "value-shape" ? copy2.current.unexpected : "current" in item2 ? fill(copy2.current.value, { value: JSON.stringify(item2.current) }) : copy2.current.none;
-  const parent = item2.key.kind === "toml-table-key" ? "mcp_servers" : item2.key.parent;
   const key = keyText(item2.key);
   return {
     title: fill(copy2.title[item2.unit], { name: item2.target }),
     change: fill(copy2.change[item2.unit], { file: item2.file, key, current }),
     impact: fill(copy2.impact[item2.unit], impactValues(item2)),
-    blocked: item2.blocked === null ? null : fill(copy2.blocked[item2.blocked], { tool: TOOL_NAMES[item2.tool][lang], parent, key }),
+    blocked: item2.blocked === null ? null : blockedText(item2.blocked, item2.key, item2.tool, lang),
     undo: item2.blocked === null ? copy2.undo : null
   };
 }
 function tuneNoticeText(notice, lang) {
   const lines = TUNE_COPY[lang].notices;
-  return notice.kind === "not_saved" ? lines.not_saved : fill(lines.plan_unsaved, { code: notice.code });
+  switch (notice.kind) {
+    case "not_saved":
+      return lines.not_saved;
+    case "plan_unsaved":
+      return fill(lines.plan_unsaved, { code: notice.code });
+    case "unfinished_work":
+      return fill(lines.unfinished_work, { count: notice.count });
+  }
+}
+var WORK_COPY = {
+  en: {
+    written: { apply: "Changed.", undo: "Undone." },
+    verified: "Verified. The value is still in place and the item is off when judged again.",
+    undone: "Undone later.",
+    writtenOnResume: "The run was interrupted, but the file shows the change was written.",
+    unknown: "The run was interrupted and the result is unknown. Check the file yourself.",
+    checkFailed: "Not written because the check before the change failed. This may be a fault in this tool.",
+    notApplied: {
+      "no-longer-candidate": "Not changed because it is no longer a candidate when judged again. Plan again.",
+      "plan-differs": "Not changed because the place or value differs from the plan now. Plan again.",
+      "changed-since-plan": "Not changed because the file changed after the plan. Plan again.",
+      "changed-before-write": "Not changed because the file changed just before the write. Plan again.",
+      "already-set": "Not changed because it already has that value.",
+      "changed-since-apply": "Not overwritten because the value changed after the apply. Look at the current value and decide yourself.",
+      "not-written": "Nothing to undo because this item was not applied.",
+      "interrupted": "The run was interrupted before the change, so it is recorded as not applied."
+    },
+    writeFailed: "The file could not be replaced ({code}).",
+    notices: {
+      reconciled: "Reconciled {count} unfinished tune {count:run|runs} with the files.",
+      overwritten: "Another program wrote {path} again after the change. Check it with aq tune verify.",
+      replan: "Some items were not changed. Plan again with aq tune plan.",
+      "new-session": "Claude Code sessions that are already open may not pick this up. Check in a new session.",
+      "restart-codex": "Codex needs a restart to apply this."
+    },
+    verify: {
+      ok: "Still off.",
+      changed: "The value changed after the apply. Check the current settings.",
+      still: "The file still has the value, but it is a candidate again when judged. Another settings layer may turn it back on."
+    }
+  },
+  ko: {
+    written: { apply: "\uBC14\uAFE8\uC2B5\uB2C8\uB2E4.", undo: "\uB418\uB3CC\uB838\uC2B5\uB2C8\uB2E4." },
+    verified: "\uD655\uC778\uD588\uC2B5\uB2C8\uB2E4. \uAC12\uC774 \uADF8\uB300\uB85C\uC774\uACE0 \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
+    undone: "\uADF8 \uB4A4\uC5D0 \uB418\uB3CC\uB838\uC2B5\uB2C8\uB2E4.",
+    writtenOnResume: "\uB04A\uAE34 \uC791\uC5C5\uC774\uC9C0\uB9CC \uD30C\uC77C\uC5D0 \uC4F4 \uAC83\uC744 \uD655\uC778\uD588\uC2B5\uB2C8\uB2E4.",
+    unknown: "\uB04A\uAE34 \uC791\uC5C5\uC774\uB77C \uACB0\uACFC\uB97C \uBAA8\uB985\uB2C8\uB2E4. \uD30C\uC77C\uC744 \uC9C1\uC811 \uD655\uC778\uD558\uC138\uC694.",
+    checkFailed: "\uBC14\uAFB8\uAE30 \uC804 \uAC80\uC0AC\uC5D0\uC11C \uAC78\uB824 \uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC774 \uB3C4\uAD6C\uC758 \uC798\uBABB\uC77C \uC218 \uC788\uC2B5\uB2C8\uB2E4.",
+    notApplied: {
+      "no-longer-candidate": "\uB2E4\uC2DC \uD310\uC815\uD558\uB2C8 \uB354\uB294 \uD6C4\uBCF4\uAC00 \uC544\uB2C8\uC5B4\uC11C \uBC14\uAFB8\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      "plan-differs": "\uACC4\uD68D\uD55C \uB4A4 \uBC14\uAFC0 \uC790\uB9AC\uB098 \uAC12\uC774 \uB2EC\uB77C\uC838 \uBC14\uAFB8\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      "changed-since-plan": "\uACC4\uD68D\uD55C \uB4A4 \uD30C\uC77C\uC774 \uBC14\uB00C\uC5B4 \uBC14\uAFB8\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      "changed-before-write": "\uBC14\uAFB8\uAE30 \uBC14\uB85C \uC55E\uC5D0\uC11C \uD30C\uC77C\uC774 \uBC14\uB00C\uC5B4 \uBC14\uAFB8\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      "already-set": "\uC774\uBBF8 \uADF8 \uAC12\uC774\uB77C \uBC14\uAFB8\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
+      "changed-since-apply": "\uC801\uC6A9\uD55C \uB4A4 \uADF8 \uAC12\uC774 \uBC14\uB00C\uC5B4 \uB36E\uC5B4\uC4F0\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. \uC9C0\uAE08 \uAC12\uC744 \uBCF4\uACE0 \uC9C1\uC811 \uC815\uD558\uC138\uC694.",
+      "not-written": "\uC801\uC6A9\uB418\uC9C0 \uC54A\uC740 \uD56D\uBAA9\uC774\uB77C \uB418\uB3CC\uB9B4 \uAC83\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+      "interrupted": "\uBC14\uAFB8\uAE30 \uC804\uC5D0 \uB04A\uAE34 \uC791\uC5C5\uC774\uB77C \uC801\uC6A9 \uC548 \uB428\uC73C\uB85C \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4."
+    },
+    writeFailed: "\uD30C\uC77C\uC744 \uAC08\uC544 \uB07C\uC6B0\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4({code}).",
+    notices: {
+      reconciled: "\uB05D\uB098\uC9C0 \uC54A\uC740 \uC815\uBE44 \uC791\uC5C5 {count}\uAC1C\uB97C \uC2E4\uC81C \uD30C\uC77C\uB85C \uB9DE\uCDC4\uC2B5\uB2C8\uB2E4.",
+      overwritten: "{path}\uB97C \uBC14\uAFBC \uB4A4 \uB2E4\uB978 \uD504\uB85C\uADF8\uB7A8\uC774 \uB2E4\uC2DC \uC37C\uC2B5\uB2C8\uB2E4. aq tune verify\uB85C \uD655\uC778\uD558\uC138\uC694.",
+      replan: "\uBC14\uAFB8\uC9C0 \uC54A\uC740 \uD56D\uBAA9\uC774 \uC788\uC2B5\uB2C8\uB2E4. aq tune plan\uC73C\uB85C \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
+      "new-session": "Claude Code\uB294 \uC9C0\uAE08 \uB5A0 \uC788\uB294 \uC138\uC158\uC5D0\uB294 \uBC14\uB85C \uC801\uC6A9\uB418\uC9C0 \uC54A\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4. \uC0C8 \uC138\uC158\uC5D0\uC11C \uD655\uC778\uD558\uC138\uC694.",
+      "restart-codex": "Codex\uB294 \uB2E4\uC2DC \uC2DC\uC791\uD574\uC57C \uC801\uC6A9\uB429\uB2C8\uB2E4."
+    },
+    verify: {
+      ok: "\uADF8\uB300\uB85C \uAEBC\uC838 \uC788\uC2B5\uB2C8\uB2E4.",
+      changed: "\uBC14\uAFBC \uAC12\uC774 \uADF8 \uB4A4\uC5D0 \uB2EC\uB77C\uC84C\uC2B5\uB2C8\uB2E4. \uC9C0\uAE08 \uC124\uC815\uC744 \uD655\uC778\uD558\uC138\uC694.",
+      still: "\uD30C\uC77C\uC5D0\uB294 \uADF8\uB300\uB85C\uC9C0\uB9CC \uB2E4\uC2DC \uD310\uC815\uD574\uB3C4 \uD6C4\uBCF4\uB85C \uB098\uC635\uB2C8\uB2E4. \uB2E4\uB978 \uC124\uC815 \uCE35\uC774 \uB2E4\uC2DC \uCF1C\uACE0 \uC788\uC744 \uC218 \uC788\uC2B5\uB2C8\uB2E4."
+    }
+  }
+};
+var isNotAppliedReason = (reason) => reason !== null && Object.hasOwn(WORK_COPY.en.notApplied, reason);
+var isBlock = (reason) => reason !== null && Object.hasOwn(TUNE_COPY.en.blocked, reason);
+function workItemText(item2, kind, lang) {
+  const copy2 = WORK_COPY[lang];
+  switch (item2.state) {
+    case "written":
+      return item2.reason === "interrupted" ? copy2.writtenOnResume : copy2.written[kind];
+    case "verified":
+      return copy2.verified;
+    case "undone":
+      return copy2.undone;
+    case "unknown":
+      return copy2.unknown;
+    case "rejected":
+      return isBlock(item2.reason) ? blockedText(item2.reason, item2.key, item2.tool, lang) : copy2.checkFailed;
+    case "not_applied":
+      return isNotAppliedReason(item2.reason) ? copy2.notApplied[item2.reason] : fill(copy2.writeFailed, { code: item2.reason ?? "unknown" });
+    case "planned":
+    case "writing":
+      return copy2.unknown;
+  }
+}
+function workNoticeText(notice, lang) {
+  const lines = WORK_COPY[lang].notices;
+  if (notice.kind === "reconciled") return fill(lines.reconciled, { count: notice.count });
+  if (notice.kind === "overwritten") return fill(lines.overwritten, { path: notice.path });
+  return lines[notice.kind];
+}
+function verifyText(result, lang) {
+  const copy2 = WORK_COPY[lang].verify;
+  if (!result.kept) return copy2.changed;
+  return result.stillCandidate ? copy2.still : copy2.ok;
 }
 
 // src/tune/plan.ts
@@ -10800,11 +10945,130 @@ async function writePlan(stateDir2, plan) {
   return path;
 }
 
+// src/tune/work.ts
+import { chmod, mkdir as mkdir6, open as open5, readdir as readdir8, readFile as readFile9, rename as rename4, rm as rm3, unlink as unlink2 } from "node:fs/promises";
+import { join as join26 } from "node:path";
+var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
+var TUNE_DIR = "tune";
+var LOCK_FILE = join26(TUNE_DIR, "lock");
+async function writeDurable(path, data, mode) {
+  const temporary = `${path}.${process.pid}.tmp`;
+  try {
+    const handle = await open5(temporary, "w");
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    if (mode !== void 0 && process.platform !== "win32") await chmod(temporary, mode);
+    await rename4(temporary, path);
+  } catch (error) {
+    await rm3(temporary, { force: true }).catch(() => void 0);
+    throw error;
+  }
+}
+var workPath = (stateDir2, workId) => join26(stateDir2, TUNE_DIR, `${workId}.json`);
+async function saveWork(stateDir2, work) {
+  await mkdir6(join26(stateDir2, TUNE_DIR), { recursive: true });
+  await writeDurable(workPath(stateDir2, work.workId), `${JSON.stringify(work, null, 2)}
+`);
+}
+var isWork = (value) => {
+  const work = value;
+  return typeof work === "object" && work !== null && typeof work.workId === "string" && Array.isArray(work.items) && Array.isArray(work.files);
+};
+async function loadWork(stateDir2, workId) {
+  if (!ID_PATTERN.test(workId)) return null;
+  try {
+    const value = JSON.parse(await readFile9(workPath(stateDir2, workId), "utf8"));
+    return isWork(value) && value.workId === workId ? value : null;
+  } catch {
+    return null;
+  }
+}
+async function listWorks(stateDir2) {
+  let names2;
+  try {
+    names2 = await readdir8(join26(stateDir2, TUNE_DIR));
+  } catch {
+    return [];
+  }
+  const works = [];
+  for (const name of names2.sort()) {
+    if (!name.endsWith(".json")) continue;
+    const work = await loadWork(stateDir2, name.slice(0, -".json".length));
+    if (work !== null) works.push(work);
+  }
+  return works;
+}
+var unfinished = (work) => work.items.some((item2) => item2.state === "planned" || item2.state === "writing");
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+async function takeLock(stateDir2, alive = isAlive) {
+  const path = join26(stateDir2, LOCK_FILE);
+  await mkdir6(join26(stateDir2, TUNE_DIR), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const handle = await open5(path, "wx");
+      try {
+        await handle.writeFile(JSON.stringify({ pid: process.pid, at: (/* @__PURE__ */ new Date()).toISOString() }));
+      } finally {
+        await handle.close();
+      }
+      return { release: () => unlink2(path).catch(() => void 0) };
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    let pid;
+    try {
+      pid = JSON.parse(await readFile9(path, "utf8")).pid;
+    } catch {
+      return null;
+    }
+    if (typeof pid !== "number" || alive(pid)) return null;
+    await unlink2(path).catch(() => void 0);
+  }
+  return null;
+}
+async function reconcileWorks(stateDir2, read = readTarget) {
+  const done = [];
+  for (const work of await listWorks(stateDir2)) {
+    if (!unfinished(work)) continue;
+    for (const file of work.files) {
+      const pending = work.items.filter((item2) => item2.file === file.path && (item2.state === "planned" || item2.state === "writing"));
+      if (pending.length === 0) continue;
+      let state = "not_applied";
+      if (file.candidate !== null) {
+        const now = await read(file.path);
+        const fingerprint = now.status === "ok" ? fingerprintOf(now.bytes) : now.status === "missing" ? null : void 0;
+        state = fingerprint === file.candidate ? "written" : fingerprint === file.before ? "not_applied" : "unknown";
+      }
+      for (const item2 of pending) {
+        item2.state = state;
+        item2.reason = "interrupted";
+      }
+    }
+    for (const item2 of work.items) {
+      if (item2.state !== "planned" && item2.state !== "writing") continue;
+      item2.state = "not_applied";
+      item2.reason = "interrupted";
+    }
+    await saveWork(stateDir2, work);
+    done.push(work.workId);
+  }
+  return done;
+}
+
 // src/commands/tune-plan.ts
 var codeOf2 = (error) => error?.code ?? "unknown";
-async function runTunePlan(options) {
-  const now = options.now ?? Date.now;
-  const started = now();
+async function judgeTune(options) {
   const opened = await openState(options.stateDir);
   const gathered = await gatherCheckupInput({
     env: options.env,
@@ -10812,7 +11076,7 @@ async function runTunePlan(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join26(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join27(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -10830,9 +11094,17 @@ async function runTunePlan(options) {
     const context = { home, bundles: judged.skills, servers: judged.servers, versionOk: versionVerified(candidate.tool, highestMainVersion(input.summaries)) };
     items.push(tuneItem(candidate, context, reads.get(path)));
   }
+  return { items, reads };
+}
+async function runTunePlan(options) {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const { items, reads } = await judgeTune({ ...options, cache: options.save });
   const files = [...reads].map(([path, read]) => ({ path, status: read.status, fingerprint: read.status === "ok" ? fingerprintOf(read.bytes) : null, items: items.filter((item2) => item2.file === path).map((item2) => item2.id) }));
   const base = { createdAt: new Date(options.clock.nowMs).toISOString(), appVersion: PROGRAM_VERSION, items, files };
   const notices2 = [];
+  const pending = (await listWorks(options.stateDir)).filter(unfinished).length;
+  if (pending > 0) notices2.push({ kind: "unfinished_work", count: pending });
   let plan = { planId: null, ...base };
   if (options.save) {
     const planId = planIdOf(options.clock.nowMs, options.random?.() ?? randomBytes2(3).toString("hex"));
@@ -10847,6 +11119,523 @@ async function runTunePlan(options) {
   }
   const text = { items: Object.fromEntries(items.map((item2) => [item2.id, tuneItemText(item2, options.lang)])), notices: notices2.map((notice) => tuneNoticeText(notice, options.lang)) };
   return { plan, run: { durationMs: now() - started, saved: plan.planId !== null, notices: notices2, text } };
+}
+
+// src/commands/tune-run.ts
+import { randomBytes as randomBytes3 } from "node:crypto";
+import { readFile as readFile10 } from "node:fs/promises";
+import { join as join28 } from "node:path";
+import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
+
+// src/tune/engine.ts
+import { stat as stat6 } from "node:fs/promises";
+
+// src/tune/json-edit.ts
+import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
+var SCALAR = /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y;
+function tokensOf(text) {
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    if (char === " " || char === "	" || char === "\n" || char === "\r") {
+      i++;
+      continue;
+    }
+    if (char === "{" || char === "}" || char === "[" || char === "]" || char === ":" || char === ",") {
+      tokens.push({ type: char, start: i, end: i + 1 });
+      i++;
+      continue;
+    }
+    if (char === '"') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== '"') j += text[j] === "\\" ? 2 : 1;
+      if (j >= text.length) return null;
+      tokens.push({ type: "string", start: i, end: j + 1 });
+      i = j + 1;
+      continue;
+    }
+    SCALAR.lastIndex = i;
+    const match = SCALAR.exec(text);
+    if (match === null) return null;
+    tokens.push({ type: "scalar", start: i, end: i + match[0].length });
+    i += match[0].length;
+  }
+  return tokens;
+}
+function treeOf(text) {
+  const tokens = tokensOf(text);
+  if (tokens === null) return null;
+  let at = 0;
+  const value = () => {
+    const token = tokens[at++];
+    if (token === void 0) return null;
+    if (token.type === "string" || token.type === "scalar") return { type: "value", start: token.start, end: token.end };
+    if (token.type !== "{" && token.type !== "[") return null;
+    const close = token.type === "{" ? "}" : "]";
+    const members = [];
+    const items = [];
+    const done = (end) => token.type === "{" ? { type: "object", start: token.start, end, members } : { type: "array", start: token.start, end, items };
+    if (tokens[at]?.type === close) return done(tokens[at++].end);
+    for (; ; ) {
+      if (token.type === "{") {
+        const key = tokens[at++];
+        if (key?.type !== "string" || tokens[at++]?.type !== ":") return null;
+        const inner = value();
+        if (inner === null) return null;
+        members.push({ key: JSON.parse(text.slice(key.start, key.end)), start: key.start, value: inner });
+      } else {
+        const inner = value();
+        if (inner === null) return null;
+        items.push(inner);
+      }
+      const sep2 = tokens[at++];
+      if (sep2?.type === close) return done(sep2.end);
+      if (sep2?.type !== ",") return null;
+    }
+  };
+  try {
+    const root = value();
+    return root !== null && at === tokens.length ? root : null;
+  } catch {
+    return null;
+  }
+}
+var eolOf = (text) => text.includes("\r\n") ? "\r\n" : "\n";
+function unitOf(text) {
+  let unit = null;
+  for (const line of text.split(/\r?\n/)) {
+    const indent = /^[ \t]+(?=\S)/.exec(line)?.[0];
+    if (indent === void 0) continue;
+    if (indent.startsWith("	")) return "	";
+    if (unit === null || indent.length < unit.length) unit = indent;
+  }
+  return unit ?? "  ";
+}
+var indentAt = (text, pos) => /^[ \t]*/.exec(text.slice(text.lastIndexOf("\n", pos - 1) + 1))[0];
+var containerText = (open6, close, entries, indent, style) => {
+  if (indent === null) return `${open6}${entries.map((entry) => entry(null)).join(", ")}${close}`;
+  const inner = indent + style.unit;
+  return `${open6}${style.eol}${entries.map((entry) => inner + entry(inner)).join(`,${style.eol}`)}${style.eol}${indent}${close}`;
+};
+var member = (key, value) => (indent) => `${JSON.stringify(key)}: ${value(indent)}`;
+var scalar = (value) => () => JSON.stringify(value);
+var serverEntry = (serverName) => () => `{ "serverName": ${JSON.stringify(serverName)} }`;
+var spansOf = (node) => node.type === "object" ? node.members.map((m) => ({ start: m.start, end: m.value.end })) : node.items;
+var bracketsOf = (node) => node.type === "object" ? ["{", "}"] : ["[", "]"];
+function insertInto(text, node, entry, style, multiline) {
+  const spans = spansOf(node);
+  const [open6, close] = bracketsOf(node);
+  const last = spans[spans.length - 1];
+  if (last === void 0) return { start: node.start, end: node.end, text: containerText(open6, close, [entry], multiline ? indentAt(text, node.start) : null, style) };
+  if (text.slice(node.start, spans[0].start).includes("\n")) {
+    const indent = indentAt(text, last.start);
+    return { start: last.end, end: last.end, text: `,${style.eol}${indent}${entry(indent)}` };
+  }
+  return { start: last.end, end: last.end, text: `, ${entry(null)}` };
+}
+function removeAt(node, index) {
+  const spans = spansOf(node);
+  const [open6, close] = bracketsOf(node);
+  if (spans.length === 1) return { start: node.start, end: node.end, text: open6 + close };
+  if (index > 0) return { start: spans[index - 1].end, end: spans[index].end, text: "" };
+  return { start: spans[0].start, end: spans[1].start, text: "" };
+}
+function lastIndexOf(node, key) {
+  for (let i = node.members.length - 1; i >= 0; i--) if (node.members[i].key === key) return i;
+  return -1;
+}
+function editOne(text, op) {
+  const root = treeOf(text);
+  if (root === null || root.type !== "object") return null;
+  const style = { eol: eolOf(text), unit: unitOf(text) };
+  const multiline = text.slice(root.start, root.end).includes("\n");
+  const parentAt = lastIndexOf(root, op.parent);
+  let edit;
+  if (parentAt < 0) {
+    if (op.op === "delete" || op.op === "remove") return null;
+    const child = op.op === "append" ? serverEntry(op.entry.serverName) : member(op.name, scalar(op.value));
+    const open6 = op.op === "append" ? "[" : "{";
+    const close = op.op === "append" ? "]" : "}";
+    edit = insertInto(text, root, member(op.parent, (indent) => containerText(open6, close, [child], indent, style)), style, multiline);
+  } else {
+    const node = root.members[parentAt].value;
+    if (op.op === "append" || op.op === "remove") {
+      if (node.type !== "array") return null;
+      if (op.op === "append") edit = insertInto(text, node, serverEntry(op.entry.serverName), style, multiline);
+      else {
+        let index = -1;
+        for (let i = node.items.length - 1; i >= 0 && index < 0; i--) {
+          const item2 = node.items[i];
+          if (isDeepStrictEqual2(JSON.parse(text.slice(item2.start, item2.end)), { serverName: op.entry.serverName })) index = i;
+        }
+        if (index < 0) return null;
+        edit = removeAt(node, index);
+      }
+    } else {
+      if (node.type !== "object") return null;
+      const at = lastIndexOf(node, op.name);
+      if (op.op === "delete") {
+        if (at < 0) return null;
+        edit = removeAt(node, at);
+      } else if (at >= 0) {
+        const value = node.members[at].value;
+        edit = { start: value.start, end: value.end, text: JSON.stringify(op.value) };
+      } else edit = insertInto(text, node, member(op.name, scalar(op.value)), style, multiline);
+    }
+  }
+  return text.slice(0, edit.start) + edit.text + text.slice(edit.end);
+}
+function editJson(original, ops) {
+  let text = original ?? "{\n}\n";
+  for (const op of ops) {
+    if (text === null) return null;
+    text = editOne(text, op);
+  }
+  return text;
+}
+var define = (target, key, value) => {
+  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
+};
+function jsonMeaningOk(original, candidate, ops) {
+  let expected;
+  let actual;
+  try {
+    expected = original === null ? {} : JSON.parse(original);
+    actual = JSON.parse(candidate);
+  } catch {
+    return false;
+  }
+  if (!isObject5(expected)) return false;
+  for (const op of ops) {
+    if (!Object.hasOwn(expected, op.parent)) {
+      if (op.op === "delete" || op.op === "remove") return false;
+      define(expected, op.parent, op.op === "append" ? [] : {});
+    }
+    const parent = expected[op.parent];
+    if (op.op === "set" || op.op === "delete") {
+      if (!isObject5(parent)) return false;
+      if (op.op === "set") define(parent, op.name, op.value);
+      else if (!Object.hasOwn(parent, op.name)) return false;
+      else delete parent[op.name];
+    } else {
+      if (!Array.isArray(parent)) return false;
+      if (op.op === "append") parent.push({ serverName: op.entry.serverName });
+      else {
+        let index = -1;
+        for (let i = parent.length - 1; i >= 0 && index < 0; i--) if (isDeepStrictEqual2(parent[i], { serverName: op.entry.serverName })) index = i;
+        if (index < 0) return false;
+        parent.splice(index, 1);
+      }
+    }
+  }
+  return isDeepStrictEqual2(expected, actual);
+}
+
+// src/tune/toml-edit.ts
+import { isDeepStrictEqual as isDeepStrictEqual3 } from "node:util";
+var ENABLED = /^(\s*(?:enabled|"enabled"|'enabled')\s*=\s*)(true|false)(?=\s*(?:#.*)?$)/;
+function linesOf(text) {
+  const parts = text.split(/(\r?\n)/);
+  const lines = [];
+  let state = null;
+  for (let i = 0; i < parts.length; i += 2) {
+    const line = parts[i];
+    lines.push({ text: line, eol: parts[i + 1] ?? "", inString: state !== null });
+    const next = scanLine(line, state);
+    if (next === void 0) return null;
+    state = next;
+  }
+  return state === null ? lines : null;
+}
+var isHeader = (line) => !line.inString && headerKey(line.text) !== null;
+function isHeaderOf(line, table) {
+  if (line.inString) return false;
+  const key = headerKey(line.text);
+  const keys = key === null ? null : splitDotted(key);
+  return keys !== null && keys.length === 2 && keys[0] === "mcp_servers" && keys[1] === table;
+}
+function editOne2(text, op) {
+  const lines = linesOf(text);
+  if (lines === null) return null;
+  const heads = lines.flatMap((line, index) => isHeaderOf(line, op.table) ? [index] : []);
+  if (heads.length !== 1) return null;
+  const head = heads[0];
+  let end = head + 1;
+  while (end < lines.length && !isHeader(lines[end])) end++;
+  const found = [];
+  for (let i = head + 1; i < end; i++) if (!lines[i].inString && ENABLED.test(lines[i].text)) found.push(i);
+  if (found.length > 1) return null;
+  if (op.op === "delete") {
+    if (found.length === 0) return null;
+    lines.splice(found[0], 1);
+  } else if (found.length === 1) {
+    const line = lines[found[0]];
+    line.text = line.text.replace(ENABLED, (_match, before) => `${before}${op.value}`);
+  } else {
+    const headLine = lines[head];
+    let indent = "";
+    for (let i = head + 1; i < end; i++) {
+      const line = lines[i];
+      if (!line.inString && /\S/.test(line.text) && !/^\s*#/.test(line.text)) {
+        indent = /^[ \t]*/.exec(line.text)[0];
+        break;
+      }
+    }
+    const added = { text: `${indent}enabled = ${op.value}`, eol: headLine.eol, inString: false };
+    if (headLine.eol === "") {
+      headLine.eol = text.includes("\r\n") ? "\r\n" : "\n";
+      added.eol = "";
+    }
+    lines.splice(head + 1, 0, added);
+  }
+  return lines.map((line) => line.text + line.eol).join("");
+}
+function editToml(original, ops) {
+  let text = original;
+  for (const op of ops) {
+    if (text === null) return null;
+    text = editOne2(text, op);
+  }
+  return text;
+}
+function tomlMeaningOk(original, candidate, ops) {
+  const expected = parseCodexConfig(original);
+  const actual = parseCodexConfig(candidate);
+  if (expected === null || actual === null) return false;
+  for (const op of ops) {
+    const servers = expected.mcp_servers;
+    const table = isTable(servers) ? servers[op.table] : void 0;
+    if (!isTable(table)) return false;
+    if (op.op === "set") table.enabled = op.value;
+    else if (!Object.hasOwn(table, "enabled")) return false;
+    else delete table.enabled;
+  }
+  return isDeepStrictEqual3(expected, actual);
+}
+
+// src/tune/engine.ts
+async function replaceSetting(path, data) {
+  const mode = await stat6(path).then(
+    (info) => info.mode & 4095,
+    () => void 0
+  );
+  await writeDurable(path, data, mode);
+}
+var fingerprintRead = (read) => read.status === "ok" ? fingerprintOf(read.bytes) : read.status === "missing" ? null : void 0;
+function jsonOpOf(item2) {
+  const { key, after } = item2;
+  if (key.kind === "json-list-add") return { op: after.present ? "append" : "remove", parent: key.parent, entry: key.entry };
+  if (key.kind === "json-entry") return after.present ? { op: "set", parent: key.parent, name: key.name, value: after.value } : { op: "delete", parent: key.parent, name: key.name };
+  throw new Error("JSON \uC790\uB9AC\uAC00 \uC544\uB2C8\uB2E4");
+}
+function tomlOpOf(item2) {
+  if (item2.key.kind !== "toml-table-key") throw new Error("TOML \uC790\uB9AC\uAC00 \uC544\uB2C8\uB2E4");
+  return item2.after.present ? { op: "set", table: item2.key.table, value: item2.after.value } : { op: "delete", table: item2.key.table };
+}
+function candidateOf(original, items) {
+  if (items[0].key.kind === "toml-table-key") {
+    if (original === null) return null;
+    const ops2 = items.map(tomlOpOf);
+    const text2 = editToml(original, ops2);
+    return text2 !== null && tomlMeaningOk(original, text2, ops2) ? text2 : null;
+  }
+  const ops = items.map(jsonOpOf);
+  const text = editJson(original, ops);
+  return text !== null && jsonMeaningOk(original, text, ops) ? text : null;
+}
+async function runFiles(work, io, planned) {
+  const notices2 = [];
+  const files = [...work.files].sort((a, b) => normalizePath(a.path) < normalizePath(b.path) ? -1 : 1);
+  for (const file of files) {
+    const items = work.items.filter((item2) => item2.file === file.path && item2.state === "planned");
+    if (items.length === 0) continue;
+    const mark = async (list, state, reason) => {
+      for (const item2 of list) {
+        item2.state = state;
+        item2.reason = reason;
+      }
+      await io.save(work);
+    };
+    const read = await io.read(file.path);
+    const fingerprint = fingerprintRead(read);
+    if (fingerprint === void 0) {
+      await mark(items, "rejected", "file-unreadable");
+      continue;
+    }
+    file.before = fingerprint;
+    if (planned !== null && planned.get(file.path) !== fingerprint) {
+      await mark(items, "not_applied", "changed-since-plan");
+      continue;
+    }
+    const ready = [];
+    for (const item2 of items) {
+      const block = blockOf(read, item2.key);
+      const slot = slotOf(read, item2.key);
+      if (block !== null || slot === null) {
+        item2.state = "rejected";
+        item2.reason = block ?? "parent-shape";
+      } else if (planned !== null && sameSlot(slot, item2.after)) {
+        item2.state = "not_applied";
+        item2.reason = "already-set";
+      } else if (planned === null && !sameSlot(slot, item2.before)) {
+        item2.state = "not_applied";
+        item2.reason = "changed-since-apply";
+      } else {
+        if (planned !== null) item2.before = slot;
+        ready.push(item2);
+      }
+    }
+    if (ready.length === 0) {
+      await io.save(work);
+      continue;
+    }
+    const candidate = candidateOf(read.status === "ok" ? read.bytes.toString("utf8") : null, ready);
+    if (candidate === null) {
+      await mark(ready, "rejected", "check-failed");
+      continue;
+    }
+    file.candidate = fingerprintOf(Buffer.from(candidate, "utf8"));
+    await mark(ready, "writing", null);
+    await io.beforeRecheck?.(file.path);
+    if (fingerprintRead(await io.read(file.path)) !== fingerprint) {
+      await mark(ready, "not_applied", "changed-before-write");
+      continue;
+    }
+    try {
+      await io.replace(file.path, candidate);
+    } catch (error) {
+      await mark(ready, "not_applied", error.code ?? "write-failed");
+      continue;
+    }
+    await mark(ready, "written", null);
+    await io.afterReplace?.(file.path);
+    if (fingerprintRead(await io.read(file.path)) !== file.candidate) notices2.push({ kind: "overwritten", path: file.path });
+  }
+  return notices2;
+}
+
+// src/commands/tune-run.ts
+var failure = (code, message) => Object.assign(new Error(message), { code });
+async function withLock(options, body) {
+  const lock = await takeLock(options.stateDir, options.alive);
+  if (lock === null) throw failure("locked", `another tune run holds the lock: ${join28(options.stateDir, LOCK_FILE)}`);
+  try {
+    return await body();
+  } finally {
+    await lock.release();
+  }
+}
+async function loadPlan(stateDir2, planId) {
+  if (!ID_PATTERN.test(planId)) return null;
+  try {
+    const plan = JSON.parse(await readFile10(join28(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
+    return plan !== null && plan.planId === planId && Array.isArray(plan.items) && Array.isArray(plan.files) ? plan : null;
+  } catch {
+    return null;
+  }
+}
+var afterOf = (item2) => item2.key.kind === "json-list-add" ? { present: true } : { present: true, value: item2.next };
+var filesOf = (items) => [...new Set(items.map((item2) => item2.file))].map((path) => ({ path, items: items.filter((item2) => item2.file === path).map((item2) => item2.id), before: null, candidate: null }));
+var newWork = (options, kind, planId, of) => ({
+  workId: planIdOf(options.clock.nowMs, options.random?.() ?? randomBytes3(3).toString("hex")),
+  kind,
+  planId,
+  of,
+  createdAt: new Date(options.clock.nowMs).toISOString(),
+  appVersion: PROGRAM_VERSION,
+  items: [],
+  files: []
+});
+var engineIo = (options) => ({ read: readTarget, replace: replaceSetting, save: (work) => saveWork(options.stateDir, work), ...options.io });
+var isUndoable = (item2) => item2.state === "written" || item2.state === "verified";
+var REPLAN = /* @__PURE__ */ new Set(["no-longer-candidate", "plan-differs", "changed-since-plan", "changed-before-write"]);
+function noticesOf(work, engine, reconciled) {
+  const notices2 = [];
+  if (reconciled.length > 0) notices2.push({ kind: "reconciled", count: reconciled.length });
+  notices2.push(...engine);
+  if (work.kind === "apply" && work.items.some((item2) => item2.state === "not_applied" && item2.reason !== null && REPLAN.has(item2.reason))) notices2.push({ kind: "replan" });
+  const written = work.items.filter((item2) => item2.state === "written");
+  if (written.some((item2) => item2.tool === "claude-code")) notices2.push({ kind: "new-session" });
+  if (written.some((item2) => item2.tool === "codex")) notices2.push({ kind: "restart-codex" });
+  return notices2;
+}
+function outcomeOf(options, started, work, notices2) {
+  const now = options.now ?? Date.now;
+  const text = { items: Object.fromEntries(work.items.map((item2) => [item2.id, workItemText(item2, work.kind, options.lang)])), notices: notices2.map((notice) => workNoticeText(notice, options.lang)) };
+  return { work, run: { durationMs: now() - started, notices: notices2, text } };
+}
+async function runTuneApply(options) {
+  const started = (options.now ?? Date.now)();
+  return withLock(options, async () => {
+    const reconciled = await reconcileWorks(options.stateDir);
+    const plan = await loadPlan(options.stateDir, options.planId);
+    if (plan === null) throw failure("plan-not-found", `no saved plan: ${options.planId}`);
+    const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
+    if (unknown.length > 0) throw failure("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    const { items: fresh } = await judgeTune({ ...options, cache: true });
+    const work = newWork(options, "apply", plan.planId, null);
+    for (const id of options.itemIds) {
+      const planned = plan.items.find((item2) => item2.id === id);
+      const now = fresh.find((item2) => item2.id === id);
+      const base = now ?? planned;
+      let state = "planned";
+      let reason = null;
+      if (now === void 0) [state, reason] = ["not_applied", "no-longer-candidate"];
+      else if (now.blocked !== null) [state, reason] = ["rejected", now.blocked];
+      else if (now.file !== planned.file || !isDeepStrictEqual4(now.key, planned.key) || !isDeepStrictEqual4(now.next, planned.next)) [state, reason] = ["not_applied", "plan-differs"];
+      work.items.push({ id, unit: base.unit, tool: base.tool, target: base.target, file: base.file, key: base.key, before: "current" in base ? { present: true, value: base.current } : { present: false }, after: afterOf(base), state, reason });
+    }
+    work.files = filesOf(work.items);
+    await saveWork(options.stateDir, work);
+    const engine = await runFiles(work, engineIo(options), new Map(plan.files.map((file) => [file.path, file.fingerprint])));
+    return outcomeOf(options, started, work, noticesOf(work, engine, reconciled));
+  });
+}
+async function runTuneUndo(options) {
+  const started = (options.now ?? Date.now)();
+  return withLock(options, async () => {
+    const reconciled = await reconcileWorks(options.stateDir);
+    const target = await loadWork(options.stateDir, options.workId);
+    if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
+    const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
+    if (unknown.length > 0) throw failure("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
+    const work = newWork(options, "undo", null, target.workId);
+    work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
+    work.files = filesOf(work.items);
+    await saveWork(options.stateDir, work);
+    const engine = await runFiles(work, engineIo(options), null);
+    for (const item2 of work.items) {
+      if (item2.state !== "written") continue;
+      const original = target.items.find((x) => x.id === item2.id);
+      original.state = "undone";
+    }
+    await saveWork(options.stateDir, target);
+    return outcomeOf(options, started, work, noticesOf(work, engine, reconciled));
+  });
+}
+async function runTuneVerify(options) {
+  const now = options.now ?? Date.now;
+  const started = now();
+  return withLock(options, async () => {
+    const reconciled = await reconcileWorks(options.stateDir);
+    const target = await loadWork(options.stateDir, options.workId);
+    if (target === null || target.kind !== "apply") throw failure("work-not-found", `no apply run: ${options.workId}`);
+    const { items: fresh } = await judgeTune({ ...options, cache: true });
+    const results = [];
+    for (const item2 of target.items) {
+      if (!isUndoable(item2)) continue;
+      const slot = slotOf(await readTarget(item2.file), item2.key);
+      const result = { id: item2.id, kept: slot !== null && sameSlot(slot, item2.after), stillCandidate: fresh.some((x) => x.id === item2.id) };
+      if (result.kept && !result.stillCandidate) item2.state = "verified";
+      results.push(result);
+    }
+    await saveWork(options.stateDir, target);
+    const notices2 = reconciled.length > 0 ? [{ kind: "reconciled", count: reconciled.length }] : [];
+    const text = { items: Object.fromEntries(results.map((result) => [result.id, verifyText(result, options.lang)])), notices: notices2.map((notice) => workNoticeText(notice, options.lang)) };
+    return { work: target, run: { durationMs: now() - started, results, notices: notices2, text } };
+  });
 }
 
 // src/commands/open.ts
@@ -10875,8 +11664,8 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 }
 
 // src/commands/clean.ts
-import { lstat as lstat9, readdir as readdir8, realpath as realpath7 } from "node:fs/promises";
-import { join as join27 } from "node:path";
+import { lstat as lstat9, readdir as readdir9, realpath as realpath7 } from "node:fs/promises";
+import { join as join29 } from "node:path";
 var isMissing5 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
@@ -10887,17 +11676,17 @@ async function lstatOrNull(path) {
   }
 }
 async function cleanReports(path, boundary) {
-  const names2 = (await readdir8(path)).sort();
+  const names2 = (await readdir9(path)).sort();
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat9(join27(path, name));
+    const info = await lstat9(join29(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join27(path, name);
+    const full = join29(path, name);
     const info = await lstat9(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
@@ -10911,7 +11700,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join27(dir, spec.name);
+  const path = join29(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -10953,18 +11742,18 @@ async function clean(dir, level) {
 }
 
 // src/commands/doctor.ts
-import { mkdir as mkdir6, rm as rm3, writeFile as writeFile4 } from "node:fs/promises";
-import { join as join28 } from "node:path";
+import { mkdir as mkdir7, rm as rm4, writeFile as writeFile4 } from "node:fs/promises";
+import { join as join30 } from "node:path";
 import * as zlib2 from "node:zlib";
 function hasZstd() {
   return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join28(dir, `.write-probe-${process.pid}`);
+  const probe = join30(dir, `.write-probe-${process.pid}`);
   try {
-    await mkdir6(dir, { recursive: true });
+    await mkdir7(dir, { recursive: true });
     await writeFile4(probe, "ok");
-    await rm3(probe, { force: true });
+    await rm4(probe, { force: true });
     return true;
   } catch {
     return false;
@@ -10992,8 +11781,8 @@ async function doctor(input) {
 }
 
 // src/commands/where.ts
-import { lstat as lstat10, readdir as readdir9 } from "node:fs/promises";
-import { join as join29 } from "node:path";
+import { lstat as lstat10, readdir as readdir10 } from "node:fs/promises";
+import { join as join31 } from "node:path";
 var isMissing6 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
@@ -11010,11 +11799,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat10(join29(dir, spec.name));
+        const info = await lstat10(join31(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join29(dir, spec.name));
+          const size = await treeSize(join31(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -11028,7 +11817,7 @@ async function where(dir) {
   }
   if (inside2) {
     const known = new Set(STATE_ENTRIES.map((spec) => spec.name));
-    report.others = (await readdir9(dir)).filter((name) => !known.has(name)).sort();
+    report.others = (await readdir10(dir)).filter((name) => !known.has(name)).sort();
   }
   return report;
 }
@@ -11062,6 +11851,26 @@ var printJson = (value) => {
   process.stdout.write(`${JSON.stringify(value, null, 2)}
 `);
 };
+function tuneRunArgs(command, rest) {
+  let lang = null;
+  let rescan = false;
+  const positional = [];
+  for (let index = 0; index < rest.length; index++) {
+    const arg = rest[index];
+    if (arg === "--lang") {
+      const value = rest[index + 1];
+      if (value === void 0 || value.startsWith("-")) return null;
+      lang = value;
+      index++;
+    } else if (arg === "--rescan") rescan = true;
+    else if (arg.startsWith("-")) return null;
+    else positional.push(arg);
+  }
+  const [id, ...items] = positional;
+  if (id === void 0 || !ID_PATTERN.test(id) || new Set(items).size !== items.length) return null;
+  if (command === "apply" && items.length === 0 || command === "verify" && items.length > 0) return null;
+  return { lang, rescan, id, items };
+}
 async function run(command, rest, context) {
   if (command === "doctor") {
     printJson(
@@ -11103,10 +11912,31 @@ async function run(command, rest, context) {
     );
     return 0;
   }
+  if (command === "tune" && (rest[0] === "apply" || rest[0] === "undo" || rest[0] === "verify")) {
+    const which = rest[0];
+    const args2 = tuneRunArgs(which, rest.slice(1));
+    if (args2 === null) return null;
+    const options = {
+      env: context.env,
+      homedir: context.homedir,
+      tmpdir: context.tmpdir ?? tmpdir(),
+      platform: context.platform ?? process.platform,
+      clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+      stateDir: stateDir(context.homedir),
+      rescan: args2.rescan,
+      entryFile: context.entryFile ?? process.argv[1] ?? "",
+      ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir }
+    };
+    if (which === "apply") printJson(await runTuneApply({ ...options, planId: args2.id, itemIds: args2.items }));
+    else if (which === "undo") printJson(await runTuneUndo({ ...options, workId: args2.id, itemIds: args2.items }));
+    else printJson(await runTuneVerify({ ...options, workId: args2.id }));
+    return 0;
+  }
   const args = command === "checkup" ? checkupArgs(rest) : null;
   if (args !== null) {
     const platform = context.platform ?? process.platform;
-    const open5 = context.open ?? ((path) => openInBrowser(path, platform));
+    const open6 = context.open ?? ((path) => openInBrowser(path, platform));
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
@@ -11119,7 +11949,7 @@ async function run(command, rest, context) {
       rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir },
-      ...args.flags.has("--no-open") ? {} : { open: open5 }
+      ...args.flags.has("--no-open") ? {} : { open: open6 }
     });
     printJson({ summary: outcome.summary, run: outcome.run });
     return 0;

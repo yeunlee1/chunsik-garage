@@ -36,7 +36,7 @@ export interface TunePlan {
 }
 
 /** 계획의 실행 알림. 저장하지 않은 계획과 저장하지 못한 계획은 적용할 수 없다 */
-export type TuneRunNotice = { kind: "not_saved" } | { kind: "plan_unsaved"; code: string };
+export type TuneRunNotice = { kind: "not_saved" } | { kind: "plan_unsaved"; code: string } | { kind: "unfinished_work"; count: number };
 
 /** 계획 ID. 결과 파일과 같은 시각 꼴에 무작위 여섯 글자를 붙인다 */
 export function planIdOf(nowMs: number, random: string): string {

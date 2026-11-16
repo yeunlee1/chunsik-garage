@@ -320,6 +320,9 @@ export function blockOf(read: TargetRead, key: TuneKey): TuneBlock | null {
 /** 그 자리의 지금 상태. 목록에 더하는 것은 이 도구가 더하는 항목이 목록에 있는지다 */
 export type Slot = { present: false } | { present: true; value?: unknown };
 
+/** 두 자리 상태가 같은지 */
+export const sameSlot = (a: Slot, b: Slot): boolean => a.present === b.present && isDeepStrictEqual(a.present ? a.value : undefined, b.present ? b.value : undefined);
+
 /** 그 자리의 지금 상태를 읽는다. 파일이 없으면 없음이고, 읽지 못했거나 풀리지 않거나 부모의 꼴이 다르면 null이다(끊긴 작업 맞추기, 되돌리기, 확인이 쓴다) */
 export function slotOf(read: TargetRead, key: TuneKey): Slot | null {
   if (read.status === "unreadable") return null;

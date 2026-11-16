@@ -1,8 +1,7 @@
 // 작업 하나를 파일마다 적용한다. 바꾸기 전 검사(16.3), 파일마다의 차례(16.5의 3.3~3.10), 되돌리기의 지금 값 확인(16.6)이고, 적용과 되돌리기가 같이 쓴다(「6단계 2부 계획 전 결정」 5·8번)
 import { stat } from "node:fs/promises";
-import { isDeepStrictEqual } from "node:util";
 import { normalizePath } from "../adapters/claude/locate.ts";
-import { blockOf, fingerprintOf, slotOf, type Slot, type TargetRead } from "./items.ts";
+import { blockOf, fingerprintOf, sameSlot, slotOf, type TargetRead } from "./items.ts";
 import { editJson, jsonMeaningOk, type JsonOp } from "./json-edit.ts";
 import { editToml, tomlMeaningOk, type TomlOp } from "./toml-edit.ts";
 import { writeDurable, type TuneWork, type WorkItem } from "./work.ts";
@@ -31,8 +30,6 @@ export async function replaceSetting(path: string, data: string): Promise<void> 
 /** 갈아 끼운 뒤 다시 읽으니 후보와 다른 파일. 누군가 갈아 끼운 뒤에 다시 쓴 것이다(16.5의 3.9) */
 export type EngineNotice = { kind: "overwritten"; path: string };
 
-const valueOf = (slot: Slot): unknown => (slot.present ? slot.value : undefined);
-const sameSlot = (a: Slot, b: Slot): boolean => a.present === b.present && isDeepStrictEqual(valueOf(a), valueOf(b));
 const fingerprintRead = (read: TargetRead): string | null | undefined => (read.status === "ok" ? fingerprintOf(read.bytes) : read.status === "missing" ? null : undefined);
 
 function jsonOpOf(item: WorkItem): JsonOp {

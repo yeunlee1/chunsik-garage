@@ -9,6 +9,7 @@ import { openState } from "../state/next-state.ts";
 import { fingerprintOf, readTarget, targetPath, tuneItem, type TargetRead, type TuneItem } from "../tune/items.ts";
 import { tuneItemText, tuneNoticeText, type TuneItemText } from "../tune/copy.ts";
 import { planIdOf, versionVerified, writePlan, type TunePlan, type TuneRunNotice } from "../tune/plan.ts";
+import { listWorks, unfinished } from "../tune/work.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
 import { selfIdentity } from "./self.ts";
@@ -40,9 +41,11 @@ export interface TunePlanOutcome {
 
 const codeOf = (error: unknown): string => (error as NodeJS.ErrnoException | null)?.code ?? "unknown";
 
-export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOutcome> {
-  const now = options.now ?? Date.now;
-  const started = now();
+/** 판정에 쓰는 것. cache면 상태 폴더의 캐시를 쓴다 */
+export type JudgeOptions = Omit<TunePlanOptions, "lang" | "save" | "now" | "random"> & { cache: boolean };
+
+/** 점검과 같은 입력으로 평가해 정비 후보를 계획 항목으로 짓는다. 바꿀 파일은 파일마다 한 번만 읽는다. 계획과, 적용·확인의 다시 하는 판정이 같이 쓴다(「6단계 계획 전 결정」 6번) */
+export async function judgeTune(options: JudgeOptions): Promise<{ items: TuneItem[]; reads: Map<string, TargetRead> }> {
   // 판정에 쓰는 지난 상태(무작위 값과 관측 기록)는 읽기만 한다. 계획은 상태와 관측 기록을 고치지 않는다(1부 결정 5번)
   const opened = await openState(options.stateDir);
   const gathered = await gatherCheckupInput({
@@ -51,7 +54,7 @@ export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOut
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -71,10 +74,20 @@ export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOut
     const context = { home, bundles: judged.skills, servers: judged.servers, versionOk: versionVerified(candidate.tool, highestMainVersion(input.summaries)) };
     items.push(tuneItem(candidate, context, reads.get(path)!));
   }
+  return { items, reads };
+}
+
+export async function runTunePlan(options: TunePlanOptions): Promise<TunePlanOutcome> {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const { items, reads } = await judgeTune({ ...options, cache: options.save });
   const files = [...reads].map(([path, read]) => ({ path, status: read.status, fingerprint: read.status === "ok" ? fingerprintOf(read.bytes) : null, items: items.filter((item) => item.file === path).map((item) => item.id) }));
   const base = { createdAt: new Date(options.clock.nowMs).toISOString(), appVersion: PROGRAM_VERSION, items, files };
 
   const notices: TuneRunNotice[] = [];
+  // 끝나지 않은 작업은 잠금을 잡는 적용이 먼저 맞춘다. 계획은 맞추지 않고 알리기만 한다(2부 결정 9번)
+  const pending = (await listWorks(options.stateDir)).filter(unfinished).length;
+  if (pending > 0) notices.push({ kind: "unfinished_work", count: pending });
   let plan: TunePlan = { planId: null, ...base };
   if (options.save) {
     const planId = planIdOf(options.clock.nowMs, options.random?.() ?? randomBytes(3).toString("hex"));

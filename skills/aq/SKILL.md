@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same.
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -81,3 +81,36 @@ Notice line. Find the first kind in this table that is in the notices and do wha
 | `report_unopened` | none (the report line already says it) |
 | `prune_failed` | none |
 | `prune_skipped` | none |
+
+## 5. Tune-up: turning off what is not used
+
+Only the program changes settings files. Never open, edit, or rewrite a settings file yourself, and never show its contents.
+
+1. When the user asks to tune up or clean up, run:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune plan --lang <lang>
+   ```
+
+2. The program prints `{"plan": {...}, "run": {...}}`. List each entry of `plan.items` with its sentences, which are in the `text.items` object of `run` under the same item ID: the title, the change, the impact, and the reason it cannot be changed automatically when there is one. Also relay the notice sentences in the `text.notices` list of `run`. If there are no items, say there is nothing to turn off now and stop.
+3. Ask which items to apply. Apply only what the user picks, and never an item that has a reason it cannot be changed automatically. Before applying, ask the user not to install plugins or change settings in other sessions for a moment.
+4. Run the apply with the plan ID and the picked item IDs. `plan.planId` is null when the plan was not saved; then it cannot be applied, so say so and stop.
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune apply <plan ID> <item ID…> --lang <lang>
+   ```
+
+5. The program prints `{"work": {...}, "run": {...}}`. Relay, for each item, its sentence in the `text.items` object of `run`, then every sentence in the `text.notices` list of `run`. Then run the check with `work.workId` and relay its sentences the same way:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune verify <work ID> --lang <lang>
+   ```
+
+6. Tell the user how to undo: ask Chunsik to undo it. To undo, run the command below with the same `work.workId`. Add item IDs after the work ID only when the user wants to undo some of them.
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" tune undo <work ID> --lang <lang>
+   ```
+
+7. If any tune command stops with `{"error": {...}}`, give `error.code` in one line: `locked` means another tune-up is running, `plan-not-found` means the plan should be made again. If writing a settings file is blocked by a sandbox or a permission prompt, tell the user the change needs permission to write that settings file.
+8. Before running `aq clean --all` for the user, warn that it also deletes the tune-up records, so the changes can no longer be undone with this tool.

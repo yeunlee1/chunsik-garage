@@ -657,13 +657,13 @@
         "id": 48,
         "title": "첫 배포: develop을 main에 병합",
         "description": "README 설치 명령(#main, @main)이 받는 첫 버전 0.1.0을 main에 둔다.",
-        "details": "사용자 지시(2026-11-16) 「이거 그럼 그냥 메인에 합쳐도 되는거아니냐」. develop→main 병합 요청을 병합 커밋으로 합치고, 임시 설정 폴더에서 #main/@main 설치와 실행을 확인한다. 새 세션 되돌리기의 작업 번호, 스킬 설명의 빠진 말 두 빈틈은 다음 버전에서 고친다.",
+        "details": "사용자 지시(2026-11-16) 「이거 그럼 그냥 메인에 합쳐도 되는거아니냐」. develop→main 병합 요청을 병합 커밋으로 합치고, 임시 설정 폴더에서 #main/@main 설치와 실행을 확인한다. 새 세션 되돌리기의 작업 번호, 스킬 설명의 빠진 말 두 빈틈은 다음 버전에서 고친다. 결과(2026-11-16): #18 병합 bca4c2f로 develop 전체가 main에 들어가, 임시 설정 폴더에 #main으로 설치한 Claude Code가 개발 의존성 86MB를 깔았다(설계 「4단계 계획에서 보완」 4번을 8단계가 빠뜨림). develop ee8f8c2 트리에서 PLUGIN_PATHS 23개만 남긴 커밋 1a5a8de를 #19로 main에 병합(2ebb61f). 다시 설치해 node_modules 없음, 두 도구 설치본 = main 23개 같은 바이트, claude plugin validate 통과, 설치된 aq.mjs doctor와 훅(첫 실행 한 줄, 두 번째 없음) 확인. main에 올리는 법은 설계 「8단계에서 정한 것」에 적음.",
         "testStrategy": "병합 트리가 develop과 같은지, 임시 CLAUDE_CONFIG_DIR·CODEX_HOME에 main 버전이 깔리고 aq.mjs와 훅이 도는지 본다.",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           47
         ],
-        "updatedAt": "2026-11-16T12:51:15.806Z"
+        "updatedAt": "2026-11-16T12:56:55.147Z"
       }
     ],
     "metadata": {

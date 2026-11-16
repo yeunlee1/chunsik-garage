@@ -7828,7 +7828,8 @@ var KNOWN = [
   /\bgh[pousr]_[A-Za-z0-9]{30,}/,
   /\bgithub_pat_[A-Za-z0-9_]{30,}/,
   /\bxox[abeprs]-[A-Za-z0-9-]{10,}/,
-  /\bAKIA[0-9A-Z]{16}\b/,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
   /\bAIza[0-9A-Za-z_-]{30,}/,
   /\bglpat-[A-Za-z0-9_-]{20,}/,
   /\bhf_[A-Za-z0-9]{30,}/,
@@ -7851,7 +7852,14 @@ function secretName(name) {
   if (NOT_VALUE_ENDINGS.some((ending) => n.endsWith(ending))) return false;
   return SECRET_WORDS.some((word) => n.includes(word)) || n.endsWith("key");
 }
-var isReference = (value) => /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%/.test(value);
+var isReference = (value) => /\$\{[^}]*\}/.test(value) || /(?:^|\s)(?:\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)(?=\s|$)/.test(value);
+var safeDecode = (value) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
 var isPlaceholder = (value) => /^(<[^>]*>|\[[^\]]*\]|\{[^}]*\}|your[\s_-].*|.*placeholder.*|(.)\2{5,}|change[\s_-]?me|example|test|dummy|none|null|undefined|true|false|todo|tbd)$/i.test(value.trim());
 var isKnown = (value) => KNOWN.some((pattern) => pattern.test(value));
 function literalSecret(value) {
@@ -7866,6 +7874,15 @@ function tableSpots(field, table) {
   if (!isObject7(table)) return [];
   return Object.entries(table).filter(([name, value]) => secretPair(name, value)).map(([name]) => ({ field, key: name }));
 }
+var HEADER_FLAGS = /* @__PURE__ */ new Set(["--header", "--headers", "-H"]);
+function headerForm(text) {
+  const match = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.+)$/.exec(text);
+  return match === null ? null : { name: match[1], value: match[2].trim() };
+}
+function headerSecret(text) {
+  const header2 = headerForm(text);
+  return header2 !== null && secretName(header2.name) && secretPair(header2.name, header2.value) ? header2.name : null;
+}
 function argSpots(args) {
   if (!Array.isArray(args)) return [];
   const spots = [];
@@ -7873,7 +7890,14 @@ function argSpots(args) {
     if (typeof arg !== "string") return;
     const flag = /^(--?[A-Za-z][A-Za-z0-9_-]*)=(.*)$/.exec(arg);
     if (flag !== null) {
-      if (secretPair(flag[1], flag[2])) spots.push({ field: "args", key: flag[1] });
+      const header3 = HEADER_FLAGS.has(flag[1]) ? headerSecret(flag[2]) : null;
+      if (header3 !== null) spots.push({ field: "args", key: header3 });
+      else if (secretPair(flag[1], flag[2])) spots.push({ field: "args", key: flag[1] });
+      return;
+    }
+    const header2 = headerSecret(arg);
+    if (header2 !== null) {
+      spots.push({ field: "args", key: header2 });
       return;
     }
     const previous = index > 0 ? args[index - 1] : void 0;
@@ -7894,11 +7918,19 @@ function urlSpots(url) {
     return [];
   }
   const spots = [];
-  if (parsed.password !== "" && !isReference(decodeURIComponent(parsed.password))) spots.push({ field: "url", key: "password" });
+  if (parsed.username !== "" && isKnown(safeDecode(parsed.username))) spots.push({ field: "url", key: "username" });
+  if (parsed.password !== "" && !isReference(parsed.password) && !isReference(safeDecode(parsed.password))) spots.push({ field: "url", key: "password" });
   for (const [name, value] of parsed.searchParams) if (secretPair(name, value) || normalized(name) === "key" && literalSecret(value)) spots.push({ field: "url", key: name });
   return spots;
 }
 function secretSpots(definition) {
+  try {
+    return spotsOf(definition);
+  } catch {
+    return [];
+  }
+}
+function spotsOf(definition) {
   if (definition === null || !isObject7(definition)) return [];
   const fields = Object.entries(definition).filter(([name, value]) => !PLAIN_FIELDS.has(name) && typeof value === "string" && secretPair(name, value)).map(([name]) => ({ field: "field", key: name }));
   const all = [...tableSpots("env", definition.env), ...tableSpots("headers", definition.headers), ...tableSpots("headers", definition.http_headers), ...fields, ...argSpots(definition.args), ...urlSpots(definition.url)];
@@ -7917,7 +7949,11 @@ function sortSecrets(list) {
   return [...list].sort((a, b) => SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || byText11(a.projectRoot, b.projectRoot) || byText11(a.server, b.server) || FIELD_ORDER[a.field] - FIELD_ORDER[b.field] || byText11(a.key, b.key));
 }
 function envSecretKeys(env) {
-  return tableSpots("env", env).map((spot) => spot.key);
+  try {
+    return tableSpots("env", env).map((spot) => spot.key);
+  } catch {
+    return [];
+  }
 }
 
 // src/scan/names.ts

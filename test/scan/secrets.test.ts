@@ -81,3 +81,27 @@ describe("envSecretKeys", () => {
     expect(envSecretKeys(["x"])).toEqual([]);
   });
 });
+
+describe("짝 검토 3차의 반례(0.2.0)", () => {
+  it("필수 1: 주소의 비밀번호 자리에 참조(%VAR%)나 깨진 퍼센트 꼴이 있어도 멈추지 않고, 참조는 비밀값으로 세지 않는다", () => {
+    expect(secretSpots({ url: "https://user:%REVIEW_TOKEN%@example.test/mcp" })).toEqual([]);
+    expect(() => secretSpots({ url: "https://user:%E0%A4%A@example.test/mcp" })).not.toThrow();
+    expect(() => secretSpots({ url: "https://example.test/mcp?api_key=%E0%A4%A" })).not.toThrow();
+    // 어떤 꼴의 정의에도 판별이 점검 전체를 멈추지 않는다
+    for (const odd of [{ url: 123 }, { args: [null, {}, 5, ["x"]] }, { env: { A: 5, B: null } }, { headers: { A: { nested: "x" } } }]) expect(() => secretSpots(odd)).not.toThrow();
+  });
+
+  it("필수 2: 인자의 머리말 꼴(--header \"Authorization: Bearer …\")을 머리말 이름으로 잡고, 참조는 넘긴다", () => {
+    expect(secretSpots({ command: "npx", args: ["-y", "mcp-remote", "https://example.test/mcp", "--header", "Authorization: Bearer abcdefghijklmnop1234"] })).toEqual([{ field: "args", key: "Authorization" }]);
+    expect(secretSpots({ command: "npx", args: ["--header", "Authorization: Bearer ${TOKEN}"] })).toEqual([]);
+    expect(secretSpots({ command: "npx", args: ["--header=X-API-Key: k-1234567890abcd"] })).toEqual([{ field: "args", key: "X-API-Key" }]);
+    // 이름이 비밀값처럼 보이지 않아도 값이 Bearer 토큰이면 잡는다
+    expect(secretSpots({ env: { MCP_HEADERS: "Bearer abcdefghijklmnop1234" } })).toEqual([{ field: "env", key: "MCP_HEADERS" }]);
+  });
+
+  it("참고: AWS 임시 키(ASIA)를 잡고, 값 가운데의 $는 참조가 아니며, 주소의 사용자 이름 자리의 알려진 키도 잡는다", () => {
+    expect(secretSpots({ env: { AWS_ACCESS_KEY_ID: `ASIA${"Q7".repeat(8)}` } })).toEqual([{ field: "env", key: "AWS_ACCESS_KEY_ID" }]);
+    expect(secretSpots({ env: { DB_PASSWORD: "pa$sword-12345", TOKEN: "$TOKEN", AUTH_HEADER: "Bearer $TOKEN" } })).toEqual([{ field: "env", key: "DB_PASSWORD" }]);
+    expect(secretSpots({ url: `https://${GH}@github.example/mcp` })).toEqual([{ field: "url", key: "username" }]);
+  });
+});

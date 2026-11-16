@@ -15,7 +15,8 @@ const KNOWN = [
   /\bgh[pousr]_[A-Za-z0-9]{30,}/,
   /\bgithub_pat_[A-Za-z0-9_]{30,}/,
   /\bxox[abeprs]-[A-Za-z0-9-]{10,}/,
-  /\bAKIA[0-9A-Z]{16}\b/,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
   /\bAIza[0-9A-Za-z_-]{30,}/,
   /\bglpat-[A-Za-z0-9_-]{20,}/,
   /\bhf_[A-Za-z0-9]{30,}/,
@@ -44,8 +45,19 @@ function secretName(name: string): boolean {
   return SECRET_WORDS.some((word) => n.includes(word)) || n.endsWith("key");
 }
 
-/** 다른 곳의 값을 가리키는 참조(${VAR}, $VAR, %VAR%)가 든 값 */
-const isReference = (value: string): boolean => /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%/.test(value);
+/**
+ * 다른 곳의 값을 가리키는 참조가 든 값. ${VAR}는 어디에 있든 참조다. $VAR와 %VAR%는 값 전체이거나 빈칸으로 떨어진 낱말일 때만 참조다.
+ * 값 가운데의 $(비밀번호의 한 글자)는 참조가 아니다(짝 검토 3차의 참고)
+ */
+const isReference = (value: string): boolean => /\$\{[^}]*\}/.test(value) || /(?:^|\s)(?:\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%)(?=\s|$)/.test(value);
+/** 퍼센트 꼴을 푼다. 깨진 꼴이면 그대로 둔다(짝 검토 3차의 필수 1, 예외가 점검 전체를 멈췄다) */
+const safeDecode = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
 /** 채워 넣으라는 자리표시나 한 글자를 되풀이한 값 */
 const isPlaceholder = (value: string): boolean => /^(<[^>]*>|\[[^\]]*\]|\{[^}]*\}|your[\s_-].*|.*placeholder.*|(.)\2{5,}|change[\s_-]?me|example|test|dummy|none|null|undefined|true|false|todo|tbd)$/i.test(value.trim());
 const isKnown = (value: string): boolean => KNOWN.some((pattern) => pattern.test(value));
@@ -69,6 +81,19 @@ function tableSpots(field: SecretField, table: unknown): SecretSpot[] {
     .map(([name]) => ({ field, key: name }));
 }
 
+/** 머리말을 받는 인자 옵션(mcp-remote의 --header 같은 것) */
+const HEADER_FLAGS = new Set(["--header", "--headers", "-H"]);
+/** 「이름: 값」 꼴의 머리말. 아니면 null이다 */
+function headerForm(text: string): { name: string; value: string } | null {
+  const match = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.+)$/.exec(text);
+  return match === null ? null : { name: match[1]!, value: match[2]!.trim() };
+}
+/** 머리말 꼴의 인자가 비밀값을 담았으면 그 머리말 이름. 아니면 null이다(짝 검토 3차의 필수 2) */
+function headerSecret(text: string): string | null {
+  const header = headerForm(text);
+  return header !== null && secretName(header.name) && secretPair(header.name, header.value) ? header.name : null;
+}
+
 function argSpots(args: unknown): SecretSpot[] {
   if (!Array.isArray(args)) return [];
   const spots: SecretSpot[] = [];
@@ -76,7 +101,15 @@ function argSpots(args: unknown): SecretSpot[] {
     if (typeof arg !== "string") return;
     const flag = /^(--?[A-Za-z][A-Za-z0-9_-]*)=(.*)$/.exec(arg);
     if (flag !== null) {
-      if (secretPair(flag[1]!, flag[2]!)) spots.push({ field: "args", key: flag[1]! });
+      const header = HEADER_FLAGS.has(flag[1]!) ? headerSecret(flag[2]!) : null;
+      if (header !== null) spots.push({ field: "args", key: header });
+      else if (secretPair(flag[1]!, flag[2]!)) spots.push({ field: "args", key: flag[1]! });
+      return;
+    }
+    // 머리말 꼴의 인자(「Authorization: Bearer …」)는 머리말 이름으로 가리킨다. --header 다음이든 아니든 같다
+    const header = headerSecret(arg);
+    if (header !== null) {
+      spots.push({ field: "args", key: header });
       return;
     }
     const previous = index > 0 ? args[index - 1] : undefined;
@@ -98,13 +131,24 @@ function urlSpots(url: unknown): SecretSpot[] {
     return [];
   }
   const spots: SecretSpot[] = [];
-  if (parsed.password !== "" && !isReference(decodeURIComponent(parsed.password))) spots.push({ field: "url", key: "password" });
+  // 사용자 이름 자리는 알려진 키 모양일 때만 잡는다(짝 검토 3차의 참고). 비밀번호 자리는 참조가 아니면 잡는다
+  if (parsed.username !== "" && isKnown(safeDecode(parsed.username))) spots.push({ field: "url", key: "username" });
+  if (parsed.password !== "" && !isReference(parsed.password) && !isReference(safeDecode(parsed.password))) spots.push({ field: "url", key: "password" });
   for (const [name, value] of parsed.searchParams) if (secretPair(name, value) || (normalized(name) === "key" && literalSecret(value))) spots.push({ field: "url", key: name });
   return spots;
 }
 
 /** MCP 서버 정의 하나에서 그대로 적힌 비밀값의 자리. 같은 칸의 같은 항목은 한 번만 낸다. 값은 내지 않는다 */
 export function secretSpots(definition: Record<string, unknown> | null): SecretSpot[] {
+  // 비밀값 점검은 덧붙인 일이다. 어떤 꼴의 정의에도 점검 전체를 멈추지 않는다(짝 검토 3차의 필수 1)
+  try {
+    return spotsOf(definition);
+  } catch {
+    return [];
+  }
+}
+
+function spotsOf(definition: Record<string, unknown> | null): SecretSpot[] {
   if (definition === null || !isObject(definition)) return [];
   const fields = Object.entries(definition)
     .filter(([name, value]) => !PLAIN_FIELDS.has(name) && typeof value === "string" && secretPair(name, value))
@@ -130,5 +174,9 @@ export function sortSecrets<T extends { scope: keyof typeof SCOPE_ORDER; project
 
 /** 설정 파일의 env 묶음에서 그대로 적힌 비밀값의 이름 */
 export function envSecretKeys(env: unknown): string[] {
-  return tableSpots("env", env).map((spot) => spot.key);
+  try {
+    return tableSpots("env", env).map((spot) => spot.key);
+  } catch {
+    return [];
+  }
 }

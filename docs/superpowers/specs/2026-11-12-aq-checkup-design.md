@@ -4714,7 +4714,8 @@ core(`src/core/`)는 경로를 풀지 않고 파일을 읽지 않는다(7.2절).
   2. 목록에 없는 파일을 그 색인에서 뺀다(`git update-index --force-remove`). 목록의 경로가 하나라도 없으면 멈춘다.
   3. 남은 트리(`git write-tree`)로 `main` 위의 새 커밋을 만들고(`git commit-tree <트리> -p origin/main`), 브랜치로 올려 병합 요청으로 합친다. 파일을 다시 담지 않으므로 줄 끝과 실행 권한이 커밋 그대로다.
   4. 병합 뒤 빈 임시 설정 폴더(`CLAUDE_CONFIG_DIR`, `CODEX_HOME`)에 README 명령대로 설치한다. `node_modules`가 없는지, 두 도구의 설치본이 `main`과 같은 바이트인지, `claude plugin validate`, 설치된 실행 파일과 훅이 도는지 본다. 첫 배포에서 모두 통과했다.
-  - 두 번째 배포부터는 플러그인 버전을 올린다. 설치본이 버전 이름의 폴더에 놓여, 같은 버전으로는 업데이트를 받지 못할 수 있다(실제로 확인하지는 않았다).
+  - 두 번째 배포부터는 플러그인 버전을 올린다. 설치본이 버전 이름의 폴더에 놓여, 같은 버전으로는 업데이트를 받지 못할 수 있다(같은 버전으로 다시 올리는 것은 확인하지 않았다).
+  - 업데이트(0.1.1 배포에서 임시 설정 폴더와 작성자 PC로 확인). Claude Code는 `claude plugin marketplace update chunsik-garage` 뒤 `claude plugin update chunsik-garage@chunsik-garage`로 0.1.0에서 0.1.1로 바뀌었다. 새 세션부터 적용되고 옛 버전 폴더는 남는다. Codex는 `codex plugin marketplace upgrade`만으로 설치본이 0.1.1로 바뀌었고, 설치본에 Codex의 기록 파일 `.codex-marketplace-install.json`이 하나 더해진다. README 두 벌의 설치 아래에 이 명령을 적었다.
   - README는 산출물에 넣지 않는다. 저장소 첫 화면은 기본 브랜치(`develop`)의 README를 보여 주고, README의 그림은 산출물 밖(`docs/images/`)에 있다.
 - **README.** 영어(`README.md`)가 기본이고 한국어(`README.ko.md`)를 따로 둔다. 23절의 첫 화면 항목을 담고, 결과 화면 캡처는 합성 기록으로 만든 결과 화면을 이고라이트로 찍었다(`docs/images/`). 둘이 큰 렌치를 든 대표 그림은 아직 없다.
 - **공개 전 점검(21.2) 가운데 한 것.** 합성 결과 화면을 이고라이트로 폭 다섯(1440, 1024, 768, 390, 320)과 언어 둘에서 열었다. 가로 넘침과 바깥으로 나가는 요청이 없었고, 깨진 그림으로 잡힌 것은 카드를 만들 때 채우는 공유 카드 창의 빈 그림 하나뿐이었다.

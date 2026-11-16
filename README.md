@@ -13,6 +13,8 @@ Node.js 22 or later is required. The `#main` and `@main` parts install the relea
 | Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage#main`, then `claude plugin install chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or use `/chunsik-garage:aq` |
 | Codex | `codex plugin marketplace add yeunlee1/chunsik-garage@main`, then `codex plugin add chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or pick the skill in `/skills` |
 
+To update, run `claude plugin marketplace update chunsik-garage`, then `claude plugin update chunsik-garage@chunsik-garage` for Claude Code, and start a new session. For Codex, run `codex plugin marketplace upgrade chunsik-garage` and restart Codex.
+
 ## What it does
 
 - **Checkup.** Scores four axes from your records and settings, opens the report page in your browser, and gives a short summary in the terminal. Every item shows how it was measured.

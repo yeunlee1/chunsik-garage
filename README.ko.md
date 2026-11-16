@@ -13,6 +13,8 @@ Node.js 22 이상이 있어야 합니다. 명령의 `#main`과 `@main`이 배포
 | Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage#main` 뒤 `claude plugin install chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/chunsik-garage:aq` |
 | Codex | `codex plugin marketplace add yeunlee1/chunsik-garage@main` 뒤 `codex plugin add chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/skills`에서 점검 스킬을 고릅니다 |
 
+업데이트는 Claude Code에서 `claude plugin marketplace update chunsik-garage` 뒤 `claude plugin update chunsik-garage@chunsik-garage`를 하고 새 세션을 엽니다. Codex는 `codex plugin marketplace upgrade chunsik-garage`를 하고 다시 켭니다.
+
 ## 하는 일
 
 - **점검.** 기록과 셋팅으로 네 기준의 점수를 매기고, 결과 화면을 브라우저로 열고, 터미널에 짧게 알립니다. 항목마다 어떻게 쟀는지 볼 수 있습니다.

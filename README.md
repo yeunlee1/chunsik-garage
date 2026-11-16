@@ -21,6 +21,7 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 - **Tune-up.** Turns off skills, plugins, and MCP servers you have not used for a while. It changes only the items you approve, writes a record first, and can undo each change.
 - **Deep checkup.** Reads the instruction files you pick and points out lines that overlap, conflict, or would be better moved. The score does not change.
 - **Session start notices (Claude Code).** One line when a session starts, if 7 days have passed since the last checkup or something new is installed. Ask to turn them on.
+- **AQ badge.** A small picture with your AQ and grade for your README or GitHub profile, made on your PC from your latest checkup. Ask for an AQ badge.
 
 ## Privacy
 
@@ -36,7 +37,7 @@ The report file contains the names of your skills and project folders. Share the
 
 ## What it leaves and how to remove it
 
-Everything lives in `~/.chunsik-garage/`: the cache, the reports, the score history, the state, the notice markers, and the tune-up records. Removing the plugin does not remove this folder.
+Everything lives in `~/.chunsik-garage/`: the cache, the reports, the score history, the state, the notice markers, the tune-up records, and the badge. Removing the plugin does not remove this folder.
 
 The only exception is a checkup run without saving. Its report page and result file (`chunsik-garage-report-<time>.html`, `chunsik-garage-result-<time>.json`) go to your OS temp folder, and this tool does not delete them. The result file lists the names of your skills, MCP servers, and projects, so delete it yourself when you no longer need it.
 

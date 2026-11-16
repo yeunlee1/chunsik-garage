@@ -1,6 +1,7 @@
 // aq 명령의 입구. Node.js 버전을 확인하고 하위 명령으로 나눠 보낸다. 예상하지 못한 오류는 이유를 담은 JSON과 종료 코드 1로 낸다(설계 20.1)
 import { homedir, tmpdir } from "node:os";
 import type { EvalClock } from "./collect/claude.ts";
+import { runBadge } from "./commands/badge.ts";
 import { runCheckup } from "./commands/checkup.ts";
 import { runDeepHints } from "./commands/deep-hints.ts";
 import { runNotify } from "./commands/notify.ts";
@@ -113,6 +114,19 @@ async function run(command: string | undefined, rest: string[], context: CliCont
   }
   if (command === "clean" && (rest.length === 0 || (rest.length === 1 && rest[0] === "--all"))) {
     printJson(await clean(stateDir(context.homedir), rest[0] === "--all" ? "all" : "clean"));
+    return 0;
+  }
+  if (command === "badge") {
+    // --lang만 받는다. 이력의 AQ로 배지 그림을 상태 폴더에 만든다(0.2.0)
+    const args = checkupArgs(rest, new Set());
+    if (args === null) return null;
+    printJson(
+      await runBadge({
+        stateDir: stateDir(context.homedir),
+        lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+        timeZone: context.clock?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    );
     return 0;
   }
   if (command === "notify" && (rest[0] === "on" || rest[0] === "off" || rest[0] === "status")) {

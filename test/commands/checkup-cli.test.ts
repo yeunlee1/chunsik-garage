@@ -118,6 +118,22 @@ describe("aq tune plan(「6단계 1부 계획 전 결정」 6번)", () => {
   });
 });
 
+describe("aq badge(0.2.0)", () => {
+  it("--lang만 받고, 이력이 없으면 no-score 오류를 JSON으로 내며, 있으면 배지를 만든다", async () => {
+    expect(await main(["badge", "--bogus"], context)).toBe(64);
+    expect(await main(["badge", "--no-save"], context)).toBe(64);
+    expect(await main(["badge", "--lang", "ko"], context)).toBe(1);
+    expect(JSON.parse(printed).error.code).toBe("no-score");
+    await put(join(root, "home", ".chunsik-garage", "history.jsonl"), `${JSON.stringify({ at: "2026-11-12T01:00:00.000Z", aq: 66, axes: {}, missingAxes: [], rulesVersion: "1.0.0" })}
+`);
+    printed = "";
+    expect(await main(["badge"], context)).toBe(0);
+    const out = JSON.parse(printed);
+    expect(out.badge).toMatchObject({ aq: 66, grade: "B", path: join(root, "home", ".chunsik-garage", "badge.svg") });
+    expect(out.run.text.made).toContain("badge");
+  });
+});
+
 describe("aq tune apply·undo·verify의 인자(6단계 2부 계획 전 결정 10번)", () => {
   const ID = "2026-11-12T03-00-00-000Z-abc123";
   it("첫 위치 인자는 ID 꼴이고, apply는 항목이 하나 이상, verify는 항목이 없으며, 항목은 겹치지 않는다. undo만 ID를 빼도 된다(0.1.1)", () => {

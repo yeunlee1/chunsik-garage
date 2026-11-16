@@ -31,6 +31,7 @@ async function fill(): Promise<void> {
   await put(join(dir, "state.json"), "{}");
   await put(join(dir, "notified", "2026-11-13"), "");
   await put(join(dir, "tune", "job-1.json"), "{}");
+  await put(join(dir, "badge.svg"), "<svg/>");
   await put(join(dir, "someone-else.txt"), "keep me");
 }
 
@@ -39,7 +40,7 @@ describe("aq where", () => {
     const report = await where(dir);
     expect(report.exists).toBe(false);
     expect(report.entries.every((e) => !e.exists && e.files === 0 && e.bytes === 0)).toBe(true);
-    expect(report.entries.map((e) => e.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune"]);
+    expect(report.entries.map((e) => e.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune", "badge.svg"]);
     expect(report.noSaveResultsInOsTemp).toBe(true);
   });
 
@@ -51,7 +52,8 @@ describe("aq where", () => {
     expect(report.entries.find((e) => e.name === "reports")).toMatchObject({ files: 4, bytes: 3 + 8 + 6 + 11 });
     expect(report.entries.find((e) => e.name === "state.json")).toMatchObject({ kind: "file", files: 1, bytes: 2, removedBy: "all" });
     expect(report.others).toEqual(["someone-else.txt"]);
-    expect(report.files).toBe(1 + 4 + 1 + 1 + 1 + 1);
+    expect(report.files).toBe(1 + 4 + 1 + 1 + 1 + 1 + 1);
+    expect(report.entries.find((e) => e.name === "badge.svg")).toMatchObject({ kind: "file", files: 1, bytes: 6, removedBy: "all" });
   });
 
   it("링크는 따라가지 않는다", async () => {
@@ -72,6 +74,7 @@ describe("aq clean", () => {
     expect(await exists(join(dir, "state.json"))).toBe(true);
     expect(await exists(join(dir, "history.jsonl"))).toBe(true);
     expect(await exists(join(dir, "tune", "job-1.json"))).toBe(true);
+    expect(await exists(join(dir, "badge.svg"))).toBe(true);
     expect(report.removed).toEqual([
       { name: "cache", files: 1, bytes: 5 },
       { name: "reports", files: 2, bytes: 3 + 8 },
@@ -83,7 +86,7 @@ describe("aq clean", () => {
     await fill();
     const report = await clean(dir, "all");
     expect((await readdir(dir)).sort()).toEqual(["someone-else.txt"]);
-    expect(report.removed.map((r) => r.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune"]);
+    expect(report.removed.map((r) => r.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune", "badge.svg"]);
   });
 
   it("폴더 안의 링크는 링크만 지우고 대상은 남긴다", async () => {

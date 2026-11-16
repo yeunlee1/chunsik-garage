@@ -58,7 +58,7 @@ describe("머리말", () => {
     expect(head.description).toContain("AQ checkup");
     expect(head.description).toContain("AQ 점검해 줘");
     // 알림, 정밀 점검, 파일 위치와 정리도 이 스킬이 맡으니 그 말로도 불려야 한다(0.1.1)
-    for (const words of ["session start notices", "deep checkup", "clean up", "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?"]) expect(head.description).toContain(words);
+    for (const words of ["session start notices", "deep checkup", "clean up", "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ badge", "AQ 배지 만들어 줘"]) expect(head.description).toContain(words);
   });
 
   it("허락 규칙은 실행 파일 명령 하나만 묻지 않고 돌게 한다", () => {
@@ -82,6 +82,7 @@ describe("실행 명령", () => {
       if (sub === "checkup") expect(checkupArgs(args)).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "deep-hints") expect(checkupArgs(args, new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "where") expect(args).toEqual([]);
+      else if (sub === "badge") expect(checkupArgs(args, new Set())).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "clean") expect([[], ["--all"]]).toContainEqual(args);
       else if (sub === "notify") {
         expect(["on", "off", "status"]).toContain(args[0]);
@@ -377,5 +378,16 @@ describe("정비의 되돌리기(0.1.1)", () => {
     // 같은 줄 안에서 조건(작업 ID가 없음)과 할 일(ID 없이 돌림)이 이어져야 한다
     expect(tune).toMatch(/no work ID[^\n]*run the same command without the work ID/);
     expect(tune).toMatch(/`nothing-to-undo` means/);
+  });
+});
+
+describe("AQ 배지(0.2.0)", () => {
+  it("배지 명령을 돌리고, 만든 문장과 붙일 줄을 전하며, 두 오류의 뜻을 안다", () => {
+    const badge = section("## 9. AQ badge");
+    expect(badge).toContain(`${COMMAND} badge --lang <lang>`);
+    expect(badge).toContain("the `made` and `howTo` sentences in the `text` of `run`");
+    expect(badge).toContain("`badge.markdown` in a code block");
+    expect(badge).toMatch(/`no-score` means/);
+    expect(badge).toMatch(/`badge-unwritten` means/);
   });
 });

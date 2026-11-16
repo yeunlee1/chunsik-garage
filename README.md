@@ -2,14 +2,16 @@
 
 AQ checkup for Claude Code and Codex. A program on your own PC reads your local Claude Code and Codex records, scores how well you set up and use these AI coding tools, and writes a one-page report.
 
+![AQ report page made from synthetic records](docs/images/report-en.png)
+
 ## Install
 
-Node.js 22 or later is required.
+Node.js 22 or later is required. The `#main` and `@main` parts install the released version; without them you get the development branch.
 
 | Tool | Install | Run |
 |---|---|---|
-| Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage`, then `claude plugin install chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or use `/chunsik-garage:aq` |
-| Codex | `codex plugin marketplace add yeunlee1/chunsik-garage`, then `codex plugin add chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or pick the skill in `/skills` |
+| Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage#main`, then `claude plugin install chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or use `/chunsik-garage:aq` |
+| Codex | `codex plugin marketplace add yeunlee1/chunsik-garage@main`, then `codex plugin add chunsik-garage@chunsik-garage` | Say "Run an AQ checkup", or pick the skill in `/skills` |
 
 ## What it does
 

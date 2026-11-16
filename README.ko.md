@@ -2,14 +2,16 @@
 
 Claude Code와 Codex의 AQ 점검입니다. 내 PC에서 도는 프로그램이 Claude Code와 Codex의 기록을 읽어, AI 코딩 도구를 얼마나 잘 갖추고 쓰는지 점수를 매기고 한 장짜리 결과 화면을 만듭니다.
 
+![합성 기록으로 만든 AQ 결과 화면](docs/images/report-ko.png)
+
 ## 설치
 
-Node.js 22 이상이 있어야 합니다.
+Node.js 22 이상이 있어야 합니다. 명령의 `#main`과 `@main`이 배포한 버전을 받게 합니다. 빼면 개발 중인 브랜치를 받습니다.
 
 | 도구 | 설치 | 부르는 법 |
 |---|---|---|
-| Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage` 뒤 `claude plugin install chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/chunsik-garage:aq` |
-| Codex | `codex plugin marketplace add yeunlee1/chunsik-garage` 뒤 `codex plugin add chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/skills`에서 점검 스킬을 고릅니다 |
+| Claude Code | `claude plugin marketplace add yeunlee1/chunsik-garage#main` 뒤 `claude plugin install chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/chunsik-garage:aq` |
+| Codex | `codex plugin marketplace add yeunlee1/chunsik-garage@main` 뒤 `codex plugin add chunsik-garage@chunsik-garage` | "AQ 점검해 줘"라고 말하거나 `/skills`에서 점검 스킬을 고릅니다 |
 
 ## 하는 일
 

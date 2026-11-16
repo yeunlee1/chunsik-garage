@@ -6,7 +6,7 @@ import { resultText, type ResultText } from "../copy/grades.ts";
 import type { Lang, Texts } from "../copy/lang.ts";
 import { nextGradeText } from "../copy/next-grade.ts";
 import { noticeText } from "../copy/notices.ts";
-import type { McpFact } from "../../scan/types.ts";
+import type { McpFact, SecretFact } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Candidate } from "../installs/candidates.ts";
 import { anyIn, calledMcpNames } from "../installs/signals.ts";
@@ -84,6 +84,8 @@ export interface CheckupResult {
     unjudgedServers: UnjudgedServer[];
     /** S3가 센 문제의 도구, 종류, 위치(절대 경로가 아니다). 결과 화면이 S3 항목에 보인다 */
     setupProblems: CountedProblem[];
+    /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 결과 화면이 그 알림 아래에 보인다. 값은 없다 */
+    credentialPlaces: SecretPlace[];
   };
   /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다 */
   nextGrade: (NextGrade & { text: Texts<string> }) | null;
@@ -112,10 +114,27 @@ function unjudgedServers(input: EvaluationInput, evaluation: Evaluation): Unjudg
   return servers.sort((a, b) => byText(a.name, b.name) || SCOPE_ORDER.indexOf(a.scope) - SCOPE_ORDER.indexOf(b.scope) || byText(a.projectRoot ?? "", b.projectRoot ?? "") || byText(a.pluginId ?? "", b.pluginId ?? "") || byText(a.tool, b.tool));
 }
 
+/** 결과 화면에 보일 비밀값의 자리. 프로젝트 범위에는 프로젝트 폴더 이름을 붙인다 */
+export interface SecretPlace {
+  tool: ToolId;
+  scope: SecretFact["scope"];
+  server: string | null;
+  projectName: string | null;
+  field: SecretFact["field"];
+  key: string;
+}
+
+function credentialPlaces(input: EvaluationInput): SecretPlace[] {
+  const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
+  return [...input.tools]
+    .sort((a, b) => byText(a.tool, b.tool))
+    .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key })));
+}
+
 export function checkupResult(source: ResultInput): CheckupResult {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
   // 합침 규칙에는 도구별 값이 없어, 그 규칙을 잰 도구와 관측 범위를 문장을 지을 때만 넘긴다. 결과의 details에는 싣지 않는다(설계 「5단계 4부 계획 전 결정」 7번)
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool)! }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };

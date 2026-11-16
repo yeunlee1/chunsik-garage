@@ -53,6 +53,14 @@ describe("aq badge", () => {
     expect(await exists(join(stateDir, "badge.svg"))).toBe(false);
   });
 
+  it("이력의 AQ가 0~100의 정수가 아니면(깨진 숫자) 그 줄을 건너뛴다(1차 짝 검토의 참고)", async () => {
+    const broken = '{"at":"2026-11-11T01:00:00.000Z","aq":1e400}';
+    await put(join(stateDir, "history.jsonl"), `${[line("2026-11-10T01:00:00.000Z", 70), broken, line("2026-11-12T01:00:00.000Z", 150), line("2026-11-13T01:00:00.000Z", 82.5), line("2026-11-14T01:00:00.000Z", -3)].join("\n")}\n`);
+    const out = await runBadge(options("ko"));
+    expect(out.badge).toMatchObject({ aq: 70, grade: "B", at: "2026-11-10T01:00:00.000Z" });
+    expect(await readFile(join(stateDir, "badge.svg"), "utf8")).toBe(badgeSvg({ aq: 70, grade: "B" }));
+  });
+
   it("배지 파일을 쓰지 못하면 badge-unwritten으로 끝낸다", async () => {
     await put(join(stateDir, "history.jsonl"), `${line("2026-11-12T01:00:00.000Z", 82)}\n`);
     await mkdir(join(stateDir, "badge.svg"), { recursive: true });

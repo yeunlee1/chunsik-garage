@@ -234,8 +234,9 @@ describe("틀 그대로", () => {
     "3. Best, indented: `가장 잘하는 것  <summary.text.best.title> (<summary.text.best.detail>)` or `Best at  <summary.text.best.title> (<summary.text.best.detail>)`. If `summary.text.best` is null, write `summary.text.noBest` instead, or nothing if that is null too.",
     "4. Fix first: only the first item of `summary.text.fixFirst`, as `🔧 춘식이 (-_-)9 먼저 고칠 것  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)` or `🔧 Chunsik (-_-)9 Fix first  <summary.text.fixFirst[0].title> (<summary.text.fixFirst[0].detail>)`. If `summary.text.fixFirst` is empty and `summary.text.noFixFirst` is not null, write `📋 춘삼이 (^_^)b <summary.text.noFixFirst>` or `📋 Chunsam (^_^)b <summary.text.noFixFirst>`. If both are empty, skip this line.",
     "5. Next grade, indented under Chunsik: `summary.text.nextGrade`. Skip this line if it is null.",
-    "6. Report line, indented, from section 4.",
-    "7. Notice line, indented, from section 4. At most one.",
+    "6. Secrets: `🔧 춘식이 (-_-)9 <summary.text.credentials>` or `🔧 Chunsik (-_-)9 <summary.text.credentials>`. Skip this line if it is null.",
+    "7. Report line, indented, from section 4.",
+    "8. Notice line, indented, from section 4. At most one.",
   ].join("\n");
   const TABLES = [
     "Report line. Use the first row that applies.",

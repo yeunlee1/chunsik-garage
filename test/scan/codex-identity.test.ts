@@ -55,6 +55,7 @@ function facts(extra: Partial<CodexSetupFacts> = {}): CodexSetupFacts {
     plugins: [plugin("a@m"), plugin("b@m")],
     projects: [project(P), project(Q), { ...project(GONE), scanned: false, configStatus: null }],
     problems: [],
+    secrets: [],
     unreadableDirs: [],
     unreadableSkillPlaces: { user: false, projects: [], plugins: [] },
     ...extra,

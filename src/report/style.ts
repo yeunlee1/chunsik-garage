@@ -159,6 +159,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
+.notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
+.notices .spots li{display:block;font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
 .ft{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 24px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--ink2)}
 .ft .lock{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
 .ft .lock svg{margin-top:2px}

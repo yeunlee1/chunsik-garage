@@ -27,6 +27,22 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
 
+describe("설정 속 비밀값의 자리(0.2.0)", () => {
+  it("결과 화면이 그릴 자리 목록은 도구 차례로 두고, 프로젝트 범위에는 프로젝트 폴더 이름을 붙인다. 값은 없다", () => {
+    const input = evaluationInput([
+      claudeTool({ sessions: enough, setup: { projects: [project("/work/shop")], secrets: [{ scope: "project", server: "pj", projectRoot: "/work/shop", field: "headers", key: "Authorization" }, { scope: "settings", server: null, projectRoot: null, field: "env", key: "ANTHROPIC_API_KEY" }] } }),
+      codexTool({ sessions: enough, setup: { secrets: [{ scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" }] } }),
+    ]);
+    const result = checkupResult({ input, evaluation: evaluate(input), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false } });
+    expect(result.details.credentialPlaces).toEqual([
+      { tool: "claude-code", scope: "project", server: "pj", projectName: "shop", field: "headers", key: "Authorization" },
+      { tool: "claude-code", scope: "settings", server: null, projectName: null, field: "env", key: "ANTHROPIC_API_KEY" },
+      { tool: "codex", scope: "user", server: "ctx", projectName: null, field: "env", key: "API_TOKEN" },
+    ]);
+    expect(result.notices.filter((notice) => notice.kind === "credentials_in_config").map((notice) => ("tool" in notice ? notice.tool : null))).toEqual(["claude-code", "codex"]);
+  });
+});
+
 describe("다음 등급까지 할 일(0.2.0)", () => {
   it("평가의 규칙 점수로 다시 계산한 차례를 싣고, 두 언어의 문장에 차례마다 규칙 이름과 그때의 AQ가 든다", () => {
     const source = resultInput({});
@@ -111,7 +127,7 @@ describe("평가 결과의 조립", () => {
     const sessions = [...enough, { days: { "2026-11-12": { responses: 1, mcpCalls: { called: 2 } } } }];
     const input = resultInput({ sessions, setup: { mcpServers: servers } });
     const result = checkupResult(input);
-    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems"]);
+    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems", "credentialPlaces"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
       { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established", judgeFrom: "2026-11-28" },

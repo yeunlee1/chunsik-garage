@@ -7,13 +7,14 @@ import { hookCommandTexts, hookMapValid, preToolUseGuards, type ShellGuard } fro
 import { mcpInstallKey, skillInstallKey } from "./identity.ts";
 import { emptyInstructionSet, readGlobalInstructions, readProjectInstructions } from "./instructions.ts";
 import { definitionHash, mcpAllowed, projectServerApproved, type McpContext } from "./mcp.ts";
+import { envSecretKeys, secretSpots, sortSecrets } from "./secrets.ts";
 import { mcpRecordNames, skillRecordNames } from "./names.ts";
 import { conflictPairs } from "./permissions.ts";
 import { mcpMapOf, readSkillsDirPlugins, scanPlugins, type McpDefinitionEntry, type PluginInstall, type SkillsDirPluginRef } from "./plugins.ts";
 import { groupProjects } from "./projects.ts";
 import { managedSettingsDir, readLayer, readManagedLayer, viewOf, type SettingsLayer, type SettingsView } from "./settings.ts";
 import { scanSkillPath, scanSkillRoot, type SkillFolder, type SkillRootScan } from "./skills.ts";
-import type { ClaudeSetupFacts, FileStatus, McpFact, PluginFact, ProjectFact, SetupProblem, SkillFact } from "./types.ts";
+import type { ClaudeSetupFacts, FileStatus, McpFact, PluginFact, ProjectFact, SecretFact, SetupProblem, SkillFact } from "./types.ts";
 
 export interface ScanInput {
   env: Record<string, string | undefined>;
@@ -360,9 +361,15 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     .filter((id) => everyContext.some((context) => pluginEnabledIn(context, id, false)))
     .sort();
 
+  // 사용자 설정의 env에 그대로 적힌 비밀값의 자리(0.2.0). 값은 여기서 버린다
+  const userSettings: unknown = userLayer.value;
+  const secrets: SecretFact[] = envSecretKeys(typeof userSettings === "object" && userSettings !== null ? (userSettings as Record<string, unknown>).env : undefined).map((key) => ({ scope: "settings", server: null, projectRoot: null, field: "env", key }));
+
   // MCP 서버(플러그인 것은 위에서 넣었다)
   const addServer = (scope: "user" | "local" | "project", entry: McpDefinitionEntry, projectRoot: string | null, enabled: boolean): void => {
     const names = mcpRecordNames(entry.name, null);
+    // 정의에 그대로 적힌 비밀값은 자리만 남긴다(0.2.0). 같은 프로젝트의 열쇠 여럿에 든 같은 서버는 위에서 한 번만 들어온다
+    for (const spot of secretSpots(entry.definition)) secrets.push({ scope, server: entry.name, projectRoot, ...spot });
     mcpServers.push({
       scope,
       name: entry.name,
@@ -496,6 +503,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
+    secrets: sortSecrets(secrets),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };

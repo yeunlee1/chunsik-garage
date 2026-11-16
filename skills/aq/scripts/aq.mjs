@@ -299,7 +299,7 @@ var COPY = {
 var failure = (code, message) => Object.assign(new Error(message), { code });
 var localDate = (iso, timeZone) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 async function runBadge(options) {
-  const scored2 = (await recentAq(options.stateDir, Number.MAX_SAFE_INTEGER)).filter((entry) => entry.aq !== null && !Number.isNaN(Date.parse(entry.at)));
+  const scored2 = (await recentAq(options.stateDir, Number.MAX_SAFE_INTEGER)).filter((entry) => entry.aq !== null && Number.isInteger(entry.aq) && entry.aq >= 0 && entry.aq <= 100 && !Number.isNaN(Date.parse(entry.at)));
   const latest = scored2.at(-1);
   if (latest === void 0) throw failure("no-score", "no saved checkup has an AQ");
   const { grade } = gradeOf(latest.aq);
@@ -493,7 +493,7 @@ function anyIn(recordNames, names2) {
 
 // src/core/installs/listing.ts
 function sessionListings(summaries, kind, normalizedCwds, lookup) {
-  const normalized = new Map(Object.entries(normalizedCwds));
+  const normalized2 = new Map(Object.entries(normalizedCwds));
   const out = [];
   for (const summary of summaries) {
     if (summary.kind !== "main") continue;
@@ -507,7 +507,7 @@ function sessionListings(summaries, kind, normalizedCwds, lookup) {
       days.push({ date, responses: cell.responses, loaded, reloaded: new Set(kind === "skill" ? cell.reloadedSkills : cell.reloadedMcpServers) });
     }
     out.push({
-      cwdKey: summary.cwd === null ? null : normalized.get(summary.cwd) ?? summary.cwd,
+      cwdKey: summary.cwd === null ? null : normalized2.get(summary.cwd) ?? summary.cwd,
       projectRoot: lookup(summary.cwd)?.normRoot ?? null,
       firstDate: summary.firstDate,
       initial: initialNames === null ? null : new Set(initialNames),
@@ -1085,8 +1085,8 @@ function projectLookup(projects, normalizedCwds) {
   const byNormCwd = /* @__PURE__ */ new Map();
   for (const project of projects) for (const cwd of project.cwds) byNormCwd.set(cwd, project);
   const byRawCwd = /* @__PURE__ */ new Map();
-  for (const [raw, normalized] of Object.entries(normalizedCwds)) {
-    const project = byNormCwd.get(normalized);
+  for (const [raw, normalized2] of Object.entries(normalizedCwds)) {
+    const project = byNormCwd.get(normalized2);
     if (project !== void 0) byRawCwd.set(raw, project);
   }
   return (cwd) => cwd === null ? null : byRawCwd.get(cwd) ?? null;
@@ -1267,8 +1267,8 @@ var AXIS_NAMES = {
   intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
 };
 var SUMMARY_COPY = {
-  en: { best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
 };
 var REASON_COPY = {
   unsupported: {
@@ -2326,6 +2326,7 @@ var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
     record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
     record_partial: "{tool}: only the first part of {files} record {files:file|files} could be read. Only what was read is counted, so the unread share is at least what is shown.",
@@ -2351,6 +2352,7 @@ var LINES = {
   ko: {
     withheld: "AQ\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. {reasons}",
     state_reset: "\uC0C1\uD0DC \uD30C\uC77C\uC774 \uAE68\uC838 \uC0C8\uB85C \uC2DC\uC791\uD588\uC2B5\uB2C8\uB2E4. \uC124\uCE58\uB97C \uC9C0\uCF1C\uBCF8 \uAE30\uB85D\uC774 \uCC98\uC74C\uBD80\uD130 \uB2E4\uC2DC \uC313\uC785\uB2C8\uB2E4.",
+    credentials_in_config: "{tool} \uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694. \uAC12\uC740 \uBCF4\uC5EC \uC8FC\uAC70\uB098 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
     record_skipped: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC774 Node.js\uAC00 zstd \uC555\uCD95\uC744 \uD480\uC9C0 \uBABB\uD574 \uAC74\uB108\uB6F4 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. Node.js 22\uB294 22.15.0 \uC774\uC0C1, 23\uC740 23.8.0 \uC774\uC0C1, 24\uBD80\uD130\uB294 \uBAA8\uB4E0 \uBC84\uC804\uC5D0\uC11C \uC77D\uD799\uB2C8\uB2E4.",
     record_partial: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC55E\uBD80\uBD84\uB9CC \uC77D\uC740 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uBD80\uBD84\uB9CC \uACC4\uC0B0\uD574\uC11C \uC77D\uC9C0 \uBABB\uD55C \uBE44\uC728\uC740 \uC801\uC5B4\uB3C4 \uBCF4\uC774\uB294 \uAC12\uC785\uB2C8\uB2E4.",
@@ -2387,6 +2389,8 @@ function noticeText(notice, lang) {
       return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY2[reason][lang]).join(" ") });
     case "state_reset":
       return lines.state_reset;
+    case "credentials_in_config":
+      return fill(lines.credentials_in_config, { tool, count: notice.places.length });
     case "record_unreadable":
       return fill(lines.record_unreadable, { tool, files: notice.files.length, dirs: notice.dirs.length });
     case "record_skipped":
@@ -2590,6 +2594,7 @@ var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
   "state_reset",
+  "credentials_in_config",
   "record_unreadable",
   "record_skipped",
   "record_partial",
@@ -2654,6 +2659,7 @@ function setupNotices(input, evaluation, run2) {
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run2.stateBroken) notices2.push({ kind: "state_reset" });
   for (const tool of input.tools) {
+    if (tool.setup.secrets.length > 0) notices2.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices2.push(...codexSetupNotices(tool.setup, input.projects));
       continue;
@@ -2893,10 +2899,14 @@ function unjudgedServers(input, evaluation) {
   }
   return servers.sort((a, b) => byText10(a.name, b.name) || SCOPE_ORDER3.indexOf(a.scope) - SCOPE_ORDER3.indexOf(b.scope) || byText10(a.projectRoot ?? "", b.projectRoot ?? "") || byText10(a.pluginId ?? "", b.pluginId ?? "") || byText10(a.tool, b.tool));
 }
+function credentialPlaces(input) {
+  const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
+  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key })));
+}
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool) }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding) => {
@@ -2938,6 +2948,8 @@ function summaryNotice(notice) {
     case "score_withheld":
     case "state_reset":
       return { kind: notice.kind, tool, detail: null, count: null };
+    case "credentials_in_config":
+      return { kind: notice.kind, tool, detail: null, count: notice.places.length };
     case "record_unreadable":
       return { kind: notice.kind, tool, detail: null, count: notice.files.length + notice.dirs.length };
     case "record_skipped":
@@ -2981,6 +2993,7 @@ function fixDetail(fix, lang) {
 }
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
+  const secretCount = result.notices.reduce((sum2, notice) => sum2 + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
   const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding) => ({
@@ -3011,6 +3024,7 @@ function checkupSummary(result, reportPath) {
       fixFirst: repairs.map((finding, index) => ({ title: finding.text[lang].title, detail: fixDetail(fixFirst[index], lang) })),
       noFixFirst: result.text[lang].noRepairs,
       nextGrade: result.nextGrade?.text[lang] ?? null,
+      credentials: secretCount === 0 ? null : fill(SUMMARY_COPY[lang].credentials, { count: secretCount }),
       notices: result.notices.map((notice) => notice.text[lang])
     }
   };
@@ -3106,6 +3120,12 @@ var REPORT_COPY = {
   best: { en: "Best at", ko: "\uAC00\uC7A5 \uC798\uD558\uB294 \uAC83" },
   fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
   nextGrade: { en: "Next grade", ko: "\uB2E4\uC74C \uB4F1\uAE09\uAE4C\uC9C0" },
+  spotSettings: { en: "Settings", ko: "\uC124\uC815" },
+  spotEnv: { en: "env", ko: "env" },
+  spotHeaders: { en: "header", ko: "\uBA38\uB9AC\uB9D0" },
+  spotField: { en: "field", ko: "\uCE78" },
+  spotArgs: { en: "argument", ko: "\uC778\uC790" },
+  spotUrl: { en: "address", ko: "\uC8FC\uC18C" },
   colGood: { en: "What you do well", ko: "\uC798\uD558\uACE0 \uC788\uB294 \uAC83" },
   colFix: { en: "What to tune up", ko: "\uC815\uBE44\uD560 \uAC83" },
   how: { en: "How it was measured", ko: "\uC5B4\uB5BB\uAC8C \uC7C0\uB098" },
@@ -3719,6 +3739,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
+.notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
+.notices .spots li{display:block;font-size:13px;color:var(--ink2);overflow-wrap:anywhere}
 .ft{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 24px;border-top:2px solid var(--ink);padding-top:16px;font-size:13px;color:var(--ink2)}
 .ft .lock{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
 .ft .lock svg{margin-top:2px}
@@ -3972,9 +3994,16 @@ function partialBand(view) {
   });
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
+var SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl };
+var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
 function notices(view) {
   if (view.notices.length === 0) return "";
-  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
+  const spots = (notice) => {
+    if (notice.kind !== "credentials_in_config") return "";
+    const places = view.credentialPlaces.filter((place) => place.tool === notice.tool);
+    return places.length === 0 ? "" : `<ul class="spots">${places.map((place) => `<li>${both(textsOf2((l) => spotLabel(place, l)))}</li>`).join("")}</ul>`;
+  };
+  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span>${spots(notice)}</li>`).join("")}</ul></section>`;
 }
 function footer(hasCard) {
   const share2 = hasCard ? `<button type="button" class="share" data-act="card" aria-haspopup="dialog">${both(REPORT_COPY.cardBtn)}</button>` : "<span></span>";
@@ -4064,7 +4093,8 @@ function reportView(result, run2) {
       text: finding.text
     })),
     usage: result.usage,
-    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, text: notice.text })),
+    notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
+    credentialPlaces: result.details.credentialPlaces,
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -7791,6 +7821,104 @@ function projectServerApproved(context, name) {
   return enabled.has(name);
 }
 
+// src/scan/secrets.ts
+var KNOWN = [
+  /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{20,}/,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}/,
+  /\bgithub_pat_[A-Za-z0-9_]{30,}/,
+  /\bxox[abeprs]-[A-Za-z0-9-]{10,}/,
+  /\bAKIA[0-9A-Z]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{30,}/,
+  /\bglpat-[A-Za-z0-9_-]{20,}/,
+  /\bhf_[A-Za-z0-9]{30,}/,
+  /\bya29\.[A-Za-z0-9_-]{20,}/,
+  /\bntn_[A-Za-z0-9]{30,}/,
+  /\bsecret_[A-Za-z0-9]{30,}/,
+  /\bfigd_[A-Za-z0-9_-]{30,}/,
+  /\blin_api_[A-Za-z0-9]{30,}/,
+  /\b[sr]k_live_[A-Za-z0-9]{20,}/,
+  /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/
+];
+var SECRET_WORDS = ["token", "secret", "password", "passwd", "apikey", "accesskey", "privatekey", "authorization", "bearer", "credential", "cookie"];
+var NOT_VALUE_ENDINGS = ["envvar", "var", "name", "path", "file", "dir", "url", "uri", "type", "id", "mode", "count", "length", "ttl", "expiry", "expires", "timeout"];
+var PLAIN_FIELDS = /* @__PURE__ */ new Set(["command", "type", "url", "cwd", "transport", "enabled"]);
+var MIN_LENGTH = 8;
+var isObject7 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var normalized = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+function secretName(name) {
+  const n = normalized(name);
+  if (NOT_VALUE_ENDINGS.some((ending) => n.endsWith(ending))) return false;
+  return SECRET_WORDS.some((word) => n.includes(word)) || n.endsWith("key");
+}
+var isReference = (value) => /\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%/.test(value);
+var isPlaceholder = (value) => /^(<[^>]*>|\[[^\]]*\]|\{[^}]*\}|your[\s_-].*|.*placeholder.*|(.)\2{5,}|change[\s_-]?me|example|test|dummy|none|null|undefined|true|false|todo|tbd)$/i.test(value.trim());
+var isKnown = (value) => KNOWN.some((pattern) => pattern.test(value));
+function literalSecret(value) {
+  const text = value.trim();
+  if (text.length < MIN_LENGTH || isReference(text) || isPlaceholder(text)) return false;
+  if (/^[A-Z][A-Z0-9_]*$/.test(text)) return false;
+  if (/^(\/|~|[A-Za-z]:[\\/]|\.{1,2}[\\/]|https?:\/\/)/.test(text)) return false;
+  return true;
+}
+var secretPair = (name, value) => typeof value === "string" && !isReference(value) && (isKnown(value) || secretName(name) && literalSecret(value));
+function tableSpots(field, table) {
+  if (!isObject7(table)) return [];
+  return Object.entries(table).filter(([name, value]) => secretPair(name, value)).map(([name]) => ({ field, key: name }));
+}
+function argSpots(args) {
+  if (!Array.isArray(args)) return [];
+  const spots = [];
+  args.forEach((arg, index) => {
+    if (typeof arg !== "string") return;
+    const flag = /^(--?[A-Za-z][A-Za-z0-9_-]*)=(.*)$/.exec(arg);
+    if (flag !== null) {
+      if (secretPair(flag[1], flag[2])) spots.push({ field: "args", key: flag[1] });
+      return;
+    }
+    const previous = index > 0 ? args[index - 1] : void 0;
+    if (typeof previous === "string" && /^--?[A-Za-z]/.test(previous) && !previous.includes("=") && !arg.startsWith("-") && secretName(previous) && literalSecret(arg) && !isReference(arg)) {
+      spots.push({ field: "args", key: previous });
+      return;
+    }
+    if (!isReference(arg) && isKnown(arg)) spots.push({ field: "args", key: `#${index + 1}` });
+  });
+  return spots;
+}
+function urlSpots(url) {
+  if (typeof url !== "string") return [];
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return [];
+  }
+  const spots = [];
+  if (parsed.password !== "" && !isReference(decodeURIComponent(parsed.password))) spots.push({ field: "url", key: "password" });
+  for (const [name, value] of parsed.searchParams) if (secretPair(name, value) || normalized(name) === "key" && literalSecret(value)) spots.push({ field: "url", key: name });
+  return spots;
+}
+function secretSpots(definition) {
+  if (definition === null || !isObject7(definition)) return [];
+  const fields = Object.entries(definition).filter(([name, value]) => !PLAIN_FIELDS.has(name) && typeof value === "string" && secretPair(name, value)).map(([name]) => ({ field: "field", key: name }));
+  const all = [...tableSpots("env", definition.env), ...tableSpots("headers", definition.headers), ...tableSpots("headers", definition.http_headers), ...fields, ...argSpots(definition.args), ...urlSpots(definition.url)];
+  const seen = /* @__PURE__ */ new Set();
+  return all.filter((spot) => {
+    const id = `${spot.field}\0${spot.key}`;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+var SCOPE_ORDER4 = { settings: 0, user: 1, local: 2, project: 3 };
+var FIELD_ORDER = { env: 0, headers: 1, field: 2, args: 3, url: 4 };
+var byText11 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
+function sortSecrets(list) {
+  return [...list].sort((a, b) => SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || byText11(a.projectRoot, b.projectRoot) || byText11(a.server, b.server) || FIELD_ORDER[a.field] - FIELD_ORDER[b.field] || byText11(a.key, b.key));
+}
+function envSecretKeys(env) {
+  return tableSpots("env", env).map((spot) => spot.key);
+}
+
 // src/scan/names.ts
 function toolForm(name) {
   return name.replace(/[^A-Za-z0-9_-]/g, "_");
@@ -8534,8 +8662,11 @@ async function scanClaudeSetup(input) {
   const mentionedIds = new Set(Object.keys(managedView.enabledPlugins));
   for (const context of everyContext) for (const layer of context.ordered) for (const id of Object.keys(layer.enabledPlugins)) mentionedIds.add(id);
   const pluginsWithoutInstall = [...mentionedIds].filter((id) => !installedIds.has(id) && !id.endsWith("@builtin")).filter((id) => everyContext.some((context) => pluginEnabledIn(context, id, false))).sort();
+  const userSettings = userLayer.value;
+  const secrets = envSecretKeys(typeof userSettings === "object" && userSettings !== null ? userSettings.env : void 0).map((key) => ({ scope: "settings", server: null, projectRoot: null, field: "env", key }));
   const addServer = (scope, entry, projectRoot, enabled) => {
     const names2 = mcpRecordNames(entry.name, null);
+    for (const spot of secretSpots(entry.definition)) secrets.push({ scope, server: entry.name, projectRoot, ...spot });
     mcpServers.push({
       scope,
       name: entry.name,
@@ -8656,6 +8787,7 @@ async function scanClaudeSetup(input) {
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
+    secrets: sortSecrets(secrets),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
@@ -9777,7 +9909,7 @@ async function readCodexProjectInstructions(root, fallback) {
 // src/scan/codex-mcp.ts
 var serversOf = (layer) => isTable(layer.mcp_servers) ? layer.mcp_servers : {};
 var cmp3 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
-var SCOPE_ORDER4 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
+var SCOPE_ORDER5 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
 function hashOf(salt, definition) {
   if (!isTable(definition)) return null;
   const copy2 = /* @__PURE__ */ Object.create(null);
@@ -9790,6 +9922,18 @@ function pluginServerOn(context, id, name, declared) {
   const policies = isTable(entry) && isTable(entry.mcp_servers) ? entry.mcp_servers : {};
   const policy = policies[name];
   return isTable(policy) ? policy.enabled !== false && !Object.hasOwn(policy, "ema_auth") : declared.enabled !== false;
+}
+function codexMcpSecrets(user, projects) {
+  const secrets = [];
+  const add = (scope, projectRoot, layer) => {
+    for (const [name, definition] of Object.entries(serversOf(layer))) {
+      if (!isTable(definition)) continue;
+      for (const spot of secretSpots(tomlToJson(definition))) secrets.push({ scope, server: name, projectRoot, ...spot });
+    }
+  };
+  add("user", null, user);
+  for (const project of projects) add("project", project.normRoot, project.layer);
+  return sortSecrets(secrets);
 }
 function codexMcpFacts(input) {
   const facts = [];
@@ -9815,7 +9959,7 @@ function codexMcpFacts(input) {
       facts.push({ ...base, scope: "plugin", name: server.name, recordNames: [server.name], projectRoot: null, pluginId: id, definitionHash: hashOf(input.salt, server.definition), enabled });
     }
   }
-  return facts.sort((a, b) => cmp3(a.name, b.name) || SCOPE_ORDER4[a.scope] - SCOPE_ORDER4[b.scope] || cmp3(a.projectRoot, b.projectRoot) || cmp3(a.pluginId, b.pluginId) || cmp3(a.definitionHash, b.definitionHash));
+  return facts.sort((a, b) => cmp3(a.name, b.name) || SCOPE_ORDER5[a.scope] - SCOPE_ORDER5[b.scope] || cmp3(a.projectRoot, b.projectRoot) || cmp3(a.pluginId, b.pluginId) || cmp3(a.definitionHash, b.definitionHash));
 }
 
 // src/scan/codex-plugins.ts
@@ -10402,6 +10546,7 @@ async function scanCodexSetup(input) {
     plugins,
     projects,
     problems: uniqueProblems,
+    secrets: codexMcpSecrets(user, trustedLayers),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };

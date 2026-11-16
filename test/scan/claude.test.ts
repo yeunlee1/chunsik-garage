@@ -118,6 +118,34 @@ describe("scanClaudeSetup", () => {
     facts = await scanClaudeSetup(input);
   });
 
+  it("비밀값: 사용자·로컬·프로젝트 범위 서버와 사용자 설정의 env에 그대로 적힌 값의 자리만 내고, 플러그인 서버는 빼며, 값은 내지 않는다(0.2.0)", async () => {
+    // 기본 준비물에는 ctx의 env.API_TOKEN과 blocked 주소의 ?key=가 있다
+    expect(facts.secrets).toEqual([
+      { scope: "user", server: "blocked", projectRoot: null, field: "url", key: "key" },
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" },
+    ]);
+    const home = input.homedir;
+    const proj = join(root, "work", "proj");
+    const ant = `sk-ant-${"q".repeat(8)}${"Z9".repeat(12)}`;
+    const settings = JSON.parse(await readFile(join(home, ".claude", "settings.json"), "utf8"));
+    await put(join(home, ".claude", "settings.json"), json({ ...settings, env: { ANTHROPIC_API_KEY: ant, EDITOR: "vim" } }));
+    const claudeJson = JSON.parse(await readFile(join(home, ".claude.json"), "utf8"));
+    claudeJson.projects[proj.replace(/\\/g, "/")].mcpServers.loc.env = { LOC_SECRET: "loc-secret-value-1" };
+    await put(join(home, ".claude.json"), json(claudeJson));
+    await put(join(proj, ".mcp.json"), json({ mcpServers: { pj: { type: "http", url: "https://pj.example/mcp", headers: { Authorization: "Bearer pj-bearer-value-123456" } }, unapproved: { command: "u" } } }));
+    await put(join(home, ".claude", "plugins", "cache", "m", "pa", "1.0.0", ".mcp.json"), json({ mcpServers: { db: { command: "db", env: { DB_TOKEN: "plugin-token-value-1" } } } }));
+    const again = await scanClaudeSetup(input);
+    expect(again.secrets).toEqual([
+      { scope: "settings", server: null, projectRoot: null, field: "env", key: "ANTHROPIC_API_KEY" },
+      { scope: "user", server: "blocked", projectRoot: null, field: "url", key: "key" },
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" },
+      { scope: "local", server: "loc", projectRoot: normalizePath(proj), field: "env", key: "LOC_SECRET" },
+      { scope: "project", server: "pj", projectRoot: normalizePath(proj), field: "headers", key: "Authorization" },
+    ]);
+    const text = JSON.stringify(again);
+    for (const value of [ant, "loc-secret-value-1", "pj-bearer-value-123456", "plugin-token-value-1", "TOKEN-VALUE-123", "QUERY-SECRET"]) expect(text).not.toContain(value);
+  });
+
   it("전역 지침은 CLAUDE.md와 규칙 파일이고 프로젝트가 나온 횟수를 센다", () => {
     expect(facts.globalInstructions.files.map((f) => f.path)).toEqual([join(input.homedir, ".claude", "CLAUDE.md"), join(input.homedir, ".claude", "rules", "style.md")]);
     expect(facts.globalInstructions.bytes).toBeGreaterThan(200);

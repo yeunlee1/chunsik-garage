@@ -17,7 +17,7 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 
 ## What it does
 
-- **Checkup.** Scores four axes from your records and settings, opens the report page in your browser, and gives a short summary in the terminal. Every item shows how it was measured, and the report shows which fixes get you to the next grade.
+- **Checkup.** Scores four axes from your records and settings, opens the report page in your browser, and gives a short summary in the terminal. Every item shows how it was measured, and the report shows which fixes get you to the next grade. It also points out API keys or tokens written as they are in your settings.
 - **Tune-up.** Turns off skills, plugins, and MCP servers you have not used for a while. It changes only the items you approve, writes a record first, and can undo each change.
 - **Deep checkup.** Reads the instruction files you pick and points out lines that overlap, conflict, or would be better moved. The score does not change.
 - **Session start notices (Claude Code).** One line when a session starts, if 7 days have passed since the last checkup or something new is installed. Ask to turn them on.
@@ -26,6 +26,8 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 ## Privacy
 
 The program and the report page send nothing out. The AI receives the scores, the counts, and the names of what to tune up. It does not receive your conversations or the text of your instructions. If you ask for a deep checkup, the AI reads the instruction files you pick.
+
+The checkup looks for API keys or tokens written as they are in your MCP settings and in the `env` of your Claude Code settings. It looks at a value only to tell its shape, and never shows or saves it. The report page lists where they are, and the AI receives only how many there are.
 
 The report file contains the names of your skills and project folders. Share the score card instead of the file.
 

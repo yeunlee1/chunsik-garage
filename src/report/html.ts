@@ -300,9 +300,18 @@ function partialBand(view: ReportView): string {
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
 
+const SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl } as const;
+/** 비밀값의 자리 한 줄. 「서버(프로젝트) · 칸 항목」이고, 설정의 env는 서버 자리에 「설정」이다. 값은 없다(0.2.0) */
+const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+
 function notices(view: ReportView): string {
   if (view.notices.length === 0) return "";
-  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span></li>`).join("")}</ul></section>`;
+  const spots = (notice: ReportView["notices"][number]): string => {
+    if (notice.kind !== "credentials_in_config") return "";
+    const places = view.credentialPlaces.filter((place) => place.tool === notice.tool);
+    return places.length === 0 ? "" : `<ul class="spots">${places.map((place) => `<li>${both(textsOf((l) => spotLabel(place, l)))}</li>`).join("")}</ul>`;
+  };
+  return `<section class="notices" aria-labelledby="h-notice"><h2 id="h-notice">${both(REPORT_COPY.notices)}</h2><ul>${view.notices.map((notice) => `<li>${ICONS.info}<span>${both(notice.text)}</span>${spots(notice)}</li>`).join("")}</ul></section>`;
 }
 
 /** hasCard는 카드 자료가 있는지다. 카드 단추와 창은 자료가 있을 때만 둔다 */

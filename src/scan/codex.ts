@@ -5,7 +5,7 @@ import { codexHome } from "../adapters/codex/locate.ts";
 import { projectNamesOf } from "./claude.ts";
 import { codexConfigShapeOk, isTable, mergeCodexLayers, parseCodexConfig, readCodexConfig, type TomlTable } from "./codex-config.ts";
 import { readCodexGlobalInstructions, readCodexProjectInstructions } from "./codex-instructions.ts";
-import { codexMcpFacts, type CodexMcpContext } from "./codex-mcp.ts";
+import { codexMcpFacts, codexMcpSecrets, type CodexMcpContext } from "./codex-mcp.ts";
 import { readCodexPlugin, type CodexPluginRead } from "./codex-plugins.ts";
 import { fallbackNames, pluginsFeatureOn, projectDocDisabled, safetyOf, trustOf, type CodexSafetyFact } from "./codex-settings.ts";
 import { scanCodexSkillRoot, type CodexSkillRootScan } from "./codex-skills.ts";
@@ -248,6 +248,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     plugins,
     projects,
     problems: uniqueProblems,
+    secrets: codexMcpSecrets(user, trustedLayers),
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };

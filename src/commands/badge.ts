@@ -27,7 +27,8 @@ const failure = (code: string, message: string): Error => Object.assign(new Erro
 const localDate = (iso: string, timeZone: string): string => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 
 export async function runBadge(options: { stateDir: string; lang: Lang; timeZone: string }): Promise<BadgeOutcome> {
-  const scored = (await recentAq(options.stateDir, Number.MAX_SAFE_INTEGER)).filter((entry): entry is { at: string; aq: number } => entry.aq !== null && !Number.isNaN(Date.parse(entry.at)));
+  // AQ는 0~100의 정수다. 깨진 줄(무한대, 범위 밖, 소수)과 날짜를 읽을 수 없는 줄은 건너뛴다(0.2.0 짝 검토 1차의 참고)
+  const scored = (await recentAq(options.stateDir, Number.MAX_SAFE_INTEGER)).filter((entry): entry is { at: string; aq: number } => entry.aq !== null && Number.isInteger(entry.aq) && entry.aq >= 0 && entry.aq <= 100 && !Number.isNaN(Date.parse(entry.at)));
   const latest = scored.at(-1);
   if (latest === undefined) throw failure("no-score", "no saved checkup has an AQ");
   const { grade } = gradeOf(latest.aq);

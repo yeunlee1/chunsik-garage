@@ -2,7 +2,7 @@
 import type { ObservationReason } from "../../adapters/claude/observation.ts";
 import { compareVersions, parseVersion } from "../../adapters/common/version.ts";
 import type { ToolId } from "../../adapters/types.ts";
-import type { CodexSetupFacts, FileStatus, ProjectFact, SetupProblem } from "../../scan/types.ts";
+import type { CodexSetupFacts, FileStatus, ProjectFact, SetupProblem, SecretFact } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { CollectedCodex, CollectedTool } from "./tools.ts";
@@ -33,6 +33,8 @@ export type UncountedPlugin = "composition_unknown" | "not_installed" | "skills_
 export type Notice =
   | { kind: "score_withheld"; reasons: Withheld[] }
   | { kind: "state_reset" }
+  /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 문장에는 수만 넣는다 */
+  | { kind: "credentials_in_config"; tool: ToolId; places: SecretFact[] }
   | { kind: "record_unreadable"; tool: ToolId; files: string[]; dirs: string[] }
   | { kind: "record_skipped"; tool: ToolId; files: string[] }
   | { kind: "record_partial"; tool: ToolId; files: string[] }
@@ -61,6 +63,7 @@ export type Notice =
 export const NOTICE_KINDS: readonly Notice["kind"][] = [
   "score_withheld",
   "state_reset",
+  "credentials_in_config",
   "record_unreadable",
   "record_skipped",
   "record_partial",
@@ -145,6 +148,7 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
   if (run.stateBroken) notices.push({ kind: "state_reset" });
 
   for (const tool of input.tools) {
+    if (tool.setup.secrets.length > 0) notices.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices.push(...codexSetupNotices(tool.setup, input.projects));
       continue;

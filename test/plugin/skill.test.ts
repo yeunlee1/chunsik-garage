@@ -79,6 +79,8 @@ describe("실행 명령", () => {
         .split(" ");
       if (sub === "checkup") expect(checkupArgs(args)).toEqual({ flags: new Set(), lang: "ko" });
       else if (sub === "deep-hints") expect(checkupArgs(args, new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
+      else if (sub === "where") expect(args).toEqual([]);
+      else if (sub === "clean") expect([[], ["--all"]]).toContainEqual(args);
       else if (sub === "notify") {
         expect(["on", "off", "status"]).toContain(args[0]);
         expect(checkupArgs(args.slice(1), new Set())).toEqual({ flags: new Set(), lang: "ko" });

@@ -622,6 +622,20 @@
           43
         ],
         "updatedAt": "2026-11-16T06:31:52.952Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 46,
+        "title": "7단계 구현: 정밀 점검·점검 이력 그래프·세션 시작 알림",
+        "description": "aq deep-hints와 스킬 본문의 정밀 점검 흐름, 결과 화면의 점검 이력 그래프와 지난 점검과의 차이, aq notify on/off/status와 Claude Code 세션 시작 훅을 한 브랜치에서 시험 먼저 구현하고, 짝 검증 한 번 뒤 develop에 병합한다.",
+        "details": "설계 17, 18절. 속도 우선(2026-11-16 사용자 지시)으로 계획 문서 없이 구현한다. 훅은 이 PC의 Claude Code에 설치하지 않고 임시 홈과 직접 실행으로만 시험한다.",
+        "testStrategy": "npm run check와 Node.js 22 통과, 임시 홈에서 정밀 점검 목록과 훅의 알림 조건을 돌려 봄, 짝 검증 필수 0건.",
+        "status": "in-progress",
+        "dependencies": [
+          45
+        ],
+        "updatedAt": "2026-11-16T06:32:10.825Z"
       }
     ],
     "metadata": {

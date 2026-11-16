@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 춘식이 정비소의 세션 시작 알림. node가 없거나 실패해도 아무것도 내지 않고 0으로 끝낸다(설계 18.2)
+DIR="$(cd "$(dirname "$0")" && pwd)"
+command -v node >/dev/null 2>&1 || exit 0
+node "${DIR}/session-start.mjs" 2>/dev/null || true
+exit 0

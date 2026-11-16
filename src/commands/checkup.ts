@@ -12,7 +12,7 @@ import { pruneCache } from "../state/cache.ts";
 import { appendHistory, historyCount, historyEntry, recentAq } from "../state/history.ts";
 import { nextState, openState } from "../state/next-state.ts";
 import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
-import { saveState } from "../state/state.ts";
+import { loadState, saveState, type StateFile } from "../state/state.ts";
 import { nextNames, notifyNames } from "../hook/notify.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
@@ -115,9 +115,7 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
       resultPath = await writeResult(options.stateDir, stamp, result);
       step = "state";
       const next = nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString());
-      // 알림이 켜져 있으면 알림용 이름 목록을 훅과 같은 함수로 새로 짓는다(설계 18.1)
-      if (next.notify?.on === true) next.notify = { ...next.notify, names: nextNames(next.notify.names, notifyNames(options.env, options.homedir)) };
-      await saveState(options.stateDir, next);
+      await saveState(options.stateDir, await withLatestNotify(next, options.stateDir, options.env, options.homedir));
       step = "history";
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;
@@ -171,4 +169,15 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
 
   const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run, result };
+}
+
+/**
+ * 저장할 다음 상태에 알림 칸을 맞춘다. 점검이 도는 동안 다른 명령(aq notify off 같은 것)이 알림을 바꿨을 수 있어, 저장 바로 앞에서 상태 파일을 다시 읽어 그 알림 칸을 쓴다(7단계 구현 검증).
+ * 알림이 켜져 있으면 알림용 이름 목록을 훅과 같은 함수로 새로 짓는다(설계 18.1)
+ */
+export async function withLatestNotify(next: StateFile, stateDir: string, env: Record<string, string | undefined>, homedir: string): Promise<StateFile> {
+  const latest = await loadState(stateDir);
+  const notify = latest.status === "ok" ? latest.state.notify : next.notify;
+  if (notify === null || !notify.on) return { ...next, notify };
+  return { ...next, notify: { ...notify, names: nextNames(notify.names, notifyNames(env, homedir)) } };
 }

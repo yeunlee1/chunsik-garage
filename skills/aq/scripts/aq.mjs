@@ -10481,8 +10481,7 @@ async function runCheckup(options) {
       resultPath = await writeResult(options.stateDir, stamp, result);
       step = "state";
       const next = nextState(opened.state, gathered.facts, evaluation.windows.today, new Date(options.clock.nowMs).toISOString());
-      if (next.notify?.on === true) next.notify = { ...next.notify, names: nextNames(next.notify.names, notifyNames(options.env, options.homedir)) };
-      await saveState(options.stateDir, next);
+      await saveState(options.stateDir, await withLatestNotify(next, options.stateDir, options.env, options.homedir));
       step = "history";
       await appendHistory(options.stateDir, historyEntry(evaluation, options.clock.nowMs));
       saved = true;
@@ -10532,6 +10531,12 @@ async function runCheckup(options) {
   if (reportPath !== null && options.open !== void 0 && !await options.open(reportPath)) notices2.push({ kind: "report_unopened" });
   const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run: run2, result };
+}
+async function withLatestNotify(next, stateDir2, env, homedir2) {
+  const latest = await loadState(stateDir2);
+  const notify = latest.status === "ok" ? latest.state.notify : next.notify;
+  if (notify === null || !notify.on) return { ...next, notify };
+  return { ...next, notify: { ...notify, names: nextNames(notify.names, notifyNames(env, homedir2)) } };
 }
 
 // src/commands/deep-hints.ts

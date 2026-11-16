@@ -2,7 +2,7 @@
 import { TOOL_NAMES } from "../core/copy/common.ts";
 import { fill } from "../core/copy/format.ts";
 import type { Lang, Texts } from "../core/copy/lang.ts";
-import type { TuneBlock, TuneItem } from "./items.ts";
+import type { TuneBlock, TuneItem, TuneKey } from "./items.ts";
 import type { TuneRunNotice } from "./plan.ts";
 
 type Unit = TuneItem["unit"];
@@ -21,10 +21,10 @@ export const TUNE_COPY: Texts<TuneCopy> = {
   en: {
     title: { A1: "Turn off an unused skill: {name}", A2: "Turn off an unused plugin: {name}", A3: "Block an unused MCP server: {name}", A4: "Turn off an unused Codex MCP server: {name}" },
     change: {
-      A1: 'In {file}, set "{name}" under skillOverrides to "off" ({current}).',
-      A2: 'In {file}, set "{name}" under enabledPlugins to false ({current}).',
-      A3: 'In {file}, add { "serverName": "{name}" } to the deniedMcpServers list.',
-      A4: "In {file}, write enabled = false in the [mcp_servers.{name}] table ({current}).",
+      A1: 'In {file}, set {key} under skillOverrides to "off" ({current}).',
+      A2: 'In {file}, set {key} under enabledPlugins to false ({current}).',
+      A3: 'In {file}, add { "serverName": {key} } to the deniedMcpServers list.',
+      A4: "In {file}, write enabled = false in the [mcp_servers.{key}] table ({current}).",
     },
     current: { none: "now not set", value: "now {value}", unexpected: "now an unexpected value" },
     impact: {
@@ -44,7 +44,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       "parent-shape": "{parent} in the settings file is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
       "value-shape": "The current value is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
       "not-toml": "config.toml could not be parsed, so it is not changed automatically. Change it yourself as described above.",
-      "table-shape": "The [mcp_servers.{name}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above.",
+      "table-shape": "The [mcp_servers.{key}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above.",
     },
     notices: {
       not_saved: "This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save.",
@@ -54,10 +54,10 @@ export const TUNE_COPY: Texts<TuneCopy> = {
   ko: {
     title: { A1: "안 쓰는 스킬 끄기: {name}", A2: "안 쓰는 플러그인 끄기: {name}", A3: "안 쓰는 MCP 서버 막기: {name}", A4: "Codex의 안 쓰는 MCP 서버 끄기: {name}" },
     change: {
-      A1: '{file}의 skillOverrides에서 이름 "{name}"의 값을 "off"로 바꿉니다({current}).',
-      A2: '{file}의 enabledPlugins에서 설치 ID "{name}"의 값을 false로 바꿉니다({current}).',
-      A3: '{file}의 deniedMcpServers 목록에 { "serverName": "{name}" } 항목을 더합니다.',
-      A4: "{file}의 [mcp_servers.{name}] 표에 enabled = false를 적습니다({current}).",
+      A1: '{file}의 skillOverrides에서 이름 {key}의 값을 "off"로 바꿉니다({current}).',
+      A2: '{file}의 enabledPlugins에서 설치 ID {key}의 값을 false로 바꿉니다({current}).',
+      A3: '{file}의 deniedMcpServers 목록에 { "serverName": {key} } 항목을 더합니다.',
+      A4: "{file}의 [mcp_servers.{key}] 표에 enabled = false를 적습니다({current}).",
     },
     current: { none: "지금은 정하지 않음", value: "지금은 {value}", unexpected: "지금은 예상하지 못한 값" },
     impact: {
@@ -77,7 +77,7 @@ export const TUNE_COPY: Texts<TuneCopy> = {
       "parent-shape": "설정 파일의 {parent}가 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "value-shape": "지금 값이 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
       "not-toml": "config.toml을 풀지 못해 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
-      "table-shape": "[mcp_servers.{name}] 표가 머리 하나로 여러 줄에 적혀 있지 않아(인라인 표나 점 열쇠로 적은 것) 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
+      "table-shape": "[mcp_servers.{key}] 표가 머리 하나로 여러 줄에 적혀 있지 않아(인라인 표나 점 열쇠로 적은 것) 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.",
     },
     notices: {
       not_saved: "저장하지 않은 계획이라 적용할 수 없습니다. 적용하려면 --no-save 없이 다시 계획하세요.",
@@ -110,16 +110,38 @@ function impactValues(item: TuneItem): Record<string, number> {
   }
 }
 
+/** TOML 기본 문자열. 역슬래시, 큰따옴표와 제어 문자를 이스케이프한다 */
+function tomlString(text: string): string {
+  const short: Record<string, string> = { "\\": "\\\\", '"': '\\"', "\b": "\\b", "\t": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r" };
+  return `"${text.replace(/[\\"\u0000-\u001f\u007f]/g, (char) => short[char] ?? `\\u${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`)}"`;
+}
+
+/**
+ * 설정 글에 넣는 자리의 이름. JSON은 JSON 문자열 꼴로 적고, TOML 표 이름은 맨 열쇠로 쓸 수 있는 글자(영문자, 숫자, -, _)만이면 그대로, 아니면 큰따옴표로 싸서 적는다.
+ * 이름을 그대로 넣으면 점이 든 이름이 다른 열쇠를 가리켰다(6단계 1부 구현 검증)
+ */
+function keyText(key: TuneKey): string {
+  switch (key.kind) {
+    case "json-entry":
+      return JSON.stringify(key.name);
+    case "json-list-add":
+      return JSON.stringify(key.entry.serverName);
+    case "toml-table-key":
+      return /^[A-Za-z0-9_-]+$/.test(key.table) ? key.table : tomlString(key.table);
+  }
+}
+
 export function tuneItemText(item: TuneItem, lang: Lang): TuneItemText {
   const copy = TUNE_COPY[lang];
   // 예상한 꼴이 아닌 지금 값은 적지 않는다(계획에도 없다)
   const current = item.blocked === "value-shape" ? copy.current.unexpected : "current" in item ? fill(copy.current.value, { value: JSON.stringify(item.current) }) : copy.current.none;
   const parent = item.key.kind === "toml-table-key" ? "mcp_servers" : item.key.parent;
+  const key = keyText(item.key);
   return {
     title: fill(copy.title[item.unit], { name: item.target }),
-    change: fill(copy.change[item.unit], { file: item.file, name: item.target, current }),
+    change: fill(copy.change[item.unit], { file: item.file, key, current }),
     impact: fill(copy.impact[item.unit], impactValues(item)),
-    blocked: item.blocked === null ? null : fill(copy.blocked[item.blocked], { tool: TOOL_NAMES[item.tool][lang], parent, name: item.target }),
+    blocked: item.blocked === null ? null : fill(copy.blocked[item.blocked], { tool: TOOL_NAMES[item.tool][lang], parent, key }),
     undo: item.blocked === null ? copy.undo : null,
   };
 }

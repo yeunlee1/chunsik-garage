@@ -10484,11 +10484,9 @@ function keyPart(text) {
   if (/^[A-Za-z0-9_-]+$/.test(part)) return part;
   if (/^'[^']*'$/.test(part)) return part.slice(1, -1);
   if (/^"(?:[^"\\]|\\.)*"$/.test(part)) {
-    try {
-      return JSON.parse(part);
-    } catch {
-      return null;
-    }
+    const table = parseCodexConfig(`${part} = 0`);
+    const names2 = table === null ? [] : Object.keys(table);
+    return names2.length === 1 ? names2[0] : null;
   }
   return null;
 }
@@ -10671,10 +10669,10 @@ var TUNE_COPY = {
   en: {
     title: { A1: "Turn off an unused skill: {name}", A2: "Turn off an unused plugin: {name}", A3: "Block an unused MCP server: {name}", A4: "Turn off an unused Codex MCP server: {name}" },
     change: {
-      A1: 'In {file}, set "{name}" under skillOverrides to "off" ({current}).',
-      A2: 'In {file}, set "{name}" under enabledPlugins to false ({current}).',
-      A3: 'In {file}, add { "serverName": "{name}" } to the deniedMcpServers list.',
-      A4: "In {file}, write enabled = false in the [mcp_servers.{name}] table ({current})."
+      A1: 'In {file}, set {key} under skillOverrides to "off" ({current}).',
+      A2: "In {file}, set {key} under enabledPlugins to false ({current}).",
+      A3: 'In {file}, add { "serverName": {key} } to the deniedMcpServers list.',
+      A4: "In {file}, write enabled = false in the [mcp_servers.{key}] table ({current})."
     },
     current: { none: "now not set", value: "now {value}", unexpected: "now an unexpected value" },
     impact: {
@@ -10694,7 +10692,7 @@ var TUNE_COPY = {
       "parent-shape": "{parent} in the settings file is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
       "value-shape": "The current value is not in the expected shape, so it is not changed automatically. Change it yourself as described above.",
       "not-toml": "config.toml could not be parsed, so it is not changed automatically. Change it yourself as described above.",
-      "table-shape": "The [mcp_servers.{name}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above."
+      "table-shape": "The [mcp_servers.{key}] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above."
     },
     notices: {
       not_saved: "This plan was not saved, so it cannot be applied. To apply it, run aq tune plan again without --no-save.",
@@ -10704,10 +10702,10 @@ var TUNE_COPY = {
   ko: {
     title: { A1: "\uC548 \uC4F0\uB294 \uC2A4\uD0AC \uB044\uAE30: {name}", A2: "\uC548 \uC4F0\uB294 \uD50C\uB7EC\uADF8\uC778 \uB044\uAE30: {name}", A3: "\uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB9C9\uAE30: {name}", A4: "Codex\uC758 \uC548 \uC4F0\uB294 MCP \uC11C\uBC84 \uB044\uAE30: {name}" },
     change: {
-      A1: '{file}\uC758 skillOverrides\uC5D0\uC11C \uC774\uB984 "{name}"\uC758 \uAC12\uC744 "off"\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).',
-      A2: '{file}\uC758 enabledPlugins\uC5D0\uC11C \uC124\uCE58 ID "{name}"\uC758 \uAC12\uC744 false\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).',
-      A3: '{file}\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": "{name}" } \uD56D\uBAA9\uC744 \uB354\uD569\uB2C8\uB2E4.',
-      A4: "{file}\uC758 [mcp_servers.{name}] \uD45C\uC5D0 enabled = false\uB97C \uC801\uC2B5\uB2C8\uB2E4({current})."
+      A1: '{file}\uC758 skillOverrides\uC5D0\uC11C \uC774\uB984 {key}\uC758 \uAC12\uC744 "off"\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).',
+      A2: "{file}\uC758 enabledPlugins\uC5D0\uC11C \uC124\uCE58 ID {key}\uC758 \uAC12\uC744 false\uB85C \uBC14\uAFC9\uB2C8\uB2E4({current}).",
+      A3: '{file}\uC758 deniedMcpServers \uBAA9\uB85D\uC5D0 { "serverName": {key} } \uD56D\uBAA9\uC744 \uB354\uD569\uB2C8\uB2E4.',
+      A4: "{file}\uC758 [mcp_servers.{key}] \uD45C\uC5D0 enabled = false\uB97C \uC801\uC2B5\uB2C8\uB2E4({current})."
     },
     current: { none: "\uC9C0\uAE08\uC740 \uC815\uD558\uC9C0 \uC54A\uC74C", value: "\uC9C0\uAE08\uC740 {value}", unexpected: "\uC9C0\uAE08\uC740 \uC608\uC0C1\uD558\uC9C0 \uBABB\uD55C \uAC12" },
     impact: {
@@ -10727,7 +10725,7 @@ var TUNE_COPY = {
       "parent-shape": "\uC124\uC815 \uD30C\uC77C\uC758 {parent}\uAC00 \uC608\uC0C1\uD55C \uAF34\uC774 \uC544\uB2C8\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
       "value-shape": "\uC9C0\uAE08 \uAC12\uC774 \uC608\uC0C1\uD55C \uAF34\uC774 \uC544\uB2C8\uB77C \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
       "not-toml": "config.toml\uC744 \uD480\uC9C0 \uBABB\uD574 \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694.",
-      "table-shape": "[mcp_servers.{name}] \uD45C\uAC00 \uBA38\uB9AC \uD558\uB098\uB85C \uC5EC\uB7EC \uC904\uC5D0 \uC801\uD600 \uC788\uC9C0 \uC54A\uC544(\uC778\uB77C\uC778 \uD45C\uB098 \uC810 \uC5F4\uC1E0\uB85C \uC801\uC740 \uAC83) \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694."
+      "table-shape": "[mcp_servers.{key}] \uD45C\uAC00 \uBA38\uB9AC \uD558\uB098\uB85C \uC5EC\uB7EC \uC904\uC5D0 \uC801\uD600 \uC788\uC9C0 \uC54A\uC544(\uC778\uB77C\uC778 \uD45C\uB098 \uC810 \uC5F4\uC1E0\uB85C \uC801\uC740 \uAC83) \uC790\uB3D9\uC73C\uB85C \uACE0\uCE58\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC704\uC5D0 \uC801\uC740 \uB300\uB85C \uC9C1\uC811 \uBC14\uAFB8\uC138\uC694."
     },
     notices: {
       not_saved: "\uC800\uC7A5\uD558\uC9C0 \uC54A\uC740 \uACC4\uD68D\uC774\uB77C \uC801\uC6A9\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4. \uC801\uC6A9\uD558\uB824\uBA74 --no-save \uC5C6\uC774 \uB2E4\uC2DC \uACC4\uD68D\uD558\uC138\uC694.",
@@ -10748,15 +10746,30 @@ function impactValues(item2) {
       return { projects: impact.projects };
   }
 }
+function tomlString(text) {
+  const short = { "\\": "\\\\", '"': '\\"', "\b": "\\b", "	": "\\t", "\n": "\\n", "\f": "\\f", "\r": "\\r" };
+  return `"${text.replace(/[\\"\u0000-\u001f\u007f]/g, (char) => short[char] ?? `\\u${char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}`)}"`;
+}
+function keyText(key) {
+  switch (key.kind) {
+    case "json-entry":
+      return JSON.stringify(key.name);
+    case "json-list-add":
+      return JSON.stringify(key.entry.serverName);
+    case "toml-table-key":
+      return /^[A-Za-z0-9_-]+$/.test(key.table) ? key.table : tomlString(key.table);
+  }
+}
 function tuneItemText(item2, lang) {
   const copy2 = TUNE_COPY[lang];
   const current = item2.blocked === "value-shape" ? copy2.current.unexpected : "current" in item2 ? fill(copy2.current.value, { value: JSON.stringify(item2.current) }) : copy2.current.none;
   const parent = item2.key.kind === "toml-table-key" ? "mcp_servers" : item2.key.parent;
+  const key = keyText(item2.key);
   return {
     title: fill(copy2.title[item2.unit], { name: item2.target }),
-    change: fill(copy2.change[item2.unit], { file: item2.file, name: item2.target, current }),
+    change: fill(copy2.change[item2.unit], { file: item2.file, key, current }),
     impact: fill(copy2.impact[item2.unit], impactValues(item2)),
-    blocked: item2.blocked === null ? null : fill(copy2.blocked[item2.blocked], { tool: TOOL_NAMES[item2.tool][lang], parent, name: item2.target }),
+    blocked: item2.blocked === null ? null : fill(copy2.blocked[item2.blocked], { tool: TOOL_NAMES[item2.tool][lang], parent, key }),
     undo: item2.blocked === null ? copy2.undo : null
   };
 }

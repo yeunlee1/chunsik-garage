@@ -1,6 +1,7 @@
 // 정비 계획의 문장(항목마다 제목·바꾸는 것·영향 범위·되돌리는 법·자동으로 고칠 수 없는 까닭, 실행 알림)을 두 언어로 시험한다(「6단계 1부 계획 전 결정」 8번)
 import { describe, expect, it } from "vitest";
 import { slots } from "../../src/core/copy/format.ts";
+import { parseCodexConfig } from "../../src/scan/codex-config.ts";
 import { TUNE_COPY, tuneItemText, tuneNoticeText } from "../../src/tune/copy.ts";
 import type { TuneBlock, TuneItem } from "../../src/tune/items.ts";
 
@@ -70,6 +71,34 @@ describe("예상한 꼴이 아닌 지금 값", () => {
     expect(text.change).toBe(`${FILE}의 skillOverrides에서 이름 "idle"의 값을 "off"로 바꿉니다(지금은 예상하지 못한 값).`);
     expect([text.blocked, text.undo]).toEqual(["지금 값이 예상한 꼴이 아니라 자동으로 고치지 않습니다. 위에 적은 대로 직접 바꾸세요.", null]);
     expect(tuneItemText(item({ blocked: "value-shape" }), "en").change).toBe(`In ${FILE}, set "idle" under skillOverrides to "off" (now an unexpected value).`);
+  });
+});
+
+describe("설정 글의 이름(6단계 1부 구현 검증)", () => {
+  const codexFile = "/home/u/.codex/config.toml";
+  const a4 = (table: string, input: Partial<TuneItem> = {}) =>
+    item({ unit: "A4", tool: "codex", target: table, file: codexFile, key: { kind: "toml-table-key", table, key: "enabled" }, next: false, impact: { unit: "A4", projects: 0 }, ...input });
+
+  it("TOML 표 이름은 맨 열쇠로 쓸 수 있으면 그대로 적고, 아니면 큰따옴표로 싸서 이스케이프한다. 적은 머리를 해석기에 넣으면 그 이름 하나가 나온다", () => {
+    expect(tuneItemText(a4("db.prod"), "ko").change).toBe(`${codexFile}의 [mcp_servers."db.prod"] 표에 enabled = false를 적습니다(지금은 정하지 않음).`);
+    expect(tuneItemText(a4("db.prod", { blocked: "table-shape" }), "en").blocked).toBe(
+      'The [mcp_servers."db.prod"] table is not written as one multi-line table (it uses an inline table or dotted keys), so it is not changed automatically. Change it yourself as described above.',
+    );
+    expect(tuneItemText(a4("my_db-1"), "en").change).toBe(`In ${codexFile}, write enabled = false in the [mcp_servers.my_db-1] table (now not set).`);
+    for (const name of ["db.prod", 'd"b', "a\\b", "d\tb", "데이터", "a b", "x\u007fy"]) {
+      const header = /\[mcp_servers\.(.+)\] 표에/.exec(tuneItemText(a4(name), "ko").change)![1];
+      const servers = parseCodexConfig(`[mcp_servers.${header}]\ncommand = "x"\n`)?.mcp_servers as Record<string, unknown> | undefined;
+      expect(Object.keys(servers ?? {}), name).toEqual([name]);
+    }
+  });
+
+  it("JSON의 이름은 JSON 문자열로 적는다. 보통 이름의 문장은 그대로다", () => {
+    const a1 = item({ target: 'a"b', key: { kind: "json-entry", parent: "skillOverrides", name: 'a"b' } });
+    expect(tuneItemText(a1, "ko").change).toBe(`${FILE}의 skillOverrides에서 이름 "a\\"b"의 값을 "off"로 바꿉니다(지금은 정하지 않음).`);
+    const a3 = item({ unit: "A3", target: "a\\b", key: { kind: "json-list-add", parent: "deniedMcpServers", entry: { serverName: "a\\b" } }, next: { serverName: "a\\b" }, impact: { unit: "A3", sameName: { local: 0, project: 0, claudeAi: 0 } } });
+    const entry = /목록에 (\{ .+ \}) 항목을/.exec(tuneItemText(a3, "ko").change)![1]!;
+    expect(JSON.parse(entry)).toEqual({ serverName: "a\\b" });
+    expect(tuneItemText(item(), "en").change).toBe(`In ${FILE}, set "idle" under skillOverrides to "off" (now not set).`);
   });
 });
 

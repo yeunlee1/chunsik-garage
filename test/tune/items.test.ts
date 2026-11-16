@@ -152,6 +152,17 @@ describe("지금 값의 꼴과 TOML의 문자열(6단계 1부 계획 리뷰 1차
   });
 });
 
+describe("표 이름의 따옴표와 이스케이프(6단계 1부 구현 검증)", () => {
+  it("큰따옴표 이름은 문서를 읽는 해석기와 같게 푼다. 8자리 유니코드 이스케이프와 따옴표 안의 탭도 그 이름이고, 따옴표 밖의 점은 열쇠를 나눈다", () => {
+    expect(tableHeaderCount('[mcp_servers."\\U00000064b"]\ncommand = "x"\n', "db")).toBe(1);
+    expect(tableHeaderCount('[mcp_servers."\\u0064b"]\ncommand = "x"\n', "db")).toBe(1);
+    expect(tableHeaderCount('[mcp_servers."d\tb"]\ncommand = "x"\n', "d\tb")).toBe(1);
+    expect(tableHeaderCount('[mcp_servers."db.prod"]\ncommand = "x"\n', "db.prod")).toBe(1);
+    expect(tableHeaderCount('[mcp_servers.db.prod]\ncommand = "x"\n', "db.prod")).toBe(0);
+    expect(tuneItem(candidate("A4", "db"), context({ home: CODEX_HOME }), ok('[mcp_servers."\\U00000064b"]\ncommand = "x"\n')).blocked).toBeNull();
+  });
+});
+
 describe("지문과 파일 읽기", () => {
   let root: string;
   beforeEach(async () => {

@@ -114,11 +114,10 @@ function keyPart(text: string): string | null {
   if (/^[A-Za-z0-9_-]+$/.test(part)) return part;
   if (/^'[^']*'$/.test(part)) return part.slice(1, -1);
   if (/^"(?:[^"\\]|\\.)*"$/.test(part)) {
-    try {
-      return JSON.parse(part) as string;
-    } catch {
-      return null;
-    }
+    // 큰따옴표 조각은 문서를 읽는 해석기로 푼다. JSON으로 풀면 TOML의 8자리 이스케이프(\U)와 따옴표 안의 탭을 받지 않아 정상 표를 놓쳤다(6단계 1부 구현 검증)
+    const table = parseCodexConfig(`${part} = 0`);
+    const names = table === null ? [] : Object.keys(table);
+    return names.length === 1 ? names[0]! : null;
   }
   return null;
 }

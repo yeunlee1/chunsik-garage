@@ -36,9 +36,12 @@ The report file contains the names of your skills and project folders. Share the
 
 Everything lives in `~/.chunsik-garage/`: the cache, the reports, the score history, the state, the notice markers, and the tune-up records. Removing the plugin does not remove this folder.
 
+The only exception is a checkup run without saving. Its report page and result file (`chunsik-garage-report-<time>.html`, `chunsik-garage-result-<time>.json`) go to your OS temp folder, and this tool does not delete them. The result file lists the names of your skills, MCP servers, and projects, so delete it yourself when you no longer need it.
+
 - Ask "where does the AQ checkup keep its files" to see the folder and its size.
 - Ask to clean up: the cache and older reports are removed, and the latest report stays.
 - Ask to remove everything: the history, the state, and the tune-up records are removed too. After that, tune-ups can no longer be undone with this tool.
+- Cleaning checks each path right before deleting it, but it cannot stop another program that swaps a folder inside `~/.chunsik-garage/` for a link at that very moment, which could delete files outside. Leave that folder alone while it is being cleaned.
 
 ## Using it in the Codex sandbox
 
@@ -58,6 +61,6 @@ Without approval the checkup still runs without saving (no cache, no history). A
 
 ## License
 
-The code is MIT licensed (`LICENSE`). The character art in `skills/aq/assets/` is not covered by the MIT license; see `skills/aq/assets/ART-LICENSE.md`.
+The code is MIT licensed (`LICENSE`). The character art in `skills/aq/assets/` is not covered by the MIT license; see `skills/aq/assets/ART-LICENSE.md`. You may share the art as it appears in the cards, result pages, and screenshots that this tool makes. You may not take the art out of them and use it elsewhere.
 
 [한국어](README.ko.md)

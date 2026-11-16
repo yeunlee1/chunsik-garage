@@ -158,7 +158,7 @@ This never changes the score. Do it only when the user asks for a deep checkup o
    node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" where
    ```
 
-   Relay the folder (`dir`) and, for each entry that exists, its name, number of files, and size.
+   Relay the folder (`dir`) and, for each entry that exists, its name, number of files, and size. Also say that the report and result files of checkups run without saving are in the OS temp folder, are not counted here, and are not removed by cleaning (`noSaveResultsInOsTemp`).
 2. When the user asks to clean up, run the first command. When the user asks to remove everything, give the warning of section 5 step 8 first, and run the second command only after the user agrees:
 
    ```bash

@@ -6,7 +6,7 @@ import { outerTypeOf } from "../common/outer-type.ts";
 import { canonicalDay, emptyDay, emptySkillSignalCounts, emptyToolCounts, type DayCell, type SessionKind, type SessionSummary, type SkillSignalCounts, type ToolCounts } from "../types.ts";
 
 /** 해석 버전. 캐시 열쇠에 들어가, 읽기나 해석이 바뀌어 예전 버전이 넣은 캐시가 틀릴 수 있으면 올린다(설계 9.4) */
-export const GEMINI_PARSER_VERSION = 1;
+export const GEMINI_PARSER_VERSION = 2;
 
 /** 셸 명령 도구(run_shell_command). 도구 오류(E2)에서 뺀다 */
 export const GEMINI_SHELL_TOOLS: readonly string[] = ["run_shell_command"];
@@ -73,21 +73,6 @@ export function isHumanContent(content: unknown): boolean {
     const piece = obj(part);
     return piece !== null && typeof piece.text === "string" && piece.thought !== true && humanText(piece.text);
   });
-}
-
-/** 사람 요청의 글(글 조각을 이은 것). 사람 요청이 아니면 null이다. 압축 뒤 사본을 지운 요청과 맞출 때 쓴다 */
-function requestKey(content: unknown): string | null {
-  if (!isHumanContent(content)) return null;
-  if (typeof content === "string") return content.trim();
-  const parts = Array.isArray(content) ? content : [content];
-  return parts
-    .map((part) => {
-      if (typeof part === "string") return part;
-      const piece = obj(part);
-      return piece !== null && typeof piece.text === "string" && piece.thought !== true ? piece.text : "";
-    })
-    .join("")
-    .trim();
 }
 
 /**
@@ -245,32 +230,20 @@ export class GeminiSessionParser {
   }
 
   /**
-   * 압축 뒤 이력 동기화는 압축 요약과 확인, 남길 대화를 새 ID로 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다) 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
-   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 user 메시지 가운데, 바로 다음이 모델 이름도 토큰도 없는 gemini 메시지이거나(요약과 남긴 대화) 지운 사람 요청과 글이 같은 것(응답 없이 끝나거나 이어진 요청)이 그 사본이다.
-   * 지운 요청과 글로 맞추는 것은 지운 요청 하나에 사본 하나다(소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts의 findCompressSplitPoint)
+   * 압축 뒤 이력 동기화는 압축 요약(user)과 확인(gemini), 남길 대화를 새 ID로 한 번에 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다), 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이다. 구간에 「user 바로 다음이 모델 이름도 토큰도 없는 gemini」인 짝(요약과 확인)이 있으면 다시 적은 구간이라
+   * 그 안의 user 메시지를 모두 사본으로 본다(응답 없이 끝난 요청의 사본도 든다). 그 짝이 없으면 압축이 아닌 이력 고침이라 아무것도 빼지 않는다(같은 글을 다시 친 새 요청을 지키려고)
+   * (소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts)
    */
   private markCopies(removed: ReadonlySet<string>): void {
     let last = -1;
-    const removedRequests = new Map<string, number>();
-    for (const id of removed) {
-      last = Math.max(last, this.firstSeen.get(id) ?? -1);
-      const record = this.messages.get(id);
-      const key = record?.type === "user" ? requestKey(record.content) : null;
-      if (key !== null) removedRequests.set(key, (removedRequests.get(key) ?? 0) + 1);
-    }
+    for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
     if (last < 0) return;
     const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id)! > last);
-    for (let index = 0; index < window.length; index++) {
-      const id = window[index]!;
-      const record = this.messages.get(id)!;
-      if (record.type !== "user") continue;
-      const next = index + 1 < window.length ? this.messages.get(window[index + 1]!)! : null;
-      const beforeSynthetic = next !== null && next.type === "gemini" && str(next.model) === null && obj(next.tokens) === null;
-      const key = requestKey(record.content);
-      const left = key === null ? 0 : (removedRequests.get(key) ?? 0);
-      if (left > 0) removedRequests.set(key!, left - 1);
-      if (beforeSynthetic || left > 0) this.copies.add(id);
-    }
+    const synthetic = (record: Json): boolean => record.type === "gemini" && str(record.model) === null && obj(record.tokens) === null;
+    const rewritten = window.some((id, index) => this.messages.get(id)!.type === "user" && index + 1 < window.length && synthetic(this.messages.get(window[index + 1]!)!));
+    if (!rewritten) return;
+    for (const id of window) if (this.messages.get(id)!.type === "user") this.copies.add(id);
   }
 
   /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */

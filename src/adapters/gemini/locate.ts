@@ -17,6 +17,8 @@ export interface GeminiLogFile {
   cwd: string | null;
   /** 옛 꼴(메시지 목록이 든 JSON 한 덩어리, .json)이다 */
   legacy: boolean;
+  /** 같은 파일을 가리는 열쇠. 장치와 파일 번호이고, 파일 번호를 모르면 정규화한 경로다. 연결로 두 자리에 보이는 같은 파일을 한 번만 넣는 데 쓴다 */
+  identity: string;
 }
 
 export interface GeminiFileList {
@@ -83,14 +85,17 @@ export async function listGeminiFiles(home: string, minMtimeMs: number | null): 
     return { tmpFound: true, files: [], olderThanWindow: 0, unreadableDirs: [tmp], unreadableFiles: [] };
   }
 
-  const consider = async (path: string, entry: Omit<GeminiLogFile, "path" | "normPath" | "size" | "mtimeMs">): Promise<void> => {
+  const consider = async (path: string, entry: Omit<GeminiLogFile, "path" | "normPath" | "size" | "mtimeMs" | "identity">): Promise<void> => {
     try {
       const info = await stat(path);
       if (minMtimeMs !== null && info.mtimeMs < minMtimeMs) {
         olderThanWindow++;
         return;
       }
-      files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, ...entry });
+      // Windows의 파일 번호는 수로 읽으면 잘려 다른 파일이 같아질 수 있어 큰 수로 읽는다
+      const big = await stat(path, { bigint: true });
+      const identity = big.ino !== 0n ? `${big.dev}:${big.ino}` : normalizePath(path);
+      files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, identity, ...entry });
     } catch {
       unreadableFiles.push(path);
     }
@@ -141,7 +146,7 @@ export async function listGeminiFiles(home: string, minMtimeMs: number | null): 
   return { tmpFound: true, files, olderThanWindow, unreadableDirs, unreadableFiles };
 }
 
-/** 여러 기록 자리(geminiRecordHomes)의 목록을 합친다. 같은 파일(정규화한 경로)은 한 번만 넣고, 결과는 정규화한 경로 차례다 */
+/** 여러 기록 자리(geminiRecordHomes)의 목록을 합친다. 같은 파일(장치와 파일 번호, 연결로 두 자리에 보여도 하나)은 한 번만 넣고, 결과는 정규화한 경로 차례다 */
 export async function listGeminiRecordFiles(homes: readonly string[], minMtimeMs: number | null): Promise<GeminiFileList> {
   const merged: GeminiFileList = { tmpFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unreadableFiles: [] };
   const seen = new Set<string>();
@@ -152,8 +157,8 @@ export async function listGeminiRecordFiles(homes: readonly string[], minMtimeMs
     merged.unreadableDirs.push(...list.unreadableDirs);
     merged.unreadableFiles.push(...list.unreadableFiles);
     for (const file of list.files) {
-      if (seen.has(file.normPath)) continue;
-      seen.add(file.normPath);
+      if (seen.has(file.identity)) continue;
+      seen.add(file.identity);
       merged.files.push(file);
     }
   }

@@ -16,8 +16,8 @@ function parse(lines: string[], context = ctx()) {
 }
 
 describe("GeminiSessionParser", () => {
-  it("해석 버전이 있다", () => {
-    expect(GEMINI_PARSER_VERSION).toBeGreaterThanOrEqual(1);
+  it("해석 버전이 있다. 짝 검토 2·3차 반영으로 세는 법이 바뀌어 2로 올렸다(이전 후보의 캐시를 쓰지 않게, 짝 검토 3차 필수 3)", () => {
+    expect(GEMINI_PARSER_VERSION).toBe(2);
   });
 
   it("사람 요청, 응답, 토큰, 모델, 도구 호출과 결과·오류·취소를 날짜 칸에 센다. 입력 토큰은 캐시를 포함한 값 그대로 두고 캐시는 따로 적는다", () => {
@@ -194,6 +194,18 @@ describe("GeminiSessionParser", () => {
       JSON.stringify({ id: "k2", timestamp: "2026-11-10T01:02:00.003Z", type: "user", content: [{ text: "이어 붙인 요청" }] }),
       JSON.stringify({ id: "k3", timestamp: "2026-11-10T01:02:00.004Z", type: "gemini", content: [{ text: "답" }] }),
       JSON.stringify({ $patch: { removeIds: ["u1", "u2", "g1"] } }),
+    ]);
+    expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
+  });
+
+  it("압축이 아닌 이력 고침(지우기)에서는 지운 요청과 글이 같은 새 요청도 그대로 센다(짝 검토 3차 필수 1)", () => {
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", [{ text: "계속해 줘" }]),
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }),
+      user("u2", "2026-11-10T01:05:01.000Z", [{ text: "계속해 줘" }]),
+      gemini("g2", "2026-11-10T01:05:04.000Z", { tokens }),
+      JSON.stringify({ $patch: { removeIds: ["u1", "g1"] } }),
     ]);
     expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
   });

@@ -2,7 +2,7 @@
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
-import { geminiServerRecordName, scanGeminiSetup, type GeminiScanInput } from "../../src/scan/gemini.ts";
+import { geminiServerRecordName, importBoundary, scanGeminiSetup, type GeminiScanInput } from "../../src/scan/gemini.ts";
 import type { GeminiSetupFacts } from "../../src/scan/types.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
@@ -134,6 +134,43 @@ describe("scanGeminiSetup", () => {
     await put(join(home, ".git", "HEAD"), "ref: refs/heads/main\n");
     facts = await scanGeminiSetup(input);
     expect(facts.globalInstructions.files.map((file) => file.path.replace(/\\/g, "/").split("/").pop())).toEqual(["GEMINI.md", "inside.md", "outside.md"]);
+  });
+
+  it("가져오기 경로는 제미나이처럼 빈칸에서 끝난다. 역빗금으로 빈칸을 잇지 않고, .·/·영문자로 시작해야 한다(짝 검토 3차 필수 5)", async () => {
+    const long = "가져온 지침은 시험을 먼저 돌린 뒤에 끝났다고 말한다.\n".repeat(20);
+    await put(join(gemini, "GEMINI.md"), "@./extra\\ guide.md\n@~note.md\n@_under.md\n");
+    await put(join(gemini, "extra guide.md"), long);
+    await put(join(gemini, "~note.md"), long);
+    await put(join(gemini, "_under.md"), long);
+    const facts = await scanGeminiSetup(input);
+    expect(facts.globalInstructions.files.map((file) => file.path.replace(/\\/g, "/").split("/").pop())).toEqual(["GEMINI.md"]);
+  });
+
+  it("프로젝트를 연결 경로로 열어도 실제 경로가 경계 안인 가져오기는 따른다(짝 검토 3차 필수 5)", async () => {
+    const alias = join(root, "work", "proj-alias");
+    await linkDir(proj, alias);
+    await put(join(gemini, "trustedFolders.json"), json({ [proj]: "TRUST_FOLDER" }));
+    await put(join(proj, "GEMINI.md"), `@${join(proj, "extra.md")}\n`);
+    await put(join(proj, "extra.md"), "가져온 프로젝트 지침은 시험을 먼저 돌린 뒤에 끝났다고 말한다.\n");
+    const facts = await scanGeminiSetup({ ...input, cwds: [alias] });
+    const scanned = facts.projects.filter((project) => project.scanned);
+    expect(scanned.map((project) => [project.trusted, project.instructions.files.length])).toEqual([[true, 2]]);
+  });
+
+  it("경계 표지는 연결을 따라가지 않고 보고, 네트워크를 가리키는 표지는 조회하지 않는다(짝 검토 3차 필수 6)", async () => {
+    const probed: string[] = [];
+    const ops = {
+      reachesNetwork: async (path: string) => path.endsWith("remote-marker"),
+      exists: async (path: string) => {
+        probed.push(path);
+        return path.endsWith(".git");
+      },
+    };
+    const start = join(root, "a", "b");
+    expect(await importBoundary(start, ["remote-marker"], ops)).toBe(start);
+    expect(probed.filter((path) => path.endsWith("remote-marker"))).toEqual([]);
+    expect(await importBoundary(start, [".git"], ops)).toBe(start);
+    expect(await importBoundary(start, [], ops)).toBe(start);
   });
 
   it("가져오기는 다섯 단계까지 따른다(제미나이의 maxDepth 5)", async () => {

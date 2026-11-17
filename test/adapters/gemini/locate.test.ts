@@ -1,5 +1,5 @@
 // 제미나이 CLI 기록 폴더의 자리와 세션 파일 목록(주 세션, 옛 꼴, 하위 에이전트, 프로젝트 폴더)을 시험한다. 폴더 모양은 공개 소스 v0.68.0을 따른 합성 폴더다(설계 「0.4.0에서 정한 것」)
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -73,6 +73,15 @@ describe("listGeminiFiles", () => {
     await put(join(base, ".gemini", "tmp", "a", "chats", "session-1.jsonl"));
     list = await listGeminiRecordFiles(geminiRecordHomes({}, base), null);
     expect(list.files.map((file) => file.sessionId).sort()).toEqual(["session-1", "session-2"]);
+  });
+
+  it("두 기록 자리가 연결로 같은 폴더를 가리키면 같은 파일을 한 번만 넣는다(짝 검토 3차 필수 2)", async () => {
+    const base = join(root, "home");
+    await put(join(base, ".gemini", "tmp", "a", "chats", "session-1.jsonl"));
+    await mkdir(join(base, ".cache"), { recursive: true });
+    await symlink(join(base, ".gemini"), join(base, ".cache", ".gemini"), process.platform === "win32" ? "junction" : "dir");
+    const list = await listGeminiRecordFiles(geminiRecordHomes({}, base), null);
+    expect(list.files.map((file) => file.sessionId)).toEqual(["session-1"]);
   });
 
   it(".project_root가 없는 옛 해시 폴더의 세션은 프로젝트 폴더를 모른다", async () => {

@@ -206,8 +206,13 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
 function header(view: ReportView, art: ReportArt, lang: Lang): string {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
   // 낱말 값(찾지 못함, 저장 안 함)은 고정폭 글꼴로 쓰면 한글 사이가 벌어져 본문 글꼴로 쓴다
-  // 도구 이름은 이름 안에서는 줄을 바꾸지 않고, 좁은 화면에서는 이름 사이에서 바꾼다(도구가 셋이면 휴대폰 폭의 한 줄에 다 들어가지 않는다)
-  const tools = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : `<dd class="tl">${pairHtml(textsOf((l) => view.tools.map((tool) => `<span class="nm">${esc(TOOL_NAMES[tool][l])}</span>`).join(" · ")))}</dd>`;
+  // 도구가 셋 이상이면 이름 안에서는 줄을 바꾸지 않고, 좁은 화면에서는 이름 사이에서 바꾼다(휴대폰 폭의 한 줄에 다 들어가지 않는다). 둘 이하는 전과 같은 한 덩어리다
+  const tools =
+    view.tools.length === 0
+      ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>`
+      : view.tools.length > 2
+        ? `<dd class="tl">${pairHtml(textsOf((l) => view.tools.map((tool) => `<span class="nm">${esc(TOOL_NAMES[tool][l])}</span>`).join(" · ")))}</dd>`
+        : `<dd>${both(textsOf((l) => view.tools.map((tool) => TOOL_NAMES[tool][l]).join(" · ")))}</dd>`;
   const round = !view.saved ? `<dd class="tx">${both(REPORT_COPY.notSaved)}</dd>` : `<dd>${view.round === null ? "—" : both(copy("roundValue", { n: view.round }))}</dd>`;
   const langButton = (code: Lang, label: string): string => `<button type="button" data-set-lang="${code}" aria-pressed="${code === lang}" lang="${code}">${label}</button>`;
   return `<header class="hd"><div><div class="brandrow">${face}<div class="brand">${both(REPORT_COPY.brand)}</div></div><h1 class="title" id="h-title">${both(REPORT_COPY.title)}</h1></div><div class="hdr"><div class="langsw" role="group"${swap(lang, { "aria-label": REPORT_COPY.langGroup })}>${langButton("en", "English")}${langButton("ko", "한국어")}</div><dl class="info"><div><dt>${both(REPORT_COPY.date)}</dt><dd>${esc(view.today)}</dd></div><div><dt>${both(REPORT_COPY.tools)}</dt>${tools}</div><div><dt>${both(REPORT_COPY.period)}</dt><dd>${esc(view.window.from.slice(5))} ~ ${esc(view.window.to.slice(5))}</dd></div><div><dt>${both(REPORT_COPY.round)}</dt>${round}</div></dl></div></header>`;

@@ -1041,8 +1041,10 @@ function codexSafeguard(setup) {
 function geminiSafeguard(setup) {
   if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
   const contexts = [setup.safety, ...setup.projects.flatMap((project) => project.scanned && project.trusted && project.safety !== null ? [project.safety] : [])];
-  const unsafe = contexts.some((context) => context.shellAutoApproved === true && context.sandbox !== true);
-  return { tool: "gemini", guardHook: false, permissionChecks: !unsafe };
+  const open6 = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open6.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open6.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  return { tool: "gemini", guardHook: false, permissionChecks: true };
 }
 function safeguardOf(tool) {
   if (tool.tool === "codex") return codexSafeguard(tool.setup);
@@ -4069,7 +4071,7 @@ function item(finding, view, lang) {
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
-  const tools2 = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : `<dd class="tl">${pairHtml(textsOf2((l) => view.tools.map((tool) => `<span class="nm">${esc(TOOL_NAMES[tool][l])}</span>`).join(" \xB7 ")))}</dd>`;
+  const tools2 = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : view.tools.length > 2 ? `<dd class="tl">${pairHtml(textsOf2((l) => view.tools.map((tool) => `<span class="nm">${esc(TOOL_NAMES[tool][l])}</span>`).join(" \xB7 ")))}</dd>` : `<dd>${both(textsOf2((l) => view.tools.map((tool) => TOOL_NAMES[tool][l]).join(" \xB7 ")))}</dd>`;
   const round = !view.saved ? `<dd class="tx">${both(REPORT_COPY.notSaved)}</dd>` : `<dd>${view.round === null ? "\u2014" : both(copy("roundValue", { n: view.round }))}</dd>`;
   const langButton = (code, label) => `<button type="button" data-set-lang="${code}" aria-pressed="${code === lang}" lang="${code}">${label}</button>`;
   return `<header class="hd"><div><div class="brandrow">${face}<div class="brand">${both(REPORT_COPY.brand)}</div></div><h1 class="title" id="h-title">${both(REPORT_COPY.title)}</h1></div><div class="hdr"><div class="langsw" role="group"${swap(lang, { "aria-label": REPORT_COPY.langGroup })}>${langButton("en", "English")}${langButton("ko", "\uD55C\uAD6D\uC5B4")}</div><dl class="info"><div><dt>${both(REPORT_COPY.date)}</dt><dd>${esc(view.today)}</dd></div><div><dt>${both(REPORT_COPY.tools)}</dt>${tools2}</div><div><dt>${both(REPORT_COPY.period)}</dt><dd>${esc(view.window.from.slice(5))} ~ ${esc(view.window.to.slice(5))}</dd></div><div><dt>${both(REPORT_COPY.round)}</dt>${round}</div></dl></div></header>`;
@@ -6571,7 +6573,7 @@ var GEMINI_USAGE_MARKERS = [
 ];
 
 // src/adapters/gemini/parser.ts
-var GEMINI_PARSER_VERSION = 1;
+var GEMINI_PARSER_VERSION = 2;
 var GEMINI_SHELL_TOOLS = ["run_shell_command"];
 var SUBAGENT_TOOLS2 = /* @__PURE__ */ new Set(["invoke_agent"]);
 var SKILL_TOOL = "activate_skill";
@@ -6612,16 +6614,6 @@ function isHumanContent(content) {
     const piece = obj3(part);
     return piece !== null && typeof piece.text === "string" && piece.thought !== true && humanText(piece.text);
   });
-}
-function requestKey(content) {
-  if (!isHumanContent(content)) return null;
-  if (typeof content === "string") return content.trim();
-  const parts = Array.isArray(content) ? content : [content];
-  return parts.map((part) => {
-    if (typeof part === "string") return part;
-    const piece = obj3(part);
-    return piece !== null && typeof piece.text === "string" && piece.thought !== true ? piece.text : "";
-  }).join("").trim();
 }
 var EXIT_CODE = /\nExit Code: (-?\d+)(?:\n(?:Signal|Background PIDs|Process Group PGID): [^\n]*)*\s*$/;
 var UNTRUSTED = /^<untrusted_context(?: [^>]*)?>\n([\s\S]*)\n<\/untrusted_context>\s*$/;
@@ -6762,32 +6754,20 @@ var GeminiSessionParser = class {
     if (Array.isArray(patch.removeIds)) this.markCopies(new Set(patch.removeIds.filter((id) => typeof id === "string")));
   }
   /**
-   * 압축 뒤 이력 동기화는 압축 요약과 확인, 남길 대화를 새 ID로 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다) 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
-   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 user 메시지 가운데, 바로 다음이 모델 이름도 토큰도 없는 gemini 메시지이거나(요약과 남긴 대화) 지운 사람 요청과 글이 같은 것(응답 없이 끝나거나 이어진 요청)이 그 사본이다.
-   * 지운 요청과 글로 맞추는 것은 지운 요청 하나에 사본 하나다(소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts의 findCompressSplitPoint)
+   * 압축 뒤 이력 동기화는 압축 요약(user)과 확인(gemini), 남길 대화를 새 ID로 한 번에 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다), 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이다. 구간에 「user 바로 다음이 모델 이름도 토큰도 없는 gemini」인 짝(요약과 확인)이 있으면 다시 적은 구간이라
+   * 그 안의 user 메시지를 모두 사본으로 본다(응답 없이 끝난 요청의 사본도 든다). 그 짝이 없으면 압축이 아닌 이력 고침이라 아무것도 빼지 않는다(같은 글을 다시 친 새 요청을 지키려고)
+   * (소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts)
    */
   markCopies(removed) {
     let last = -1;
-    const removedRequests = /* @__PURE__ */ new Map();
-    for (const id of removed) {
-      last = Math.max(last, this.firstSeen.get(id) ?? -1);
-      const record = this.messages.get(id);
-      const key = record?.type === "user" ? requestKey(record.content) : null;
-      if (key !== null) removedRequests.set(key, (removedRequests.get(key) ?? 0) + 1);
-    }
+    for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
     if (last < 0) return;
     const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id) > last);
-    for (let index = 0; index < window.length; index++) {
-      const id = window[index];
-      const record = this.messages.get(id);
-      if (record.type !== "user") continue;
-      const next = index + 1 < window.length ? this.messages.get(window[index + 1]) : null;
-      const beforeSynthetic = next !== null && next.type === "gemini" && str3(next.model) === null && obj3(next.tokens) === null;
-      const key = requestKey(record.content);
-      const left = key === null ? 0 : removedRequests.get(key) ?? 0;
-      if (left > 0) removedRequests.set(key, left - 1);
-      if (beforeSynthetic || left > 0) this.copies.add(id);
-    }
+    const synthetic = (record) => record.type === "gemini" && str3(record.model) === null && obj3(record.tokens) === null;
+    const rewritten = window.some((id, index) => this.messages.get(id).type === "user" && index + 1 < window.length && synthetic(this.messages.get(window[index + 1])));
+    if (!rewritten) return;
+    for (const id of window) if (this.messages.get(id).type === "user") this.copies.add(id);
   }
   /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */
   accept(record) {
@@ -7835,7 +7815,9 @@ async function listGeminiFiles(home, minMtimeMs) {
         olderThanWindow++;
         return;
       }
-      files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, ...entry });
+      const big = await stat5(path, { bigint: true });
+      const identity = big.ino !== 0n ? `${big.dev}:${big.ino}` : normalizePath(path);
+      files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, identity, ...entry });
     } catch {
       unreadableFiles.push(path);
     }
@@ -7891,8 +7873,8 @@ async function listGeminiRecordFiles(homes, minMtimeMs) {
     merged.unreadableDirs.push(...list.unreadableDirs);
     merged.unreadableFiles.push(...list.unreadableFiles);
     for (const file of list.files) {
-      if (seen.has(file.normPath)) continue;
-      seen.add(file.normPath);
+      if (seen.has(file.identity)) continue;
+      seen.add(file.identity);
       merged.files.push(file);
     }
   }
@@ -8661,7 +8643,7 @@ function countMentions(text, targets) {
   }
   return out;
 }
-function importsOf(text) {
+function importsOf(text, style = "claude") {
   const prose = [];
   let fence = null;
   for (const raw of text.split("\n")) {
@@ -8681,6 +8663,24 @@ function importsOf(text) {
   }
   const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
   const out = [];
+  if (style === "gemini") {
+    const space = (char) => char === " " || char === "	" || char === "\n" || char === "\r";
+    let index = 0;
+    while (index < cleaned.length) {
+      index = cleaned.indexOf("@", index);
+      if (index === -1) break;
+      if (index > 0 && !space(cleaned[index - 1])) {
+        index++;
+        continue;
+      }
+      let end = index + 1;
+      while (end < cleaned.length && !space(cleaned[end])) end++;
+      const token = cleaned.slice(index + 1, end);
+      if (/^[./A-Za-z]/.test(token)) out.push(token);
+      index = end + 1;
+    }
+    return out;
+  }
   for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
     const token = match[1].replace(/\\ /g, " ");
     if (token.startsWith('"') || token.startsWith("'")) continue;
@@ -8758,10 +8758,11 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
     if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
     if (info.realPath !== null) readReal.add(info.realPath);
     if (imports !== null && hops < (imports.style === "gemini" ? GEMINI_IMPORT_HOPS : MAX_IMPORT_HOPS)) {
-      for (const token of importsOf(read.text)) {
-        const target = imports.style === "gemini" ? geminiImportTarget(token, path) : importTarget(token, path, imports.homedir);
+      const gemini = imports.style === "gemini";
+      for (const token of importsOf(read.text, gemini ? "gemini" : "claude")) {
+        const target = gemini ? geminiImportTarget(token, path) : importTarget(token, path, imports.homedir);
         if (target === null) continue;
-        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        if (imports.within !== null && !gemini && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -11632,6 +11633,7 @@ async function scanCodexSetup(input) {
 }
 
 // src/scan/gemini.ts
+import { lstat as lstat8 } from "node:fs/promises";
 import { dirname as dirname7, isAbsolute as isAbsolute4, join as join27, relative as relative6, resolve as resolve11 } from "node:path";
 
 // src/scan/gemini-settings.ts
@@ -11749,14 +11751,21 @@ function geminiSystemPaths(env, platform) {
   return { settings, defaults };
 }
 var SHELL_NAMES = /* @__PURE__ */ new Set(["run_shell_command", "ShellTool"]);
+var SANDBOX_COMMANDS = /* @__PURE__ */ new Set(["docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"]);
 function sandboxOn(value) {
-  if (typeof value === "boolean") return value;
+  if (value === void 0 || value === null || value === false) return false;
+  if (value === true) return true;
   if (typeof value === "string") {
-    const text = value.trim().toLowerCase();
-    return !(text === "" || text === "0" || text === "false");
+    if (value === "" || value === "0" || value === "false") return false;
+    if (value === "1" || value === "true") return true;
+    return SANDBOX_COMMANDS.has(value) ? true : null;
   }
-  if (isObject5(value)) return Boolean(value.enabled);
-  return false;
+  if (isObject5(value)) {
+    if (!value.enabled) return false;
+    const command = value.command;
+    return command === void 0 || command === null ? true : typeof command === "string" ? sandboxOn(command) : null;
+  }
+  return null;
 }
 function geminiSafetyOf(layers) {
   let approvalMode = "default";
@@ -11773,7 +11782,8 @@ function geminiSafetyOf(layers) {
     if (typeof toolLevel === "boolean") toolSandboxing = toolLevel;
   }
   const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
-  return { approvalMode, sandbox: sandboxOn(box) || toolSandboxing, shellAutoApproved };
+  const on = sandboxOn(box);
+  return { approvalMode, sandbox: on === null ? null : on || toolSandboxing, shellAutoApproved };
 }
 function unknownGeminiSafety() {
   return { approvalMode: null, sandbox: null, shellAutoApproved: null };
@@ -11806,13 +11816,26 @@ async function realOrSelf(path) {
   if (await reachesNetwork(path)) return path;
   return (await entryInfo(path)).realPath ?? path;
 }
-async function importBoundary(dir, markers) {
+var LOCAL_BOUNDARY_OPS = {
+  reachesNetwork: (path) => reachesNetwork(path),
+  exists: async (path) => {
+    try {
+      await lstat8(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+async function importBoundary(dir, markers, ops = LOCAL_BOUNDARY_OPS) {
   const start = resolve11(dir);
-  if (markers.length === 0 || await reachesNetwork(start)) return start;
+  if (markers.length === 0 || await ops.reachesNetwork(start)) return start;
   for (let current = start; ; ) {
     for (const marker2 of markers) {
       if (marker2 === "" || isAbsolute4(marker2) || marker2.includes("..")) continue;
-      if ((await entryInfo(join27(current, marker2))).exists) return current;
+      const path = join27(current, marker2);
+      if (await ops.reachesNetwork(path)) continue;
+      if (await ops.exists(path)) return current;
     }
     const parent = dirname7(current);
     if (parent === current) return start;
@@ -12353,7 +12376,7 @@ import { join as join33 } from "node:path";
 
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
-import { lstat as lstat8, readFile as readFile10 } from "node:fs/promises";
+import { lstat as lstat9, readFile as readFile10 } from "node:fs/promises";
 import { dirname as dirname9, join as join30 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
@@ -12361,13 +12384,13 @@ function targetPath(candidate, home) {
   return join30(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
-  const folder = await lstat8(dirname9(path)).then(
+  const folder = await lstat9(dirname9(path)).then(
     (info) => info.isDirectory(),
     () => false
   );
   let file;
   try {
-    file = await lstat8(path);
+    file = await lstat9(path);
   } catch (error) {
     const code = error?.code;
     return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing", folder } : { status: "unreadable" };
@@ -13602,12 +13625,12 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 }
 
 // src/commands/clean.ts
-import { lstat as lstat9, readdir as readdir10, realpath as realpath7 } from "node:fs/promises";
+import { lstat as lstat10, readdir as readdir10, realpath as realpath7 } from "node:fs/promises";
 import { join as join35 } from "node:path";
 var isMissing7 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
-    return await lstat9(path);
+    return await lstat10(path);
   } catch (error) {
     if (isMissing7(error)) return null;
     throw error;
@@ -13618,14 +13641,14 @@ async function cleanReports(path, boundary) {
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat9(join35(path, name));
+    const info = await lstat10(join35(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
     const full = join35(path, name);
-    const info = await lstat9(full);
+    const info = await lstat10(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
       kept.bytes += info.size;
@@ -13722,14 +13745,14 @@ async function doctor(input) {
 }
 
 // src/commands/where.ts
-import { lstat as lstat10, readdir as readdir11 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir11 } from "node:fs/promises";
 import { join as join37 } from "node:path";
 var isMissing8 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
-    dirInfo = await lstat10(dir);
+    dirInfo = await lstat11(dir);
   } catch (error) {
     if (!isMissing8(error)) throw error;
   }
@@ -13740,7 +13763,7 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat10(join37(dir, spec.name));
+        const info = await lstat11(join37(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {

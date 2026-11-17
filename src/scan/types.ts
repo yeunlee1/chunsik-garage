@@ -254,7 +254,7 @@ export interface CodexProjectFact {
 export interface GeminiSafetyFact {
   /** general.defaultApprovalMode(default, auto_edit, plan). 정하지 않았으면 "default"다. 모두 자동 승인(YOLO)은 실행할 때만 켜져 설정에 없다 */
   approvalMode: string | null;
-  /** 샌드박스가 켜져 있다. tools.sandbox(참, false·0·빈 글이 아닌 글, enabled가 참인 설정 묶음)나 도구 샌드박스(security.toolSandboxing)다 */
+  /** 샌드박스가 켜져 있다. tools.sandbox(참, true·1·아는 명령 이름, enabled가 참인 설정 묶음)나 도구 샌드박스(security.toolSandboxing)다. 제미나이가 시작하지 못하는 값이면 null이다 */
   sandbox: boolean | null;
   /** tools.allowed(확인 창을 건너뛰는 도구, 그 칸을 적은 마지막 층의 목록)에 셸 도구가 인자 없이 통째로 들어 있다 */
   shellAutoApproved: boolean | null;

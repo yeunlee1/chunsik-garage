@@ -1,4 +1,5 @@
 // 제미나이 CLI의 지금 셋팅을 읽어 셋팅 사실로 낸다. 시스템 기본값·사용자 설정·신뢰한 프로젝트 층(.gemini/settings.json)·시스템 설정, 승인 방식·샌드박스·셸 자동 허용, 지침(GEMINI.md), MCP 서버를 프로젝트 목록과 함께 본다. 값과 글은 메모리에서 쓰고 버린다(설계 10, 「0.4.0에서 정한 것」)
+import { lstat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { geminiHome } from "../adapters/gemini/locate.ts";
@@ -47,17 +48,37 @@ async function realOrSelf(path: string): Promise<string> {
   return (await entryInfo(path)).realPath ?? path;
 }
 
+/** 경계 표지를 살피는 함수들(시험이 가짜로 바꾼다). 있는지는 연결을 따라가지 않고(lstat) 본다 */
+export interface BoundaryOps {
+  reachesNetwork(path: string): Promise<boolean>;
+  exists(path: string): Promise<boolean>;
+}
+
+const LOCAL_BOUNDARY_OPS: BoundaryOps = {
+  reachesNetwork: (path) => reachesNetwork(path),
+  exists: async (path) => {
+    try {
+      await lstat(path);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
 /**
  * 제미나이 지침의 가져오기 경계. 그 폴더부터 위로 경계 표지(기본 .git)가 있는 폴더를 찾고, 없으면 그 폴더다. 표지 목록이 비면 그 폴더다
- * (공개 소스 utils/memoryImportProcessor.ts의 findProjectRoot)
+ * (공개 소스 utils/memoryImportProcessor.ts의 findProjectRoot). 표지가 네트워크를 가리키는 연결이면 조회하지 않고 없는 것으로 본다(짝 검토 3차 필수 6)
  */
-async function importBoundary(dir: string, markers: readonly string[]): Promise<string> {
+export async function importBoundary(dir: string, markers: readonly string[], ops: BoundaryOps = LOCAL_BOUNDARY_OPS): Promise<string> {
   const start = resolve(dir);
-  if (markers.length === 0 || (await reachesNetwork(start))) return start;
+  if (markers.length === 0 || (await ops.reachesNetwork(start))) return start;
   for (let current = start; ; ) {
     for (const marker of markers) {
       if (marker === "" || isAbsolute(marker) || marker.includes("..")) continue;
-      if ((await entryInfo(join(current, marker))).exists) return current;
+      const path = join(current, marker);
+      if (await ops.reachesNetwork(path)) continue;
+      if (await ops.exists(path)) return current;
     }
     const parent = dirname(current);
     if (parent === current) return start;

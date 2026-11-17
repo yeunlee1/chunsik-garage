@@ -157,18 +157,28 @@ export function geminiSystemPaths(env: Record<string, string | undefined>, platf
 /** 셸 도구의 이름. tools.allowed에 인자 없이 들면 셸 명령이 확인 창 없이 돈다(인자가 붙은 것은 그 명령만 건너뛴다) */
 const SHELL_NAMES: ReadonlySet<string> = new Set(["run_shell_command", "ShellTool"]);
 
+/** 제미나이가 아는 샌드박스 명령(공개 소스 cli/src/config/sandboxConfig.ts의 VALID_SANDBOX_COMMANDS) */
+const SANDBOX_COMMANDS: ReadonlySet<string> = new Set(["docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"]);
+
 /**
- * 합친 tools.sandbox 값이 샌드박스를 켜는지. 참·거짓은 그대로, 글은 false·0·빈 글이면 끔이고 그 밖(true, 1, 명령 이름)은 켬이다.
- * 설정 묶음은 enabled가 참일 때만 켬이다(공개 소스 cli/src/config/sandboxConfig.ts의 loadSandboxConfig, getSandboxCommand)
+ * 합친 tools.sandbox 값이 샌드박스를 켜는지. 없거나 거짓이면 끔, 참이면 켬이다. 글은 글자 그대로 견주어 false·0·빈 글이면 끔, true·1과 아는 명령 이름이면 켬이다.
+ * 설정 묶음은 enabled가 참일 때만 켜고, 그때의 명령(command)은 글과 같은 규칙이다. 그 밖의 값은 제미나이가 시작하지 못하는 값이라 모름(null)이다
+ * (공개 소스 cli/src/config/sandboxConfig.ts의 loadSandboxConfig, getSandboxCommand. 글을 소문자로 바꾸는 것은 환경 변수 쪽만이다)
  */
-function sandboxOn(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
+function sandboxOn(value: unknown): boolean | null {
+  if (value === undefined || value === null || value === false) return false;
+  if (value === true) return true;
   if (typeof value === "string") {
-    const text = value.trim().toLowerCase();
-    return !(text === "" || text === "0" || text === "false");
+    if (value === "" || value === "0" || value === "false") return false;
+    if (value === "1" || value === "true") return true;
+    return SANDBOX_COMMANDS.has(value) ? true : null;
   }
-  if (isObject(value)) return Boolean(value.enabled);
-  return false;
+  if (isObject(value)) {
+    if (!value.enabled) return false;
+    const command = value.command;
+    return command === undefined || command === null ? true : typeof command === "string" ? sandboxOn(command) : null;
+  }
+  return null;
 }
 
 /**
@@ -192,7 +202,9 @@ export function geminiSafetyOf(layers: readonly Json[]): GeminiSafetyFact {
   }
   // 인자가 붙은 허용(run_shell_command(git) 같은 것)은 그 명령만 묻지 않으므로 통째로 허용한 것이 아니다
   const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
-  return { approvalMode, sandbox: sandboxOn(box) || toolSandboxing, shellAutoApproved };
+  // 모르는 샌드박스 값이면 제미나이가 시작하지 못하므로 도구 샌드박스와 상관없이 모름이다
+  const on = sandboxOn(box);
+  return { approvalMode, sandbox: on === null ? null : on || toolSandboxing, shellAutoApproved };
 }
 
 /** 읽지 못한 층의 안전 설정(모두 모름) */

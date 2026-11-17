@@ -288,6 +288,11 @@ describe("gatherCheckupInput의 Gemini CLI(설계 「0.4.0에서 정한 것」)"
     await put(join(home, ".gemini", "settings.json"), JSON.stringify({ tools: { allowed: ["run_shell_command"], sandbox: true } }));
     result = evaluate((await gatherCheckupInput(options())).input);
     expect(result.findings.find((f) => f.ruleId === "S2")).toMatchObject({ status: "scored", value: 1 });
+
+    // 제미나이가 시작하지 못하는 샌드박스 값은 안전장치로 치지 않고 제미나이를 빼고 잰다(짝 검토 3차 필수 4)
+    await put(join(home, ".gemini", "settings.json"), JSON.stringify({ tools: { allowed: ["run_shell_command"], sandbox: "not-a-sandbox" } }));
+    result = evaluate((await gatherCheckupInput(options())).input);
+    expect(result.findings.find((f) => f.ruleId === "S2")).toMatchObject({ status: "scored", value: 1, evidence: { guarded: 1, tools: 1, unreadTools: 1 } });
   });
 
   it("제미나이의 사용자 설정이 풀리지 않으면 S3이 세고 S2는 제미나이를 빼고 잰다", async () => {

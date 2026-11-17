@@ -71,8 +71,11 @@ function geminiSafeguard(setup: GeminiSetupFacts): ToolSafeguard {
   if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
   // 신뢰하지 않는 폴더는 프로젝트 층을 쓰지 않아 전역 맥락과 같다
   const contexts = [setup.safety, ...setup.projects.flatMap((project) => (project.scanned && project.trusted && project.safety !== null ? [project.safety] : []))];
-  const unsafe = contexts.some((context) => context.shellAutoApproved === true && context.sandbox !== true);
-  return { tool: "gemini", guardHook: false, permissionChecks: !unsafe };
+  // 셸을 묻지 않고 실행하게 둔 맥락 가운데 샌드박스가 꺼진 곳이 있으면 안전장치가 없다. 꺼진 곳은 없고 샌드박스 값을 모르는 곳(제미나이가 시작하지 못하는 값)이 있으면 모름이다
+  const open = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  return { tool: "gemini", guardHook: false, permissionChecks: true };
 }
 
 function safeguardOf(tool: ToolSetup): ToolSafeguard {

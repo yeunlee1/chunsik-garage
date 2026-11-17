@@ -6,11 +6,21 @@ const sandboxOf = (...layers: Record<string, unknown>[]) => geminiSafetyOf(layer
 const shellOf = (...layers: Record<string, unknown>[]) => geminiSafetyOf(layers).shellAutoApproved;
 
 describe("geminiSafetyOf의 샌드박스", () => {
-  it("참·거짓과 글을 제미나이처럼 읽는다. 글 false와 0과 빈 글은 끔, true와 1과 명령 이름은 켬이다", () => {
-    expect([sandboxOf({ tools: { sandbox: true } }), sandboxOf({ tools: { sandbox: false } })]).toEqual([true, false]);
-    expect(["false", "0", "", "  ", "FALSE"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([false, false, false, false, false]);
-    expect(["true", "1", "docker", "sandbox-exec"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([true, true, true, true]);
+  it("참·거짓과 글을 제미나이처럼 읽는다. 글 false와 0과 빈 글은 끔, true와 1과 아는 명령 이름은 켬이다", () => {
+    expect([sandboxOf({ tools: { sandbox: true } }), sandboxOf({ tools: { sandbox: false } }), sandboxOf({ tools: { sandbox: null } })]).toEqual([true, false, false]);
+    expect(["false", "0", ""].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([false, false, false]);
+    expect(["true", "1", "docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([true, true, true, true, true, true, true, true]);
     expect(sandboxOf({})).toBe(false);
+  });
+
+  it("제미나이가 시작하지 못하는 값(모르는 명령, 대문자, 빈칸, 수)은 켬도 끔도 아닌 모름이다(짝 검토 3차 필수 4)", () => {
+    expect(["not-a-sandbox", "FALSE", "Docker", "  ", " docker"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([null, null, null, null, null]);
+    expect(sandboxOf({ tools: { sandbox: 1 } })).toBeNull();
+    expect(sandboxOf({ tools: { sandbox: { enabled: true, command: "bogus" } } })).toBeNull();
+    // 모르는 값이면 도구 샌드박스가 켜져 있어도 모름이다(제미나이가 시작하지 못한다)
+    expect(sandboxOf({ tools: { sandbox: "bogus" }, security: { toolSandboxing: true } })).toBeNull();
+    // 꺼진 묶음의 명령은 보지 않는다
+    expect(sandboxOf({ tools: { sandbox: { enabled: false, command: "bogus" } } })).toBe(false);
   });
 
   it("설정 묶음은 enabled가 참일 때만 켬이다. 층마다의 묶음은 합쳐서 본다", () => {

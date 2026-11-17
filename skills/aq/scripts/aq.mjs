@@ -5292,7 +5292,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.3.1";
+var PROGRAM_VERSION = "0.4.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {

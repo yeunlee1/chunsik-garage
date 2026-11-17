@@ -16,7 +16,7 @@ import { reportHtml } from "../../src/report/html.ts";
 import { REPORT_SCRIPT, SCRIPT_IDS, type ClientData } from "../../src/report/script.ts";
 import { reportView, type ReportRun, type ReportView } from "../../src/report/view.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -353,6 +353,38 @@ describe("다음 등급으로 가는 셋팅 방법(0.3.0, 사용자 추가 요�
       if (finding.text.ko.prescription !== null) expect(section).toContain(esc(finding.text.ko.prescription));
     }
     expect(reportHtml({ ...view, nextPlan: null }, art)).not.toContain('<section class="next"');
+  });
+
+  it("도구마다 재는 규칙을 두 도구로 쟀으면 만점이 아닌 도구마다 지금 값과 목표를 적고, 평균값에 목표를 붙이지 않는다(짝 3차 필수 2번)", () => {
+    // F1(높은 추론 강도의 몫)을 Claude Code는 30%(만점), Codex는 90%(만점 아님)로 잰다. 다른 규칙은 그대로 두기로 해 F1만 차례에 남긴다
+    const sessions = (xhigh: number) => [0, 1, 2].map((index) => ({ days: { [`2026-11-1${index}`]: { responses: 50, humanRequests: 10, efforts: { xhigh, high: 50 - xhigh } } } }));
+    const twoTools = (codexXhigh: number): CheckupResult => {
+      const input = evaluationInput([claudeTool({ sessions: sessions(15) }), codexTool({ sessions: sessions(codexXhigh) })]);
+      return checkupResult({ input, evaluation: evaluate(input), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: RULES.map((spec) => spec.id).filter((id) => id !== "F1") });
+    };
+    const checked = twoTools(45);
+    const f1 = checked.findings.find((f) => f.ruleId === "F1")!;
+    expect(checked.nextGrade!.steps.map((step) => step.ruleId)).toEqual(["F1"]);
+    expect(f1.tools.map((tool) => [tool.tool, tool.value])).toEqual([["claude-code", 0.3], ["codex", 0.9]]);
+    expect(f1.value).toBeCloseTo(0.6, 9);
+    const section = between(reportHtml(viewOf(checked), art), '<section class="next"', "</section>");
+    expect(section).toContain(esc("Codex 지금 90% → 목표 60%"));
+    expect(section).toContain(esc("Codex: now 90% → aim for 60%"));
+    expect(section).not.toContain(esc("지금 60% → 목표 60%"));
+    expect(section).not.toContain("Claude Code 지금");
+    // 점수가 0이고 0점 기준보다 나쁜 도구는 그 줄에 점수가 오르기 시작하는 값을 붙인다
+    const zero = between(reportHtml(viewOf(twoTools(49)), art), '<section class="next"', "</section>");
+    expect(zero).toContain(esc("Codex 지금 98% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+  });
+
+  it("지금 값과 목표 뒤에 점수가 오르기 시작하는 값을 붙일 때 가운뎃점으로 나눠 숫자 둘이 붙지 않는다", () => {
+    // I3(요청 하나에 도구 호출)이 0회로 0점 기준(1회)보다 나쁘다. 다른 차례 후보는 그대로 두기로 해 I3만 남긴다
+    const input = evaluationInput([claudeTool({ sessions: enough })]);
+    const checked = checkupResult({ input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: ["S1", "I1", "I2"] });
+    expect(checked.nextGrade!.steps.map((step) => step.ruleId)).toEqual(["I3"]);
+    const section = between(reportHtml(viewOf(checked), art), '<section class="next"', "</section>");
+    expect(section).toContain(esc("지금 0회/요청 → 목표 8회/요청 · 1회/요청보다 늘려야 점수가 오르기 시작합니다."));
+    expect(section).toContain(esc("Now 0 calls per request → aim for 8 calls per request · The score starts to rise above 1 call per request."));
   });
 });
 

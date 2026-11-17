@@ -30,9 +30,11 @@ export interface SummaryFix {
    * F4는 전역 지침과 가장 많이 겹친 프로젝트, 정비 후보가 있는 규칙은 후보의 이름이다. 값과 절대 경로는 넣지 않는다
    */
   targets: string[];
-  /** 지금 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다 */
+  /** 지금 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다. 도구마다 재는 규칙이면 응답 수로 평균한 것이다 */
   value: number | null;
   score: number | null;
+  /** 도구마다 재는 규칙에서 잰 도구마다의 값과 점수(0.3.0 짝 3차 필수 2번). 만점 기준은 도구마다 맞춰야 하므로 평균값(value)과 견주지 않는다. 합쳐 재는 규칙이면 비었다 */
+  tools: { tool: ToolId; value: number; score: number }[];
   /** 규칙의 0점 기준과 만점 기준(0.3.0, 다른 PC 피드백 4번) */
   zeroAt: number;
   fullAt: number;
@@ -200,6 +202,7 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
     targets: targetsOf(finding, result),
     value: finding.value,
     score: finding.score,
+    tools: finding.tools.flatMap((value) => (value.status === "scored" ? [{ tool: value.tool, value: value.value!, score: value.score! }] : [])),
     zeroAt: ruleSpec(finding.ruleId).zeroAt,
     fullAt: ruleSpec(finding.ruleId).fullAt,
   }));

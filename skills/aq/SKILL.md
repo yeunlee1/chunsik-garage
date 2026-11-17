@@ -190,6 +190,7 @@ When the user asks to fix or improve what the checkup found (Korean such as "고
 
 - `summary.fixFirst[].targets` names what each item is about: where a setup problem is (S3), the MCP servers that failed to connect (S5), the projects without instructions (F3), the project whose instructions overlap the global ones most (F4), or the skills, plugins, and MCP servers to turn off. Turning things off goes through the tune-up in section 5.
 - `summary.fixFirst[].value`, `zeroAt`, and `fullAt` are the measured value and the rule's thresholds. Use them to say how far the item is, without changing the numbers.
+- When `summary.fixFirst[].tools` has more than one tool, `value` is only their average weighted by responses, so do not compare it with `zeroAt` or `fullAt`. The thresholds apply to each tool: name each tool whose `score` is below 1 with its own `value`.
 - `summary.credentialPlaces` lists where an API key or token is written as it is: the tool, the scope, the server, the field, and the key name. A place whose `copy` is `default` is a leftover copy in the tool's default settings location. The values are not in the summary. If the user asks you to move a key into an environment variable, change only that field so it refers to a variable, and ask the user to set the variable themselves. Never print, copy, or repeat a key's value.
 - Say what you will change before you change it, and change settings only after the user agrees.
 

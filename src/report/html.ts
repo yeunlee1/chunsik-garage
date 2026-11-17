@@ -132,7 +132,8 @@ function ruleChips(finding: ViewFinding, view: ReportView, lang: Lang, withTarge
 
 /**
  * 다음 등급으로 가는 셋팅 방법(0.3.0). 다음 등급까지의 차례마다 할 일, 지금 값과 목표(만점 기준), 거기까지 고친 AQ, 처방, 가리키는 이름을 보인다.
- * 규칙 점수가 0이면 점수가 오르기 시작하는 값(0점 기준)도 적는다. AQ가 없거나 다음 등급이 없으면(S등급) 그리지 않는다
+ * 규칙 점수가 0이고 지금 값이 0점 기준보다 나쁘면 점수가 오르기 시작하는 값(0점 기준)도 적는다. 도구마다 재는 규칙을 두 도구 넘게 쟀으면
+ * 만점이 아닌 도구마다 따로 적는다. 평균값은 만점 기준과 견줄 수 없다(짝 3차 필수 2번). AQ가 없거나 다음 등급이 없으면(S등급) 그리지 않는다
  */
 function nextPath(view: ReportView, lang: Lang): string {
   const plan = view.nextPlan;
@@ -143,16 +144,22 @@ function nextPath(view: ReportView, lang: Lang): string {
       const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
       if (finding === undefined) return "";
       const spec = ruleSpec(step.ruleId);
-      const now = textsOf((l) => {
-        const text = finding.text[l];
-        const current = text.value === null || text.unit === null ? null : joinValue(text.value, text.unit, l);
-        const line = current === null ? "" : fill(REPORT_COPY.nextNow[l], { now: current, target: ruleValueText(step.ruleId, spec.fullAt, l) });
-        const atZero = finding.score !== null && finding.value !== null && settleScore(finding.score) === 0 && beyondZeroMark(step.ruleId, finding.value);
-        const start = atZero ? ` ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}` : "";
-        return `${line}${start}`.trim();
-      });
+      // 지금 값과 목표 한 줄. 점수가 오르기 시작하는 값은 가운뎃점 뒤에 붙여 숫자 둘이 붙지 않게 한다
+      const nowLine = (l: Lang, now: string, value: number, score: number, tool: ToolId | null): string => {
+        const target = ruleValueText(step.ruleId, spec.fullAt, l);
+        const line = tool === null ? fill(REPORT_COPY.nextNow[l], { now, target }) : fill(REPORT_COPY.nextNowTool[l], { tool: TOOL_NAMES[tool][l], now, target });
+        if (settleScore(score) !== 0 || !beyondZeroMark(step.ruleId, value)) return line;
+        return `${line} · ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}`;
+      };
+      const short = finding.tools.length >= 2 ? finding.tools.filter((tool) => settleScore(tool.score) < 1) : [];
+      const lines =
+        short.length > 0
+          ? short.map((tool) => textsOf((l) => nowLine(l, ruleValueText(step.ruleId, tool.value, l), tool.value, tool.score, tool.tool)))
+          : finding.value === null || finding.score === null || finding.text.en.value === null
+            ? []
+            : [textsOf((l) => nowLine(l, joinValue(finding.text[l].value!, finding.text[l].unit!, l), finding.value!, finding.score!, null))];
       const fix = finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-      return `<li class="step"><div class="sh"><b>${both(textsOf((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${now.en === "" ? "" : `<p class="now">${both(now)}</p>`}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+      return `<li class="step"><div class="sh"><b>${both(textsOf((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${lines.map((line) => `<p class="now">${both(line)}</p>`).join("")}${fix}${ruleChips(finding, view, lang, true)}</li>`;
     })
     .join("");
   return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;

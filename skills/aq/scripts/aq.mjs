@@ -3078,6 +3078,7 @@ function checkupSummary(result, reportPath) {
     targets: targetsOf(finding, result),
     value: finding.value,
     score: finding.score,
+    tools: finding.tools.flatMap((value) => value.status === "scored" ? [{ tool: value.tool, value: value.value, score: value.score }] : []),
     zeroAt: ruleSpec(finding.ruleId).zeroAt,
     fullAt: ruleSpec(finding.ruleId).fullAt
   }));
@@ -3223,6 +3224,7 @@ var REPORT_COPY = {
   nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uC704\uC5D0\uC11C\uBD80\uD130 \uCC28\uB840\uB85C \uACE0\uCE58\uBA74 \uC904\uB9C8\uB2E4 \uC801\uD78C AQ\uAC00 \uB429\uB2C8\uB2E4." },
   nextShort: { en: "These alone reach {last}.", ko: "\uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4." },
   nextNow: { en: "Now {now} \u2192 aim for {target}", ko: "\uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
+  nextNowTool: { en: "{tool}: now {now} \u2192 aim for {target}", ko: "{tool} \uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
   nextBelow: { en: "The score starts to rise below {start}.", ko: "{start}\uBCF4\uB2E4 \uC904\uC5EC\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
   nextAbove: { en: "The score starts to rise above {start}.", ko: "{start}\uBCF4\uB2E4 \uB298\uB824\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
   nextAfter: { en: "AQ {aq} once fixed up to here", ko: "\uC5EC\uAE30\uAE4C\uC9C0 \uACE0\uCE58\uBA74 AQ {aq}" },
@@ -3971,16 +3973,16 @@ function nextPath(view, lang) {
     const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
     if (finding === void 0) return "";
     const spec = ruleSpec(step.ruleId);
-    const now = textsOf2((l) => {
-      const text = finding.text[l];
-      const current = text.value === null || text.unit === null ? null : joinValue(text.value, text.unit, l);
-      const line = current === null ? "" : fill(REPORT_COPY.nextNow[l], { now: current, target: ruleValueText(step.ruleId, spec.fullAt, l) });
-      const atZero = finding.score !== null && finding.value !== null && settleScore(finding.score) === 0 && beyondZeroMark(step.ruleId, finding.value);
-      const start = atZero ? ` ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}` : "";
-      return `${line}${start}`.trim();
-    });
+    const nowLine = (l, now, value, score, tool) => {
+      const target = ruleValueText(step.ruleId, spec.fullAt, l);
+      const line = tool === null ? fill(REPORT_COPY.nextNow[l], { now, target }) : fill(REPORT_COPY.nextNowTool[l], { tool: TOOL_NAMES[tool][l], now, target });
+      if (settleScore(score) !== 0 || !beyondZeroMark(step.ruleId, value)) return line;
+      return `${line} \xB7 ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}`;
+    };
+    const short = finding.tools.length >= 2 ? finding.tools.filter((tool) => settleScore(tool.score) < 1) : [];
+    const lines = short.length > 0 ? short.map((tool) => textsOf2((l) => nowLine(l, ruleValueText(step.ruleId, tool.value, l), tool.value, tool.score, tool.tool))) : finding.value === null || finding.score === null || finding.text.en.value === null ? [] : [textsOf2((l) => nowLine(l, joinValue(finding.text[l].value, finding.text[l].unit, l), finding.value, finding.score, null))];
     const fix = finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-    return `<li class="step"><div class="sh"><b>${both(textsOf2((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${now.en === "" ? "" : `<p class="now">${both(now)}</p>`}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+    return `<li class="step"><div class="sh"><b>${both(textsOf2((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${lines.map((line) => `<p class="now">${both(line)}</p>`).join("")}${fix}${ruleChips(finding, view, lang, true)}</li>`;
   }).join("");
   return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
 }
@@ -4228,6 +4230,7 @@ function reportView(result, run2) {
       gain: finding.gain,
       value: finding.value,
       score: finding.score,
+      tools: finding.tools.flatMap((value) => value.status === "scored" ? [{ tool: value.tool, value: value.value, score: value.score }] : []),
       targets: targetsOf2(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text

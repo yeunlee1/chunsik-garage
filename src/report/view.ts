@@ -20,9 +20,11 @@ export interface ViewFinding {
   measured: boolean;
   /** 예상 효과. 없으면 null이다 */
   gain: number | null;
-  /** 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다(0.3.0. 덧붙이는 말과 다음 등급으로 가는 법에 쓴다) */
+  /** 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다(0.3.0. 덧붙이는 말과 다음 등급으로 가는 법에 쓴다). 도구마다 재는 규칙이면 응답 수로 평균한 것이다 */
   value: number | null;
   score: number | null;
+  /** 도구마다 재는 규칙에서 잰 도구마다의 값과 점수(0.3.0 짝 3차 필수 2번). 만점 기준은 도구마다 맞춰야 한다. 합쳐 재는 규칙이면 비었다 */
+  tools: { tool: ToolId; value: number; score: number }[];
   /** 정리할 것의 이름(정비 후보의 대상). 후보의 차례 그대로다 */
   targets: string[];
   /** 규칙은 쟀지만 비율을 못 잰 도구 가운데 후보가 나온 도구(먼저 고칠 것의 덧붙이는 말) */
@@ -121,6 +123,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
       gain: finding.gain,
       value: finding.value,
       score: finding.score,
+      tools: finding.tools.flatMap((value) => (value.status === "scored" ? [{ tool: value.tool, value: value.value!, score: value.score! }] : [])),
       targets: targetsOf(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text,

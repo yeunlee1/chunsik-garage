@@ -56,6 +56,7 @@ export const REPORT_COPY = {
   nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}등급까지 {need}점입니다. 위에서부터 차례로 고치면 줄마다 적힌 AQ가 됩니다." },
   nextShort: { en: "These alone reach {last}.", ko: "이것만으로는 {last}점입니다." },
   nextNow: { en: "Now {now} → aim for {target}", ko: "지금 {now} → 목표 {target}" },
+  nextNowTool: { en: "{tool}: now {now} → aim for {target}", ko: "{tool} 지금 {now} → 목표 {target}" },
   nextBelow: { en: "The score starts to rise below {start}.", ko: "{start}보다 줄여야 점수가 오르기 시작합니다." },
   nextAbove: { en: "The score starts to rise above {start}.", ko: "{start}보다 늘려야 점수가 오르기 시작합니다." },
   nextAfter: { en: "AQ {aq} once fixed up to here", ko: "여기까지 고치면 AQ {aq}" },

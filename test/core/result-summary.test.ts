@@ -88,9 +88,27 @@ describe("요약", () => {
       ],
     };
     expect(checkupSummary(result, null).fixFirst).toEqual([
-      { ruleId: "E3", axis: "efficiency", gain: 6, measured: true, candidates: 0, unmeasuredTools: [], targets: [], value: 0.5, score: 0.5, zeroAt: 3, fullAt: 0.2 },
-      { ruleId: "E5", axis: "efficiency", gain: null, measured: false, candidates: 1, unmeasuredTools: ["claude-code"], targets: ["A1:claude-code:x"], value: null, score: null, zeroAt: 0.8, fullAt: 0.2 },
-      { ruleId: "E6", axis: "efficiency", gain: null, measured: true, candidates: 2, unmeasuredTools: [], targets: ["A3:claude-code:a", "A3:claude-code:b"], value: 0, score: 1, zeroAt: 0.7, fullAt: 0.1 },
+      { ruleId: "E3", axis: "efficiency", gain: 6, measured: true, candidates: 0, unmeasuredTools: [], targets: [], value: 0.5, score: 0.5, tools: [], zeroAt: 3, fullAt: 0.2 },
+      { ruleId: "E5", axis: "efficiency", gain: null, measured: false, candidates: 1, unmeasuredTools: ["claude-code"], targets: ["A1:claude-code:x"], value: null, score: null, tools: [], zeroAt: 0.8, fullAt: 0.2 },
+      { ruleId: "E6", axis: "efficiency", gain: null, measured: true, candidates: 2, unmeasuredTools: [], targets: ["A3:claude-code:a", "A3:claude-code:b"], value: 0, score: 1, tools: [], zeroAt: 0.7, fullAt: 0.1 },
+    ]);
+  });
+
+  it("도구마다 재는 규칙은 잰 도구마다의 값과 점수를 싣는다. value는 응답 수로 평균한 값이라 만점 기준과 견줄 수 없다(짝 3차 필수 2번)", () => {
+    const scored = (tool: "claude-code" | "codex", value: number, score: number) => ({ tool, status: "scored" as const, reason: null, value, score, evidence: {}, candidates: [], observed: "measured" as const });
+    const f1 = finding("F1", {
+      axis: "fit",
+      category: "repair",
+      gain: 1,
+      value: 0.6,
+      score: 0.5714,
+      tools: [scored("claude-code", 0.3, 1), scored("codex", 0.9, 0.1429), { tool: "claude-code", status: "unmeasured", reason: "too_little", value: null, score: null, evidence: {}, candidates: [], observed: "measured" }],
+    });
+    const fix = checkupSummary({ ...baseResult(), findings: [f1] }, null).fixFirst[0]!;
+    expect(fix.value).toBe(0.6);
+    expect(fix.tools).toEqual([
+      { tool: "claude-code", value: 0.3, score: 1 },
+      { tool: "codex", value: 0.9, score: 0.1429 },
     ]);
   });
 

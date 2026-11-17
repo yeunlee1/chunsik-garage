@@ -1286,8 +1286,8 @@ var AXIS_NAMES = {
   intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
 };
 var SUMMARY_COPY = {
-  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", gainBelow: "{axis} up to +{gain} \xB7 now {now}, rises only below {start}", gainAbove: "{axis} up to +{gain} \xB7 now {now}, rises only above {start}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", gainBelow: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAbove: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", gainBelow: "{axis} up to +{gain} \xB7 now {now}, rises only below {start}", gainAbove: "{axis} up to +{gain} \xB7 now {now}, rises only above {start}", gainBelowTools: "{axis} up to +{gain} \xB7 now {now}, each rises only below {start}", gainAboveTools: "{axis} up to +{gain} \xB7 now {now}, each rises only above {start}", toolJoin: " and ", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", gainBelow: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAbove: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainBelowTools: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, \uB3C4\uAD6C\uB9C8\uB2E4 {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAboveTools: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, \uB3C4\uAD6C\uB9C8\uB2E4 {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", toolJoin: "\xB7", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
 };
 var REASON_COPY = {
   unsupported: {
@@ -3035,9 +3035,13 @@ function fixDetail(fix, lang) {
   const copy2 = SUMMARY_COPY[lang];
   if (fix.gain !== null) {
     const spec = ruleSpec(fix.ruleId);
-    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyondZeroMark(fix.ruleId, fix.value)) {
-      const template = spec.zeroAt > spec.fullAt ? copy2.gainBelow : copy2.gainAbove;
-      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now: ruleValueText(fix.ruleId, fix.value, lang), start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
+    const below = spec.zeroAt > spec.fullAt;
+    const perTool = fix.tools.length >= 2;
+    const beyond = perTool ? fix.tools.some((tool) => beyondZeroMark(fix.ruleId, tool.value)) : fix.value !== null && beyondZeroMark(fix.ruleId, fix.value);
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyond) {
+      const template = perTool ? below ? copy2.gainBelowTools : copy2.gainAboveTools : below ? copy2.gainBelow : copy2.gainAbove;
+      const now = perTool ? fix.tools.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${ruleValueText(fix.ruleId, tool.value, lang)}`).join(copy2.toolJoin) : ruleValueText(fix.ruleId, fix.value, lang);
+      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now, start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
     }
     return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
   }
@@ -4041,7 +4045,7 @@ function hero(view, art, lang) {
   )}</span></div>`;
   const next = scored2 && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf2((l) => keepArrows(esc(view.nextGrade[l]))))}</span>` : "";
   const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score }, l)}`)
+    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score, tools: first.tools }, l)}`)
   )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }

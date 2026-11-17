@@ -256,7 +256,7 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
         ? ""
         : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>`
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score }, l)}`),
+          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score, tools: first.tools }, l)}`),
         )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }

@@ -377,6 +377,23 @@ describe("다음 등급으로 가는 셋팅 방법(0.3.0, 사용자 추가 요�
     expect(zero).toContain(esc("Codex 지금 98% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
   });
 
+  it("두 도구가 모두 0점인 도구별 규칙은 진단 칸의 먼저 고칠 것에도 평균값 대신 도구마다의 값을 적는다(짝 4차 필수 2번)", () => {
+    // F1을 Claude Code 98%, Codex 100%로 잰다. 평균 99%를 95%와 견주면, Claude Code만 95% 아래로 내려도 오르는 것과 어긋난다
+    const sessions = (xhigh: number) => [0, 1, 2].map((index) => ({ days: { [`2026-11-1${index}`]: { responses: 50, humanRequests: 10, efforts: { xhigh, high: 50 - xhigh } } } }));
+    const input = evaluationInput([claudeTool({ sessions: sessions(49) }), codexTool({ sessions: sessions(50) })]);
+    const checked = checkupResult({ input, evaluation: evaluate(input), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: RULES.map((spec) => spec.id).filter((id) => id !== "F1") });
+    const f1 = checked.findings.find((f) => f.ruleId === "F1")!;
+    expect([f1.score, f1.tools.map((tool) => tool.score)]).toEqual([0, [0, 0]]);
+    const html = reportHtml(viewOf(checked), art);
+    const band = between(html, REPORT_COPY.fixFirst.ko, "</div>");
+    expect(band).toContain(esc("지금 Claude Code 98%·Codex 100%, 도구마다 95% 아래로 줄여야 오르기 시작"));
+    expect(band).toContain(esc("now Claude Code 98% and Codex 100%, each rises only below 95%"));
+    expect(band).not.toContain("99%");
+    const section = between(html, '<section class="next"', "</section>");
+    expect(section).toContain(esc("Claude Code 지금 98% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+    expect(section).toContain(esc("Codex 지금 100% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+  });
+
   it("지금 값과 목표 뒤에 점수가 오르기 시작하는 값을 붙일 때 가운뎃점으로 나눠 숫자 둘이 붙지 않는다", () => {
     // I3(요청 하나에 도구 호출)이 0회로 0점 기준(1회)보다 나쁘다. 다른 차례 후보는 그대로 두기로 해 I3만 남긴다
     const input = evaluationInput([claudeTool({ sessions: enough })]);

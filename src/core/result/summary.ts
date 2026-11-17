@@ -41,7 +41,7 @@ export interface SummaryFix {
 }
 
 /** 덧붙이는 말에 쓰는 것 */
-export type FixDetailInput = Pick<SummaryFix, "ruleId" | "axis" | "gain" | "measured" | "candidates" | "unmeasuredTools" | "value" | "score">;
+export type FixDetailInput = Pick<SummaryFix, "ruleId" | "axis" | "gain" | "measured" | "candidates" | "unmeasuredTools" | "value" | "score" | "tools">;
 
 /** 이름과 경로를 뺀 알림. detail은 정해진 값(지표, 무엇을 읽지 못했는지, 세지 않은 까닭)이고 count는 대상의 수다 */
 export interface SummaryNotice {
@@ -148,15 +148,20 @@ export function beyondZeroMark(ruleId: RuleId, value: number): boolean {
 
 /**
  * 먼저 고칠 것의 덧붙이는 말. 결과 화면의 진단 띠도 같은 말을 쓴다. 규칙 점수가 0이고 지금 값이 0점 기준보다 나쁘면 조금 고쳐서는 오르지 않으므로
- * 지금 값과 점수가 오르기 시작하는 값(0점 기준)을 함께 적는다(0.3.0, 다른 PC 피드백 4번)
+ * 지금 값과 점수가 오르기 시작하는 값(0점 기준)을 함께 적는다(0.3.0, 다른 PC 피드백 4번). 두 도구 넘게 잰 도구별 규칙은 한 도구만 기준을 넘어도
+ * 오르므로 평균값을 기준과 견주지 않고, 도구마다의 지금 값과 「도구마다」 오르기 시작하는 값을 적는다(짝 4차 필수 2번)
  */
 export function fixDetail(fix: FixDetailInput, lang: Lang): string {
   const copy = SUMMARY_COPY[lang];
   if (fix.gain !== null) {
     const spec = ruleSpec(fix.ruleId);
-    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyondZeroMark(fix.ruleId, fix.value)) {
-      const template = spec.zeroAt > spec.fullAt ? copy.gainBelow : copy.gainAbove;
-      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now: ruleValueText(fix.ruleId, fix.value, lang), start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
+    const below = spec.zeroAt > spec.fullAt;
+    const perTool = fix.tools.length >= 2;
+    const beyond = perTool ? fix.tools.some((tool) => beyondZeroMark(fix.ruleId, tool.value)) : fix.value !== null && beyondZeroMark(fix.ruleId, fix.value);
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyond) {
+      const template = perTool ? (below ? copy.gainBelowTools : copy.gainAboveTools) : below ? copy.gainBelow : copy.gainAbove;
+      const now = perTool ? fix.tools.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${ruleValueText(fix.ruleId, tool.value, lang)}`).join(copy.toolJoin) : ruleValueText(fix.ruleId, fix.value, lang);
+      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now, start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
     }
     return fill(copy.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
   }

@@ -161,6 +161,18 @@ describe("요약", () => {
     expect(checkupSummary({ ...result, lang: "en" }, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["Efficiency up to +11 · now 24,400 tokens (est.), rises only below 16,000 tokens (est.)", "Fit up to +2 · now 5%, rises only above 10%", "Efficiency up to +5"]);
   });
 
+  it("두 도구로 잰 도구별 규칙은 평균값을 0점 기준과 견주지 않고, 도구마다의 지금 값과 도구마다 오르기 시작하는 값을 적는다(짝 4차 필수 2번)", () => {
+    // Claude Code 98%, Codex 99%면 평균 98.5%다. Claude Code만 92%로 내려도 평균은 95.5%로 95%보다 높지만 점수는 오른다
+    const scored = (tool: "claude-code" | "codex", value: number) => ({ tool, status: "scored" as const, reason: null, value, score: 0, evidence: {}, candidates: [], observed: "measured" as const });
+    const f1 = finding("F1", { axis: "fit", category: "repair", value: 0.985, score: 0, gain: 100, tools: [scored("claude-code", 0.98), scored("codex", 0.99)] });
+    const result = { ...baseResult(), lang: "ko" as const, findings: [f1] };
+    expect(checkupSummary(result, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["상황 적합 최대 +100 · 지금 Claude Code 98%·Codex 99%, 도구마다 95% 아래로 줄여야 오르기 시작"]);
+    expect(checkupSummary({ ...result, lang: "en" }, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["Fit up to +100 · now Claude Code 98% and Codex 99%, each rises only below 95%"]);
+    // 도구 하나만 쟀으면 지금처럼 그 값 하나를 적는다
+    const one = { ...result, findings: [{ ...f1, value: 0.99, tools: [scored("codex", 0.99)] }] };
+    expect(checkupSummary(one, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["상황 적합 최대 +100 · 지금 99%, 95% 아래로 줄여야 오르기 시작"]);
+  });
+
   it("알림 스물세 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {
     const notices: Notice[] = [
       { kind: "score_withheld", reasons: ["too_few_days"] },

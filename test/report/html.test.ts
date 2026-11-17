@@ -370,6 +370,8 @@ describe("점수 매기는 법(0.3.0, 사용자 추가 요청)", () => {
       const mark = (value: number): string => pair(ruleValueText(spec.id, value, "en"), ruleValueText(spec.id, value, "ko"));
       expect(section).toContain(`<tr class="rule"><th scope="row">${pair(RULE_COPY[spec.id].en.name, name)}</th><td class="n">${spec.weight}</td><td>${mark(spec.zeroAt)}</td><td>${mark(spec.fullAt)}</td></tr>`);
     }
+    // 위 비교는 같은 함수의 출력과 견주므로, 반올림으로 바뀌기 쉬운 E7의 두 기준은 글자 그대로 본다(짝 3차 필수 3번)
+    expect(section).toContain('<td><span lang="en" data-l="en">0.15 stops per request</span><span lang="ko" data-l="ko">0.15회/요청</span></td><td><span lang="en" data-l="en">0.02 stops per request</span><span lang="ko" data-l="ko">0.02회/요청</span></td>');
     // AQ를 내지 않은 화면에도 같은 설명이 있다
     const withheld = reportHtml({ ...viewOf(result()), score: { aq: null, grade: null, tier: null, withheld: ["too_few_requests"] } }, art);
     expect(withheld).toContain('<section class="how-score"');

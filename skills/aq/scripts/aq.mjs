@@ -31,15 +31,30 @@ var UNCOUNTED = "\u2014";
 function groupDigits(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
-function oneDecimal(value) {
-  const tenths = roundHalfUp(value * 10);
-  const whole = groupDigits(Math.floor(tenths / 10));
-  const rest = tenths % 10;
-  return rest === 0 ? whole : `${whole}.${rest}`;
+function decimalText(value, places) {
+  const scale = 10 ** places;
+  const scaled = roundHalfUp(value * scale);
+  const whole = groupDigits(Math.floor(scaled / scale));
+  const rest = places === 0 ? "" : String(scaled % scale).padStart(places, "0").replace(/0+$/, "");
+  return rest === "" ? whole : `${whole}.${rest}`;
 }
-function formatValue(kind, value) {
-  if (kind === "share") return oneDecimal(value * 100);
-  if (kind === "rate") return oneDecimal(value);
+function oneDecimal(value) {
+  return decimalText(value, 1);
+}
+function placesOf(value) {
+  for (let places = 0; places < 6; places++) {
+    const scaled = value * 10 ** places;
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-9) return places;
+  }
+  return 6;
+}
+function rulePlaces(spec) {
+  const scale = spec.kind === "share" ? 100 : 1;
+  return Math.max(1, placesOf(spec.zeroAt * scale), placesOf(spec.fullAt * scale));
+}
+function formatValue(kind, value, places = 1) {
+  if (kind === "share") return decimalText(value * 100, places);
+  if (kind === "rate") return decimalText(value, places);
   return groupDigits(roundHalfUp(value));
 }
 var SLOT = /\{([A-Za-z]+)(?::([^|{}]*)\|([^|{}]*))?\}/g;
@@ -2127,15 +2142,15 @@ function reasonOf(copy2, reason, lang) {
   const common = REASON_COPY[reason][lang];
   return { word: own?.word ?? common.word, text: own?.text ?? common.text };
 }
-function measured(kind, value, copy2) {
-  const shown = formatValue(kind, value);
+function measured(kind, value, copy2, places) {
+  const shown = formatValue(kind, value, places);
   return { value: shown, unit: fill(copy2.unit, { value: shown === "1" ? 1 : 0 }) };
 }
-function toolLine(kind, value, copy2, lang) {
+function toolLine(kind, places, value, copy2, lang) {
   const tool = TOOL_NAMES[value.tool][lang];
   const evidence = fillEvidence(copy2.evidence, value.evidence);
   if (value.status === "scored") {
-    const shown = measured(kind, value.value, copy2);
+    const shown = measured(kind, value.value, copy2, places);
     return fill(TOOL_LINE[lang].measured, { tool, value: joinValue(shown.value, shown.unit, lang), evidence });
   }
   return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy2, value.reason, lang).word, evidence });
@@ -2198,15 +2213,17 @@ function unjudgedNotes(servers, lang) {
   return lines;
 }
 function ruleValueText(ruleId, value, lang) {
-  const shown = measured(ruleSpec(ruleId).kind, value, RULE_COPY[ruleId][lang]);
+  const spec = ruleSpec(ruleId);
+  const shown = measured(spec.kind, value, RULE_COPY[ruleId][lang], rulePlaces(spec));
   return joinValue(shown.value, shown.unit, lang);
 }
 function findingText(finding, details, lang) {
   const copy2 = RULE_COPY[finding.ruleId][lang];
-  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2) : null;
+  const places = rulePlaces(ruleSpec(finding.ruleId));
+  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2, places) : null;
   const method = [copy2.method];
   if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy2.evidence, finding.evidence));
-  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy2, lang));
+  for (const value of finding.tools) method.push(toolLine(finding.kind, places, value, copy2, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
   method.push(...measurementNotes(finding, details, lang));
   return {

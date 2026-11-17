@@ -1,6 +1,6 @@
 // 평가 결과의 규칙 하나에서 문장을 만드는 것을 본다. 분류와 상태에 따라 제목·설명·처방을 고르고, 잰 값과 단위, 못 잰 이유, 어떻게 쟀나, E6의 정보를 만든다(설계 11.5, 12.2, 13.1)
 import { describe, expect, it } from "vitest";
-import { findingText, joinValue, RULE_COPY, type FindingInput } from "../../src/core/copy/findings.ts";
+import { findingText, joinValue, RULE_COPY, ruleValueText, type FindingInput } from "../../src/core/copy/findings.ts";
 import type { ToolSafeguard } from "../../src/core/metrics/setup.ts";
 import type { ResultToolValue, UnjudgedServer } from "../../src/core/result/assemble.ts";
 import { RULES } from "../../src/core/rules.ts";
@@ -36,6 +36,28 @@ describe("잰 값과 단위", () => {
     expect(i3(0.96)).toMatchObject({ value: "1", unit: "call per request" });
     expect(i3(1.1)).toMatchObject({ value: "1.1", unit: "calls per request" });
     expect(i3(0.94)).toMatchObject({ value: "0.9", unit: "calls per request" });
+  });
+
+  it("규칙의 0점·만점 기준은 반올림하지 않고 그 값 그대로 적는다. 규칙 스물둘의 기준을 다시 읽으면 규칙 표의 값이다(짝 3차 필수 3번)", () => {
+    expect(ruleValueText("E7", 0.15, "ko")).toBe("0.15회/요청");
+    expect(ruleValueText("E7", 0.02, "ko")).toBe("0.02회/요청");
+    expect(ruleValueText("E7", 0.15, "en")).toBe("0.15 stops per request");
+    for (const spec of RULES) {
+      for (const mark of [spec.zeroAt, spec.fullAt]) {
+        const shown = Number(ruleValueText(spec.id, mark, "en").match(/^[\d,.]+/)![0].replaceAll(",", ""));
+        expect(shown, `${spec.id} ${mark}`).toBeCloseTo(spec.kind === "share" ? mark * 100 : mark, 9);
+      }
+    }
+  });
+
+  it("기준에 소수 둘째 자리가 있는 규칙(E7)은 잰 값도 둘째 자리까지 적어, 지금 값과 기준을 견줄 수 있다", () => {
+    const e7 = (value: number) => findingText(finding("E7", { kind: "rate", value, category: "repair", evidence: { denied: 1, interruptedTurns: 1, lengthStops: 1, humanRequests: 100 } }), NONE, "ko");
+    expect(e7(0.16)).toMatchObject({ value: "0.16", unit: "회/요청" });
+    expect(e7(0.15)).toMatchObject({ value: "0.15" });
+    expect(e7(0.03)).toMatchObject({ value: "0.03" });
+    expect(ruleValueText("E7", 0.155, "ko")).toBe("0.16회/요청");
+    // 다른 규칙은 그대로 소수 한 자리다
+    expect(ruleValueText("E3", 0.25, "ko")).toBe(`0.3${RULE_COPY.E3.ko.unit}`);
   });
 });
 

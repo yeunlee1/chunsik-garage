@@ -20,3 +20,7 @@ You may share the art as it appears in the cards, result pages, and screenshots 
 | `icon.png` | 512×512 | The plugin icon in plugin directories (PNG, because the Claude plugin directory does not take WebP) |
 
 `scripts/make-assets.py` makes these files from the original drawings, which are not in this repository.
+
+The same terms cover `docs/images/hero.png` (1280×640), the picture at the top of the README that is also the repository's link preview. `scripts/make-hero.py` makes it from its original drawing.
+
+README 맨 위 그림이자 저장소 링크 미리보기 그림인 `docs/images/hero.png`(1280×640)도 같은 조건이다. `scripts/make-hero.py`가 원본 그림으로 만든다.

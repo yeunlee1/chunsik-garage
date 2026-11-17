@@ -39,7 +39,7 @@ What runs on your PC: the skill runs `skills/aq/scripts/aq.mjs` with Node.js, an
 - Node.js 22 or later. Tested on 22 and 24.
 - Built and tested on Windows 11. macOS and Linux are covered only by tests with temporary home folders.
 - Made for Claude Code and Codex on your own PC. The checkup reads the records these tools keep on your PC, so it is not made for claude.ai chat or Cowork.
-- Claude Code record formats checked on 2.1.220 to 2.1.325. Codex record formats checked on 0.166.0 (and the older format of 0.140 to 0.142).
+- Claude Code record formats checked on 2.1.220 to 2.1.322, and the settings a tune-up changes on 2.1.220 to 2.1.325. Codex record formats checked on records of 0.166.0 (and the older format of 0.140 to 0.142), and up to 0.169.0 by comparing the public source of the record shapes the checkup reads.
 
 ## What it leaves and how to remove it
 

@@ -4792,3 +4792,7 @@ core(`src/core/`)는 경로를 풀지 않고 파일을 읽지 않는다(7.2절).
   - 안 쓰는 것의 판정은 그 지표의 표지가 든 긴 줄이 있을 때만 막는다. 두 도구의 기록은 빈칸 없는 JSON이라(이 PC의 기록에서 키 뒤 빈칸 0곳) 구조로 적힌 사용 신호는 표지와 맞고, 글 안에서 따옴표가 이스케이프된 것은 맞지 않는다. 맞더라도 판정을 막는 쪽으로만 틀린다.
   - 요약의 빠진 것에 `tooLongSkillLines`, `tooLongMcpLines`를 더했다. 이 칸이 없는 옛 요약은 긴 줄이 있으면 막는다. Codex 파서 버전을 2로 올렸다.
 - **네트워크를 가리키는 연결(짝 검토 2차 필수 1).** 가져올 경로의 어느 칸이 네트워크 경로를 가리키는 연결(심볼릭 링크, 정션)이면 따르지 않는다. 연결을 따라가는 조회(stat, realpath)는 그것만으로 네트워크에 닿을 수 있어, 뿌리부터 한 칸씩 연결을 따라가지 않는 조회(lstat, readlink)로 먼저 살피고 그 뒤의 칸은 조회하지 않는다. 가져오기가 아닌 지침 파일(설정 폴더의 CLAUDE.md, rules, 프로젝트의 지침)은 사용자의 설정 위치라 지금처럼 읽는다.
+- **Codex 새 버전과 실행 항목 종류(피드백 8번).** 다른 PC의 「종류를 모르는 실행 항목」은 새 버전 탓이 아니었다. Codex의 실행 항목 종류(공개 소스 `codex-rs/protocol/src/items.rs`의 `TurnItem`)는 0.166.0과 0.169.0이 같고, 그 가운데 아홉을 분류하지 않았을 뿐이다. 도구 호출인 넷(DynamicToolCall, CollabAgentToolCall, ImageGeneration, FunctionCallOutput)은 호출만 세고(상태 값을 기록으로 확인하지 못해 결과·오류는 세지 않는다), 도구가 아닌 다섯(Plan, HookPrompt, SubAgentActivity, EnteredReviewMode, ExitedReviewMode)은 세지 않는다. 호출 층이 실행 층보다 많은 턴의 차이는 지금처럼 이름 모름으로 더하므로, FunctionCallOutput을 세어도 같은 호출을 두 번 세지 않는다.
+  - 확인한 범위의 위쪽 끝을 0.169.0으로 올렸다. 점검이 읽는 기록 모양(TurnItem, ResponseItem, TokenUsage는 같고, EventMsg는 기록에 남지 않는 종류 하나만 더해졌으며, SessionMeta와 TurnContextItem은 바뀌었지만 읽는 칸인 `cli_version`, `model`, `effort` 등은 그대로다)을 0.166.0과 0.169.0의 공개 소스로 견줘 확인했다. 실제 0.169.0의 기록으로는 확인하지 못했다.
+  - 알림의 「종류를 모르는 실행 항목」에 많은 차례로 셋까지 종류 이름을 붙인다(Codex가 정한 이름이라 사용자 자료가 아니다). 출처 모를 세션의 값은 붙이지 않는다.
+  - README의 Claude Code 범위가 기록 형식(2.1.322까지)과 정비가 바꾸는 설정(2.1.325까지)을 섞어 2.1.325로 적었던 것을 나눠 적었다.

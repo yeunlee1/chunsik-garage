@@ -8,7 +8,7 @@ import type { Withheld } from "../scoreboard.ts";
 import type { CollectedCodex, CollectedTool } from "./tools.ts";
 
 /** 도구마다 기록의 해석 규약을 확인한 버전의 범위(설계 9.5). 새 버전의 기록을 확인하면 넓힌다. 이 밖의 버전은 읽을 수 있는 필드로 계산하고 알린다(설계 20.1) */
-export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
+export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.169.0" } };
 /** 점수 구간의 사람 요청 가운데 근거가 약한 것의 몫이 이것을 넘으면 알린다(설계 9.5). 정확히 이 값은 넘지 않은 것이다 */
 export const WEAK_REQUEST_SHARE = 0.1;
 

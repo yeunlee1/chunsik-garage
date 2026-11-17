@@ -2331,6 +2331,7 @@ var UNCLASSIFIED = {
   thread_source: { en: "{count} {count:session|sessions} of unknown origin counted as main", ko: "\uC8FC \uC138\uC158\uC73C\uB85C \uC13C \uCD9C\uCC98 \uBAA8\uB97C \uC138\uC158 {count}\uAC1C" },
   item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "\uC885\uB958\uB97C \uBAA8\uB974\uB294 \uC2E4\uD589 \uD56D\uBAA9 {count}\uAC1C" }
 };
+var TOP_ITEM_KINDS = 3;
 var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
@@ -2388,7 +2389,12 @@ var LINES = {
 var LIST_JOIN = ", ";
 function unclassifiedItems(counts, lang) {
   const groups = UNCLASSIFIED_GROUPS.map((group) => ({ group, count: counts.filter((item2) => item2.what.split(":")[0] === group).reduce((sum2, item2) => sum2 + item2.count, 0) }));
-  return groups.filter((item2) => item2.count > 0).map((item2) => fill(UNCLASSIFIED[item2.group][lang], { count: item2.count })).join(LIST_JOIN);
+  return groups.filter((item2) => item2.count > 0).map((item2) => {
+    const text = fill(UNCLASSIFIED[item2.group][lang], { count: item2.count });
+    if (item2.group !== "item") return text;
+    const kinds = counts.filter((entry) => entry.what.startsWith("item:")).map((entry) => ({ name: entry.what.slice("item:".length), count: entry.count })).sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).slice(0, TOP_ITEM_KINDS);
+    return `${text} [${kinds.map((kind) => `${kind.name} ${fill("{count}", { count: kind.count })}`).join(" \xB7 ")}]`;
+  }).join(LIST_JOIN);
 }
 function noticeText(notice, lang) {
   const lines = LINES[lang];
@@ -2598,7 +2604,7 @@ function deepFiles(input) {
 }
 
 // src/core/result/notices.ts
-var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
+var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.169.0" } };
 var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
@@ -6068,10 +6074,15 @@ var EXEC_TOOLS = /* @__PURE__ */ new Map([
   ["McpToolCall", { name: "mcp", status: true }],
   ["ImageView", { name: "image_view", status: false }],
   ["Extension", { name: "extension", status: false }],
-  ["WebSearch", { name: "web_search", status: false }]
+  ["WebSearch", { name: "web_search", status: false }],
+  // 0.3.0. Codex 0.166.0~0.169.0의 TurnItem(공개 소스 codex-rs/protocol/src/items.rs)에서 도구 호출인 나머지 넷. 상태의 값을 기록으로 확인하지 못해 호출만 센다(다른 PC 피드백 8번)
+  ["DynamicToolCall", { name: "dynamic_tool", status: false }],
+  ["CollabAgentToolCall", { name: "collab_agent", status: false }],
+  ["ImageGeneration", { name: "image_generation", status: false }],
+  ["FunctionCallOutput", { name: "function", status: false }]
 ]);
 var CODEX_SHELL_TOOLS = ["shell"];
-var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
+var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction", "Plan", "HookPrompt", "SubAgentActivity", "EnteredReviewMode", "ExitedReviewMode"]);
 var CALL_TYPES = /* @__PURE__ */ new Set(["function_call", "custom_tool_call", "web_search_call"]);
 var CODEX_PARSER_VERSION = 2;
 var SUB_THREAD_SOURCES = /* @__PURE__ */ new Set(["subagent", "guardian_review", "memory_consolidation"]);

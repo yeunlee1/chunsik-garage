@@ -59,6 +59,9 @@ const UNCLASSIFIED: Record<(typeof UNCLASSIFIED_GROUPS)[number], Texts<string>> 
   item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "종류를 모르는 실행 항목 {count}개" },
 };
 
+/** 종류 이름을 붙이는 실행 항목의 수(많은 차례, 0.3.0). 이름은 Codex가 정한 항목 종류라 사용자 자료가 아니다 */
+const TOP_ITEM_KINDS = 3;
+
 /** 알림마다의 틀 */
 const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & { withheld: string; setupCounted: string }> = {
   en: {
@@ -121,7 +124,16 @@ function unclassifiedItems(counts: readonly { what: string; count: number }[], l
   const groups = UNCLASSIFIED_GROUPS.map((group) => ({ group, count: counts.filter((item) => item.what.split(":")[0] === group).reduce((sum, item) => sum + item.count, 0) }));
   return groups
     .filter((item) => item.count > 0)
-    .map((item) => fill(UNCLASSIFIED[item.group][lang], { count: item.count }))
+    .map((item) => {
+      const text = fill(UNCLASSIFIED[item.group][lang], { count: item.count });
+      if (item.group !== "item") return text;
+      const kinds = counts
+        .filter((entry) => entry.what.startsWith("item:"))
+        .map((entry) => ({ name: entry.what.slice("item:".length), count: entry.count }))
+        .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .slice(0, TOP_ITEM_KINDS);
+      return `${text} [${kinds.map((kind) => `${kind.name} ${fill("{count}", { count: kind.count })}`).join(" · ")}]`;
+    })
     .join(LIST_JOIN);
 }
 

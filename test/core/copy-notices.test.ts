@@ -87,8 +87,11 @@ describe("알림의 문장", () => {
     expect(noticeText(of("unnamed_files"), "ko")).toBe("Codex 기록 폴더에서 이름으로 기록을 알아볼 수 없는 파일 1개는 읽지 않았습니다.");
     expect(noticeText(of("unnamed_files"), "en")).toBe("Codex: 1 file in the records folder could not be recognized by name and was not read.");
     const unclassified: Notice = { kind: "unclassified", tool: "codex", counts: [{ what: "item:Plan", count: 3 }, { what: "thread_source:secret", count: 2 }] };
-    expect(noticeText(unclassified, "ko")).toBe("Codex에 분류하지 못한 기록이 있습니다(주 세션으로 센 출처 모를 세션 2개, 종류를 모르는 실행 항목 3개).");
-    expect(noticeText(unclassified, "en")).toBe("Codex: some records could not be classified (2 sessions of unknown origin counted as main, 3 work items of an unknown kind).");
+    // 실행 항목은 많은 차례로 셋까지 종류 이름을 붙인다(Codex가 정한 이름이라 사용자 자료가 아니다). 출처 모를 세션의 값은 붙이지 않는다(0.3.0, 다른 PC 피드백 8번)
+    expect(noticeText(unclassified, "ko")).toBe("Codex에 분류하지 못한 기록이 있습니다(주 세션으로 센 출처 모를 세션 2개, 종류를 모르는 실행 항목 3개 [Plan 3]).");
+    expect(noticeText(unclassified, "en")).toBe("Codex: some records could not be classified (2 sessions of unknown origin counted as main, 3 work items of an unknown kind [Plan 3]).");
+    const many: Notice = { kind: "unclassified", tool: "codex", counts: [{ what: "item:A", count: 1 }, { what: "item:B", count: 4000 }, { what: "item:C", count: 2 }, { what: "item:D", count: 2 }] };
+    expect(noticeText(many, "ko")).toBe("Codex에 분류하지 못한 기록이 있습니다(종류를 모르는 실행 항목 4,005개 [B 4,000 · C 2 · D 2]).");
   });
 
   it("영어는 수가 1이면 단수다", () => {

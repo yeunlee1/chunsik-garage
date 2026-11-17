@@ -105,6 +105,8 @@ describe("기록 쪽 알림", () => {
 
   it("확인한 범위 밖 버전의 기록이 있으면 그 버전들을 버전 차례로 알린다. 버전을 모르는 세션은 넣지 않는다", () => {
     expect(VERIFIED_VERSIONS["claude-code"]).toEqual({ from: "2.1.220", to: "2.1.322" });
+    // Codex는 0.166.0까지 기록으로, 0.169.0까지 기록 모양의 공개 소스 비교로 확인했다(0.3.0, 다른 PC 피드백 8번)
+    expect(VERIFIED_VERSIONS.codex).toEqual({ from: "0.140.0", to: "0.169.0" });
     const notices = noticesOf({ sessions: [{ ...fine, version: "2.1.323" }, { ...fine, version: "2.1.100" }, { ...fine, version: "2.1.322" }, { ...fine, version: "2.1.220" }, { ...fine, version: null }, { ...fine, version: "2.1.323" }] });
     expect(notices).toEqual([{ kind: "version_unverified", tool: "claude-code", versions: ["2.1.100", "2.1.323"], verified: { from: "2.1.220", to: "2.1.322" } }]);
   });

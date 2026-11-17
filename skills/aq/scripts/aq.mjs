@@ -31,15 +31,30 @@ var UNCOUNTED = "\u2014";
 function groupDigits(value) {
   return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
-function oneDecimal(value) {
-  const tenths = roundHalfUp(value * 10);
-  const whole = groupDigits(Math.floor(tenths / 10));
-  const rest = tenths % 10;
-  return rest === 0 ? whole : `${whole}.${rest}`;
+function decimalText(value, places) {
+  const scale = 10 ** places;
+  const scaled = roundHalfUp(value * scale);
+  const whole = groupDigits(Math.floor(scaled / scale));
+  const rest = places === 0 ? "" : String(scaled % scale).padStart(places, "0").replace(/0+$/, "");
+  return rest === "" ? whole : `${whole}.${rest}`;
 }
-function formatValue(kind, value) {
-  if (kind === "share") return oneDecimal(value * 100);
-  if (kind === "rate") return oneDecimal(value);
+function oneDecimal(value) {
+  return decimalText(value, 1);
+}
+function placesOf(value) {
+  for (let places = 0; places < 6; places++) {
+    const scaled = value * 10 ** places;
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-9) return places;
+  }
+  return 6;
+}
+function rulePlaces(spec) {
+  const scale = spec.kind === "share" ? 100 : 1;
+  return Math.max(1, placesOf(spec.zeroAt * scale), placesOf(spec.fullAt * scale));
+}
+function formatValue(kind, value, places = 1) {
+  if (kind === "share") return decimalText(value * 100, places);
+  if (kind === "rate") return decimalText(value, places);
   return groupDigits(roundHalfUp(value));
 }
 var SLOT = /\{([A-Za-z]+)(?::([^|{}]*)\|([^|{}]*))?\}/g;
@@ -1157,8 +1172,10 @@ function toolTotals(summaries, windows, shellTools) {
       autoCompactions: 0,
       subagentCalls: 0,
       mcpConnectionFailure: false,
+      mcpFailedServers: [],
       instructionTokens: instructionTokens(summary.instructionChars)
     };
+    const failedServers = /* @__PURE__ */ new Set();
     let sessionResponses = 0;
     for (const [date, cell] of Object.entries(summary.days)) {
       if (collect.has(date)) totals2.collectResponses += cell.responses;
@@ -1191,7 +1208,9 @@ function toolTotals(summaries, windows, shellTools) {
       session.autoCompactions += cell.autoCompactions;
       session.subagentCalls += cell.subagentCalls;
       if (cell.mcpConnectionFailure) session.mcpConnectionFailure = true;
+      for (const name of Object.keys(cell.mcpFailedServers)) failedServers.add(name);
     }
+    session.mcpFailedServers = [...failedServers].sort();
     if (summary.kind === "main" && sessionResponses > 0) totals2.mainSessions.push(session);
   }
   for (const name of [...efforts.keys()].sort()) totals2.efforts[name] = efforts.get(name);
@@ -1267,8 +1286,8 @@ var AXIS_NAMES = {
   intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
 };
 var SUMMARY_COPY = {
-  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", gainBelow: "{axis} up to +{gain} \xB7 now {now}, rises only below {start}", gainAbove: "{axis} up to +{gain} \xB7 now {now}, rises only above {start}", gainBelowTools: "{axis} up to +{gain} \xB7 now {now}, each rises only below {start}", gainAboveTools: "{axis} up to +{gain} \xB7 now {now}, each rises only above {start}", toolJoin: " and ", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", gainBelow: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAbove: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainBelowTools: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, \uB3C4\uAD6C\uB9C8\uB2E4 {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAboveTools: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, \uB3C4\uAD6C\uB9C8\uB2E4 {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", toolJoin: "\xB7", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
 };
 var REASON_COPY = {
   unsupported: {
@@ -2123,15 +2142,15 @@ function reasonOf(copy2, reason, lang) {
   const common = REASON_COPY[reason][lang];
   return { word: own?.word ?? common.word, text: own?.text ?? common.text };
 }
-function measured(kind, value, copy2) {
-  const shown = formatValue(kind, value);
+function measured(kind, value, copy2, places) {
+  const shown = formatValue(kind, value, places);
   return { value: shown, unit: fill(copy2.unit, { value: shown === "1" ? 1 : 0 }) };
 }
-function toolLine(kind, value, copy2, lang) {
+function toolLine(kind, places, value, copy2, lang) {
   const tool = TOOL_NAMES[value.tool][lang];
   const evidence = fillEvidence(copy2.evidence, value.evidence);
   if (value.status === "scored") {
-    const shown = measured(kind, value.value, copy2);
+    const shown = measured(kind, value.value, copy2, places);
     return fill(TOOL_LINE[lang].measured, { tool, value: joinValue(shown.value, shown.unit, lang), evidence });
   }
   return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy2, value.reason, lang).word, evidence });
@@ -2193,12 +2212,18 @@ function unjudgedNotes(servers, lang) {
   if (servers.some((server) => server.scope === "claude-ai")) lines.push(copy2.deny);
   return lines;
 }
+function ruleValueText(ruleId, value, lang) {
+  const spec = ruleSpec(ruleId);
+  const shown = measured(spec.kind, value, RULE_COPY[ruleId][lang], rulePlaces(spec));
+  return joinValue(shown.value, shown.unit, lang);
+}
 function findingText(finding, details, lang) {
   const copy2 = RULE_COPY[finding.ruleId][lang];
-  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2) : null;
+  const places = rulePlaces(ruleSpec(finding.ruleId));
+  const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2, places) : null;
   const method = [copy2.method];
   if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy2.evidence, finding.evidence));
-  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy2, lang));
+  for (const value of finding.tools) method.push(toolLine(finding.kind, places, value, copy2, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
   method.push(...measurementNotes(finding, details, lang));
   return {
@@ -2260,14 +2285,14 @@ var COPY2 = {
   en: {
     reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
     partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
-    // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이다(화면에서 둘이 떨어지지 않게)
-    step: "{name} (\u2192\xA0{aq})",
+    // 화살표와 숫자 사이는 보통 빈칸이다. 모델이 그대로 옮기기 쉽게 하고, 결과 화면이 둘을 묶어 떨어지지 않게 한다(0.3.0)
+    step: "{name} (\u2192 {aq})",
     join: ", "
   },
   ko: {
     reaches: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}.",
     partial: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}. \uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4.",
-    step: "{name}(\u2192\xA0{aq})",
+    step: "{name}(\u2192 {aq})",
     join: ", "
   }
 };
@@ -2323,6 +2348,7 @@ var UNCLASSIFIED = {
   thread_source: { en: "{count} {count:session|sessions} of unknown origin counted as main", ko: "\uC8FC \uC138\uC158\uC73C\uB85C \uC13C \uCD9C\uCC98 \uBAA8\uB97C \uC138\uC158 {count}\uAC1C" },
   item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "\uC885\uB958\uB97C \uBAA8\uB974\uB294 \uC2E4\uD589 \uD56D\uBAA9 {count}\uAC1C" }
 };
+var TOP_ITEM_KINDS = 3;
 var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
@@ -2380,7 +2406,12 @@ var LINES = {
 var LIST_JOIN = ", ";
 function unclassifiedItems(counts, lang) {
   const groups = UNCLASSIFIED_GROUPS.map((group) => ({ group, count: counts.filter((item2) => item2.what.split(":")[0] === group).reduce((sum2, item2) => sum2 + item2.count, 0) }));
-  return groups.filter((item2) => item2.count > 0).map((item2) => fill(UNCLASSIFIED[item2.group][lang], { count: item2.count })).join(LIST_JOIN);
+  return groups.filter((item2) => item2.count > 0).map((item2) => {
+    const text = fill(UNCLASSIFIED[item2.group][lang], { count: item2.count });
+    if (item2.group !== "item") return text;
+    const kinds = counts.filter((entry) => entry.what.startsWith("item:")).map((entry) => ({ name: entry.what.slice("item:".length), count: entry.count })).sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).slice(0, TOP_ITEM_KINDS);
+    return `${text} [${kinds.map((kind) => `${kind.name} ${fill("{count}", { count: kind.count })}`).join(" \xB7 ")}]`;
+  }).join(LIST_JOIN);
 }
 function noticeText(notice, lang) {
   const lines = LINES[lang];
@@ -2447,10 +2478,10 @@ function totals(rules, fixed2) {
   }
   return { rounded, raw };
 }
-function nextGrade(rules, score) {
+function nextGrade(rules, score, exclude = /* @__PURE__ */ new Set()) {
   if (score.aq === null || score.grade === null || score.grade === "S") return null;
   const target = NEXT[score.grade];
-  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1);
+  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1 && !exclude.has(rule2.ruleId));
   const fixed2 = /* @__PURE__ */ new Set();
   const steps = [];
   while (steps.length < NEXT_GRADE_STEPS && (steps.at(-1)?.aq ?? score.aq) < target.at) {
@@ -2590,7 +2621,7 @@ function deepFiles(input) {
 }
 
 // src/core/result/notices.ts
-var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.166.0" } };
+var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.169.0" } };
 var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
@@ -2900,14 +2931,21 @@ function unjudgedServers(input, evaluation) {
   }
   return servers.sort((a, b) => byText10(a.name, b.name) || SCOPE_ORDER3.indexOf(a.scope) - SCOPE_ORDER3.indexOf(b.scope) || byText10(a.projectRoot ?? "", b.projectRoot ?? "") || byText10(a.pluginId ?? "", b.pluginId ?? "") || byText10(a.tool, b.tool));
 }
+function failedMcpServers(evaluation) {
+  return evaluation.tools.filter((tool) => tool.scored).flatMap((tool) => {
+    const sessions = /* @__PURE__ */ new Map();
+    for (const session of tool.totals.mainSessions) for (const name of session.mcpFailedServers) sessions.set(name, (sessions.get(name) ?? 0) + 1);
+    return [...sessions].map(([name, count]) => ({ tool: tool.tool, name, sessions: count }));
+  }).sort((a, b) => b.sessions - a.sessions || byText10(a.tool, b.tool) || byText10(a.name, b.name));
+}
 function credentialPlaces(input) {
   const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
-  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key })));
+  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key, ...secret.copy === void 0 ? {} : { copy: secret.copy } })));
 }
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input), failedMcpServers: failedMcpServers(evaluation) };
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool) }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding) => {
@@ -2916,7 +2954,8 @@ function checkupResult(source) {
   });
   const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
-  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const ignored = [...source.ignored ?? []];
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score, new Set(ignored));
   const nameOf = (lang) => (ruleId) => findings.find((finding) => finding.ruleId === ruleId).text[lang].name;
   return {
     schema: RESULT_SCHEMA,
@@ -2937,7 +2976,8 @@ function checkupResult(source) {
     deepHints: deepHints(input),
     notices: notices2.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details,
-    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) }
+    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) },
+    ignored
   };
 }
 
@@ -2985,25 +3025,66 @@ function summaryNotice(notice) {
       return { kind: notice.kind, tool, detail: null, count: notice.count };
   }
 }
+function beyondZeroMark(ruleId, value) {
+  const spec = ruleSpec(ruleId);
+  const now = settleScore(value);
+  const mark = settleScore(spec.zeroAt);
+  return spec.zeroAt > spec.fullAt ? now > mark : now < mark;
+}
 function fixDetail(fix, lang) {
   const copy2 = SUMMARY_COPY[lang];
-  if (fix.gain !== null) return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  if (fix.gain !== null) {
+    const spec = ruleSpec(fix.ruleId);
+    const below = spec.zeroAt > spec.fullAt;
+    const perTool = fix.tools.length >= 2;
+    const beyond = perTool ? fix.tools.some((tool) => beyondZeroMark(fix.ruleId, tool.value)) : fix.value !== null && beyondZeroMark(fix.ruleId, fix.value);
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyond) {
+      const template = perTool ? below ? copy2.gainBelowTools : copy2.gainAboveTools : below ? copy2.gainBelow : copy2.gainAbove;
+      const now = perTool ? fix.tools.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${ruleValueText(fix.ruleId, tool.value, lang)}`).join(copy2.toolJoin) : ruleValueText(fix.ruleId, fix.value, lang);
+      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now, start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
+    }
+    return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  }
   if (!fix.measured) return fill(copy2.unmeasured, { candidates: fix.candidates });
   if (fix.unmeasuredTools.length > 0) return fill(copy2.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
   return fill(copy2.candidates, { candidates: fix.candidates });
+}
+function targetsOf(finding, result) {
+  const names2 = (() => {
+    switch (finding.ruleId) {
+      case "S3":
+        return result.details.setupProblems.map((problem) => problem.place);
+      case "S5":
+        return result.details.failedMcpServers.map((server) => server.name);
+      case "F3":
+        return result.details.missingInstructions.map((project) => project.name);
+      case "F4":
+        return result.details.worstOverlap === null ? [] : [result.details.worstOverlap.name];
+      default:
+        return finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
+    }
+  })();
+  return [...new Set(names2)];
 }
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
   const secretCount = result.notices.reduce((sum2, notice) => sum2 + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  const ignored = new Set(result.ignored);
+  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair" && !ignored.has(finding.ruleId)).slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding) => ({
     ruleId: finding.ruleId,
     axis: finding.axis,
     gain: finding.gain,
     measured: finding.status === "scored",
     candidates: finding.candidates.length,
-    unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool)
+    unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
+    targets: targetsOf(finding, result),
+    value: finding.value,
+    score: finding.score,
+    tools: finding.tools.flatMap((value) => value.status === "scored" ? [{ tool: value.tool, value: value.value, score: value.score }] : []),
+    zeroAt: ruleSpec(finding.ruleId).zeroAt,
+    fullAt: ruleSpec(finding.ruleId).fullAt
   }));
   return {
     aq: result.score.aq,
@@ -3015,6 +3096,8 @@ function checkupSummary(result, reportPath) {
     fixFirst,
     nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
+    credentialPlaces: result.details.credentialPlaces.map((place) => ({ ...place })),
+    ignored: [...result.ignored],
     reportPath,
     lang,
     text: {
@@ -3122,6 +3205,7 @@ var REPORT_COPY = {
   fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
   nextGrade: { en: "Next grade", ko: "\uB2E4\uC74C \uB4F1\uAE09\uAE4C\uC9C0" },
   spotSettings: { en: "Settings", ko: "\uC124\uC815" },
+  spotDefaultCopy: { en: "copy in the default location", ko: "\uAE30\uBCF8 \uC704\uCE58\uC758 \uC0AC\uBCF8" },
   spotEnv: { en: "env", ko: "env" },
   spotHeaders: { en: "header", ko: "\uBA38\uB9AC\uB9D0" },
   spotField: { en: "field", ko: "\uCE78" },
@@ -3138,6 +3222,28 @@ var REPORT_COPY = {
   targets: { en: "To clean up", ko: "\uC815\uB9AC\uD560 \uAC83" },
   places: { en: "Where", ko: "\uACE0\uCE60 \uACF3" },
   missingProjects: { en: "Projects without instructions", ko: "\uC9C0\uCE68\uC774 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8" },
+  failedServers: { en: "Servers that failed to connect", ko: "\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84" },
+  nextTitle: { en: "How to reach grade {grade}", ko: "{grade}\uB4F1\uAE09\uC73C\uB85C \uAC00\uB294 \uC14B\uD305 \uBC29\uBC95" },
+  kept: { en: "Kept as you chose", ko: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD568" },
+  nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uC704\uC5D0\uC11C\uBD80\uD130 \uCC28\uB840\uB85C \uACE0\uCE58\uBA74 \uC904\uB9C8\uB2E4 \uC801\uD78C AQ\uAC00 \uB429\uB2C8\uB2E4." },
+  nextShort: { en: "These alone reach {last}.", ko: "\uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4." },
+  nextNow: { en: "Now {now} \u2192 aim for {target}", ko: "\uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
+  nextNowTool: { en: "{tool}: now {now} \u2192 aim for {target}", ko: "{tool} \uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
+  nextBelow: { en: "The score starts to rise below {start}.", ko: "{start}\uBCF4\uB2E4 \uC904\uC5EC\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
+  nextAbove: { en: "The score starts to rise above {start}.", ko: "{start}\uBCF4\uB2E4 \uB298\uB824\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
+  nextAfter: { en: "AQ {aq} once fixed up to here", ko: "\uC5EC\uAE30\uAE4C\uC9C0 \uACE0\uCE58\uBA74 AQ {aq}" },
+  howTitle: { en: "How the score works", ko: "\uC810\uC218 \uB9E4\uAE30\uB294 \uBC95" },
+  howAq: { en: "AQ is the average of the four dimension scores (Setup, Efficiency, Fit, Intensity), rounded. A dimension that could not be measured is left out.", ko: "AQ\uB294 \uB124 \uAE30\uC900(\uC14B\uD305, \uD6A8\uC728, \uC0C1\uD669 \uC801\uD569, \uAC15\uB3C4) \uC810\uC218\uC758 \uD3C9\uADE0\uC744 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uAE30\uC900\uC740 \uBE7C\uACE0 \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
+  howAxis: { en: "A dimension score is the weighted average of its rule scores on a scale of 100, rounded. A rule that could not be measured is left out.", ko: "\uAE30\uC900 \uC810\uC218\uB294 \uADF8 \uAE30\uC900\uC5D0 \uB4E0 \uADDC\uCE59 \uC810\uC218\uB97C \uBB34\uAC8C\uB85C \uD3C9\uADE0\uD574 100\uC810 \uB9CC\uC810\uC73C\uB85C \uBC14\uAFB8\uACE0 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uADDC\uCE59\uC740 \uBE8D\uB2C8\uB2E4." },
+  howRule: { en: "A rule scores 0 at its zero mark and 1 at its full mark, in proportion in between. A rule measured per tool is scored for each tool, then averaged by the number of responses.", ko: "\uADDC\uCE59 \uC810\uC218\uB294 \uC7B0 \uAC12\uC774 0\uC810 \uAE30\uC900\uC774\uBA74 0, \uB9CC\uC810 \uAE30\uC900\uC774\uBA74 1\uC774\uACE0, \uADF8 \uC0AC\uC774\uB294 \uAC70\uB9AC\uC5D0 \uBE44\uB840\uD569\uB2C8\uB2E4. \uB3C4\uAD6C\uB9C8\uB2E4 \uC7AC\uB294 \uADDC\uCE59\uC740 \uB3C4\uAD6C\uB9C8\uB2E4 \uC810\uC218\uB97C \uB0B8 \uB4A4 \uC751\uB2F5 \uC218\uB85C \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
+  howGrades: { en: "Grades are S 90 or higher, A 80 to 89, B 65 to 79, C 50 to 64, and D 49 or lower.", ko: "\uB4F1\uAE09\uC740 S 90 \uC774\uC0C1, A 80~89, B 65~79, C 50~64, D 49 \uC774\uD558\uC785\uB2C8\uB2E4." },
+  howWithheld: { en: "No AQ is given when the last {days} days have fewer than {requests} requests from you or fewer than {active} days of use.", ko: "\uCD5C\uADFC {days}\uC77C \uB3D9\uC548 \uC0AC\uB78C \uC694\uCCAD\uC774 {requests}\uAC1C\uBCF4\uB2E4 \uC801\uAC70\uB098 \uC4F4 \uB0A0\uC774 {active}\uC77C\uBCF4\uB2E4 \uC801\uC73C\uBA74 AQ\uB97C \uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." },
+  howTable: { en: "Weights and marks of the {n} rules", ko: "\uADDC\uCE59 {n}\uAC1C\uC758 \uBB34\uAC8C\uC640 \uAE30\uC900" },
+  thRule: { en: "Rule", ko: "\uADDC\uCE59" },
+  thWeight: { en: "Weight", ko: "\uBB34\uAC8C" },
+  thZero: { en: "Zero mark", ko: "0\uC810 \uAE30\uC900" },
+  thFull: { en: "Full mark", ko: "\uB9CC\uC810 \uAE30\uC900" },
+  failedSessions: { en: "{n} {n:session|sessions}", ko: "\uC138\uC158 {n}\uAC1C" },
   overlapProject: { en: "Project with the most overlap", ko: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8" },
   serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 {n}\uAC1C" },
   judgeFrom: { en: "If nothing else changes, it can be judged from the check-up {n} {n:day|days} from now.", ko: "\uB2E4\uB978 \uC870\uAC74\uC774 \uAC19\uC73C\uBA74 {n}\uC77C \uB4A4\uC758 \uC810\uAC80\uBD80\uD130 \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." },
@@ -3179,8 +3285,8 @@ var REPORT_COPY = {
   partialReadUnknown: { en: "Only part of the {tool} records could be read. How much could not be read is unknown.", ko: "{tool} \uAE30\uB85D\uC744 \uC77C\uBD80\uB9CC \uC77D\uC5C8\uC2B5\uB2C8\uB2E4. \uC5BC\uB9C8\uB098 \uC77D\uC9C0 \uBABB\uD588\uB294\uC9C0\uB294 \uC54C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." },
   footCalc: { en: "Computed on this PC.", ko: "\uC774 PC\uC5D0\uC11C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4." },
   footPromise: {
-    en: "The program and this page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.",
-    ko: "\uD504\uB85C\uADF8\uB7A8\uACFC \uACB0\uACFC \uD654\uBA74\uC740 \uB124\uD2B8\uC6CC\uD06C\uB85C \uC694\uCCAD\uC744 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uD504\uB85C\uADF8\uB7A8\uC774 \uB0B4\uB193\uB294 \uAE00\uC740 \uC9C0\uAE08 \uC4F0\uB294 AI \uB300\uD654\uB85C \uC804\uD574\uC9D1\uB2C8\uB2E4. \uC810\uAC80\uC774\uBA74 \uC810\uC218\uC640 \uC9D1\uACC4, \uACB0\uACFC \uD654\uBA74\uACFC \uACB0\uACFC \uD30C\uC77C\uC758 \uACBD\uB85C\uC785\uB2C8\uB2E4. \uC815\uBE44\uBA74 \uC815\uBE44\uD560 \uAC83\uC758 \uC774\uB984, \uC124\uC815 \uD30C\uC77C\uC758 \uACBD\uB85C, \uBC14\uAFC0 \uD56D\uBAA9\uACFC \uADF8 \uAC12\uB3C4 \uC804\uD574\uC9D1\uB2C8\uB2E4. \uB300\uD654 \uB0B4\uC6A9\uACFC \uC9C0\uCE68\uC758 \uAE00\uC740 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC815\uBC00 \uC810\uAC80\uC744 \uC2DC\uD0A4\uBA74 \uACE0\uB978 \uC9C0\uCE68 \uD30C\uC77C\uB9CC AI\uAC00 \uC77D\uC2B5\uB2C8\uB2E4."
+    en: "The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, the paths of the report and result files, and the names of what to fix, such as MCP servers that failed to connect and where API keys are written. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. The values of API keys, your conversations, and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.",
+    ko: "\uD504\uB85C\uADF8\uB7A8\uACFC \uACB0\uACFC \uD654\uBA74\uC740 \uB124\uD2B8\uC6CC\uD06C\uB85C \uC694\uCCAD\uC744 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uD504\uB85C\uADF8\uB7A8\uC774 \uB0B4\uB193\uB294 \uAE00\uC740 \uC9C0\uAE08 \uC4F0\uB294 AI \uB300\uD654\uB85C \uC804\uD574\uC9D1\uB2C8\uB2E4. \uC810\uAC80\uC774\uBA74 \uC810\uC218\uC640 \uC9D1\uACC4, \uACB0\uACFC \uD654\uBA74\uACFC \uACB0\uACFC \uD30C\uC77C\uC758 \uACBD\uB85C, \uACE0\uCE60 \uB300\uC0C1\uC758 \uC774\uB984(\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84, API \uD0A4\uAC00 \uC801\uD78C \uC790\uB9AC \uAC19\uC740 \uAC83)\uC785\uB2C8\uB2E4. \uC815\uBE44\uBA74 \uC815\uBE44\uD560 \uAC83\uC758 \uC774\uB984, \uC124\uC815 \uD30C\uC77C\uC758 \uACBD\uB85C, \uBC14\uAFC0 \uD56D\uBAA9\uACFC \uADF8 \uAC12\uB3C4 \uC804\uD574\uC9D1\uB2C8\uB2E4. API \uD0A4\uC758 \uAC12\uACFC \uB300\uD654 \uB0B4\uC6A9, \uC9C0\uCE68\uC758 \uAE00\uC740 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC815\uBC00 \uC810\uAC80\uC744 \uC2DC\uD0A4\uBA74 \uACE0\uB978 \uC9C0\uCE68 \uD30C\uC77C\uB9CC AI\uAC00 \uC77D\uC2B5\uB2C8\uB2E4."
   },
   footNames: { en: "This file contains the names of your skills and project folders. Anyone you send the file to can see them. To share your result, use the card.", ko: "\uC774 \uD30C\uC77C\uC5D0\uB294 \uC2A4\uD0AC\uACFC \uD504\uB85C\uC81D\uD2B8 \uD3F4\uB354\uC758 \uC774\uB984\uC774 \uB4E4\uC5B4 \uC788\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC9F8 \uBCF4\uB0B4\uBA74 \uADF8 \uC774\uB984\uB3C4 \uBCF4\uC785\uB2C8\uB2E4. \uACB0\uACFC\uB97C \uB098\uB20C \uB54C\uB294 \uCE74\uB4DC\uB97C \uC4F0\uC138\uC694." },
   cardBtn: { en: "Save as card", ko: "\uCE74\uB4DC\uB85C \uC800\uC7A5" },
@@ -3646,7 +3752,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
-.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}.nw{white-space:nowrap}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
@@ -3673,7 +3779,7 @@ h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:7
 .it p{margin:4px 0 0;font-size:14px;color:var(--ink2)}
 .it p.fix{color:var(--ink)}
 .tag{font-size:12px;font-weight:700;white-space:nowrap;color:var(--ink2)}
-.tag.up{font-family:var(--mono);color:var(--up)}
+.tag.up{font-family:var(--mono);color:var(--up)}.tag.kept{color:var(--ink2);border:1px solid var(--hair);border-radius:10px;padding:0 7px;font-weight:600}
 .chips{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
 .chips li{font-family:var(--mono);padding:2px 8px;border:1px solid var(--hair);border-radius:12px;background:#fff}
 .chips li.k{font-family:var(--font);font-weight:700;color:var(--ink2);border:0;background:none;padding:2px 0}
@@ -3737,7 +3843,7 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .partial svg{margin-top:2px}
 .partial p{margin:0;font-size:14px;color:var(--ink)}
 .partial p+p{margin-top:4px}
-.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
+.next{border-top:1px dashed var(--mute);padding:22px 0 14px}.next .lead{margin:6px 0 0;font-size:14px;color:var(--ink2)}.steps{margin:10px 0 0;padding:0;list-style:none;counter-reset:step}.step{counter-increment:step;position:relative;padding:12px 0 12px 36px;border-top:1px solid var(--hair)}.step:first-child{border-top:0}.step::before{content:counter(step);position:absolute;left:0;top:13px;width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font:700 12px/24px var(--mono);text-align:center}.step .sh{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;align-items:baseline}.step .sh b{font-size:16px;line-height:1.35;letter-spacing:-.01em;flex:1 1 12em;min-width:0}.step .aq{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--up);white-space:nowrap}.step p{margin:4px 0 0;font-size:14px;color:var(--ink2)}.step p.fix{color:var(--ink)}.step .now{font-variant-numeric:tabular-nums}.how-score{border-top:1px dashed var(--mute);padding:22px 0 18px}.rulesum{margin:10px 0 0;padding:0 0 0 18px;display:grid;gap:4px;font-size:14px;color:var(--ink);line-height:1.5}.ruletable{margin-top:12px}.ruletable>summary{font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}.ruletable .tvwrap{max-height:none;margin-top:8px}table.rules tr.grp th{background:var(--wash);font-weight:800;color:var(--ink)}table.tv th.n{text-align:right;white-space:nowrap}table.rules td{white-space:nowrap}table.rules th[scope=row]{min-width:9em}.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
 .notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
@@ -3800,6 +3906,7 @@ var pairHtml = (html) => LANGS.map((lang) => `<span lang="${lang}" data-l="${lan
 var both = (texts) => pairHtml(textsOf2((lang) => esc(texts[lang])));
 var perLang = (make2) => LANGS.map((lang) => make2(lang).replace(/^<([a-z0-9]+)/, `<$1 lang="${lang}" data-l="${lang}"`)).join("");
 var swap = (lang, attrs) => ` data-tr${Object.entries(attrs).map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`).join("")}`;
+var keepArrows = (html) => html.replace(/\(→ (\d+)\)/g, '<span class="nw">(\u2192 $1)</span>');
 var fillHtml = (template, values) => fill(esc(template), values);
 var dayNumber = (date) => {
   const [year, month, day] = date.split("-").map(Number);
@@ -3854,21 +3961,57 @@ ${connectors.map((server) => `  { "serverName": ${JSON.stringify(server.name)} }
 ]`)}</pre><span class="when">${both(copy("blockNote"))}</span></li>`;
   return `<details class="how"><summary>${both(copy("serversOut", { n: view.servers.length }))}</summary>${notes}<ul class="names">${items}${deny}</ul></details>`;
 }
+function ruleChips(finding, view, lang, withTargets) {
+  const targets = withTargets ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
+  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  return `${targets}${places}${failed}${missing}${overlap}`;
+}
+function nextPath(view, lang) {
+  const plan = view.nextPlan;
+  if (view.score.aq === null || plan === null) return "";
+  const lead = textsOf2((l) => fill(REPORT_COPY.nextLead[l], { need: plan.need, grade: plan.grade }) + (plan.reaches ? "" : ` ${fill(REPORT_COPY.nextShort[l], { last: plan.steps.at(-1).aq })}`));
+  const steps = plan.steps.map((step) => {
+    const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
+    if (finding === void 0) return "";
+    const spec = ruleSpec(step.ruleId);
+    const nowLine = (l, now, value, score, tool) => {
+      const target = ruleValueText(step.ruleId, spec.fullAt, l);
+      const line = tool === null ? fill(REPORT_COPY.nextNow[l], { now, target }) : fill(REPORT_COPY.nextNowTool[l], { tool: TOOL_NAMES[tool][l], now, target });
+      if (settleScore(score) !== 0 || !beyondZeroMark(step.ruleId, value)) return line;
+      return `${line} \xB7 ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}`;
+    };
+    const short = finding.tools.length >= 2 ? finding.tools.filter((tool) => settleScore(tool.score) < 1) : [];
+    const lines = short.length > 0 ? short.map((tool) => textsOf2((l) => nowLine(l, ruleValueText(step.ruleId, tool.value, l), tool.value, tool.score, tool.tool))) : finding.value === null || finding.score === null || finding.text.en.value === null ? [] : [textsOf2((l) => nowLine(l, joinValue(finding.text[l].value, finding.text[l].unit, l), finding.value, finding.score, null))];
+    const fix = finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
+    return `<li class="step"><div class="sh"><b>${both(textsOf2((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${lines.map((line) => `<p class="now">${both(line)}</p>`).join("")}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+  }).join("");
+  return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
+}
+function howScore() {
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const mark = (ruleId, value) => both(textsOf2((l) => ruleValueText(ruleId, value, l)));
+  const rows = AXES.map(
+    (axis) => `<tr class="grp"><th colspan="4" scope="colgroup">${both(AXIS_NAMES[axis])}</th></tr>` + RULES.filter((spec) => spec.axis === axis).map((spec) => `<tr class="rule"><th scope="row">${both(textsOf2((l) => RULE_COPY[spec.id][l].name))}</th><td class="n">${spec.weight}</td><td>${mark(spec.id, spec.zeroAt)}</td><td>${mark(spec.id, spec.fullAt)}</td></tr>`).join("")
+  ).join("");
+  const table = `<table class="tv rules"><thead><tr><th scope="col">${both(REPORT_COPY.thRule)}</th><th scope="col" class="n">${both(REPORT_COPY.thWeight)}</th><th scope="col">${both(REPORT_COPY.thZero)}</th><th scope="col">${both(REPORT_COPY.thFull)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<section class="how-score" aria-labelledby="h-how"><h2 id="h-how"><span class="no">04</span>${both(REPORT_COPY.howTitle)}</h2><ul class="rulesum">${lines.map((line) => `<li>${both(line)}</li>`).join("")}</ul><details class="ruletable"><summary>${both(copy("howTable", { n: RULES.length }))}</summary><div class="tvwrap">${table}</div></details></section>`;
+}
 function item(finding, view, lang) {
   const status = statusOf(finding);
   const repair = finding.category === "repair";
   const gain = repair && view.score.aq !== null && finding.gain !== null ? finding.gain : null;
   const tag = gain === null ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>` : `<span class="tag up">${both(textsOf2((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
+  const kept = view.ignored.includes(finding.ruleId) ? `<span class="tag kept">${both(REPORT_COPY.kept)}</span>` : "";
   const description2 = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf2((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-  const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
-  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  const named2 = ruleChips(finding, view, lang, repair);
   const phrase = textsOf2((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how = finding.text.en.method.length + finding.text.ko.method.length === 0 ? "" : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${targets}${places}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${kept}${tag}</span></div>${description2}${prescription}${named2}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
@@ -3892,7 +4035,7 @@ function hero(view, art, lang) {
   const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
   const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   const best = view.findings.find((finding) => finding.category === "strength") ?? null;
-  const first = scored2 ? view.findings.find((finding) => finding.category === "repair") ?? null : null;
+  const first = scored2 ? view.findings.find((finding) => finding.category === "repair" && !view.ignored.includes(finding.ruleId)) ?? null : null;
   const bestLine = best === null ? "<div></div>" : `<div class="pt">${ICONS.good}<span><b>${both(REPORT_COPY.best)}</b>${both(
     textsOf2((l) => {
       const text = best.text[l];
@@ -3900,9 +4043,9 @@ function hero(view, art, lang) {
       return `${text.title} \xB7 ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
     })
   )}</span></div>`;
-  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf2((l) => keepArrows(esc(view.nextGrade[l]))))}</span>` : "";
   const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
+    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score, tools: first.tools }, l)}`)
   )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
@@ -3996,7 +4139,7 @@ function partialBand(view) {
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
 var SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl };
-var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}${place.copy === "default" ? ` \xB7 ${REPORT_COPY.spotDefaultCopy[lang]}` : ""}`;
 function notices(view) {
   if (view.notices.length === 0) return "";
   const spots = (notice) => {
@@ -4054,7 +4197,7 @@ function reportHtml(view, art) {
 </head>
 <body>
 <div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
-<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${nextPath(view, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${howScore()}${notices(view)}${footer(client.card !== null)}</article></main>
 ${cardDialog(client.card !== null)}
 <div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
 <script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>
@@ -4066,7 +4209,7 @@ ${cardDialog(client.card !== null)}
 
 // src/report/view.ts
 function reportView(result, run2) {
-  const targetsOf = (finding) => finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
+  const targetsOf2 = (finding) => finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
   const withheld = result.score.aq === null ? result.notices.find((notice) => notice.kind === "score_withheld")?.text ?? null : null;
   return {
     lang: result.lang,
@@ -4089,13 +4232,17 @@ function reportView(result, run2) {
       severity: finding.severity,
       measured: finding.status === "scored",
       gain: finding.gain,
-      targets: targetsOf(finding),
+      value: finding.value,
+      score: finding.score,
+      tools: finding.tools.flatMap((value) => value.status === "scored" ? [{ tool: value.tool, value: value.value, score: value.score }] : []),
+      targets: targetsOf2(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text
     })),
     usage: result.usage,
     notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
     credentialPlaces: result.details.credentialPlaces,
+    failedServers: result.details.failedMcpServers.map((server) => ({ ...server })),
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -4108,6 +4255,8 @@ function reportView(result, run2) {
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
     nextGrade: result.nextGrade?.text ?? null,
+    ignored: [...result.ignored],
+    nextPlan: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ruleId: step.ruleId, aq: step.aq })) },
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
   };
 }
@@ -4267,6 +4416,7 @@ function emptyDay() {
     interruptedTurns: 0,
     subagentCalls: 0,
     mcpConnectionFailure: false,
+    mcpFailedServers: nameRecord(),
     skillSignals: nameRecord(),
     mcpCalls: nameRecord(),
     mcpAttributions: nameRecord(),
@@ -4286,6 +4436,7 @@ function canonicalDay(day) {
     efforts: sortedRecord(day.efforts),
     tools: sortedRecord(day.tools),
     unknownDenialKinds: sortedRecord(day.unknownDenialKinds),
+    mcpFailedServers: sortedRecord(day.mcpFailedServers),
     skillSignals: sortedRecord(day.skillSignals),
     mcpCalls: sortedRecord(day.mcpCalls),
     mcpAttributions: sortedRecord(day.mcpAttributions),
@@ -4310,6 +4461,7 @@ var DAY_SHAPE = {
   interruptedTurns: "number",
   subagentCalls: "number",
   mcpConnectionFailure: "boolean",
+  mcpFailedServers: "numbers",
   skillSignals: "skills",
   mcpCalls: "numbers",
   mcpAttributions: "numbers",
@@ -4471,6 +4623,8 @@ function reviveSummary(value) {
       brokenLines: missing.brokenLines,
       tailFragments: missing.tailFragments,
       tooLongLines: missing.tooLongLines,
+      ...isObject2(v.missing) && isNumber(v.missing.tooLongSkillLines) ? { tooLongSkillLines: v.missing.tooLongSkillLines } : {},
+      ...isObject2(v.missing) && isNumber(v.missing.tooLongMcpLines) ? { tooLongMcpLines: v.missing.tooLongMcpLines } : {},
       unconfirmedTypes
     },
     firstResponseIdHashes: hashes,
@@ -4881,6 +5035,12 @@ function reviveNotify(value) {
   if (v.names !== null && (!Array.isArray(v.names) || !v.names.every((name) => typeof name === "string"))) return void 0;
   return { on: v.on, lang: v.lang, names: v.names === null ? null : [...v.names].sort() };
 }
+var RULE_ORDER = new Map(RULES.map((spec, index) => [spec.id, index]));
+function reviveIgnoredRules(value) {
+  if (!Array.isArray(value)) return [];
+  const known = value.filter((id) => typeof id === "string" && RULE_ORDER.has(id));
+  return [...new Set(known)].sort((a, b) => RULE_ORDER.get(a) - RULE_ORDER.get(b));
+}
 function reviveState(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value;
@@ -4899,7 +5059,8 @@ function reviveState(value) {
   }
   const notify = reviveNotify(v.notify);
   if (notify === void 0) return null;
-  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify };
+  const ignoredRules = reviveIgnoredRules(v.ignoredRules);
+  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify, ...ignoredRules.length > 0 ? { ignoredRules } : {} };
 }
 async function loadState(dir) {
   let text;
@@ -5079,7 +5240,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.2.1";
+var PROGRAM_VERSION = "0.3.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {
@@ -5116,11 +5277,11 @@ var REASON_ORDER = ["unreadable-files", "too-long-lines", "unconfirmed-pieces"];
 function mostlyBroken(summary) {
   return summary.missing.brokenLines * 2 > summary.missing.lines;
 }
-function observeRecords(summaries, unreadableCount2, harmless) {
+function observeRecords(summaries, unreadableCount2, harmless, longLines = (summary) => summary.missing.tooLongLines) {
   const found = /* @__PURE__ */ new Set();
   if (unreadableCount2 > 0) found.add("unreadable-files");
   for (const summary of summaries) {
-    if (summary.missing.tooLongLines > 0) found.add("too-long-lines");
+    if (longLines(summary) > 0) found.add("too-long-lines");
     for (const [type, count] of Object.entries(summary.missing.unconfirmedTypes)) {
       if (count > 0 && !harmless.has(type)) found.add("unconfirmed-pieces");
     }
@@ -5129,8 +5290,18 @@ function observeRecords(summaries, unreadableCount2, harmless) {
   return { complete: reasons.length === 0, reasons };
 }
 function claudeObservation(summaries, unreadableCount2, metric) {
-  return observeRecords(summaries, unreadableCount2, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES);
+  const longLines = (summary) => (metric === "skill" ? summary.missing.tooLongSkillLines : summary.missing.tooLongMcpLines) ?? summary.missing.tooLongLines;
+  return observeRecords(summaries, unreadableCount2, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES, longLines);
 }
+var marker = (name, text) => ({ name, bytes: Buffer.from(text, "utf8") });
+var CLAUDE_USAGE_MARKERS = [
+  marker("skill", '"Skill"'),
+  marker("skill", "<command-name>"),
+  marker("skill", '"attributionSkill"'),
+  marker("skill", '"invoked_skills"'),
+  marker("mcp", '"mcp__'),
+  marker("mcp", '"attributionMcpServer"')
+];
 
 // src/adapters/common/hash.ts
 var OFFSET = 0xcbf29ce484222325n;
@@ -5425,7 +5596,7 @@ var ResponseTable = class {
 };
 
 // src/adapters/claude/parser.ts
-var CLAUDE_PARSER_VERSION = 2;
+var CLAUDE_PARSER_VERSION = 3;
 var COUNTED_TYPES = /* @__PURE__ */ new Set(["assistant", "user", "attachment", "system"]);
 var FIRST_RESPONSE_IDS = 20;
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["Bash", "PowerShell"]);
@@ -5446,7 +5617,7 @@ var strings = (value) => Array.isArray(value) ? value.filter((v) => typeof v ===
 var HOOK_FAILURE_MARKERS = ["blocking because onFailure is", "blocking because Git Bash wasn't found"];
 function hasFailureMarker(blockingError) {
   const text = typeof blockingError === "string" ? blockingError : str(obj(blockingError)?.blockingError) ?? "";
-  return HOOK_FAILURE_MARKERS.some((marker) => text.includes(marker));
+  return HOOK_FAILURE_MARKERS.some((marker2) => text.includes(marker2));
 }
 var num = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
 var str = (value) => typeof value === "string" && value !== "" ? value : null;
@@ -5477,6 +5648,8 @@ var ClaudeSessionParser = class {
   brokenLines = 0;
   tailFragments = 0;
   tooLongLines = 0;
+  tooLongSkillLines = 0;
+  tooLongMcpLines = 0;
   unconfirmedTypes = nameRecord();
   responsesWithoutId = 0;
   undatedLines = 0;
@@ -5504,10 +5677,12 @@ var ClaudeSessionParser = class {
     if (parsed === null) this.missing(text, "broken");
     else this.accept(parsed);
   }
-  /** 상한을 넘은 줄 하나를 받는다. */
-  tooLong() {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 사용 흔적의 표지다(0.3.0) */
+  tooLong(found) {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("skill")) this.tooLongSkillLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
   }
   /** 끝 조각을 정리하고 요약을 낸다. 한 번만 부른다. */
   finish(tail, inProgress) {
@@ -5547,6 +5722,8 @@ var ClaudeSessionParser = class {
         brokenLines: this.brokenLines,
         tailFragments: this.tailFragments,
         tooLongLines: this.tooLongLines,
+        tooLongSkillLines: this.tooLongSkillLines,
+        tooLongMcpLines: this.tooLongMcpLines,
         unconfirmedTypes: sortedRecord(this.unconfirmedTypes)
       },
       firstResponseIdHashes: this.firstIds.map(fnv1a64),
@@ -5827,7 +6004,13 @@ var ClaudeSessionParser = class {
       return;
     }
     if (type === "deferred_tools_delta") {
-      if (Array.isArray(body.failedMcpServers) && body.failedMcpServers.length > 0) day.mcpConnectionFailure = true;
+      if (Array.isArray(body.failedMcpServers) && body.failedMcpServers.length > 0) {
+        day.mcpConnectionFailure = true;
+        for (const item2 of body.failedMcpServers) {
+          const name = typeof item2 === "string" ? item2 : str(obj(item2)?.name);
+          if (name !== null && name !== "") bump(day.mcpFailedServers, name);
+        }
+      }
       return;
     }
     if (type === "hook_success" || type === "hook_non_blocking_error") {
@@ -5901,8 +6084,12 @@ var CODEX_COVERAGE = {
 };
 var CODEX_MCP_NON_SIGNAL_TYPES = /* @__PURE__ */ new Set(["session_meta", "turn_context", "token_usage_record", "world_state", "compacted"]);
 function codexMcpObservation(summaries, unreadableCount2) {
-  return observeRecords(summaries, unreadableCount2, CODEX_MCP_NON_SIGNAL_TYPES);
+  return observeRecords(summaries, unreadableCount2, CODEX_MCP_NON_SIGNAL_TYPES, (summary) => summary.missing.tooLongMcpLines ?? summary.missing.tooLongLines);
 }
+var CODEX_USAGE_MARKERS = [
+  { name: "mcp", bytes: Buffer.from('"McpToolCall"', "utf8") },
+  { name: "mcp", bytes: Buffer.from('"mcp__', "utf8") }
+];
 
 // src/adapters/codex/parser.ts
 var EXEC_TOOLS = /* @__PURE__ */ new Map([
@@ -5911,12 +6098,17 @@ var EXEC_TOOLS = /* @__PURE__ */ new Map([
   ["McpToolCall", { name: "mcp", status: true }],
   ["ImageView", { name: "image_view", status: false }],
   ["Extension", { name: "extension", status: false }],
-  ["WebSearch", { name: "web_search", status: false }]
+  ["WebSearch", { name: "web_search", status: false }],
+  // 0.3.0. Codex 0.166.0~0.169.0의 TurnItem(공개 소스 codex-rs/protocol/src/items.rs)에서 도구 호출인 나머지 넷. 상태의 값을 기록으로 확인하지 못해 호출만 센다(다른 PC 피드백 8번)
+  ["DynamicToolCall", { name: "dynamic_tool", status: false }],
+  ["CollabAgentToolCall", { name: "collab_agent", status: false }],
+  ["ImageGeneration", { name: "image_generation", status: false }],
+  ["FunctionCallOutput", { name: "function", status: false }]
 ]);
 var CODEX_SHELL_TOOLS = ["shell"];
-var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
+var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction", "Plan", "HookPrompt", "SubAgentActivity", "EnteredReviewMode", "ExitedReviewMode"]);
 var CALL_TYPES = /* @__PURE__ */ new Set(["function_call", "custom_tool_call", "web_search_call"]);
-var CODEX_PARSER_VERSION = 1;
+var CODEX_PARSER_VERSION = 2;
 var SUB_THREAD_SOURCES = /* @__PURE__ */ new Set(["subagent", "guardian_review", "memory_consolidation"]);
 var obj2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 var num2 = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -5967,6 +6159,7 @@ var CodexSessionParser = class {
   brokenLines = 0;
   tailFragments = 0;
   tooLongLines = 0;
+  tooLongMcpLines = 0;
   undatedLines = 0;
   /** 깨진 줄과 끝 조각의 맨 바깥 종류(온전히 읽히지 않으면 ?)별 수. MCP 호출의 관측이 빠짐없는지 가른다(설계 9.8) */
   unconfirmedTypes = nameRecord();
@@ -6059,10 +6252,11 @@ var CodexSessionParser = class {
     else if (parsed.type !== "session_meta") this.idFallback = "first-line-not-meta";
     else this.identityPending = true;
   }
-  /** 상한을 넘은 줄 하나를 받는다 */
-  tooLong() {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 MCP 호출의 표지다(0.3.0) */
+  tooLong(found) {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
     this.firstLine(null);
   }
   day(date) {
@@ -6287,7 +6481,7 @@ var CodexSessionParser = class {
       instructionChars: this.instructionChars,
       initialSkills: null,
       initialMcpServers: null,
-      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
+      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, tooLongMcpLines: this.tooLongMcpLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord() },
       codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: sortedRecord(this.unknownItemTypes), inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine }
@@ -6305,10 +6499,87 @@ var IN_PROGRESS_WINDOW_MS = 2e3;
 function decode(buffer, start, end) {
   return buffer.toString("utf8", start, end > start && buffer[end - 1] === 13 ? end - 1 : end);
 }
-function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
+var BACKSLASH = 92;
+var LOWER_U = 117;
+function hexValue(byte) {
+  if (byte >= 48 && byte <= 57) return byte - 48;
+  if (byte >= 65 && byte <= 70) return byte - 55;
+  if (byte >= 97 && byte <= 102) return byte - 87;
+  return -1;
+}
+function escapeDecoder() {
+  let held = Buffer.alloc(0);
+  return {
+    push(piece) {
+      const input = held.length > 0 ? Buffer.concat([held, piece]) : piece;
+      held = Buffer.alloc(0);
+      if (input.indexOf(BACKSLASH) === -1) return input;
+      const out = Buffer.allocUnsafe(input.length);
+      let written = 0;
+      let index = 0;
+      while (index < input.length) {
+        const slash = input.indexOf(BACKSLASH, index);
+        written += input.copy(out, written, index, slash === -1 ? input.length : slash);
+        if (slash === -1) break;
+        if (slash + 1 >= input.length || input[slash + 1] === LOWER_U && slash + 6 > input.length) {
+          held = Buffer.from(input.subarray(slash));
+          break;
+        }
+        if (input[slash + 1] !== LOWER_U) {
+          out[written++] = BACKSLASH;
+          out[written++] = input[slash + 1];
+          index = slash + 2;
+          continue;
+        }
+        let code = 0;
+        for (let at = slash + 2; at < slash + 6; at++) {
+          const digit = hexValue(input[at]);
+          code = digit < 0 || code < 0 ? -1 : code * 16 + digit;
+        }
+        if (code < 0) {
+          out[written++] = BACKSLASH;
+          out[written++] = LOWER_U;
+          index = slash + 2;
+          continue;
+        }
+        if (code === 34 || code === BACKSLASH) {
+          out[written++] = BACKSLASH;
+          out[written++] = code;
+        } else if (code < 128) {
+          out[written++] = code;
+        } else {
+          written += input.copy(out, written, slash, slash + 6);
+        }
+        index = slash + 6;
+      }
+      return out.subarray(0, written);
+    },
+    reset() {
+      held = Buffer.alloc(0);
+    }
+  };
+}
+function lineSplitter(sink, maxLine = MAX_LINE_BYTES, markers = []) {
   let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
   let carryBytes = 0;
   let skipping = false;
+  const longest = markers.reduce((most, marker2) => Math.max(most, marker2.bytes.length), 0);
+  const decoder = escapeDecoder();
+  let found = /* @__PURE__ */ new Set();
+  let edge = Buffer.alloc(0);
+  const scan = (raw) => {
+    if (markers.length === 0 || raw.length === 0) return;
+    const piece = decoder.push(raw);
+    const joined = edge.length > 0 ? Buffer.concat([edge, piece]) : piece;
+    for (const marker2 of markers) if (!found.has(marker2.name) && joined.indexOf(marker2.bytes) !== -1) found.add(marker2.name);
+    edge = Buffer.from(joined.subarray(Math.max(0, joined.length - (longest - 1))));
+  };
+  const endLong = () => {
+    sink.tooLong(found);
+    found = /* @__PURE__ */ new Set();
+    edge = Buffer.alloc(0);
+    decoder.reset();
+  };
   return {
     push(view) {
       let start = 0;
@@ -6319,6 +6590,8 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
           const length = end - start;
           if (carryBytes + length > maxLine) {
             skipping = true;
+            scan(carry.subarray(0, carryBytes));
+            scan(view.subarray(start, end));
             carryBytes = 0;
           } else if (newline !== -1 && carryBytes === 0) {
             sink.line(decode(view, start, end));
@@ -6333,10 +6606,12 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
             view.copy(carry, carryBytes, start, end);
             carryBytes += length;
           }
+        } else {
+          scan(view.subarray(start, end));
         }
         if (newline === -1) break;
         if (skipping) {
-          sink.tooLong();
+          endLong();
           skipping = false;
         } else {
           sink.line(decode(carry, 0, carryBytes));
@@ -6347,7 +6622,7 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
     },
     finish() {
       if (skipping) {
-        sink.tooLong();
+        endLong();
         return null;
       }
       return carryBytes > 0 ? decode(carry, 0, carryBytes) : null;
@@ -6364,7 +6639,7 @@ async function readLines(path, nowMs, sink, options = {}) {
     const mtimeMsAtOpen = opened.mtimeMs;
     if (options.afterOpen) await options.afterOpen();
     const buffer = Buffer.allocUnsafe(chunkSize);
-    const splitter = lineSplitter(sink, maxLine);
+    const splitter = lineSplitter(sink, maxLine, options.markers ?? []);
     let position = 0;
     while (position < sizeAtOpen) {
       const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
@@ -6428,10 +6703,15 @@ async function collectFromList(home, list, options) {
         parentSessionId: file.parentSessionId,
         timeZone: options.clock.timeZone
       });
-      const outcome = await readLines(file.path, options.clock.nowMs, {
-        line: (text) => parser.line(text),
-        tooLong: () => parser.tooLong()
-      });
+      const outcome = await readLines(
+        file.path,
+        options.clock.nowMs,
+        {
+          line: (text) => parser.line(text),
+          tooLong: (found) => parser.tooLong(found)
+        },
+        { markers: CLAUDE_USAGE_MARKERS }
+      );
       const summary = parser.finish(outcome.tail, outcome.inProgress);
       summaries.push(summary);
       bytes += outcome.bytesRead;
@@ -6600,6 +6880,8 @@ function mergeRecords(records, outside2 = []) {
   const unknownHookKinds = nameRecord();
   const unknownItemTypes = nameRecord();
   const missing = { lines: 0, brokenLines: 0, tailFragments: 0, tooLongLines: 0 };
+  let longMcp = 0;
+  let mcpCounted = true;
   const notes = { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: 0 };
   const inheritedSkipped = { items: 0, totals: 0, responses: 0 };
   let firstDate = null;
@@ -6616,6 +6898,8 @@ function mergeRecords(records, outside2 = []) {
     missing.brokenLines += summary.missing.brokenLines;
     missing.tailFragments += summary.missing.tailFragments;
     missing.tooLongLines += summary.missing.tooLongLines;
+    if (summary.missing.tooLongMcpLines === void 0) mcpCounted = false;
+    else longMcp += summary.missing.tooLongMcpLines;
     addNumbers(unconfirmedTypes, summary.missing.unconfirmedTypes);
     notes.syntheticResponses += summary.notes.syntheticResponses;
     notes.responsesWithoutId += summary.notes.responsesWithoutId;
@@ -6647,7 +6931,7 @@ function mergeRecords(records, outside2 = []) {
     instructionChars: instructionChars === null ? null : { ascii: instructionChars.ascii, other: instructionChars.other },
     initialSkills: base.initialSkills === null ? null : [...base.initialSkills],
     initialMcpServers: base.initialMcpServers === null ? null : [...base.initialMcpServers],
-    missing: { ...missing, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
+    missing: { ...missing, ...mcpCounted ? { tooLongMcpLines: longMcp } : {}, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
     firstResponseIdHashes: [...base.firstResponseIdHashes],
     notes: { ...notes, unknownHookKinds: sortedRecord(unknownHookKinds) },
     ...codex === void 0 ? {} : {
@@ -6786,7 +7070,7 @@ async function readZstdLines(path, nowMs, sink, options = {}) {
   if (options.afterOpen) await options.afterOpen();
   const seen = { endedEarly: false };
   const frames = await scanZstdFrames(path, sizeAtOpen, seen);
-  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES);
+  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES, options.markers ?? []);
   let bytesRead = 0;
   let decodedBytes = 0;
   let decodeError = sizeAtOpen === 0 ? "EMPTY" : null;
@@ -6826,15 +7110,15 @@ var keysOf2 = (group) => [.../* @__PURE__ */ new Set([group.recordId, ...group.c
 var recentlyChanged = (file, options) => file.changedMs !== null && options.clock.nowMs - file.changedMs < IN_PROGRESS_WINDOW_MS;
 async function parseCopy(file, inherited, options) {
   const parser = new CodexSessionParser({ recordId: file.recordId, timeZone: options.clock.timeZone, inherited });
-  const sink = { line: (text) => parser.line(text), tooLong: () => parser.tooLong() };
+  const sink = { line: (text) => parser.line(text), tooLong: (found) => parser.tooLong(found) };
   if (!file.compressed) {
-    const outcome2 = await readLines(file.path, options.clock.nowMs, sink);
+    const outcome2 = await readLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
     const stable2 = outcome2.sizeAtOpen === file.size && outcome2.mtimeMsAtOpen === file.mtimeMs;
     const inProgress2 = outcome2.inProgress || !stable2 || recentlyChanged(file, options);
     const summary2 = parser.finish(outcome2.tail, inProgress2);
     return { summary: summary2, prints: parser.fingerprints(), bytesRead: outcome2.bytesRead, inProgress: inProgress2, partial: outcome2.endedEarly, storable: !inProgress2 };
   }
-  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink);
+  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
   const incomplete = outcome.frames.status !== "complete" || outcome.decodeError !== null || outcome.endedEarly;
   if (incomplete && outcome.decodedBytes === 0) throw new Error(outcome.decodeError ?? outcome.frames.status);
   const stable = outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs;
@@ -6844,14 +7128,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure4 = null;
+  let failure5 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure4 ??= "unknown-size";
+      failure5 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure4 ??= "skipped";
+      failure5 ??= "skipped";
       continue;
     }
     try {
@@ -6869,10 +7153,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure4 ??= "failed";
+      failure5 ??= "failed";
     }
   }
-  return failure4 ?? "failed";
+  return failure5 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -7667,10 +7951,11 @@ async function readClaudeJson(path) {
 
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
-import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, join as join16 } from "node:path";
+import { lstat as lstat5, readlink } from "node:fs/promises";
+import { basename as basename4, dirname as dirname3, isAbsolute, join as join16, parse, resolve as resolve5 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
+var MAX_IMPORT_HOPS = 4;
 function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
@@ -7736,11 +8021,88 @@ function countMentions(text, targets) {
   }
   return out;
 }
-async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set()) {
+function importsOf(text) {
+  const prose = [];
+  let fence = null;
+  for (const raw of text.split("\n")) {
+    const body = raw.replace(/^(?:[ \t]*(?:[-*+]|\d{1,9}[.)]|>)(?=[ \t]|$))*[ \t]*/, "");
+    const marker2 = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
+    if (fence !== null) {
+      if (marker2 !== null && marker2[0] === fence[0] && marker2.length >= fence.length && body.slice(marker2.length).trim() === "") fence = null;
+      prose.push("");
+      continue;
+    }
+    if (marker2 !== null) {
+      fence = marker2;
+      prose.push("");
+      continue;
+    }
+    prose.push(raw);
+  }
+  const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
+  const out = [];
+  for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+    const token = match[1].replace(/\\ /g, " ");
+    if (token.startsWith('"') || token.startsWith("'")) continue;
+    out.push(token);
+  }
+  return out;
+}
+var NETWORK_PATH = /^(\\\\|\/\/)/;
+function importTarget(token, from, homedir2) {
+  if (NETWORK_PATH.test(token)) return null;
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join16(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve5(dirname3(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
+}
+var MAX_LINK_HOPS = 40;
+async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
+  let pending = resolve5(path);
+  for (let hops = 0; hops <= MAX_LINK_HOPS; hops++) {
+    if (NETWORK_PATH.test(pending)) return true;
+    const { root } = parse(pending);
+    const parts = pending.slice(root.length).split(/[\\/]+/).filter((part) => part !== "");
+    let current = root;
+    let followed = false;
+    for (let index = 0; index < parts.length && !followed; index++) {
+      current = join16(current, parts[index]);
+      let info;
+      try {
+        info = await ops.lstat(current);
+      } catch {
+        return false;
+      }
+      if (!info.isSymbolicLink()) continue;
+      let target;
+      try {
+        target = await ops.readlink(current);
+      } catch {
+        return false;
+      }
+      if (NETWORK_PATH.test(target)) return true;
+      pending = join16(resolve5(dirname3(current), target), ...parts.slice(index + 1));
+      followed = true;
+    }
+    if (!followed) return false;
+  }
+  return true;
+}
+var insideOf = (path, folder) => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
+async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set(), imports = null) {
   const set = emptyInstructionSet();
   const hashes = /* @__PURE__ */ new Set();
   const mentions = /* @__PURE__ */ Object.create(null);
-  for (const path of [...new Set(paths)].sort()) {
+  const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
+  const seen = new Set(queue.map((item2) => normalizePath(item2.path)));
+  const readReal = /* @__PURE__ */ new Set();
+  const rootReal = imports?.within ? ((await entryInfo(imports.within)).realPath ?? normalizePath(imports.within)).replace(/\/$/, "") : null;
+  for (let index = 0; index < queue.length; index++) {
+    const { path, hops } = queue[index];
+    if (hops > 0) {
+      if (await reachesNetwork(path)) continue;
+      const target = await entryInfo(path);
+      if (!target.isFile) continue;
+      if (rootReal !== null && (target.realPath === null || !target.realPath.startsWith(`${rootReal}/`))) continue;
+    }
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -7748,6 +8110,19 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
       continue;
     }
     const info = await entryInfo(path);
+    if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
+    if (info.realPath !== null) readReal.add(info.realPath);
+    if (imports !== null && hops < MAX_IMPORT_HOPS) {
+      for (const token of importsOf(read.text)) {
+        const target = importTarget(token, path, imports.homedir);
+        if (target === null) continue;
+        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        const key = normalizePath(target);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        queue.push({ path: target, hops: hops + 1 });
+      }
+    }
     const same = info.realPath !== null && sameAsGlobal.has(info.realPath);
     const bytes = Buffer.byteLength(read.text, "utf8");
     set.files.push({ path, realPath: info.realPath, bytes, hasContent: /\S/u.test(read.text), sameAsGlobal: same });
@@ -7759,6 +8134,8 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
     for (const [key, count] of Object.entries(countMentions(read.text, mentionTargets))) mentions[key] = (mentions[key] ?? 0) + count;
   }
   set.lineHashes = [...hashes].sort();
+  set.files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  set.unreadable.sort();
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
@@ -7773,15 +8150,15 @@ async function projectInstructionPaths(root) {
   const paths = present.length > 0 ? [...present, ...rules.paths] : [join16(root, "AGENTS.md"), join16(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
-async function readGlobalInstructions(claudeHome2, mentionTargets) {
+async function readGlobalInstructions(claudeHome2, mentionTargets, options = null) {
   const found = await globalInstructionPaths(claudeHome2);
-  const read = await readInstructionSet(found.paths, mentionTargets);
+  const read = await readInstructionSet(found.paths, mentionTargets, /* @__PURE__ */ new Set(), options === null ? null : { homedir: options.homedir, within: null });
   read.set.unreadableDirs = found.unreadableDirs;
   return read;
 }
-async function readProjectInstructions(root, global) {
+async function readProjectInstructions(root, global, options = null) {
   const found = await projectInstructionPaths(root);
-  const { set } = await readInstructionSet(found.paths, [], realPaths(global));
+  const { set } = await readInstructionSet(found.paths, [], realPaths(global), options === null ? null : { homedir: options.homedir, within: root });
   set.unreadableDirs = found.unreadableDirs;
   return set;
 }
@@ -7985,17 +8362,17 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname3, isAbsolute, join as join17, parse, resolve as resolve5 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join17, parse as parse2, resolve as resolve6 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
-  const gitDir = isAbsolute(match[1]) ? match[1] : resolve5(dir, match[1]);
+  const gitDir = isAbsolute2(match[1]) ? match[1] : resolve6(dir, match[1]);
   const common = await readText(join17(gitDir, "commondir"));
   if (common.status !== "ok") return null;
-  const commonDir = resolve5(gitDir, common.text.trim());
-  return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
+  const commonDir = resolve6(gitDir, common.text.trim());
+  return parse2(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
@@ -8004,7 +8381,7 @@ async function gitRootFrom(start) {
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
-    const parent = dirname3(dir);
+    const parent = dirname4(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -8018,7 +8395,7 @@ function isExcludedFolder(normRoot, normCwd, context) {
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
 }
 async function resolveProject(cwd, context) {
-  const absolute = resolve5(cwd);
+  const absolute = resolve6(cwd);
   const info = await entryInfo(absolute);
   const exists = info.exists && info.isDir;
   const gitRoot = exists ? await gitRootFrom(absolute) : null;
@@ -8504,6 +8881,19 @@ function projectNamesOf(refs) {
   return names2;
 }
 var slashed = (path) => path.replace(/\\/g, "/");
+async function defaultCopySecrets(input) {
+  const defaultHome = join20(input.homedir, ".claude");
+  if (!input.env.CLAUDE_CONFIG_DIR?.trim() || normalizePath(claudeHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const found = [];
+  const settings = await readJson(join20(defaultHome, "settings.json"));
+  if (settings.status === "ok" && typeof settings.value === "object" && settings.value !== null) {
+    for (const key of envSecretKeys(settings.value.env)) found.push({ scope: "settings", server: null, projectRoot: null, field: "env", key });
+  }
+  const claudeJson = await readClaudeJson(join20(input.homedir, ".claude.json"));
+  for (const entry of claudeJson.userMcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "user", server: entry.name, projectRoot: null, ...spot });
+  for (const project of claudeJson.projects) for (const entry of project.mcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "local", server: entry.name, projectRoot: project.normKey, ...spot });
+  return sortSecrets(found).map((secret) => ({ ...secret, copy: "default" }));
+}
 async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
@@ -8546,7 +8936,7 @@ async function scanClaudeSetup(input) {
     });
   }
   const everyContext = [global, ...contexts.values()];
-  const globalRead = await readGlobalInstructions(home, active);
+  const globalRead = await readGlobalInstructions(home, active, { homedir: input.homedir });
   const userSkillScan = await scanSkillRoot(join20(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
   for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join20(ref.root, ".claude", "skills"), { pluginDirs: true }));
@@ -8767,7 +9157,7 @@ async function scanClaudeSetup(input) {
       mcpJsonStatus: mcpJsonStatus.get(ref.normRoot) ?? null,
       hasSettings,
       hasLocalSettings,
-      instructions: layers === void 0 ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set),
+      instructions: layers === void 0 ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set, { homedir: input.homedir }),
       bypassInProject: projectView.bypass,
       bypassInLocal: localView.bypass,
       permissionConflicts: layers === void 0 ? 0 : conflictPairs(userView, settingsStatus === "ok" ? projectView : null, localSettingsStatus === "ok" ? localView : null)
@@ -8824,14 +9214,14 @@ async function scanClaudeSetup(input) {
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
-    secrets: sortSecrets(secrets),
+    secrets: [...sortSecrets(secrets), ...await defaultCopySecrets(input)],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute2, join as join24, relative as relative5, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join24, relative as relative5, resolve as resolve9 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -9701,7 +10091,7 @@ function validateTablePeek(ctx, peek, ptr) {
   if (peek === null || ctx.uk === 2)
     TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
 }
-function parse2(toml, options = {}) {
+function parse3(toml, options = {}) {
   let ctx = {
     s: toml,
     p: 0,
@@ -9864,7 +10254,7 @@ function exceedsLimits(value, maxDepth = MAX_CONFIG_DEPTH) {
 function parseCodexConfig(text) {
   let value;
   try {
-    value = parse2(text, { integersAsBigInt: "asNeeded" });
+    value = parse3(text, { integersAsBigInt: "asNeeded" });
   } catch {
     return null;
   }
@@ -10000,12 +10390,12 @@ function codexMcpFacts(input) {
 }
 
 // src/scan/codex-plugins.ts
-import { join as join23, relative as relative4, resolve as resolve6, sep } from "node:path";
+import { join as join23, relative as relative4, resolve as resolve7, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
 import { readFile as readFile7 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname4, join as join22 } from "node:path";
+import { basename as basename7, dirname as dirname5, join as join22 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -10083,13 +10473,13 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
   }
   const namespaces = /* @__PURE__ */ new Map();
   const namespaceOf = async (dir) => {
-    for (let current = dir; ; current = dirname4(current)) {
+    for (let current = dir; ; current = dirname5(current)) {
       if (pluginRoots.has(current)) {
         if (!namespaces.has(current)) namespaces.set(current, await manifestNamespace(current));
         const namespace2 = namespaces.get(current);
         if (namespace2 !== null) return namespace2;
       }
-      if (current === root || dirname4(current) === current) return null;
+      if (current === root || dirname5(current) === current) return null;
     }
   };
   for (const { dir, viaLink } of found) {
@@ -10242,7 +10632,7 @@ function manifestPath(root, raw) {
   if (typeof raw !== "string" || !raw.startsWith("./")) return null;
   const rest = raw.slice(2);
   if (rest === "" || rest.split(/[\\/]/).includes("..") || rest.startsWith("/") || rest.startsWith("\\") || /^[A-Za-z]:/.test(rest)) return null;
-  const resolved = resolve6(root, rest);
+  const resolved = resolve7(root, rest);
   const inside2 = relative4(root, resolved);
   return inside2 !== "" && !inside2.startsWith("..") && !inside2.startsWith(sep) ? resolved : null;
 }
@@ -10334,9 +10724,9 @@ async function readCodexPlugin(codexHome2, id) {
 }
 
 // src/scan/codex-settings.ts
-import { resolve as resolve7 } from "node:path";
+import { resolve as resolve8 } from "node:path";
 var asciiLower = (text, platform) => platform === "win32" ? text.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : text;
-var trustKeyForm = (path, platform) => asciiLower(resolve7(path).replace(/\\/g, "/"), platform);
+var trustKeyForm = (path, platform) => asciiLower(resolve8(path).replace(/\\/g, "/"), platform);
 function trustOf(user, root, platform = process.platform) {
   const projects = isTable(user.projects) ? user.projects : {};
   const rootForm = trustKeyForm(root, platform);
@@ -10399,7 +10789,7 @@ var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
   const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join24(homedir2, raw.slice(2)) : raw;
-  const absolute = isAbsolute2(expanded) ? expanded : resolve8(home, expanded);
+  const absolute = isAbsolute3(expanded) ? expanded : resolve9(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
 async function skillRules(user, home, homedir2) {
@@ -10429,6 +10819,13 @@ function configuredIn(merged, id) {
   return entry.enabled !== void 0 || !isTable(fallback) || fallback.enabled !== false;
 }
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
+async function codexDefaultCopySecrets(input) {
+  const defaultHome = join24(input.homedir, ".codex");
+  if (!input.env.CODEX_HOME?.trim() || normalizePath(codexHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const read = await readCodexConfig(join24(defaultHome, "config.toml"));
+  if (read.status !== "ok") return [];
+  return codexMcpSecrets(read.value, []).map((secret) => ({ ...secret, copy: "default" }));
+}
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
   const userFile = join24(home, "config.toml");
@@ -10583,7 +10980,7 @@ async function scanCodexSetup(input) {
     plugins,
     projects,
     problems: uniqueProblems,
-    secrets: codexMcpSecrets(user, trustedLayers),
+    secrets: [...codexMcpSecrets(user, trustedLayers), ...await codexDefaultCopySecrets(input)],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
@@ -10760,15 +11157,15 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname5 } from "node:path";
+import { basename as basename8, dirname as dirname6 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname5(entryFile)) === "scripts") {
+  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname6(entryFile)) === "scripts") {
     try {
-      skillRealPaths.push(normalizePath(await realpath6(dirname5(dirname5(entryFile)))));
+      skillRealPaths.push(normalizePath(await realpath6(dirname6(dirname6(entryFile)))));
     } catch {
     }
   }
@@ -10794,7 +11191,7 @@ async function runCheckup(options) {
     ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken }, ignored: opened.broken ? [] : opened.state.ignoredRules ?? [] });
   const stamp = resultStamp(options.clock.nowMs);
   const notices2 = [];
   let saved = false;
@@ -10948,6 +11345,50 @@ async function runNotify(action, options) {
   return { notify: { on, lang: state.notify?.lang ?? options.lang }, lastCheckupAt: state.lastCheckupAt, run: { text } };
 }
 
+// src/commands/ignore.ts
+var COPY4 = {
+  en: {
+    added: '"{name}" is now kept as you chose. It is left out of what to fix first and the next-grade steps, and it still counts in the score.',
+    removed: '"{name}" is no longer kept as you chose.',
+    list: "Kept as you chose: {names}.",
+    none: "Nothing is kept as you chose.",
+    quote: (name) => `"${name}"`
+  },
+  ko: {
+    added: "\u300C{name}\u300D \uD56D\uBAA9\uC740 \uC815\uD55C \uB300\uB85C \uB450\uACE0, \uBA3C\uC800 \uACE0\uCE60 \uAC83\uACFC \uB2E4\uC74C \uB4F1\uAE09 \uCC28\uB840\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uC810\uC218\uC5D0\uB294 \uADF8\uB300\uB85C \uB4E4\uC5B4\uAC11\uB2C8\uB2E4.",
+    removed: "\u300C{name}\u300D \uD56D\uBAA9\uC758 \u300C\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD568\u300D\uC744 \uD480\uC5C8\uC2B5\uB2C8\uB2E4.",
+    list: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC740 {names}\uC785\uB2C8\uB2E4.",
+    none: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+    quote: (name) => `\u300C${name}\u300D`
+  }
+};
+var failure3 = (code, message) => Object.assign(new Error(message), { code });
+function ruleIdOf(text) {
+  if (text === null) return null;
+  return RULES.find((spec) => spec.id === text.trim().toUpperCase())?.id ?? null;
+}
+async function runIgnore(action, rule2, options) {
+  const copy2 = COPY4[options.lang];
+  const nameOf = (id2) => RULE_COPY[id2][options.lang].name;
+  const opened = await openState(options.stateDir);
+  if (action === "list") {
+    const ignored = opened.broken ? [] : reviveIgnoredRules(opened.state.ignoredRules);
+    return { ignored, run: { text: ignored.length === 0 ? copy2.none : copy2.list.replace("{names}", ignored.map((id2) => copy2.quote(nameOf(id2))).join(", ")) } };
+  }
+  const id = ruleIdOf(rule2);
+  if (id === null) throw failure3("unknown-rule", `not a rule id: ${rule2 ?? "(none)"}`);
+  if (opened.broken) throw failure3("state-broken", "the state file could not be read; run a checkup first");
+  const { state } = opened;
+  const current = reviveIgnoredRules(state.ignoredRules);
+  const next = reviveIgnoredRules(action === "add" ? [...current, id] : current.filter((value) => value !== id));
+  if (next.join(",") !== current.join(",") || opened.fresh) {
+    if (next.length > 0) state.ignoredRules = next;
+    else delete state.ignoredRules;
+    if (next.length > 0 || !opened.fresh) await saveState(options.stateDir, state);
+  }
+  return { ignored: next, run: { text: (action === "add" ? copy2.added : copy2.removed).replace("{name}", nameOf(id)) } };
+}
+
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 import { join as join30 } from "node:path";
@@ -10955,14 +11396,14 @@ import { join as join30 } from "node:path";
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join27 } from "node:path";
+import { dirname as dirname7, join as join27 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
   return join27(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
-  const folder = await lstat8(dirname6(path)).then(
+  const folder = await lstat8(dirname7(path)).then(
     (info) => info.isDirectory(),
     () => false
   );
@@ -12031,10 +12472,10 @@ async function runFiles(work, io, planned) {
 }
 
 // src/commands/tune-run.ts
-var failure3 = (code, message) => Object.assign(new Error(message), { code });
+var failure4 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure3("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure4("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -12085,9 +12526,9 @@ async function runTuneApply(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const plan = await loadPlan(options.stateDir, options.planId);
-    if (plan === null) throw failure3("plan-not-found", `no saved plan: ${options.planId}`);
+    if (plan === null) throw failure4("plan-not-found", `no saved plan: ${options.planId}`);
     const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure3("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure4("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
     const { items: fresh } = await judgeTune({ ...options, cache: true });
     const work = newWork(options, "apply", plan.planId, null);
     for (const id of options.itemIds) {
@@ -12115,10 +12556,10 @@ async function runTuneUndo(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
-    if (target === null && options.workId === null) throw failure3("nothing-to-undo", "no apply run has changes left to undo");
-    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null && options.workId === null) throw failure4("nothing-to-undo", "no apply run has changes left to undo");
+    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure3("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure4("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
     const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
     const work = newWork(options, "undo", null, target.workId);
     work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
@@ -12155,7 +12596,7 @@ async function runTuneVerify(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
     const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
@@ -12183,16 +12624,16 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve9(false));
+      child.once("error", () => resolve10(false));
       child.once("spawn", () => {
         child.unref();
-        resolve9(true);
+        resolve10(true);
       });
     } catch {
-      resolve9(false);
+      resolve10(false);
     }
   });
 }
@@ -12443,6 +12884,14 @@ async function run(command, rest, context) {
     const args2 = checkupArgs(rest.slice(1), /* @__PURE__ */ new Set());
     if (args2 === null) return null;
     printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "ignore" && (rest[0] === "add" || rest[0] === "remove" || rest[0] === "list")) {
+    const action = rest[0];
+    const rule2 = action === "list" ? null : rest[1] ?? null;
+    const args2 = checkupArgs(rest.slice(action === "list" ? 1 : 2), /* @__PURE__ */ new Set());
+    if (args2 === null || action !== "list" && (rule2 === null || rule2.startsWith("--"))) return null;
+    printJson(await runIgnore(action, rule2, { stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
     return 0;
   }
   if (command === "deep-hints") {

@@ -17,17 +17,18 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 
 ## What it does
 
-- **Checkup.** Scores four axes from your records and settings, opens the report page in your browser, and gives a short summary in the terminal. Every item shows how it was measured, and the report shows which fixes get you to the next grade. It also points out API keys or tokens written as they are in your settings.
+- **Checkup.** Scores four axes from your records and settings, opens the report page in your browser, and gives a short summary in the terminal. Every item shows how it was measured. The report shows how to reach the next grade step by step (what to change, the value now and the target) and explains how the score and the grades are worked out. It also points out API keys or tokens written as they are in your settings.
 - **Tune-up.** Turns off skills, plugins, and MCP servers you have not used for a while. It changes only the items you approve, writes a record first, and can undo each change.
 - **Deep checkup.** Reads the instruction files you pick and points out lines that overlap, conflict, or would be better moved. The score does not change.
 - **Session start notices (Claude Code).** One line when a session starts, if 7 days have passed since the last checkup or something new is installed. Ask to turn them on.
+- **Leaving an item as you chose.** If you keep a setting on purpose, such as a high reasoning effort, ask to leave that item as it is. It still counts in the score and leaves what to fix first and the next-grade steps.
 - **AQ badge.** A small picture with your AQ and grade for your README or GitHub profile, made on your PC from your latest checkup. Ask for an AQ badge.
 
 ## Privacy
 
-The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.
+The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, the paths of the report and result files, and the names of what to fix, such as MCP servers that failed to connect and where API keys are written. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. The values of API keys, your conversations, and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.
 
-The checkup looks for API keys or tokens written as they are in your MCP settings and in the `env` of your Claude Code settings. It looks at a value only to tell its shape, and never shows or saves it. The report page lists where they are, and the AI receives only how many there are.
+The checkup looks for API keys or tokens written as they are in your MCP settings and in the `env` of your Claude Code settings. It looks at a value only to tell its shape, and never shows or saves it. The report page and the AI receive where they are (the server, the field, and the key name) so you can move them, never the values.
 
 The report file contains the names of your skills and project folders. Share the score card instead of the file.
 
@@ -38,7 +39,7 @@ What runs on your PC: the skill runs `skills/aq/scripts/aq.mjs` with Node.js, an
 - Node.js 22 or later. Tested on 22 and 24.
 - Built and tested on Windows 11. macOS and Linux are covered only by tests with temporary home folders.
 - Made for Claude Code and Codex on your own PC. The checkup reads the records these tools keep on your PC, so it is not made for claude.ai chat or Cowork.
-- Claude Code record formats checked on 2.1.220 to 2.1.325. Codex record formats checked on 0.166.0 (and the older format of 0.140 to 0.142).
+- Claude Code record formats checked on 2.1.220 to 2.1.322, and the settings a tune-up changes on 2.1.220 to 2.1.325. Codex record formats checked on records of 0.166.0 (and the older format of 0.140 to 0.142), and up to 0.169.0 by comparing the public source of the record shapes the checkup reads.
 
 ## What it leaves and how to remove it
 

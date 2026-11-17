@@ -135,32 +135,45 @@ export function countMentions(text: string, targets: readonly MentionTarget[]): 
  * 역빗금 뒤의 빈칸은 경로의 빈칸으로 푼다(Claude Code 문서의 「Import additional files」)
  */
 export function importsOf(text: string): string[] {
-  const out: string[] = [];
+  // 코드 블록을 지운다. 줄 앞의 들여쓰기, 목록 표시(-, *, +, 1. 같은 것), 인용 표시(>)를 걷어 낸 뒤 ```나 ~~~로 열고, 같은 글자의 같거나 긴 울타리만 있는 줄에서 닫는다(짝 검토 1차 필수 1)
+  const prose: string[] = [];
   let fence: string | null = null;
   for (const raw of text.split("\n")) {
-    const marker = /^(`{3,}|~{3,})/.exec(raw.trimStart())?.[1] ?? null;
+    const body = raw.replace(/^(?:[ \t]*(?:[-*+]|\d{1,9}[.)]|>)(?=[ \t]|$))*[ \t]*/, "");
+    const marker = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
     if (fence !== null) {
-      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length && body.slice(marker.length).trim() === "") fence = null;
+      prose.push("");
       continue;
     }
     if (marker !== null) {
       fence = marker;
+      prose.push("");
       continue;
     }
-    const line = raw.replace(/(`+)[\s\S]*?\1/g, " ");
-    for (const match of line.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
-      const token = match[1]!.replace(/\\ /g, " ");
-      if (token.startsWith('"') || token.startsWith("'")) continue;
-      out.push(token);
-    }
+    prose.push(raw);
+  }
+  // 코드 칸을 지운다. 같은 길이의 역따옴표 사이이고, 여러 줄에 걸칠 수 있지만 빈 줄(문단의 끝)은 넘지 않는다
+  const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
+  const out: string[] = [];
+  for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+    const token = match[1]!.replace(/\\ /g, " ");
+    if (token.startsWith('"') || token.startsWith("'")) continue;
+    out.push(token);
   }
   return out;
 }
 
-/** 가져오기 경로를 푼다. ~/는 홈, 상대 경로는 가져오는 파일의 폴더 기준이다 */
-function resolveImport(token: string, from: string, homedir: string): string {
-  if (token.startsWith("~/") || token.startsWith("~\\")) return join(homedir, token.slice(2));
-  return isAbsolute(token) ? token : resolve(dirname(from), token);
+const NETWORK_PATH = /^(\\\\|\/\/)/;
+
+/**
+ * 가져오기 경로를 푼다. ~/는 홈, 상대 경로는 가져오는 파일의 폴더 기준이다.
+ * 네트워크 경로(\\서버, //서버)는 파일 조회만으로도 네트워크에 닿을 수 있어 null로 두고 따르지 않는다(짝 검토 1차 필수 3)
+ */
+export function importTarget(token: string, from: string, homedir: string): string | null {
+  if (NETWORK_PATH.test(token)) return null;
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join(homedir, token.slice(2)) : isAbsolute(token) ? token : resolve(dirname(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
 }
 
 const insideOf = (path: string, folder: string): boolean => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
@@ -182,10 +195,16 @@ export async function readInstructionSet(
   const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
   const seen = new Set(queue.map((item) => normalizePath(item.path)));
   const readReal = new Set<string>();
+  // 프로젝트 지침이면 연결을 푼 프로젝트 뿌리의 실제 경로. 가져올 파일의 실제 경로도 이 안이어야 한다(짝 검토 1차 필수 2)
+  const rootReal = imports?.within ? ((await entryInfo(imports.within)).realPath ?? normalizePath(imports.within)).replace(/\/$/, "") : null;
   for (let index = 0; index < queue.length; index++) {
     const { path, hops } = queue[index]!;
-    // 가져오기의 대상이 파일이 아니면(없는 경로, 폴더, 경로가 아닌 낱말) 건너뛴다
-    if (hops > 0 && !(await entryInfo(path)).isFile) continue;
+    if (hops > 0) {
+      // 가져오기의 대상이 파일이 아니면(없는 경로, 폴더, 경로가 아닌 낱말) 건너뛰고, 프로젝트 지침은 연결 폴더를 거쳐 밖으로 나가는 대상을 읽기 전에 거른다
+      const target = await entryInfo(path);
+      if (!target.isFile) continue;
+      if (rootReal !== null && (target.realPath === null || !target.realPath.startsWith(`${rootReal}/`))) continue;
+    }
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -197,7 +216,8 @@ export async function readInstructionSet(
     if (info.realPath !== null) readReal.add(info.realPath);
     if (imports !== null && hops < MAX_IMPORT_HOPS) {
       for (const token of importsOf(read.text)) {
-        const target = resolveImport(token, path, imports.homedir);
+        const target = importTarget(token, path, imports.homedir);
+        if (target === null) continue;
         if (imports.within !== null && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);
         if (seen.has(key)) continue;

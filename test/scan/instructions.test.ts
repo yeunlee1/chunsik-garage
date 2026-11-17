@@ -7,6 +7,7 @@ import {
   countMentions,
   globalInstructionPaths,
   importsOf,
+  importTarget,
   lineHash,
   linesForOverlap,
   markdownFilesUnder,
@@ -128,6 +129,35 @@ describe("가져오기(@경로, 0.3.0)", () => {
       "mail me at someone@example.com",
     ].join("\n");
     expect(importsOf(text)).toEqual(["README.md", "docs/git.md", "~/.claude/mine.md", "Design Docs/api.md"]);
+  });
+
+  it("목록·인용 안의 코드 블록과 여러 줄에 걸친 코드 칸 안은 가져오기가 아니다(짝 검토 1차 필수 1)", () => {
+    expect(importsOf(["- ```md", "  @AGENTS.md", "  ```", "> ```", "> @quoted.md", "> ```", "1. ~~~", "   @numbered.md", "   ~~~", "@after.md"].join("\n"))).toEqual(["after.md"]);
+    expect(importsOf("문장 `\n@AGENTS.md\n끝` 다음\n@real.md")).toEqual(["real.md"]);
+    // 빈 줄로 끝난 문단을 넘는 역따옴표는 코드 칸이 아니다
+    expect(importsOf("짝이 없는 ` 하나\n\n@kept.md")).toEqual(["kept.md"]);
+  });
+
+  it("네트워크 경로(\\\\서버 또는 //서버)는 가져오기 대상으로 풀지 않는다. 파일 조회조차 하지 않는다(짝 검토 1차 필수 3)", () => {
+    const from = join(root, "CLAUDE.md");
+    expect(importTarget("\\\\review.invalid\\share\\rules.md", from, root)).toBeNull();
+    expect(importTarget("//review.invalid/share/rules.md", from, root)).toBeNull();
+    expect(importTarget("rules.md", from, root)).toBe(join(root, "rules.md"));
+    expect(importTarget("~/x.md", from, join(root, "home"))).toBe(join(root, "home", "x.md"));
+  });
+
+  it("프로젝트 안의 연결 폴더를 거쳐 프로젝트 밖을 가리키는 가져오기는 따르지 않는다. 프로젝트 뿌리 자체가 연결이면 안쪽 가져오기는 따른다(짝 검토 1차 필수 2)", async () => {
+    const homedir = join(root, "home");
+    const project = join(root, "proj");
+    await put(join(root, "outside", "rules.md"), "Outside rules that must not be read\n");
+    await linkDir(join(root, "outside"), join(project, "linked"));
+    await put(join(project, "CLAUDE.md"), "@linked/rules.md\n@inside.md\n");
+    await put(join(project, "inside.md"), "Inside rules that are read\n");
+    const global = await readGlobalInstructions(join(root, "no-home"), [], { homedir });
+    expect((await readProjectInstructions(project, global.set, { homedir })).files.map((f) => f.path)).toEqual([join(project, "CLAUDE.md"), join(project, "inside.md")]);
+    // 뿌리를 연결로 열어도 안쪽 가져오기는 그대로 따른다
+    await linkDir(project, join(root, "via-link"));
+    expect((await readProjectInstructions(join(root, "via-link"), global.set, { homedir })).files.map((f) => f.path)).toEqual([join(root, "via-link", "CLAUDE.md"), join(root, "via-link", "inside.md")]);
   });
 
   it("전역 지침은 가져온 파일까지 크기와 줄에 넣는다. ~/는 홈, 상대 경로는 그 파일 기준이고, 네 단계까지 따른다. 돌아오는 가져오기는 한 번만 읽는다", async () => {

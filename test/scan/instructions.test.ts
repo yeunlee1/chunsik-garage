@@ -6,6 +6,7 @@ import {
   countChars,
   countMentions,
   globalInstructionPaths,
+  importsOf,
   lineHash,
   linesForOverlap,
   markdownFilesUnder,
@@ -110,6 +111,54 @@ describe("지침 파일의 위치", () => {
     const bad = join(root, "bad\u0000dir");
     expect(await markdownFilesUnder(bad)).toEqual({ paths: [], unreadableDirs: [bad] });
     expect(await markdownFilesUnder(join(root, "none"))).toEqual({ paths: [], unreadableDirs: [] });
+  });
+});
+
+describe("가져오기(@경로, 0.3.0)", () => {
+  it("줄 어디서나 @경로를 찾고, 코드 칸·코드 블록·따옴표·메일 주소는 가져오기가 아니다. 빈칸은 \\로 이은 것을 푼다", () => {
+    const text = [
+      "See @README.md for the overview and @docs/git.md for git.",
+      "@~/.claude/mine.md",
+      "Write `@not-this.md` literally.",
+      "```",
+      "@inside-fence.md",
+      "```",
+      "@Design\\ Docs/api.md",
+      '@"quoted.md"',
+      "mail me at someone@example.com",
+    ].join("\n");
+    expect(importsOf(text)).toEqual(["README.md", "docs/git.md", "~/.claude/mine.md", "Design Docs/api.md"]);
+  });
+
+  it("전역 지침은 가져온 파일까지 크기와 줄에 넣는다. ~/는 홈, 상대 경로는 그 파일 기준이고, 네 단계까지 따른다. 돌아오는 가져오기는 한 번만 읽는다", async () => {
+    const homedir = join(root, "home");
+    const profile = join(root, "profile");
+    const line = "Imported rule line that is long enough to compare";
+    await put(join(profile, "CLAUDE.md"), "@~/.claude/CLAUDE.md\n");
+    await put(join(homedir, ".claude", "CLAUDE.md"), `${line}\n@../.agents/rules.md\n`);
+    await put(join(homedir, ".agents", "rules.md"), "@two.md\n");
+    await put(join(homedir, ".agents", "two.md"), "@three.md\n@rules.md\n");
+    await put(join(homedir, ".agents", "three.md"), "@four.md\n");
+    await put(join(homedir, ".agents", "four.md"), "fifth hop is not read\n");
+    const { set } = await readGlobalInstructions(profile, [], { homedir });
+    expect(set.files.map((f) => f.path)).toEqual([join(homedir, ".agents", "rules.md"), join(homedir, ".agents", "three.md"), join(homedir, ".agents", "two.md"), join(homedir, ".claude", "CLAUDE.md"), join(profile, "CLAUDE.md")]);
+    // 읽은 다섯 파일의 글(네 단계 너머의 four.md는 읽지 않는다)
+    const read = ["@~/.claude/CLAUDE.md\n", `${line}\n@../.agents/rules.md\n`, "@two.md\n", "@three.md\n@rules.md\n", "@four.md\n"];
+    expect(set.bytes).toBe(read.reduce((sum, text) => sum + Buffer.byteLength(text), 0));
+    expect(set.lineHashes).toContain(lineHash(line));
+    // 홈을 주지 않으면 지금처럼 가져오기를 따르지 않는다
+    expect((await readGlobalInstructions(profile, [])).set.files.map((f) => f.path)).toEqual([join(profile, "CLAUDE.md")]);
+  });
+
+  it("프로젝트 지침은 프로젝트 폴더 안의 가져오기만 따른다(바깥 가져오기는 승인을 받아야 실려 실렸는지 알 수 없다)", async () => {
+    const homedir = join(root, "home");
+    const project = join(root, "proj");
+    await put(join(project, "CLAUDE.md"), "@AGENTS.md\n@~/outside.md\n");
+    await put(join(project, "AGENTS.md"), "Project agents rules that are long enough\n");
+    await put(join(homedir, "outside.md"), "outside\n");
+    const global = await readGlobalInstructions(join(root, "no-home"), [], { homedir });
+    const set = await readProjectInstructions(project, global.set, { homedir });
+    expect(set.files.map((f) => f.path)).toEqual([join(project, "AGENTS.md"), join(project, "CLAUDE.md")]);
   });
 });
 

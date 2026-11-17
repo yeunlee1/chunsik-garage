@@ -270,6 +270,34 @@ describe("scanClaudeSetup", () => {
     expect(scanned.problems.filter((p) => p.owner === "user").map((p) => p.place).sort()).toEqual(["$CLAUDE_CONFIG_DIR/settings.json", "app (2)/.mcp.json", "app/.mcp.json"]);
   });
 
+  it("설정 폴더를 옮겨 쓰면 기본 위치(~/.claude.json, ~/.claude/settings.json)의 사본도 비밀값만 보고 사본이라고 적는다. 옮기지 않았으면 두 번 세지 않는다(0.3.0, 다른 PC 피드백 3번)", async () => {
+    const config = join(root, "profiles", "p1", "home");
+    await put(join(config, ".claude.json"), json({ mcpServers: { moved: { command: "m", env: { MOVED_TOKEN: "moved-token-value-1" } } } }));
+    const settings = JSON.parse(await readFile(join(input.homedir, ".claude", "settings.json"), "utf8"));
+    await put(join(input.homedir, ".claude", "settings.json"), json({ ...settings, env: { GITHUB_TOKEN: `ghp_${"a1B2".repeat(9)}` } }));
+    const moved = await scanClaudeSetup({ ...input, env: { CLAUDE_CONFIG_DIR: config } });
+    expect(moved.secrets).toEqual([
+      { scope: "user", server: "moved", projectRoot: null, field: "env", key: "MOVED_TOKEN" },
+      { scope: "settings", server: null, projectRoot: null, field: "env", key: "GITHUB_TOKEN", copy: "default" },
+      { scope: "user", server: "blocked", projectRoot: null, field: "url", key: "key", copy: "default" },
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN", copy: "default" },
+    ]);
+    expect(JSON.stringify(moved)).not.toContain("moved-token-value-1");
+    // 옮기지 않았으면 기본 위치가 지금 쓰는 곳이라 사본으로 따로 세지 않는다
+    const here = await scanClaudeSetup(input);
+    expect(here.secrets.filter((secret) => "copy" in secret)).toEqual([]);
+  });
+
+  it("설정 폴더를 옮기고 그곳의 CLAUDE.md가 홈의 지침을 가져오는 한 줄뿐이어도 가져온 지침까지 전역 지침으로 센다(0.3.0, 다른 PC 피드백 1번)", async () => {
+    const config = join(root, "profiles", "p1", "home");
+    await put(join(config, "CLAUDE.md"), "@~/.claude/CLAUDE.md\n");
+    await put(join(input.homedir, ".claude", "CLAUDE.md"), `${"Keep the tests green before you say the work is done.\n".repeat(5)}@~/.agents/common.md\n`);
+    await put(join(input.homedir, ".agents", "common.md"), "Shared working rules for every project.\n");
+    const scanned = await scanClaudeSetup({ ...input, env: { CLAUDE_CONFIG_DIR: config } });
+    expect(scanned.globalInstructions.files.map((f) => f.path)).toEqual([join(input.homedir, ".agents", "common.md"), join(input.homedir, ".claude", "CLAUDE.md"), join(config, "CLAUDE.md")]);
+    expect(scanned.globalInstructions.bytes).toBeGreaterThanOrEqual(200);
+  });
+
   it("이름이 ~인 프로젝트의 설정 문제는 사용자 설정의 문제와 다른 위치로 적는다", async () => {
     await put(join(input.homedir, ".claude", "settings.json"), "{ 깨짐");
     const tilde = join(root, "x", "~");

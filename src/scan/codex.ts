@@ -13,7 +13,7 @@ import { entryInfo, readText } from "./fs.ts";
 import { codexMcpInstallKey, codexSkillInstallKey } from "./identity.ts";
 import { emptyInstructionSet } from "./instructions.ts";
 import { groupProjects, type ProjectRef } from "./projects.ts";
-import type { CodexPluginFact, CodexProjectFact, CodexSetupFacts, FileStatus, SetupProblem, SkillFact } from "./types.ts";
+import type { CodexPluginFact, CodexProjectFact, CodexSetupFacts, FileStatus, SecretFact, SetupProblem, SkillFact } from "./types.ts";
 
 export interface CodexScanInput {
   env: Record<string, string | undefined>;
@@ -80,6 +80,15 @@ function configuredIn(merged: TomlTable, id: string): boolean {
 }
 
 const loadable = (plugin: CodexPluginRead): boolean => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
+
+/** CODEX_HOME으로 옮겨 쓰면 기본 위치(~/.codex/config.toml)의 서버 정의도 비밀값의 자리만 본다. 점수에는 넣지 않는다(0.3.0) */
+async function codexDefaultCopySecrets(input: CodexScanInput): Promise<SecretFact[]> {
+  const defaultHome = join(input.homedir, ".codex");
+  if (!input.env.CODEX_HOME?.trim() || normalizePath(codexHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const read = await readCodexConfig(join(defaultHome, "config.toml"));
+  if (read.status !== "ok") return [];
+  return codexMcpSecrets(read.value, []).map((secret) => ({ ...secret, copy: "default" as const }));
+}
 
 export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupFacts> {
   const home = codexHome(input.env, input.homedir);
@@ -248,7 +257,7 @@ export async function scanCodexSetup(input: CodexScanInput): Promise<CodexSetupF
     plugins,
     projects,
     problems: uniqueProblems,
-    secrets: codexMcpSecrets(user, trustedLayers),
+    secrets: [...codexMcpSecrets(user, trustedLayers), ...(await codexDefaultCopySecrets(input))],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };

@@ -1,7 +1,7 @@
 // 지침 파일을 읽어 크기, 글자 종류별 글자 수, 줄마다의 지문만 남기고 글은 버린다. 전역 지침에 프로젝트의 경로나 이름이 몇 번 나오는지도 센다(설계 10 「지침 파일의 범위」, 11.3 S1·F3·F4, 17)
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { entryInfo, listDir, readText } from "./fs.ts";
 
@@ -31,6 +31,16 @@ export interface InstructionSet {
 
 export const MIN_LINE_CHARS = 20;
 const RULES_MAX_DEPTH = 8;
+/** Claude Code가 가져오기(@경로)를 따르는 깊이. 문서의 「maximum depth of four hops」다(설계 「0.3.0에서 정한 것」) */
+export const MAX_IMPORT_HOPS = 4;
+
+/** 가져오기를 따르는 법. 주지 않으면 따르지 않는다 */
+export interface ImportOptions {
+  /** `@~/`를 풀 홈 폴더 */
+  homedir: string;
+  /** 가져온 파일이 이 폴더 안일 때만 따른다(프로젝트 지침). null이면 어디든 따른다(전역 지침) */
+  within: string | null;
+}
 
 export function emptyInstructionSet(): InstructionSet {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
@@ -121,6 +131,41 @@ export function countMentions(text: string, targets: readonly MentionTarget[]): 
 }
 
 /**
+ * 지침 글의 가져오기(@경로). 줄 어디서나 찾고, 코드 블록과 코드 칸 안, 따옴표로 감싼 경로, 앞이 빈칸이 아닌 @(메일 주소 같은 것)는 뺀다.
+ * 역빗금 뒤의 빈칸은 경로의 빈칸으로 푼다(Claude Code 문서의 「Import additional files」)
+ */
+export function importsOf(text: string): string[] {
+  const out: string[] = [];
+  let fence: string | null = null;
+  for (const raw of text.split("\n")) {
+    const marker = /^(`{3,}|~{3,})/.exec(raw.trimStart())?.[1] ?? null;
+    if (fence !== null) {
+      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+      continue;
+    }
+    if (marker !== null) {
+      fence = marker;
+      continue;
+    }
+    const line = raw.replace(/(`+)[\s\S]*?\1/g, " ");
+    for (const match of line.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+      const token = match[1]!.replace(/\\ /g, " ");
+      if (token.startsWith('"') || token.startsWith("'")) continue;
+      out.push(token);
+    }
+  }
+  return out;
+}
+
+/** 가져오기 경로를 푼다. ~/는 홈, 상대 경로는 가져오는 파일의 폴더 기준이다 */
+function resolveImport(token: string, from: string, homedir: string): string {
+  if (token.startsWith("~/") || token.startsWith("~\\")) return join(homedir, token.slice(2));
+  return isAbsolute(token) ? token : resolve(dirname(from), token);
+}
+
+const insideOf = (path: string, folder: string): boolean => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
+
+/**
  * 파일 목록을 읽어 지침 묶음을 만든다. 없는 파일은 건너뛴다. 글은 메모리에서 세고 버린다.
  * mentionTargets가 있으면 그 횟수도 센다. 실제 경로가 sameAsGlobal에 든 파일은 목록과 크기에는 넣고 줄 지문에서만 뺀다.
  */
@@ -128,11 +173,19 @@ export async function readInstructionSet(
   paths: readonly string[],
   mentionTargets: readonly MentionTarget[] = [],
   sameAsGlobal: ReadonlySet<string> = new Set(),
+  imports: ImportOptions | null = null,
 ): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
   const set = emptyInstructionSet();
   const hashes = new Set<string>();
   const mentions: Record<string, number> = Object.create(null) as Record<string, number>;
-  for (const path of [...new Set(paths)].sort()) {
+  // 처음 받은 파일은 0단계다. 가져온 파일은 가져온 파일의 단계에 하나를 더하고, 같은 파일(경로나 실제 경로)은 한 번만 읽는다
+  const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
+  const seen = new Set(queue.map((item) => normalizePath(item.path)));
+  const readReal = new Set<string>();
+  for (let index = 0; index < queue.length; index++) {
+    const { path, hops } = queue[index]!;
+    // 가져오기의 대상이 파일이 아니면(없는 경로, 폴더, 경로가 아닌 낱말) 건너뛴다
+    if (hops > 0 && !(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -140,6 +193,18 @@ export async function readInstructionSet(
       continue;
     }
     const info = await entryInfo(path);
+    if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
+    if (info.realPath !== null) readReal.add(info.realPath);
+    if (imports !== null && hops < MAX_IMPORT_HOPS) {
+      for (const token of importsOf(read.text)) {
+        const target = resolveImport(token, path, imports.homedir);
+        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        const key = normalizePath(target);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        queue.push({ path: target, hops: hops + 1 });
+      }
+    }
     const same = info.realPath !== null && sameAsGlobal.has(info.realPath);
     const bytes = Buffer.byteLength(read.text, "utf8");
     set.files.push({ path, realPath: info.realPath, bytes, hasContent: /\S/u.test(read.text), sameAsGlobal: same });
@@ -151,6 +216,8 @@ export async function readInstructionSet(
     for (const [key, count] of Object.entries(countMentions(read.text, mentionTargets))) mentions[key] = (mentions[key] ?? 0) + count;
   }
   set.lineHashes = [...hashes].sort();
+  set.files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  set.unreadable.sort();
   return { set, mentions };
 }
 
@@ -173,18 +240,22 @@ export async function projectInstructionPaths(root: string): Promise<FoundFiles>
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 
-/** 전역 지침을 읽는다. 전역 지침에 목록의 프로젝트가 나온 횟수도 센다. */
-export async function readGlobalInstructions(claudeHome: string, mentionTargets: readonly MentionTarget[]): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
+/** 전역 지침을 읽는다. 홈을 주면 가져오기를 어디든 따른다(사용자 범위의 가져오기는 승인 없이 실린다). 전역 지침에 목록의 프로젝트가 나온 횟수도 센다. */
+export async function readGlobalInstructions(
+  claudeHome: string,
+  mentionTargets: readonly MentionTarget[],
+  options: { homedir: string } | null = null,
+): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
   const found = await globalInstructionPaths(claudeHome);
-  const read = await readInstructionSet(found.paths, mentionTargets);
+  const read = await readInstructionSet(found.paths, mentionTargets, new Set(), options === null ? null : { homedir: options.homedir, within: null });
   read.set.unreadableDirs = found.unreadableDirs;
   return read;
 }
 
-/** 프로젝트 지침을 읽는다. 전역 지침과 같은 파일은 표시하고 줄 지문에서만 뺀다. */
-export async function readProjectInstructions(root: string, global: InstructionSet): Promise<InstructionSet> {
+/** 프로젝트 지침을 읽는다. 홈을 주면 프로젝트 폴더 안의 가져오기만 따른다(바깥 가져오기는 승인을 받아야 실려 실렸는지 알 수 없다). 전역 지침과 같은 파일은 표시하고 줄 지문에서만 뺀다. */
+export async function readProjectInstructions(root: string, global: InstructionSet, options: { homedir: string } | null = null): Promise<InstructionSet> {
   const found = await projectInstructionPaths(root);
-  const { set } = await readInstructionSet(found.paths, [], realPaths(global));
+  const { set } = await readInstructionSet(found.paths, [], realPaths(global), options === null ? null : { homedir: options.homedir, within: root });
   set.unreadableDirs = found.unreadableDirs;
   return set;
 }

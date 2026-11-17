@@ -57,6 +57,8 @@ export interface SecretFact {
   field: SecretField;
   /** 항목의 이름(환경 변수나 머리말의 이름, 인자의 옵션이나 「#몇 번째」, 주소의 password나 질의 이름) */
   key: string;
+  /** 도구가 옮긴 설정 폴더(CLAUDE_CONFIG_DIR, CODEX_HOME)를 쓰는 동안 기본 위치의 사본에서 찾았다. 지금 쓰는 곳이면 없다(0.3.0) */
+  copy?: "default";
 }
 
 export interface McpFact {

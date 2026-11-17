@@ -165,18 +165,27 @@ const SANDBOX_COMMANDS: ReadonlySet<string> = new Set(["docker", "podman", "sand
  * 설정 묶음은 enabled가 참일 때만 켜고, 그때의 명령(command)은 글과 같은 규칙이다. 그 밖의 값은 제미나이가 시작하지 못하는 값이라 모름(null)이다
  * (공개 소스 cli/src/config/sandboxConfig.ts의 loadSandboxConfig, getSandboxCommand. 글을 소문자로 바꾸는 것은 환경 변수 쪽만이다)
  */
-function sandboxOn(value: unknown): boolean | null {
+/** 운영 체제가 받는 명령인지. runsc는 Linux, windows-native는 Windows에서만 받고(sandboxConfig.ts의 getSandboxCommand), sandbox-exec는 macOS에만 있는 명령이다 */
+function commandAllowed(command: string, platform: NodeJS.Platform): boolean {
+  if (command === "runsc") return platform === "linux";
+  if (command === "windows-native") return platform === "win32";
+  if (command === "sandbox-exec") return platform === "darwin";
+  return true;
+}
+
+function sandboxOn(value: unknown, platform: NodeJS.Platform): boolean | null {
   if (value === undefined || value === null || value === false) return false;
   if (value === true) return true;
   if (typeof value === "string") {
     if (value === "" || value === "0" || value === "false") return false;
     if (value === "1" || value === "true") return true;
-    return SANDBOX_COMMANDS.has(value) ? true : null;
+    // 모르는 명령이나 이 운영 체제가 받지 않는 명령이면 제미나이가 시작하지 못한다(짝 검토 4차 필수 2)
+    return SANDBOX_COMMANDS.has(value) && commandAllowed(value, platform) ? true : null;
   }
   if (isObject(value)) {
     if (!value.enabled) return false;
     const command = value.command;
-    return command === undefined || command === null ? true : typeof command === "string" ? sandboxOn(command) : null;
+    return command === undefined || command === null ? true : typeof command === "string" ? sandboxOn(command, platform) : null;
   }
   return null;
 }
@@ -186,7 +195,7 @@ function sandboxOn(value: unknown): boolean | null {
  * 승인 방식과 도구 샌드박스(security.toolSandboxing)는 뒤의 층이 정한 값이다. tools.sandbox는 묶음끼리는 칸을 합치고 그 밖에는 뒤의 값으로 바꾼다.
  * tools.allowed는 합치는 방식이 없는 목록이라 그 칸을 적은 마지막 층의 목록이 정한다. 도구 샌드박스가 켜져 있으면 tools.sandbox가 없어도 샌드박스가 있다(core/src/config/config.ts)
  */
-export function geminiSafetyOf(layers: readonly Json[]): GeminiSafetyFact {
+export function geminiSafetyOf(layers: readonly Json[], platform: NodeJS.Platform = process.platform): GeminiSafetyFact {
   let approvalMode = "default";
   let box: unknown = undefined;
   let toolSandboxing = false;
@@ -203,7 +212,7 @@ export function geminiSafetyOf(layers: readonly Json[]): GeminiSafetyFact {
   // 인자가 붙은 허용(run_shell_command(git) 같은 것)은 그 명령만 묻지 않으므로 통째로 허용한 것이 아니다
   const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
   // 모르는 샌드박스 값이면 제미나이가 시작하지 못하므로 도구 샌드박스와 상관없이 모름이다
-  const on = sandboxOn(box);
+  const on = sandboxOn(box, platform);
   return { approvalMode, sandbox: on === null ? null : on || toolSandboxing, shellAutoApproved };
 }
 

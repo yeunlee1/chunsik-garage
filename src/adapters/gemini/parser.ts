@@ -230,20 +230,28 @@ export class GeminiSessionParser {
   }
 
   /**
-   * 압축 뒤 이력 동기화는 압축 요약(user)과 확인(gemini), 남길 대화를 새 ID로 한 번에 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다), 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
-   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이다. 구간에 「user 바로 다음이 모델 이름도 토큰도 없는 gemini」인 짝(요약과 확인)이 있으면 다시 적은 구간이라
-   * 그 안의 user 메시지를 모두 사본으로 본다(응답 없이 끝난 요청의 사본도 든다). 그 짝이 없으면 압축이 아닌 이력 고침이라 아무것도 빼지 않는다(같은 글을 다시 친 새 요청을 지키려고)
-   * (소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts)
+   * 이력을 새 ID로 다시 적으면(압축 뒤의 요약·확인과 남긴 대화, 압축이 실패한 뒤의 잘라내기) 제미나이는 다시 적은 메시지를 한 번에 붙이고 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 다시 적은 gemini 메시지에는 모델 이름도 토큰도 없다. 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이고, 구간의 user 메시지 가운데
+   * 다음 user 메시지 전까지 실제 응답(모델 이름이나 토큰이 있는 gemini)이 따르지 않는 것을 사본으로 본다. 실제 응답이 따르는 요청은 압축이 아닌 이력 고침 뒤에 남은 새 요청이라 센다.
+   * 구간 안에서 응답을 받지 못하고 끝난 진짜 새 요청은 사본과 가를 정보가 기록에 없어 사본으로 본다(사람 요청은 대신 보는 값이다)
+   * (소스 geminiChat.ts의 생성자·initialize·setHistory, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts, 짝 검토 4차 필수 1)
    */
   private markCopies(removed: ReadonlySet<string>): void {
     let last = -1;
     for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
     if (last < 0) return;
     const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id)! > last);
-    const synthetic = (record: Json): boolean => record.type === "gemini" && str(record.model) === null && obj(record.tokens) === null;
-    const rewritten = window.some((id, index) => this.messages.get(id)!.type === "user" && index + 1 < window.length && synthetic(this.messages.get(window[index + 1]!)!));
-    if (!rewritten) return;
-    for (const id of window) if (this.messages.get(id)!.type === "user") this.copies.add(id);
+    const answer = (record: Json): boolean => record.type === "gemini" && (str(record.model) !== null || obj(record.tokens) !== null);
+    for (let index = 0; index < window.length; index++) {
+      if (this.messages.get(window[index]!)!.type !== "user") continue;
+      let answered = false;
+      for (let next = index + 1; next < window.length && !answered; next++) {
+        const after = this.messages.get(window[next]!)!;
+        if (after.type === "user") break;
+        answered = answer(after);
+      }
+      if (!answered) this.copies.add(window[index]!);
+    }
   }
 
   /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */

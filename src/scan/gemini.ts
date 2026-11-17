@@ -160,7 +160,7 @@ export async function scanGeminiSetup(input: GeminiScanInput): Promise<GeminiSet
     const layers = layersWith(read.value);
     const within = await importBoundary(ref.root, boundaryMarkersOf(layers));
     const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
-    projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers) : null });
+    projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers, input.platform) : null });
     if (read.status === "ok") projectLayers.push({ normRoot: ref.normRoot, layer: read.value });
   }
 
@@ -202,7 +202,7 @@ export async function scanGeminiSetup(input: GeminiScanInput): Promise<GeminiSet
     trustedFolders: trustStatus,
     globalInstructions: globalRead.set,
     globalMentions: globalRead.mentions,
-    safety: outerKnown ? geminiSafetyOf(layersWith(null)) : unknownGeminiSafety(),
+    safety: outerKnown ? geminiSafetyOf(layersWith(null), input.platform) : unknownGeminiSafety(),
     // 스킬 폴더는 이 버전에서 훑지 않는다. 사용자 스킬 자리를 읽지 못한 것으로 두어 스킬 규칙이 0으로 재지 않게 한다
     skills: [],
     mcpServers,

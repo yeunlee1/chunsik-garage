@@ -225,6 +225,12 @@ describe("규칙마다 덧붙는 것", () => {
     expect(findingText(i3, both, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.");
     const codexOnly = { ...NONE, mergedTools: { I3: [{ tool: "codex" as const, observed: "proxy" as const }] } };
     expect(findingText(i3, codexOnly, "ko").method).not.toContain(line);
+    // 제미나이도 모델이 낸 호출 하나를 하나로 센다. 굵기가 다른 Codex가 함께 있을 때만 줄을 붙인다(0.4.0)
+    const three = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "codex" as const, observed: "measured" as const }, { tool: "gemini" as const, observed: "measured" as const }] } };
+    expect(findingText(i3, three, "ko").method.at(-1)).toBe("도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code와 Gemini CLI는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.");
+    expect(findingText(i3, three, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code and Gemini CLI one call the model makes is one, and in Codex one action that actually ran is one.");
+    const sameGrain = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "gemini" as const, observed: "measured" as const }] } };
+    expect(findingText(i3, sameGrain, "ko").method.some((text) => text.startsWith("도구 호출을 세는 굵기"))).toBe(false);
     expect(findingText(i3, NONE, "ko").method).not.toContain(line);
     expect(findingText({ ...i3, status: "unmeasured", reason: "too_little", value: null, score: null, category: "unmeasured" }, both, "ko").method).not.toContain(line);
   });

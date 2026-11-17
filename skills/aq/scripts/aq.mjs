@@ -1383,9 +1383,10 @@ var PROXY_LINE = {
   ko: "{tool}: \uAE30\uB85D\uC774 \uADF8\uB300\uB85C \uB0A8\uAE30\uC9C0 \uC54A\uB294 \uAC12\uC774\uB77C \uAC00\uAE4C\uC6B4 \uAC12\uC73C\uB85C \uC7C0\uC2B5\uB2C8\uB2E4."
 };
 var TOOL_CALL_GRAIN = {
-  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
-  ko: "\uB3C4\uAD6C \uD638\uCD9C\uC744 \uC138\uB294 \uAD75\uAE30\uAC00 \uB3C4\uAD6C\uB9C8\uB2E4 \uB2E4\uB985\uB2C8\uB2E4. Claude Code\uB294 \uBAA8\uB378\uC774 \uB0B8 \uD638\uCD9C \uD558\uB098\uAC00, Codex\uB294 \uC2E4\uC81C\uB85C \uC2E4\uD589\uB41C \uC791\uC5C5 \uD558\uB098\uAC00 \uD558\uB098\uC785\uB2C8\uB2E4."
+  en: "Tool calls are counted at a different grain in each tool. In {models} one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "\uB3C4\uAD6C \uD638\uCD9C\uC744 \uC138\uB294 \uAD75\uAE30\uAC00 \uB3C4\uAD6C\uB9C8\uB2E4 \uB2E4\uB985\uB2C8\uB2E4. {models}\uB294 \uBAA8\uB378\uC774 \uB0B8 \uD638\uCD9C \uD558\uB098\uAC00, Codex\uB294 \uC2E4\uC81C\uB85C \uC2E4\uD589\uB41C \uC791\uC5C5 \uD558\uB098\uAC00 \uD558\uB098\uC785\uB2C8\uB2E4."
 };
+var TOOL_CALL_GRAIN_JOIN = { en: " and ", ko: "\uC640 " };
 var UNJUDGED_COPY = {
   en: {
     intro: "Servers left out of the judgment that have no record of being called. They are not suggested for turning off.",
@@ -2221,7 +2222,11 @@ function measurementNotes(finding, details, lang) {
   if (finding.status !== "scored") return [];
   const used = ruleSpec(finding.ruleId).unit === "merged" ? details.mergedTools?.[finding.ruleId] ?? [] : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
   const lines = used.filter((item2) => item2.observed === "proxy").map((item2) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item2.tool][lang] }));
-  if (finding.ruleId === "I3" && new Set(used.map((item2) => item2.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+  const usedTools = new Set(used.map((item2) => item2.tool));
+  const modelGrain = ["claude-code", "gemini"].filter((tool) => usedTools.has(tool));
+  if (finding.ruleId === "I3" && usedTools.has("codex") && modelGrain.length > 0) {
+    lines.push(fill(TOOL_CALL_GRAIN[lang], { models: modelGrain.map((tool) => TOOL_NAMES[tool][lang]).join(TOOL_CALL_GRAIN_JOIN[lang]) }));
+  }
   return lines;
 }
 var WHY_ORDER = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
@@ -6754,20 +6759,28 @@ var GeminiSessionParser = class {
     if (Array.isArray(patch.removeIds)) this.markCopies(new Set(patch.removeIds.filter((id) => typeof id === "string")));
   }
   /**
-   * 압축 뒤 이력 동기화는 압축 요약(user)과 확인(gemini), 남길 대화를 새 ID로 한 번에 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다), 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
-   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이다. 구간에 「user 바로 다음이 모델 이름도 토큰도 없는 gemini」인 짝(요약과 확인)이 있으면 다시 적은 구간이라
-   * 그 안의 user 메시지를 모두 사본으로 본다(응답 없이 끝난 요청의 사본도 든다). 그 짝이 없으면 압축이 아닌 이력 고침이라 아무것도 빼지 않는다(같은 글을 다시 친 새 요청을 지키려고)
-   * (소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts)
+   * 이력을 새 ID로 다시 적으면(압축 뒤의 요약·확인과 남긴 대화, 압축이 실패한 뒤의 잘라내기) 제미나이는 다시 적은 메시지를 한 번에 붙이고 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 다시 적은 gemini 메시지에는 모델 이름도 토큰도 없다. 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이고, 구간의 user 메시지 가운데
+   * 다음 user 메시지 전까지 실제 응답(모델 이름이나 토큰이 있는 gemini)이 따르지 않는 것을 사본으로 본다. 실제 응답이 따르는 요청은 압축이 아닌 이력 고침 뒤에 남은 새 요청이라 센다.
+   * 구간 안에서 응답을 받지 못하고 끝난 진짜 새 요청은 사본과 가를 정보가 기록에 없어 사본으로 본다(사람 요청은 대신 보는 값이다)
+   * (소스 geminiChat.ts의 생성자·initialize·setHistory, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts, 짝 검토 4차 필수 1)
    */
   markCopies(removed) {
     let last = -1;
     for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
     if (last < 0) return;
     const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id) > last);
-    const synthetic = (record) => record.type === "gemini" && str3(record.model) === null && obj3(record.tokens) === null;
-    const rewritten = window.some((id, index) => this.messages.get(id).type === "user" && index + 1 < window.length && synthetic(this.messages.get(window[index + 1])));
-    if (!rewritten) return;
-    for (const id of window) if (this.messages.get(id).type === "user") this.copies.add(id);
+    const answer = (record) => record.type === "gemini" && (str3(record.model) !== null || obj3(record.tokens) !== null);
+    for (let index = 0; index < window.length; index++) {
+      if (this.messages.get(window[index]).type !== "user") continue;
+      let answered = false;
+      for (let next = index + 1; next < window.length && !answered; next++) {
+        const after = this.messages.get(window[next]);
+        if (after.type === "user") break;
+        answered = answer(after);
+      }
+      if (!answered) this.copies.add(window[index]);
+    }
   }
   /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */
   accept(record) {
@@ -11752,22 +11765,28 @@ function geminiSystemPaths(env, platform) {
 }
 var SHELL_NAMES = /* @__PURE__ */ new Set(["run_shell_command", "ShellTool"]);
 var SANDBOX_COMMANDS = /* @__PURE__ */ new Set(["docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"]);
-function sandboxOn(value) {
+function commandAllowed(command, platform) {
+  if (command === "runsc") return platform === "linux";
+  if (command === "windows-native") return platform === "win32";
+  if (command === "sandbox-exec") return platform === "darwin";
+  return true;
+}
+function sandboxOn(value, platform) {
   if (value === void 0 || value === null || value === false) return false;
   if (value === true) return true;
   if (typeof value === "string") {
     if (value === "" || value === "0" || value === "false") return false;
     if (value === "1" || value === "true") return true;
-    return SANDBOX_COMMANDS.has(value) ? true : null;
+    return SANDBOX_COMMANDS.has(value) && commandAllowed(value, platform) ? true : null;
   }
   if (isObject5(value)) {
     if (!value.enabled) return false;
     const command = value.command;
-    return command === void 0 || command === null ? true : typeof command === "string" ? sandboxOn(command) : null;
+    return command === void 0 || command === null ? true : typeof command === "string" ? sandboxOn(command, platform) : null;
   }
   return null;
 }
-function geminiSafetyOf(layers) {
+function geminiSafetyOf(layers, platform = process.platform) {
   let approvalMode = "default";
   let box = void 0;
   let toolSandboxing = false;
@@ -11782,7 +11801,7 @@ function geminiSafetyOf(layers) {
     if (typeof toolLevel === "boolean") toolSandboxing = toolLevel;
   }
   const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
-  const on = sandboxOn(box);
+  const on = sandboxOn(box, platform);
   return { approvalMode, sandbox: on === null ? null : on || toolSandboxing, shellAutoApproved };
 }
 function unknownGeminiSafety() {
@@ -11903,7 +11922,7 @@ async function scanGeminiSetup(input) {
     const layers = layersWith(read.value);
     const within = await importBoundary(ref.root, boundaryMarkersOf(layers));
     const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join27(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
-    projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers) : null });
+    projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers, input.platform) : null });
     if (read.status === "ok") projectLayers.push({ normRoot: ref.normRoot, layer: read.value });
   }
   const mcpServers = [];
@@ -11941,7 +11960,7 @@ async function scanGeminiSetup(input) {
     trustedFolders: trustStatus,
     globalInstructions: globalRead.set,
     globalMentions: globalRead.mentions,
-    safety: outerKnown ? geminiSafetyOf(layersWith(null)) : unknownGeminiSafety(),
+    safety: outerKnown ? geminiSafetyOf(layersWith(null), input.platform) : unknownGeminiSafety(),
     // 스킬 폴더는 이 버전에서 훑지 않는다. 사용자 스킬 자리를 읽지 못한 것으로 두어 스킬 규칙이 0으로 재지 않게 한다
     skills: [],
     mcpServers,

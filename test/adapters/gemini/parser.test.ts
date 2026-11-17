@@ -198,6 +198,31 @@ describe("GeminiSessionParser", () => {
     expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
   });
 
+  it("요약 없이 이력을 다시 적은 경우(압축 실패 뒤 잘라내기)도 응답이 따르지 않는 요청 사본은 다시 세지 않는다(짝 검토 4차 필수 1)", () => {
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", [{ text: "작업해 줘" }]),
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens, content: [{ text: "" }] }),
+      JSON.stringify({ id: "k1", timestamp: "2026-11-10T01:02:00.002Z", type: "user", content: [{ text: "작업해 줘" }] }),
+      JSON.stringify({ $patch: { removeIds: ["u1", "g1"] } }),
+    ]);
+    expect(summary.days["2026-11-10"]!.humanRequests).toBe(1);
+  });
+
+  it("다시 적은 구간이라도 실제 응답(모델 이름이나 토큰)이 따르는 요청은 사본이 아니다", () => {
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", [{ text: "옛 요청" }]),
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }),
+      user("u2", "2026-11-10T01:05:01.000Z", [{ text: "새 요청" }]),
+      JSON.stringify({ id: "i1", timestamp: "2026-11-10T01:05:02.000Z", type: "info", content: "안내" }),
+      gemini("g2", "2026-11-10T01:05:04.000Z", { tokens }),
+      JSON.stringify({ id: "b1", timestamp: "2026-11-10T01:05:05.000Z", type: "gemini", content: "Binary received" }),
+      JSON.stringify({ $patch: { removeIds: ["u1", "g1"] } }),
+    ]);
+    expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
+  });
+
   it("압축이 아닌 이력 고침(지우기)에서는 지운 요청과 글이 같은 새 요청도 그대로 센다(짝 검토 3차 필수 1)", () => {
     const summary = parse([
       meta(),

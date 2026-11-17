@@ -117,9 +117,11 @@ export const PROXY_LINE: Texts<string> = {
 
 /** 요청당 도구 호출(I3)을 두 도구에서 쟀을 때 어떻게 쟀나에 더하는 줄. 도구 호출을 세는 굵기가 도구마다 다르다(설계 9.7) */
 export const TOOL_CALL_GRAIN: Texts<string> = {
-  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
-  ko: "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.",
+  en: "Tool calls are counted at a different grain in each tool. In {models} one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "도구 호출을 세는 굵기가 도구마다 다릅니다. {models}는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.",
 };
+/** 모델이 낸 호출 하나를 하나로 세는 도구(Claude Code, 제미나이)의 이름을 잇는 말 */
+export const TOOL_CALL_GRAIN_JOIN: Texts<string> = { en: " and ", ko: "와 " };
 
 /** E6 항목의 정보. 판정에서 뺀 켜진 서버 가운데 부른 기록이 없는 것을 까닭마다 센다. 이름은 결과 화면이 따로 그린다(설계 13.1, 16.1) */
 export const UNJUDGED_COPY: Texts<{ intro: string; line: string; why: Record<UnjudgedServer["why"], string>; deny: string }> = {

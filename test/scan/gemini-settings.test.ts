@@ -9,8 +9,17 @@ describe("geminiSafetyOf의 샌드박스", () => {
   it("참·거짓과 글을 제미나이처럼 읽는다. 글 false와 0과 빈 글은 끔, true와 1과 아는 명령 이름은 켬이다", () => {
     expect([sandboxOf({ tools: { sandbox: true } }), sandboxOf({ tools: { sandbox: false } }), sandboxOf({ tools: { sandbox: null } })]).toEqual([true, false, false]);
     expect(["false", "0", ""].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([false, false, false]);
-    expect(["true", "1", "docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([true, true, true, true, true, true, true, true]);
+    expect(["true", "1", "docker", "podman", "lxc"].map((value) => sandboxOf({ tools: { sandbox: value } }))).toEqual([true, true, true, true, true]);
     expect(sandboxOf({})).toBe(false);
+  });
+
+  it("운영 체제가 받는 명령만 켬이다. runsc는 Linux, windows-native는 Windows, sandbox-exec는 macOS에서만이고 그 밖에서는 모름이다(짝 검토 4차 필수 2)", () => {
+    const on = (value: string, platform: NodeJS.Platform) => geminiSafetyOf([{ tools: { sandbox: value } }], platform).sandbox;
+    expect([on("runsc", "linux"), on("runsc", "win32"), on("runsc", "darwin")]).toEqual([true, null, null]);
+    expect([on("windows-native", "win32"), on("windows-native", "linux"), on("windows-native", "darwin")]).toEqual([true, null, null]);
+    expect([on("sandbox-exec", "darwin"), on("sandbox-exec", "linux"), on("sandbox-exec", "win32")]).toEqual([true, null, null]);
+    expect(geminiSafetyOf([{ tools: { sandbox: { enabled: true, command: "runsc" } } }], "win32").sandbox).toBeNull();
+    expect([on("docker", "win32"), on("podman", "darwin"), on("lxc", "linux")]).toEqual([true, true, true]);
   });
 
   it("제미나이가 시작하지 못하는 값(모르는 명령, 대문자, 빈칸, 수)은 켬도 끔도 아닌 모름이다(짝 검토 3차 필수 4)", () => {

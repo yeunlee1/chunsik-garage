@@ -1,5 +1,7 @@
 # Chunsik's Garage
 
+![Chunsik the otter and Chunsam the axolotl holding a big wrench together](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/hero.png)
+
 AQ checkup for Claude Code and Codex. A program on your own PC reads your local Claude Code and Codex records, scores how well you set up and use these AI coding tools, and writes a one-page report.
 
 ![AQ report page made from synthetic records](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-en.png)

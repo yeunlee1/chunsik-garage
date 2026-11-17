@@ -63,6 +63,17 @@ describe("doctor", () => {
     const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
     expect(report.codex).toEqual({ home: join(root, ".codex"), sessionsFound: true, recordFiles: 2, compressedOnly: 1, unreadable: 0 });
   });
+  it("Gemini CLI 기록 폴더와 세션 파일 수를 낸다. GEMINI_CLI_HOME을 따르고, 없으면 찾지 못한 것이다(설계 「0.4.0에서 정한 것」)", async () => {
+    const chats = join(root, ".gemini", "tmp", "proj", "chats");
+    await mkdir(join(chats, "parent-1"), { recursive: true });
+    await writeFile(join(chats, "session-2026-11-10T01-00-aaaa1111.jsonl"), "{}\n");
+    await writeFile(join(chats, "parent-1", "agent-1.jsonl"), "{}\n");
+    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
+    expect(report.gemini).toEqual({ home: join(root, ".gemini"), tmpFound: true, sessionFiles: 2, unreadable: 0 });
+    const elsewhere = join(root, "gemini 다른 곳");
+    const missing = await doctor({ env: { GEMINI_CLI_HOME: elsewhere }, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
+    expect(missing.gemini).toEqual({ home: join(elsewhere, ".gemini"), tmpFound: false, sessionFiles: 0, unreadable: 0 });
+  });
   it("Codex 기록 폴더는 CODEX_HOME을 따르고, 없으면 찾지 못한 것이며, 날짜 폴더 자리에 파일이 있으면 읽지 못한 것으로 센다", async () => {
     const elsewhere = join(root, "codex 다른 곳");
     const missing = await doctor({ env: { CODEX_HOME: elsewhere }, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: stateDir(root) });
@@ -88,6 +99,7 @@ describe("doctor", () => {
     const printed = JSON.parse(String(write.mock.calls[0]![0]));
     expect(printed.claudeCode.projectsFound).toBe(false);
     expect(printed.codex.sessionsFound).toBe(false);
-    expect(Object.keys(printed)).toEqual(["node", "zstd", "claudeCode", "codex", "state"]);
+    expect(printed.gemini.tmpFound).toBe(false);
+    expect(Object.keys(printed)).toEqual(["node", "zstd", "claudeCode", "codex", "gemini", "state"]);
   });
 });

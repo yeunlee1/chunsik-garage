@@ -1,19 +1,23 @@
-// 점검의 입력 묶음을 모은다. 두 도구의 기록을 읽고, 셋팅을 스캔하고, 지난 점검까지의 관측 기록을 붙여 core가 받는 모양으로 만든다. 경로의 정규화처럼 순수하지 않은 일은 여기서 끝낸다(설계 7.2, 8, 10 「프로젝트 목록」, 12.1, 「5단계 3부 계획 전 결정」 2·3번)
+// 점검의 입력 묶음을 모은다. 세 도구(Claude Code, Codex, Gemini CLI)의 기록을 읽고, 셋팅을 스캔하고, 지난 점검까지의 관측 기록을 붙여 core가 받는 모양으로 만든다. 경로의 정규화처럼 순수하지 않은 일은 여기서 끝낸다(설계 7.2, 8, 10 「프로젝트 목록」, 12.1, 「5단계 3부 계획 전 결정」 2·3번)
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { claudeObservation, CLAUDE_COVERAGE, type Observation } from "../adapters/claude/observation.ts";
 import { SHELL_TOOLS } from "../adapters/claude/parser.ts";
 import { CODEX_COVERAGE, codexMcpObservation } from "../adapters/codex/observation.ts";
 import { CODEX_SHELL_TOOLS } from "../adapters/codex/parser.ts";
+import { GEMINI_COVERAGE, geminiMcpObservation } from "../adapters/gemini/observation.ts";
+import { GEMINI_SHELL_TOOLS } from "../adapters/gemini/parser.ts";
 import { makeWindows } from "../adapters/common/dates.ts";
 import type { ToolCoverage } from "../adapters/types.ts";
 import { collectClaude, unreadableCount, type ClaudeCollectResult, type ClaudeReadStats, type EvalClock } from "../collect/claude.ts";
 import { codexUnreadableCount, collectCodex, type CodexCollectResult, type CodexReadStats } from "../collect/codex.ts";
+import { collectGemini, type GeminiCollectResult } from "../collect/gemini.ts";
 import type { EvaluationInput } from "../core/evaluate.ts";
 import type { SelfIdentity } from "../core/installs/candidates.ts";
 import type { CollectedTool } from "../core/result/tools.ts";
 import { scanClaudeSetup } from "../scan/claude.ts";
 import { scanCodexSetup } from "../scan/codex.ts";
-import type { ClaudeSetupFacts, CodexSetupFacts } from "../scan/types.ts";
+import { scanGeminiSetup } from "../scan/gemini.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, GeminiSetupFacts } from "../scan/types.ts";
 import type { StateFile } from "../state/state.ts";
 
 export interface CheckupInputOptions {
@@ -38,9 +42,9 @@ export interface CheckupInputOptions {
 export interface CheckupInput {
   input: EvaluationInput;
   /** 도구마다 모은 기록 */
-  collected: { claude: ClaudeCollectResult; codex: CodexCollectResult };
-  /** 도구마다의 셋팅 사실. 관측 기록을 고칠 때 쓴다 */
-  facts: { claude: ClaudeSetupFacts; codex: CodexSetupFacts };
+  collected: { claude: ClaudeCollectResult; codex: CodexCollectResult; gemini: GeminiCollectResult };
+  /** 도구마다의 셋팅 사실. 관측 기록을 고칠 때 쓴다(제미나이는 관측 기록에 넣는 설치가 없다) */
+  facts: { claude: ClaudeSetupFacts; codex: CodexSetupFacts; gemini: GeminiSetupFacts };
   /** 평가 결과에 싣는 수집 결과(도구마다). 캐시를 쓴 파일 수처럼 실행마다 다른 것은 뺐다 */
   tools: CollectedTool[];
 }
@@ -49,6 +53,9 @@ const CLAUDE_AI_PREFIX = "claude.ai ";
 
 /** Codex는 스킬 사용을 기록하지 않아 스킬의 관측은 늘 빠짐없지 않다(설계 「5단계 2부 계획 전 결정」 6번, 「5단계 4부 계획 전 결정」 3번) */
 const CODEX_SKILL_OBSERVATION: Observation = { complete: false, reasons: ["not-recorded"] };
+
+/** 제미나이는 스킬 사용을 이 버전에서 보지 않아 스킬의 관측은 늘 빠짐없지 않다(설계 「0.4.0에서 정한 것」) */
+const GEMINI_SKILL_OBSERVATION: Observation = { complete: false, reasons: ["not-recorded"] };
 
 /** 이어받은 것을 확인하지 못한 세션이 있으면 대신 보는 것으로 낮추는 Codex의 관측 범위(「5단계 4부 계획 전 결정」 4번) */
 const INHERITED_METRICS = ["responsesAndTokens", "toolCalls", "toolErrors", "shellExitCodes"] as const;
@@ -80,12 +87,13 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
   const collectOptions = { env: options.env, homedir: options.homedir, clock: options.clock, cacheDir: options.cacheDir, rescan: options.rescan };
   const claude = await collectClaude(collectOptions);
   const codex = await collectCodex(collectOptions);
+  const gemini = await collectGemini(collectOptions);
 
-  // 프로젝트 목록은 두 도구의 주 세션 가운데 수집 구간에 응답이 있는 것의 작업 폴더(세션마다 처음 적힌 것 하나)로 만든다. 하위 세션과 작업 폴더가 없는 세션은 넣지 않는다
+  // 프로젝트 목록은 세 도구의 주 세션 가운데 수집 구간에 응답이 있는 것의 작업 폴더(세션마다 처음 적힌 것 하나)로 만든다. 하위 세션과 작업 폴더가 없는 세션은 넣지 않는다
   const collectDates = new Set(makeWindows(options.clock.nowMs, options.clock.timeZone).collectDates);
   const cwds = new Set<string>();
   const normalizedCwds: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const summary of [...claude.summaries, ...codex.summaries]) {
+  for (const summary of [...claude.summaries, ...codex.summaries, ...gemini.summaries]) {
     if (summary.cwd !== null) normalizedCwds[summary.cwd] = normalizePath(summary.cwd, options.platform);
     if (summary.kind === "main" && summary.cwd !== null && Object.entries(summary.days).some(([date, day]) => collectDates.has(date) && day.responses > 0)) cwds.add(summary.cwd);
   }
@@ -109,10 +117,12 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
     ...(options.managedDir === undefined ? {} : { managedDir: options.managedDir }),
   });
   const codexFacts = await scanCodexSetup({ env: options.env, homedir: options.homedir, tmpdir: options.tmpdir, platform: options.platform, cwds: sortedCwds, salt: options.state.salt });
+  const geminiFacts = await scanGeminiSetup({ env: options.env, homedir: options.homedir, tmpdir: options.tmpdir, platform: options.platform, cwds: sortedCwds, salt: options.state.salt });
 
   const claudeUnreadable = unreadableCount(claude.read);
   const claudeObserved = { skills: claudeObservation(claude.summaries, claudeUnreadable, "skill"), mcp: claudeObservation(claude.summaries, claudeUnreadable, "mcp") };
   const codexObserved = { skills: CODEX_SKILL_OBSERVATION, mcp: codexMcpObservation(codex.summaries, codexUnreadableCount(codex.read)) };
+  const geminiObserved = { skills: GEMINI_SKILL_OBSERVATION, mcp: geminiMcpObservation(gemini.summaries, unreadableCount(gemini.read)) };
   const input: EvaluationInput = {
     clock: options.clock,
     tools: [
@@ -132,14 +142,23 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
         complete: { skills: codexObserved.skills.complete, mcp: codexObserved.mcp.complete },
         setup: codexFacts,
       },
+      {
+        tool: "gemini",
+        summaries: gemini.summaries,
+        coverage: GEMINI_COVERAGE,
+        shellTools: [...GEMINI_SHELL_TOOLS].sort(),
+        complete: { skills: geminiObserved.skills.complete, mcp: geminiObserved.mcp.complete },
+        setup: geminiFacts,
+      },
     ],
-    // Codex의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
+    // Codex와 제미나이의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
     projects: claudeFacts.projects,
     normalizedCwds: { ...normalizedCwds },
     installs: options.state.installs,
     self: options.self,
   };
   const { fromCache: _fromCache, ...claudeRead } = claude.read;
+  const { fromCache: _geminiFromCache, ...geminiRead } = gemini.read;
   const tools: CollectedTool[] = [
     { tool: "claude-code", detected: claude.detected, visibleFrom: claude.visibleFrom, overlappingSessions: claude.overlappingSessions, read: claudeRead, observation: claudeObserved },
     // Codex는 다른 기록에서 이어받은 앞부분을 빼고 세므로 다른 세션과 겹쳐 세는 응답이 없다(설계 「5단계 계획 전 결정」 7번)
@@ -163,6 +182,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
         idFallbacks: codex.idFallbacks,
       },
     },
+    { tool: "gemini", detected: gemini.detected, visibleFrom: gemini.visibleFrom, overlappingSessions: gemini.overlappingSessions, read: geminiRead, observation: geminiObserved },
   ];
-  return { input, collected: { claude, codex }, facts: { claude: claudeFacts, codex: codexFacts }, tools };
+  return { input, collected: { claude, codex, gemini }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools };
 }

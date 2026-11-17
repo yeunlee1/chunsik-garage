@@ -40,7 +40,15 @@ export interface ImportOptions {
   homedir: string;
   /** 가져온 파일이 이 폴더 안일 때만 따른다(프로젝트 지침). null이면 어디든 따른다(전역 지침) */
   within: string | null;
+  /**
+   * 가져오기 규칙. 주지 않으면 Claude Code의 것(`@~/`를 홈으로 풀고 네 단계까지)이다. gemini는 `~`를 풀지 않고 가져오는 파일의 폴더 기준으로 풀며
+   * 다섯 단계까지 따른다(공개 소스 Gemini CLI v0.68.0의 utils/memoryImportProcessor.ts, 설계 「0.4.0에서 정한 것」)
+   */
+  style?: "claude" | "gemini";
 }
+
+/** 제미나이가 가져오기를 따르는 깊이(processImports의 maxDepth 5). 다섯째 단계의 파일까지 읽고 그 파일의 가져오기는 따르지 않는다 */
+export const GEMINI_IMPORT_HOPS = 5;
 
 export function emptyInstructionSet(): InstructionSet {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
@@ -132,9 +140,11 @@ export function countMentions(text: string, targets: readonly MentionTarget[]): 
 
 /**
  * 지침 글의 가져오기(@경로). 줄 어디서나 찾고, 코드 블록과 코드 칸 안, 따옴표로 감싼 경로, 앞이 빈칸이 아닌 @(메일 주소 같은 것)는 뺀다.
- * 역빗금 뒤의 빈칸은 경로의 빈칸으로 푼다(Claude Code 문서의 「Import additional files」)
+ * 역빗금 뒤의 빈칸은 경로의 빈칸으로 푼다(Claude Code 문서의 「Import additional files」).
+ * style이 gemini면 제미나이의 규칙이다. 다음 빈칸(빈칸·탭·줄바꿈)까지가 경로이고 역빗금으로 빈칸을 잇지 않으며, 경로는 .·/·영문자로 시작해야 한다
+ * (공개 소스 Gemini CLI v0.68.0의 utils/memoryImportProcessor.ts의 findImports)
  */
-export function importsOf(text: string): string[] {
+export function importsOf(text: string, style: "claude" | "gemini" = "claude"): string[] {
   // 코드 블록을 지운다. 줄 앞의 들여쓰기, 목록 표시(-, *, +, 1. 같은 것), 인용 표시(>)를 걷어 낸 뒤 ```나 ~~~로 열고, 같은 글자의 같거나 긴 울타리만 있는 줄에서 닫는다(짝 검토 1차 필수 1)
   const prose: string[] = [];
   let fence: string | null = null;
@@ -156,6 +166,24 @@ export function importsOf(text: string): string[] {
   // 코드 칸을 지운다. 같은 길이의 역따옴표 사이이고, 여러 줄에 걸칠 수 있지만 빈 줄(문단의 끝)은 넘지 않는다
   const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
   const out: string[] = [];
+  if (style === "gemini") {
+    const space = (char: string | undefined): boolean => char === " " || char === "\t" || char === "\n" || char === "\r";
+    let index = 0;
+    while (index < cleaned.length) {
+      index = cleaned.indexOf("@", index);
+      if (index === -1) break;
+      if (index > 0 && !space(cleaned[index - 1])) {
+        index++;
+        continue;
+      }
+      let end = index + 1;
+      while (end < cleaned.length && !space(cleaned[end])) end++;
+      const token = cleaned.slice(index + 1, end);
+      if (/^[./A-Za-z]/.test(token)) out.push(token);
+      index = end + 1;
+    }
+    return out;
+  }
   for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
     const token = match[1]!.replace(/\\ /g, " ");
     if (token.startsWith('"') || token.startsWith("'")) continue;
@@ -173,6 +201,16 @@ const NETWORK_PATH = /^(\\\\|\/\/)/;
 export function importTarget(token: string, from: string, homedir: string): string | null {
   if (NETWORK_PATH.test(token)) return null;
   const target = token.startsWith("~/") || token.startsWith("~\\") ? join(homedir, token.slice(2)) : isAbsolute(token) ? token : resolve(dirname(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
+}
+
+/**
+ * 제미나이의 가져오기 경로. `~`를 풀지 않고 가져오는 파일의 폴더 기준으로 푼다(절대 경로는 그대로다). file:, http:, https: 주소와 네트워크 경로는 따르지 않는다
+ * (공개 소스 Gemini CLI v0.68.0의 utils/memoryImportProcessor.ts의 validateImportPath, processImports)
+ */
+export function geminiImportTarget(token: string, from: string): string | null {
+  if (/^(file|https?):\/\//i.test(token) || NETWORK_PATH.test(token)) return null;
+  const target = resolve(dirname(from), token);
   return NETWORK_PATH.test(target) ? null : target;
 }
 
@@ -261,11 +299,13 @@ export async function readInstructionSet(
     const info = await entryInfo(path);
     if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
     if (info.realPath !== null) readReal.add(info.realPath);
-    if (imports !== null && hops < MAX_IMPORT_HOPS) {
-      for (const token of importsOf(read.text)) {
-        const target = importTarget(token, path, imports.homedir);
+    if (imports !== null && hops < (imports.style === "gemini" ? GEMINI_IMPORT_HOPS : MAX_IMPORT_HOPS)) {
+      const gemini = imports.style === "gemini";
+      for (const token of importsOf(read.text, gemini ? "gemini" : "claude")) {
+        const target = gemini ? geminiImportTarget(token, path) : importTarget(token, path, imports.homedir);
         if (target === null) continue;
-        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        // 제미나이는 대상과 경계를 둘 다 실제 경로로 바꾼 뒤 견주므로 글자 경계로 미리 거르지 않는다. 경계 밖이면 읽기 전의 실제 경로 검사가 거른다
+        if (imports.within !== null && !gemini && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);
         if (seen.has(key)) continue;
         seen.add(key);

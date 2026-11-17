@@ -2,7 +2,7 @@
 
 ![큰 렌치를 함께 든 해달 춘식이와 우파루파 춘삼이](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/hero.png)
 
-Claude Code와 Codex의 AQ 점검입니다. 내 PC에서 도는 프로그램이 Claude Code와 Codex의 기록을 읽어, AI 코딩 도구를 얼마나 잘 갖추고 쓰는지 점수를 매기고 한 장짜리 결과 화면을 만듭니다.
+Claude Code와 Codex의 AQ 점검입니다. Gemini CLI 기록도 함께 셉니다. 내 PC에서 도는 프로그램이 Claude Code, Codex, Gemini CLI의 기록을 읽어, AI 코딩 도구를 얼마나 잘 갖추고 쓰는지 점수를 매기고 한 장짜리 결과 화면을 만듭니다.
 
 ![합성 기록으로 만든 AQ 결과 화면](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-ko.png)
 
@@ -42,6 +42,7 @@ Node.js 22 이상이 있어야 합니다. 명령의 `#main`과 `@main`이 배포
 - Windows 11에서 만들고 시험했습니다. macOS와 Linux는 임시 홈 폴더 시험으로만 확인했습니다.
 - 내 PC의 Claude Code와 Codex에서 쓰도록 만들었습니다. 이 도구들이 PC에 남긴 기록을 읽으므로 claude.ai 채팅이나 Cowork용이 아닙니다.
 - Claude Code는 2.1.220부터 2.1.322까지의 기록 형식과 2.1.220부터 2.1.325까지 정비가 바꾸는 설정을 확인했습니다. Codex는 0.166.0의 기록(그리고 0.140부터 0.142까지의 옛 형식)으로 확인했고, 0.169.0까지는 점검이 읽는 기록 모양의 공개 소스를 비교해 확인했습니다.
+- Gemini CLI는 PC에 기록과 설정이 있으면 함께 읽습니다. 점검은 Claude Code나 Codex에서 돌립니다. Gemini CLI 확장은 없습니다. 기록 형식은 Gemini CLI 0.68.0의 공개 소스로만 확인했고 실제 기록으로는 아직 확인하지 않았습니다. 기록에 어느 버전이 썼는지 남지 않습니다. Gemini CLI에서는 스킬, 안 쓰는 MCP 서버, MCP 연결 실패와 훅, 추론 강도, 압축을 재지 않고 정비도 하지 않습니다. Gemini CLI에서 신뢰하지 않은 폴더의 설정은 Gemini CLI처럼 빼고 봅니다.
 
 ## 남기는 것과 지우는 법
 

@@ -2,17 +2,25 @@
 import type { ObservationReason } from "../../adapters/claude/observation.ts";
 import { compareVersions, parseVersion } from "../../adapters/common/version.ts";
 import type { ToolId } from "../../adapters/types.ts";
-import type { CodexSetupFacts, FileStatus, ProjectFact, SetupProblem, SecretFact } from "../../scan/types.ts";
+import type { CodexSetupFacts, FileStatus, GeminiSetupFacts, ProjectFact, SetupProblem, SecretFact } from "../../scan/types.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 import type { Withheld } from "../scoreboard.ts";
 import type { CollectedCodex, CollectedTool } from "./tools.ts";
 
 /** 도구마다 기록의 해석 규약을 확인한 버전의 범위(설계 9.5). 새 버전의 기록을 확인하면 넓힌다. 이 밖의 버전은 읽을 수 있는 필드로 계산하고 알린다(설계 20.1) */
-export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.169.0" } };
+export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = {
+  "claude-code": { from: "2.1.220", to: "2.1.322" },
+  codex: { from: "0.140.0", to: "0.169.0" },
+  // 제미나이 CLI는 세션 기록에 버전을 적지 않아 이 범위로 견줄 버전이 없다. 해석 규약은 공개 소스 v0.68.0으로 확인했다(설계 「0.4.0에서 정한 것」)
+  gemini: { from: "0.68.0", to: "0.68.0" },
+};
 /** 점수 구간의 사람 요청 가운데 근거가 약한 것의 몫이 이것을 넘으면 알린다(설계 9.5). 정확히 이 값은 넘지 않은 것이다 */
 export const WEAK_REQUEST_SHARE = 0.1;
 
-/** 있는데 읽지 못한 셋팅이 무엇인지. 이 차례로 싣는다. codex_config와 codex_project_config는 Codex의 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이다 */
+/**
+ * 있는데 읽지 못한 셋팅이 무엇인지. 이 차례로 싣는다. codex_config와 codex_project_config는 Codex의 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이다.
+ * gemini_trusted_folders는 제미나이의 작업 폴더 신뢰 규칙(trustedFolders.json)이다. 제미나이의 사용자·시스템·프로젝트 설정은 user_settings, managed_settings, project_settings로 싣는다
+ */
 export type UnreadableSetup =
   | "claude_json"
   | "user_settings"
@@ -23,6 +31,7 @@ export type UnreadableSetup =
   | "plugins_file"
   | "codex_config"
   | "codex_project_config"
+  | "gemini_trusted_folders"
   | "skill_dirs"
   | "instructions"
   | "hook_settings"
@@ -138,6 +147,24 @@ function codexSetupNotices(setup: CodexSetupFacts, projects: readonly ProjectFac
   return notices;
 }
 
+/** 제미나이 셋팅 쪽 알림. 읽지 못한 설정과 지침, 점수에 세지 않는 문제다. 플러그인과 스킬 폴더는 이 버전에서 보지 않는다(설계 「0.4.0에서 정한 것」) */
+function geminiSetupNotices(setup: GeminiSetupFacts, projects: readonly ProjectFact[]): Notice[] {
+  const notices: Notice[] = [];
+  const rootOf = new Map(projects.map((project) => [project.normRoot, project.root]));
+  const unreadable: [UnreadableSetup, boolean, string[]][] = [
+    ["user_settings", unread(setup.settings), []],
+    ["managed_settings", false, setup.managedParts.filter((part) => unread(part.status)).map((part) => part.path)],
+    ["project_settings", false, setup.projects.filter((project) => project.trusted && unread(project.settingsStatus)).map((project) => rootOf.get(project.normRoot) ?? project.normRoot)],
+    ["gemini_trusted_folders", setup.folderTrust && unread(setup.trustedFolders), []],
+    ["instructions", false, [setup.globalInstructions, ...setup.projects.map((project) => project.instructions)].flatMap((set) => [...set.unreadable, ...set.unreadableDirs])],
+  ];
+  for (const [what, whole, targets] of unreadable) {
+    if (whole || targets.length > 0) notices.push({ kind: "setup_unreadable", tool: "gemini", what, targets: sortedUnique(targets) });
+  }
+  notices.push(...unscoredProblems("gemini", setup.problems));
+  return notices;
+}
+
 /**
  * 셋팅 쪽 알림과 실행 입력 알림. 있는데 읽지 못한 셋팅, 켜져 있는데 세지 않은 플러그인, 점수에 세지 않는 플러그인 안의 문제,
  * 지금 PC에 없는 프로젝트, 상태 파일이 깨져 새로 시작한 것, AQ를 내지 않은 것이다
@@ -151,6 +178,10 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
     if (tool.setup.secrets.length > 0) notices.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices.push(...codexSetupNotices(tool.setup, input.projects));
+      continue;
+    }
+    if (tool.tool === "gemini") {
+      notices.push(...geminiSetupNotices(tool.setup, input.projects));
       continue;
     }
     const id = tool.tool;

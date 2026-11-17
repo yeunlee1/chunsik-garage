@@ -1,4 +1,4 @@
-// 셋팅 스캐너가 내는 Claude Code와 Codex의 셋팅 사실. 숫자, 이름, 경로, 참거짓, 지문만 담고 설정의 값·지침의 글·훅 명령·권한 규칙의 글은 담지 않는다(설계 10, 12.1, 19.1, 「5단계 2부 계획 전 결정」 9번)
+// 셋팅 스캐너가 내는 Claude Code, Codex, 제미나이 CLI의 셋팅 사실. 숫자, 이름, 경로, 참거짓, 지문만 담고 설정의 값·지침의 글·훅 명령·권한 규칙의 글은 담지 않는다(설계 10, 12.1, 19.1, 「5단계 2부 계획 전 결정」 9번)
 import type { CodexSafetyFact, CodexTrust } from "./codex-settings.ts";
 import type { ShellGuard } from "./hooks.ts";
 import type { InstructionSet } from "./instructions.ts";
@@ -248,6 +248,61 @@ export interface CodexProjectFact {
   instructions: InstructionSet;
   /** 신뢰한 프로젝트 맥락(사용자 층 위에 그 프로젝트 층)의 승인과 샌드박스. 신뢰한 프로젝트가 아니거나 그 설정을 읽지 못했으면 null */
   safety: CodexSafetyFact | null;
+}
+
+/** 제미나이 CLI의 안전 설정(공개 소스 v0.68.0의 settingsSchema.ts). 그 층을 읽지 못했으면 칸이 모두 null이다(설계 「0.4.0에서 정한 것」) */
+export interface GeminiSafetyFact {
+  /** general.defaultApprovalMode(default, auto_edit, plan). 정하지 않았으면 "default"다. 모두 자동 승인(YOLO)은 실행할 때만 켜져 설정에 없다 */
+  approvalMode: string | null;
+  /** 샌드박스가 켜져 있다. tools.sandbox(참, true·1·아는 명령 이름, enabled가 참인 설정 묶음)나 도구 샌드박스(security.toolSandboxing)다. 제미나이가 시작하지 못하는 값이면 null이다 */
+  sandbox: boolean | null;
+  /** tools.allowed(확인 창을 건너뛰는 도구, 그 칸을 적은 마지막 층의 목록)에 셸 도구가 인자 없이 통째로 들어 있다 */
+  shellAutoApproved: boolean | null;
+}
+
+/** 제미나이 CLI 프로젝트마다의 셋팅 사실. 프로젝트 목록과 이름은 Claude Code의 ProjectFact와 같고 정규화한 뿌리로 잇는다 */
+export interface GeminiProjectFact {
+  normRoot: string;
+  /** 스캐너가 셋팅을 읽은 프로젝트다(지금 PC에 있고 프로젝트로 보지 않는 폴더가 아니다) */
+  scanned: boolean;
+  /**
+   * 제미나이가 이 폴더를 신뢰한다. 작업 폴더 신뢰가 꺼져 있거나 신뢰 규칙(trustedFolders.json)이 신뢰한다고 정했을 때다. 맞는 규칙이 없으면 신뢰하지 않는다.
+   * 신뢰하지 않는 폴더에서는 프로젝트 설정과 프로젝트 지침을 쓰지 않는다(공개 소스 cli/src/config/settings.ts, context/memoryContextManager.ts)
+   */
+  trusted: boolean;
+  /** 신뢰한 프로젝트의 .gemini/settings.json의 읽기 상태. 신뢰하지 않거나 읽지 않는 폴더면 null */
+  settingsStatus: FileStatus | null;
+  /** 프로젝트 뿌리의 지침(context.fileName과 GEMINI.md). 신뢰하지 않거나 읽지 않는 폴더면 빈 묶음이다 */
+  instructions: InstructionSet;
+  /** 시스템 기본값, 사용자 층, 프로젝트 층, 시스템 설정을 차례로 얹은 안전 설정. 신뢰하지 않거나 읽지 않는 폴더, 그 설정을 읽지 못했으면 null */
+  safety: GeminiSafetyFact | null;
+}
+
+/** 셋팅 스캐너가 내는 제미나이 CLI의 셋팅 사실(설계 「0.4.0에서 정한 것」). 스킬 폴더는 이 버전에서 훑지 않아 skills가 비고 unreadableSkillPlaces.user가 참이다 */
+export interface GeminiSetupFacts {
+  tool: "gemini";
+  home: string;
+  /** 사용자 settings.json의 읽기 상태(주석을 떼고 읽는다) */
+  settings: FileStatus;
+  /** 있는 시스템 설정 파일(시스템 기본값 system-defaults.json, 시스템 설정 settings.json)과 그 상태. 비어 있으면 없다 */
+  managedParts: { path: string; status: FileStatus }[];
+  /** 작업 폴더 신뢰 기능(security.folderTrust.enabled, 기본 참) */
+  folderTrust: boolean;
+  /** 신뢰 규칙 파일(trustedFolders.json)의 읽기 상태. 값이 신뢰 단계가 아니면 unparsable이다 */
+  trustedFolders: FileStatus;
+  globalInstructions: InstructionSet;
+  /** 전역 지침에 목록의 프로젝트 경로나 이름이 나온 횟수(정규화한 뿌리 → 횟수) */
+  globalMentions: Record<string, number>;
+  /** 프로젝트 밖(시스템 기본값, 사용자 층, 시스템 설정)의 안전 설정 */
+  safety: GeminiSafetyFact;
+  skills: SkillFact[];
+  mcpServers: McpFact[];
+  projects: GeminiProjectFact[];
+  problems: SetupProblem[];
+  /** 설정의 MCP 서버 정의에 그대로 적힌 비밀값의 자리 */
+  secrets: SecretFact[];
+  unreadableDirs: string[];
+  unreadableSkillPlaces: { user: boolean; projects: string[]; plugins: string[] };
 }
 
 /** 셋팅 스캐너가 내는 Codex의 셋팅 사실(「5단계 2부 계획 전 결정」 9번). 스킬·서버·문제·지침의 꼴은 Claude Code와 같다 */

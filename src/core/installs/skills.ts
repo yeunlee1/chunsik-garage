@@ -55,7 +55,8 @@ function skillsUnread(tool: ClaudeToolSetup): boolean {
 
 export function judgeSkills(tool: ToolSetup, context: VerdictContext): SkillJudgement {
   // Codex는 스킬 사용을 기록하지 않는다. 판정하지 않아 판정한 스킬 묶음에도 들지 않는다(설계 「5단계 3부 계획 전 결정」 10번)
-  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
+  // 제미나이는 스킬 폴더를 이 버전에서 훑지 않는다(설계 「0.4.0에서 정한 것」)
+  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex" || tool.tool === "gemini") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const { setup } = tool;
   // 대상을 모르면 분모가 몇인지도 따질 수 없다. 판정하지 않으므로 안 쓴 것이 확인됨도 정비 후보도 나오지 않는다
   if (skillsUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };

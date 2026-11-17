@@ -35,6 +35,7 @@ const UNREADABLE_SETUP: Record<UnreadableSetup, Texts<string>> = {
   plugins_file: { en: "plugin install records", ko: "플러그인 설치 기록" },
   codex_config: { en: "config.toml", ko: "config.toml" },
   codex_project_config: { en: "project config.toml", ko: "프로젝트의 config.toml" },
+  gemini_trusted_folders: { en: "trustedFolders.json", ko: "trustedFolders.json" },
   skill_dirs: { en: "skill folders", ko: "스킬 폴더" },
   instructions: { en: "instruction files", ko: "지침 파일" },
   hook_settings: { en: "settings with hooks", ko: "훅을 적은 설정" },

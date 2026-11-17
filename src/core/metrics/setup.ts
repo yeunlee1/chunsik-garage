@@ -2,10 +2,10 @@
 import { compareVersions, maxVersion, parseVersion, type Version } from "../../adapters/common/version.ts";
 import type { SessionSummary, ToolId } from "../../adapters/types.ts";
 import type { ShellGuard } from "../../scan/hooks.ts";
-import type { ClaudeHooksFacts, ClaudeSetupFacts, CodexSetupFacts, SetupProblem } from "../../scan/types.ts";
+import type { ClaudeHooksFacts, ClaudeSetupFacts, CodexSetupFacts, GeminiSetupFacts, SetupProblem } from "../../scan/types.ts";
 import { blank, countGate, scored, unmeasured, type Measurement } from "../measure.ts";
 import { sameInstall } from "../installs/same.ts";
-import { codexSettingsUnread, enablementUnread, globalSettingsUnread, mcpPlacesUnread, projectSettingsUnread } from "../readability.ts";
+import { codexSettingsUnread, enablementUnread, geminiSettingsUnread, globalSettingsUnread, mcpPlacesUnread, projectSettingsUnread } from "../readability.ts";
 import type { ToolUsage } from "../totals.ts";
 
 interface ToolSetupCommon extends Omit<ToolUsage, "tool"> {
@@ -14,7 +14,7 @@ interface ToolSetupCommon extends Omit<ToolUsage, "tool"> {
 }
 
 /** 점수에 넣는 도구 하나의 구간 합계, 관측 범위, 셋팅 사실. 셋팅 사실의 꼴은 도구마다 다르다(설계 「5단계 3부 계획 전 결정」 4번) */
-export type ToolSetup = ToolSetupCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts });
+export type ToolSetup = ToolSetupCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts } | { tool: "gemini"; setup: GeminiSetupFacts });
 export type ClaudeToolSetup = Extract<ToolSetup, { tool: "claude-code" }>;
 
 /** 전역 지침 파일들의 크기를 합쳐 이만큼이면 전역 지침이 있는 것이다(설계 11.3 S1) */
@@ -63,8 +63,24 @@ function codexSafeguard(setup: CodexSetupFacts): ToolSafeguard {
   return { tool: "codex", guardHook: false, permissionChecks: !unsafe };
 }
 
+/**
+ * 제미나이의 안전장치. 맥락(전역, 읽은 프로젝트마다) 가운데 셸 도구를 확인 없이 허용(tools.allowed)하면서 샌드박스가 없는 것이 하나도 없으면 안전장치가 있다.
+ * 기본 승인 방식(default, auto_edit, plan)은 셸 명령마다 묻는다. 모두 자동 승인(YOLO)은 실행할 때만 켜져 설정으로는 보지 못한다(설계 「0.4.0에서 정한 것」)
+ */
+function geminiSafeguard(setup: GeminiSetupFacts): ToolSafeguard {
+  if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  // 신뢰하지 않는 폴더는 프로젝트 층을 쓰지 않아 전역 맥락과 같다
+  const contexts = [setup.safety, ...setup.projects.flatMap((project) => (project.scanned && project.trusted && project.safety !== null ? [project.safety] : []))];
+  // 셸을 묻지 않고 실행하게 둔 맥락 가운데 샌드박스가 꺼진 곳이 있으면 안전장치가 없다. 꺼진 곳은 없고 샌드박스 값을 모르는 곳(제미나이가 시작하지 못하는 값)이 있으면 모름이다
+  const open = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  return { tool: "gemini", guardHook: false, permissionChecks: true };
+}
+
 function safeguardOf(tool: ToolSetup): ToolSafeguard {
   if (tool.tool === "codex") return codexSafeguard(tool.setup);
+  if (tool.tool === "gemini") return geminiSafeguard(tool.setup);
   const { setup } = tool;
   const old = seesProjectBypass(tool.highestVersion);
   if (globalSettingsUnread(setup) || (old && projectSettingsUnread(setup))) return { tool: tool.tool, guardHook: null, permissionChecks: null };
@@ -134,8 +150,8 @@ function s5(tool: ToolSetup): Measurement {
   const evidence = { enabledServers, failedSessions, mainSessions: totals.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
   // Codex는 켜짐과 서버를 정하는 설정이 같은 파일들이다(설계 「5단계 2부 계획 전 결정」 7번)
-  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
-  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
+  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : tool.tool === "gemini" ? geminiSettingsUnread(tool.setup) : enablementUnread(tool.setup);
+  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : tool.tool === "gemini" ? geminiSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
   // 켜짐을 정하는 설정을 읽지 못한 점검에서는 막아 둔 서버가 켜져 있는 것으로 보인다. 보이는 켜진 서버를 믿을 수 없다
   if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
   // 재는지는 지금의 셋팅으로 정한다. 켜져 있는 서버가 없으면 지난 연결 실패가 있어도 재지 않는다. 없다는 것은 다 읽었을 때만 말한다

@@ -445,3 +445,15 @@ describe("그대로 두기로 한 규칙(0.3.0, 다른 PC 피드백 5번)", () =
     expect(reportHtml(view, art)).not.toContain(REPORT_COPY.kept.ko);
   });
 });
+
+describe("머리말의 도구 목록(0.4.0)", () => {
+  it("도구가 셋 이상이면 좁은 화면에서 이름 사이에서만 줄을 바꾸게 이름마다 묶고, 둘 이하는 전과 같은 한 덩어리다(짝 검토 2·3차 참고 1)", () => {
+    const base = viewOf(result());
+    const two = reportHtml({ ...base, tools: ["claude-code", "codex"] }, art);
+    const three = reportHtml({ ...base, tools: ["claude-code", "codex", "gemini"] }, art);
+    expect(two).toContain(`<dd>${pairOf({ en: "Claude Code · Codex", ko: "Claude Code · Codex" })}</dd>`);
+    expect(two).not.toContain('<dd class="tl">');
+    expect(three).toContain('<dd class="tl">');
+    expect(count(three, '<span class="nm">Gemini CLI</span>')).toBe(2);
+  });
+});

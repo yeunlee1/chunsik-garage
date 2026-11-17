@@ -9,6 +9,7 @@ import type { ReasonCopy } from "./types.ts";
 export const TOOL_NAMES: Record<ToolId, Texts<string>> = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
   codex: { en: "Codex", ko: "Codex" },
+  gemini: { en: "Gemini CLI", ko: "Gemini CLI" },
 };
 
 export const AXIS_NAMES: Record<Axis, Texts<string>> = {
@@ -81,7 +82,7 @@ export const OTHER_TOOL_COPY: Record<"too_little" | "watching", Texts<string>> =
  * 안전장치(S2)가 도구마다 어느 조건으로 인정됐는지(설계 11.3 S2의 근거와 처방). 훅의 명령은 싣지 않는다. codexGuarded와 codexNone은 Codex의 조건이고,
  * unknown은 안전장치를 정하는 설정을 읽지 못해 뺀 도구다(「5단계 계획 전 결정」 4번, 「5단계 4부 계획 전 결정」 6번)
  */
-export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; codexGuarded: string; codexNone: string; unknown: string }> = {
+export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; codexGuarded: string; codexNone: string; geminiGuarded: string; geminiNone: string; unknown: string }> = {
   en: {
     line: "{tool}: {condition}",
     hook: "a PreToolUse hook that can block covers shell commands",
@@ -90,6 +91,8 @@ export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: st
     none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
     codexGuarded: "no place combines no approval with full sandbox access",
     codexNone: "no safeguard (a place combines no approval with full sandbox access)",
+    geminiGuarded: "no place lets shell commands run without asking while the sandbox is off",
+    geminiNone: "no safeguard (a place lets shell commands run without asking while the sandbox is off)",
     unknown: "left out, because a settings file that decides the safeguard could not be read",
   },
   ko: {
@@ -100,6 +103,8 @@ export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: st
     none: "안전장치 없음(권한 우회 모드이고 셸 명령을 덮는 확인 훅이 없음)",
     codexGuarded: "승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없음",
     codexNone: "안전장치 없음(승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있음)",
+    geminiGuarded: "셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 없음",
+    geminiNone: "안전장치 없음(셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 있음)",
     unknown: "안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음",
   },
 };
@@ -112,9 +117,11 @@ export const PROXY_LINE: Texts<string> = {
 
 /** 요청당 도구 호출(I3)을 두 도구에서 쟀을 때 어떻게 쟀나에 더하는 줄. 도구 호출을 세는 굵기가 도구마다 다르다(설계 9.7) */
 export const TOOL_CALL_GRAIN: Texts<string> = {
-  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
-  ko: "도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.",
+  en: "Tool calls are counted at a different grain in each tool. In {models} one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "도구 호출을 세는 굵기가 도구마다 다릅니다. {models}는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.",
 };
+/** 모델이 낸 호출 하나를 하나로 세는 도구(Claude Code, 제미나이)의 이름을 잇는 말 */
+export const TOOL_CALL_GRAIN_JOIN: Texts<string> = { en: " and ", ko: "와 " };
 
 /** E6 항목의 정보. 판정에서 뺀 켜진 서버 가운데 부른 기록이 없는 것을 까닭마다 센다. 이름은 결과 화면이 따로 그린다(설계 13.1, 16.1) */
 export const UNJUDGED_COPY: Texts<{ intro: string; line: string; why: Record<UnjudgedServer["why"], string>; deny: string }> = {

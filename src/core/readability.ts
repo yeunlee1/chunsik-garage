@@ -1,5 +1,5 @@
 // 셋팅 사실에서 "있는데 읽지 못한 것"을 가른다. 없는 파일과 폴더는 읽지 못한 것이 아니다(순수 함수, 설계 11.3, 11.4, 20.1)
-import type { ClaudeSetupFacts, CodexSetupFacts, FileStatus } from "../scan/types.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, FileStatus, GeminiSetupFacts } from "../scan/types.ts";
 
 /** 있는데 열지 못했거나, 열었는데 풀리지 않았다. 읽지 않은 곳(null)과 없는 파일은 아니다 */
 export const unread = (status: FileStatus | null): boolean => status === "unparsable" || status === "unreadable";
@@ -10,6 +10,19 @@ export const unread = (status: FileStatus | null): boolean => status === "unpars
  */
 export function codexSettingsUnread(facts: CodexSetupFacts): boolean {
   return unread(facts.config) || facts.projects.some((project) => project.trust === "trusted" && unread(project.configStatus));
+}
+
+/**
+ * 제미나이의 안전장치와 서버를 정하는 설정 가운데 읽지 못한(풀리지 않은) 것이 있다. 사용자 settings.json, 시스템 기본값과 시스템 설정,
+ * 작업 폴더 신뢰가 켜져 있을 때의 신뢰 규칙 파일, 신뢰한 프로젝트의 .gemini/settings.json이다(설계 「0.4.0에서 정한 것」)
+ */
+export function geminiSettingsUnread(facts: GeminiSetupFacts): boolean {
+  return (
+    unread(facts.settings) ||
+    facts.managedParts.some((part) => unread(part.status)) ||
+    (facts.folderTrust && unread(facts.trustedFolders)) ||
+    facts.projects.some((project) => project.scanned && project.trusted && unread(project.settingsStatus))
+  );
 }
 
 /** 사용자 설정이나 관리 정책을 이룬 파일 가운데 읽지 못한 것이 있다 */

@@ -162,6 +162,11 @@ describe("규칙마다 덧붙는 것", () => {
     expect(line(true)).toBe("Codex: 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없음");
     expect(line(false)).toBe("Codex: 안전장치 없음(승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있음)");
     expect(line(null)).toBe("Codex: 안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음");
+    // 제미나이도 확인 훅이 아니라 셸 자동 허용과 샌드박스로 본다(설계 「0.4.0에서 정한 것」)
+    const gemini = (permissionChecks: boolean | null) => findingText(s2, { safeguards: [{ tool: "gemini", guardHook: permissionChecks === null ? null : false, permissionChecks }], unjudgedServers: [] }, "ko").method.at(-1);
+    expect(gemini(true)).toBe("Gemini CLI: 셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 없음");
+    expect(gemini(false)).toBe("Gemini CLI: 안전장치 없음(셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 있음)");
+    expect(gemini(null)).toBe("Gemini CLI: 안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음");
   });
 
   it("S2의 처방은 안전장치가 없는 도구마다의 문장을 도구의 차례로 잇는다", () => {
@@ -174,10 +179,12 @@ describe("규칙마다 덧붙는 것", () => {
     expect(prescription([none("codex"), none("claude-code")])).toBe(`${byTool["claude-code"]} ${byTool.codex}`);
     // 읽지 못해 뺀 도구는 처방에 넣지 않는다
     expect(prescription([none("claude-code"), { tool: "codex", guardHook: null, permissionChecks: null }])).toBe(byTool["claude-code"]);
+    expect(prescription([none("gemini"), none("codex")])).toBe(`${byTool.codex} ${byTool.gemini}`);
+    expect(byTool.gemini).toBe("Gemini CLI에서 tools.allowed에서 run_shell_command를 빼거나 샌드박스(tools.sandbox)를 켜세요. 사용자 설정, 시스템 설정, 신뢰한 프로젝트의 설정을 모두 봅니다.");
     expect(byTool.codex).toBe("Codex에서 승인 정책을 never로 두려면 샌드박스를 전면 해제(danger-full-access)하지 마세요. 전면 해제가 필요하면 승인 정책을 on-request로 두세요. 사용자 config.toml과 신뢰한 프로젝트의 설정을 모두 봅니다.");
     for (const lang of ["en", "ko"] as const) {
       const texts = RULE_COPY.S2[lang].prescriptionByTool!;
-      expect(Object.keys(texts).sort()).toEqual(["claude-code", "codex"]);
+      expect(Object.keys(texts).sort()).toEqual(["claude-code", "codex", "gemini"]);
       for (const text of Object.values(texts)) expect(text, `${lang}: ${text}`).toMatch(/[.!?]$/);
     }
   });
@@ -218,6 +225,12 @@ describe("규칙마다 덧붙는 것", () => {
     expect(findingText(i3, both, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.");
     const codexOnly = { ...NONE, mergedTools: { I3: [{ tool: "codex" as const, observed: "proxy" as const }] } };
     expect(findingText(i3, codexOnly, "ko").method).not.toContain(line);
+    // 제미나이도 모델이 낸 호출 하나를 하나로 센다. 굵기가 다른 Codex가 함께 있을 때만 줄을 붙인다(0.4.0)
+    const three = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "codex" as const, observed: "measured" as const }, { tool: "gemini" as const, observed: "measured" as const }] } };
+    expect(findingText(i3, three, "ko").method.at(-1)).toBe("도구 호출을 세는 굵기가 도구마다 다릅니다. Claude Code와 Gemini CLI는 모델이 낸 호출 하나가, Codex는 실제로 실행된 작업 하나가 하나입니다.");
+    expect(findingText(i3, three, "en").method.at(-1)).toBe("Tool calls are counted at a different grain in each tool. In Claude Code and Gemini CLI one call the model makes is one, and in Codex one action that actually ran is one.");
+    const sameGrain = { ...NONE, mergedTools: { I3: [{ tool: "claude-code" as const, observed: "measured" as const }, { tool: "gemini" as const, observed: "measured" as const }] } };
+    expect(findingText(i3, sameGrain, "ko").method.some((text) => text.startsWith("도구 호출을 세는 굵기"))).toBe(false);
     expect(findingText(i3, NONE, "ko").method).not.toContain(line);
     expect(findingText({ ...i3, status: "unmeasured", reason: "too_little", value: null, score: null, category: "unmeasured" }, both, "ko").method).not.toContain(line);
   });
@@ -226,7 +239,7 @@ describe("규칙마다 덧붙는 것", () => {
     const s2 = finding("S2", { axis: "setup", value: 1, score: 1, category: "strength", evidence: { guarded: 1, tools: 1, unreadTools: 0 } });
     const text = findingText(s2, { safeguards: [{ tool: "codex", guardHook: false, permissionChecks: true }], unjudgedServers: [] }, "ko");
     expect(text.title).toBe("셸 명령에 안전장치를 둠");
-    expect(text.description).toBe("도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.");
+    expect(text.description).toBe("도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한이고, Gemini CLI는 셸 명령마다 묻는 확인이나 샌드박스입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.");
     expect(RULE_COPY.S2.en.good).toBe("Has a safeguard on shell commands");
     expect(RULE_COPY.S2.ko.fix).toBe("셸 명령에 안전장치 두기");
   });

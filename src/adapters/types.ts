@@ -2,7 +2,7 @@
 import { nameRecord, sortedRecord } from "./common/canonical.ts";
 import type { LocalDate } from "./common/dates.ts";
 
-export type ToolId = "claude-code" | "codex";
+export type ToolId = "claude-code" | "codex" | "gemini";
 export type SessionKind = "main" | "sub";
 
 /** measured는 봄, proxy는 대신 봄(가까운 값), unsupported는 못 봄이다. 못 봄은 0이 아니다(설계 9.7) */
@@ -355,11 +355,11 @@ function reviveCodex(v: unknown): NonNullable<SessionSummary["codex"]> | null {
   };
 }
 
-/** 캐시에서 꺼낸 값이 세션 요약의 모양이면 같은 모양(열쇠 차례와 원형 없는 기록까지)으로 되살린다. Codex 요약은 codex 칸이 있어야 하고 Claude Code 요약에는 없어야 한다. 모양이 다르면 null이다. */
+/** 캐시에서 꺼낸 값이 세션 요약의 모양이면 같은 모양(열쇠 차례와 원형 없는 기록까지)으로 되살린다. Codex 요약은 codex 칸이 있어야 하고 Claude Code·제미나이 요약에는 없어야 한다. 모양이 다르면 null이다. */
 export function reviveSummary(value: unknown): SessionSummary | null {
   if (!isObject(value)) return null;
   const v = value;
-  if ((v.tool !== "claude-code" && v.tool !== "codex") || typeof v.sessionId !== "string" || (v.kind !== "main" && v.kind !== "sub")) return null;
+  if ((v.tool !== "claude-code" && v.tool !== "codex" && v.tool !== "gemini") || typeof v.sessionId !== "string" || (v.kind !== "main" && v.kind !== "sub")) return null;
   if (!isNullableString(v.parentSessionId) || !isNullableString(v.cwd) || !isNullableString(v.version)) return null;
   if (!isNullableString(v.firstDate) || (v.firstDate !== null && !DATE_KEY.test(v.firstDate))) return null;
   if (!isObject(v.days)) return null;

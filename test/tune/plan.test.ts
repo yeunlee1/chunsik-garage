@@ -6,8 +6,9 @@ import { planIdOf, TUNE_VERIFIED, versionVerified, writePlan, type TunePlan } fr
 import { makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
 describe("확인한 버전 범위", () => {
-  it("Claude Code는 2.1.220부터 2.1.325까지, Codex는 0.166.0이다. 그 밖이거나 버전을 모르면 확인한 범위 밖이다", () => {
-    expect(TUNE_VERIFIED).toEqual({ "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } });
+  it("Claude Code는 2.1.220부터 2.1.325까지, Codex는 0.166.0이다. 그 밖이거나 버전을 모르면 확인한 범위 밖이다. 제미나이는 기록에 버전이 없어 늘 범위 밖이다", () => {
+    expect(TUNE_VERIFIED).toEqual({ "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" }, gemini: { from: "0.68.0", to: "0.68.0" } });
+    expect(versionVerified("gemini", null)).toBe(false);
     expect(["2.1.220", "2.1.300", "2.1.325"].map((version) => versionVerified("claude-code", version))).toEqual([true, true, true]);
     expect(["2.1.219", "2.1.326", "2.2.0", "abc", null].map((version) => versionVerified("claude-code", version))).toEqual([false, false, false, false, false]);
     expect(["0.166.0", "0.165.9", "0.166.1", null].map((version) => versionVerified("codex", version))).toEqual([true, false, false, false]);

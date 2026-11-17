@@ -5,7 +5,7 @@ import type { ToolSafeguard } from "../metrics/setup.ts";
 import type { Reason } from "../reasons.ts";
 import type { ResultFinding, ResultToolValue, UnjudgedServer } from "../result/assemble.ts";
 import { ruleSpec, type RuleId, type ValueKind } from "../rules.ts";
-import { OTHER_TOOL_COPY, PROXY_LINE, REASON_COPY, SAFEGUARD_COPY, TOOL_CALL_GRAIN, TOOL_LINE, TOOL_NAMES, UNJUDGED_COPY } from "./common.ts";
+import { OTHER_TOOL_COPY, PROXY_LINE, REASON_COPY, SAFEGUARD_COPY, TOOL_CALL_GRAIN, TOOL_CALL_GRAIN_JOIN, TOOL_LINE, TOOL_NAMES, UNJUDGED_COPY } from "./common.ts";
 import { fill, formatValue, rulePlaces, slots } from "./format.ts";
 import type { Lang, Texts } from "./lang.ts";
 import { EFFICIENCY_COPY } from "./rules-efficiency.ts";
@@ -111,6 +111,8 @@ function safeguardCondition(safeguard: ToolSafeguard, copy: (typeof SAFEGUARD_CO
   const { guardHook, permissionChecks } = safeguard;
   if (guardHook === null || permissionChecks === null) return copy.unknown;
   if (safeguard.tool === "codex") return permissionChecks ? copy.codexGuarded : copy.codexNone;
+  // 제미나이도 확인 훅을 안전장치로 치지 않는다. 이 버전은 제미나이의 훅을 읽지 않는다(설계 「0.4.0에서 정한 것」)
+  if (safeguard.tool === "gemini") return permissionChecks ? copy.geminiGuarded : copy.geminiNone;
   return guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
 }
 
@@ -150,7 +152,12 @@ function measurementNotes(finding: FindingInput, details: FindingDetails, lang: 
       ? (details.mergedTools?.[finding.ruleId] ?? [])
       : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
   const lines = used.filter((item) => item.observed === "proxy").map((item) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item.tool][lang] }));
-  if (finding.ruleId === "I3" && new Set(used.map((item) => item.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+  // 도구 호출을 세는 굵기는 Codex만 다르다. Codex와 다른 도구로 함께 쟀을 때만 붙이고, 모델이 낸 호출 하나를 하나로 세는 도구의 이름을 넣는다(0.4.0)
+  const usedTools = new Set(used.map((item) => item.tool));
+  const modelGrain = (["claude-code", "gemini"] as const).filter((tool) => usedTools.has(tool));
+  if (finding.ruleId === "I3" && usedTools.has("codex") && modelGrain.length > 0) {
+    lines.push(fill(TOOL_CALL_GRAIN[lang], { models: modelGrain.map((tool) => TOOL_NAMES[tool][lang]).join(TOOL_CALL_GRAIN_JOIN[lang]) }));
+  }
   return lines;
 }
 

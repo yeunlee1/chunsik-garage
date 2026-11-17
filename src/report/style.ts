@@ -148,6 +148,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .tools .t>b{font-family:var(--mono)}
 .splitbar{grid-column:1/-1;display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;background:var(--track)}
 .splitbar i{display:block;height:100%}
+/* 도구 이름표는 띠의 차례대로 한 줄에 두고, 좁으면 다음 줄로 넘긴다(도구가 셋이어도 읽는 차례가 띠와 같다) */
+.tools .lg{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .tools small{font-size:12px;color:var(--ink2)}
 .shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}
@@ -194,6 +196,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 .sheet{margin:0 0 40px;padding:28px 18px 22px}
 .hd{grid-template-columns:1fr}.hdr{justify-items:start}
 .info{grid-auto-flow:row;grid-template-columns:1fr 1fr}.info div:nth-child(odd){border-left:0}.info div:nth-child(n+3){border-top:1px solid var(--ink)}
+.info dd.tl{white-space:normal}.info dd.tl .nm{white-space:nowrap}
 .title{font-size:26px}
 .hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
 .ax{grid-template-columns:100px 1fr 60px;gap:12px}

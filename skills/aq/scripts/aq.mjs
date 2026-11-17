@@ -5241,7 +5241,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.3.0";
+var PROGRAM_VERSION = "0.3.1";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {

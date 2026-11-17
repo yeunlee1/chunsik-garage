@@ -1,6 +1,6 @@
 {
   "name": "chunsik-garage",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
   "license": "MIT",
   "private": true,

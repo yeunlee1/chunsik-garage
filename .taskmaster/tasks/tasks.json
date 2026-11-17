@@ -820,6 +820,42 @@
         "description": "0.3.0: 너무 긴 줄의 판정과 Codex 새 버전 기록",
         "details": "사용자 지시(2026-11-17) 「이거 다 고치구 추가로 … S로 가려면 어떻게 셋팅을하면 좋을지 방법을 설명해주면 좋을거같고. 또 이거 점수나 등급은 어떤기준으로 측정이되는지도 사람들이 볼수있게 해주면 좋을거같아 리포트에」. 다른 PC에서 돌린 점검의 피드백 8가지를 0.3.0에 반영한다. 피드백 7·8번. 결과: f0ffd84(긴 줄의 사용 흔적 표지), 1aa20a3(Codex 실행 항목 아홉 분류, 확인 범위 0.169.0, 모르는 종류 이름). 짝 3·4차 고침: db21f89(빈칸 있는 JSON의 긴 줄 표지), 22b7089(긴 줄을 훑을 때 JSON 이스케이프를 풀어 견줌).",
         "updatedAt": "2026-11-17T05:07:44.306Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "status": "pending",
+        "dependencies": [],
+        "testStrategy": "업데이트 뒤 두 도구의 설치 버전과 점검 결과의 다음 등급 차례 확인",
+        "id": 61,
+        "title": "회사 PC를 0.3.0으로 올리고 다시 점검",
+        "description": "회사 PC를 0.3.0으로 올리고 다시 점검",
+        "details": "사용자 지시(2026-11-17) 「이거 1~3번까지 진행해보자 추천방식으로 다 진행해줘」. 회사 PC의 Claude Code·Codex 플러그인을 0.3.0으로 올리고 점검을 다시 해 S등급으로 가는 차례를 본다. 회사 PC에 닿을 수 없으면 할 일을 정리해 넘긴다.",
+        "updatedAt": "2026-11-17T07:03:31.199Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "status": "pending",
+        "dependencies": [],
+        "testStrategy": "포털의 입력값을 초안과 대조, 제출 뒤 검사 결과 확인",
+        "id": 62,
+        "title": "Claude 공식 목록에 플러그인 제출",
+        "description": "Claude 공식 목록에 플러그인 제출",
+        "details": "사용자 지시(2026-11-17) 「이거 1~3번까지 진행해보자 추천방식으로 다 진행해줘」. claude.ai/directory/manage에서 Plugin bundle로 낸다(홍보 초안 6절). 연락 이메일, 확인 칸, 제출과 공개 단추는 사용자가 정하거나 누른다.",
+        "updatedAt": "2026-11-17T07:03:31.199Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "status": "in-progress",
+        "dependencies": [],
+        "testStrategy": "시험을 먼저 써 실패를 본 뒤 구현, npm run check, 짝 검토 한 번, 설치 확인",
+        "id": 63,
+        "title": "0.3.1: SECURITY.md, 반올림 설명, 대표 그림",
+        "description": "0.3.1: SECURITY.md, 반올림 설명, 대표 그림",
+        "details": "사용자 지시(2026-11-17) 「이거 1~3번까지 진행해보자 추천방식으로 다 진행해줘」. 홍보 전에 작은 것 셋을 0.3.1로 묶는다. SECURITY.md(awesome-codex-plugins 조건), 점수 매기는 법에 화면 값은 반올림이고 계산은 반올림 전 값이라는 한 줄, 춘식이와 춘삼이가 큰 렌치를 든 대표 그림(README와 링크 미리보기용, Codex 그림 세션).",
+        "updatedAt": "2026-11-17T07:03:31.199Z"
       }
     ],
     "metadata": {

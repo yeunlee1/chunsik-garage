@@ -1,7 +1,7 @@
 {
   "name": "chunsik-garage",
   "displayName": "Chunsik's Garage",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AQ checkup for Claude Code and Codex: scores how well you set up and use your AI coding tools, computed on your own PC.",
   "author": {
     "name": "yeunlee1"
@@ -9,6 +9,7 @@
   "homepage": "https://github.com/yeunlee1/chunsik-garage",
   "repository": "https://github.com/yeunlee1/chunsik-garage",
   "license": "MIT",
+  "icon": "skills/aq/assets/icon.png",
   "keywords": [
     "aq",
     "checkup",

@@ -7,8 +7,8 @@ const read = (path: string): string => readFileSync(path, "utf8");
 const json = (path: string): Record<string, unknown> => JSON.parse(read(path)) as Record<string, unknown>;
 const pkg = json("package.json");
 
-/** 플러그인 정보에 쓰는 열쇠. 설계 7.1의 꼭 넣는 것(name, version, description, author, repository, license)에 화면 이름, 집, 찾기 낱말을 더했다 */
-const PLUGIN_KEYS = ["author", "description", "displayName", "homepage", "keywords", "license", "name", "repository", "version"];
+/** 플러그인 정보에 쓰는 열쇠. 설계 7.1의 꼭 넣는 것(name, version, description, author, repository, license)에 화면 이름, 집, 찾기 낱말, 공식 목록의 아이콘(「0.2.1에서 정한 것」)을 더했다 */
+const PLUGIN_KEYS = ["author", "description", "displayName", "homepage", "icon", "keywords", "license", "name", "repository", "version"];
 
 describe("Claude Code 플러그인 정보", () => {
   it("이름은 이 도구가 스스로를 알아보는 플러그인 이름이고, 설명·라이선스는 package.json과 같으며 저작자와 저장소는 정한 값이다", () => {

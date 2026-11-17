@@ -90,8 +90,8 @@ export const REPORT_COPY = {
   partialReadUnknown: { en: "Only part of the {tool} records could be read. How much could not be read is unknown.", ko: "{tool} 기록을 일부만 읽었습니다. 얼마나 읽지 못했는지는 알 수 없습니다." },
   footCalc: { en: "Computed on this PC.", ko: "이 PC에서 계산했습니다." },
   footPromise: {
-    en: "The program and this page send nothing anywhere. The AI receives your scores, totals and the names of things to tune up. Your conversations and the text of your instructions are not sent. If you ask for a deep check, the AI reads the instruction files you pick.",
-    ko: "프로그램과 결과 화면은 바깥으로 아무것도 보내지 않습니다. AI에게는 점수와 집계, 정비할 것의 이름이 전해집니다. 대화 내용과 지침의 글은 전해지지 않습니다. 정밀 점검을 시키면 고른 지침 파일을 AI가 읽습니다.",
+    en: "The program and this page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.",
+    ko: "프로그램과 결과 화면은 네트워크로 요청을 보내지 않습니다. 프로그램이 내놓는 글은 지금 쓰는 AI 대화로 전해집니다. 점검이면 점수와 집계, 결과 화면과 결과 파일의 경로입니다. 정비면 정비할 것의 이름, 설정 파일의 경로, 바꿀 항목과 그 값도 전해집니다. 대화 내용과 지침의 글은 보내지 않습니다. 정밀 점검을 시키면 고른 지침 파일만 AI가 읽습니다.",
   },
   footNames: { en: "This file contains the names of your skills and project folders. Anyone you send the file to can see them. To share your result, use the card.", ko: "이 파일에는 스킬과 프로젝트 폴더의 이름이 들어 있습니다. 파일째 보내면 그 이름도 보입니다. 결과를 나눌 때는 카드를 쓰세요." },
   cardBtn: { en: "Save as card", ko: "카드로 저장" },

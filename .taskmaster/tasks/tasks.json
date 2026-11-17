@@ -748,6 +748,18 @@
           53
         ],
         "updatedAt": "2026-11-16T16:02:47.550Z"
+      },
+      {
+        "priority": "high",
+        "subtasks": [],
+        "id": 55,
+        "title": "홍보 준비: 저장소 소개·주제 태그, 배포 안내, 소개 글 초안, Claude 공식 목록 제출 준비",
+        "description": "다른 사람도 써 보게 알리는 준비를 한다. 올리기와 제출은 사용자가 한다.",
+        "details": "사용자 지시(2026-11-17) 「그래 이렇게 해봐」(앞 답의 「제가 할 수 있는 것」 세 가지). Claude 공식 목록은 README가 플러그인 폴더에 있어야 해서(40낱말 이상) README 두 벌을 산출물에 담고 0.2.1로 배포한다. 글과 공개 문구는 짝 검토 뒤에 쓴다.",
+        "testStrategy": "npm run check, 임시 설정 폴더에 설치해 claude plugin validate, 깃허브 조회로 소개·태그·배포 안내 확인",
+        "status": "in-progress",
+        "dependencies": [],
+        "updatedAt": "2026-11-17T03:48:17.117Z"
       }
     ],
     "metadata": {

@@ -2,7 +2,7 @@
 
 AQ checkup for Claude Code and Codex. A program on your own PC reads your local Claude Code and Codex records, scores how well you set up and use these AI coding tools, and writes a one-page report.
 
-![AQ report page made from synthetic records](docs/images/report-en.png)
+![AQ report page made from synthetic records](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-en.png)
 
 ## Install
 
@@ -25,16 +25,19 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 
 ## Privacy
 
-The program and the report page send nothing out. The AI receives the scores, the counts, and the names of what to tune up. It does not receive your conversations or the text of your instructions. If you ask for a deep checkup, the AI reads the instruction files you pick.
+The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.
 
 The checkup looks for API keys or tokens written as they are in your MCP settings and in the `env` of your Claude Code settings. It looks at a value only to tell its shape, and never shows or saves it. The report page lists where they are, and the AI receives only how many there are.
 
 The report file contains the names of your skills and project folders. Share the score card instead of the file.
 
+What runs on your PC: the skill runs `skills/aq/scripts/aq.mjs` with Node.js, and Claude Code runs `hooks/session-start.mjs` when a session starts. The hook stays quiet unless you turned the notices on. Neither program makes network requests.
+
 ## Supported
 
 - Node.js 22 or later. Tested on 22 and 24.
 - Built and tested on Windows 11. macOS and Linux are covered only by tests with temporary home folders.
+- Made for Claude Code and Codex on your own PC. The checkup reads the records these tools keep on your PC, so it is not made for claude.ai chat or Cowork.
 - Claude Code record formats checked on 2.1.220 to 2.1.325. Codex record formats checked on 0.166.0 (and the older format of 0.140 to 0.142).
 
 ## What it leaves and how to remove it

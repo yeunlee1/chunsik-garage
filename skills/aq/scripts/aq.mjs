@@ -336,7 +336,7 @@ async function runBadge(options) {
 }
 
 // src/commands/checkup.ts
-import { join as join25 } from "node:path";
+import { join as join28 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -422,6 +422,7 @@ function codexCandidates(tool, servers) {
 }
 function candidatesOf(tool, skills, servers, day, self) {
   if (tool.tool === "codex") return codexCandidates(tool, servers);
+  if (tool.tool === "gemini") return [];
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   const unknownPlugin = enabledPlugins.some((plugin) => !plugin.compositionKnown) || setup.pluginsWithoutInstall.length > 0;
@@ -595,6 +596,9 @@ var unread = (status) => status === "unparsable" || status === "unreadable";
 function codexSettingsUnread(facts) {
   return unread(facts.config) || facts.projects.some((project) => project.trust === "trusted" && unread(project.configStatus));
 }
+function geminiSettingsUnread(facts) {
+  return unread(facts.settings) || facts.managedParts.some((part) => unread(part.status)) || facts.folderTrust && unread(facts.trustedFolders) || facts.projects.some((project) => project.scanned && project.trusted && unread(project.settingsStatus));
+}
 function globalSettingsUnread(facts) {
   return unread(facts.settings.user) || facts.settings.managedParts.some((part) => unread(part.status));
 }
@@ -708,11 +712,13 @@ var byServer = (a, b) => byText3(a.name, b.name) || SCOPE_ORDER[a.scope] - SCOPE
 byContent(a, b);
 function serversUnread(tool) {
   if (tool.tool === "codex") return codexSettingsUnread(tool.setup);
+  if (tool.tool === "gemini") return geminiSettingsUnread(tool.setup);
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
   return unread(setup.claudeJson) || places.user || places.projects.length > 0 || setup.projects.some((project) => unread(project.mcpJsonStatus)) || unread(setup.pluginsFile) || enablementUnread(setup);
 }
 function judgeServers(tool, context) {
+  if (tool.tool === "gemini") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
   const { setup } = tool;
   if (tool.coverage.mcpCalls === "unsupported") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
   if (serversUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
@@ -742,7 +748,7 @@ function skillsUnread(tool) {
   return setup.claudeJson !== "ok" || places.user || places.projects.length > 0 || unread(setup.pluginsFile) || enablementUnread(setup);
 }
 function judgeSkills(tool, context) {
-  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
+  if (tool.coverage.skillUsage === "unsupported" || tool.tool === "codex" || tool.tool === "gemini") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const { setup } = tool;
   if (skillsUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), bundles: [] };
   const uncounted = new Set(setup.unreadableSkillPlaces.plugins);
@@ -770,7 +776,7 @@ var FREQUENT_SESSIONS = 3;
 var byText5 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 var scanned = (project) => project.exists && !project.excluded;
 function toolProjects(tool) {
-  const projects = tool.tool === "codex" ? tool.setup.projects.filter((project) => project.scanned).map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.configStatus !== null && project.configStatus !== "missing" })) : tool.setup.projects.filter(scanned).map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
+  const projects = tool.tool === "codex" ? tool.setup.projects.filter((project) => project.scanned).map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.configStatus !== null && project.configStatus !== "missing" })) : tool.tool === "gemini" ? tool.setup.projects.filter((project) => project.scanned).map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.settingsStatus !== null && project.settingsStatus !== "missing" })) : tool.setup.projects.filter(scanned).map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
   return projects.sort((a, b) => byText5(a.normRoot, b.normRoot));
 }
 function hasInstructionFiles(set) {
@@ -825,6 +831,7 @@ function f4(tools2, names2) {
   return { measurement: scored(worst.overlapping / worst.globalLines, evidence), worst: { tool: worst.tool, normRoot: worst.normRoot, name: worst.name } };
 }
 function f5(tool) {
+  if (tool.tool === "gemini") return unmeasured("unsupported", { differingCopies: null, identicalCopies: null, skillKinds: null });
   const places = tool.setup.unreadableSkillPlaces;
   if (places.user || places.projects.length > 0) return unmeasured("unreadable", { differingCopies: null, identicalCopies: null, skillKinds: null });
   const hashesByName = /* @__PURE__ */ new Map();
@@ -894,7 +901,7 @@ function s4(totals2, coverage) {
 }
 function e1(totals2, coverage, tool) {
   const { input, cacheRead, cacheWrite } = totals2.tokens;
-  const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
+  const all = tool === "codex" || tool === "gemini" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }
@@ -1031,8 +1038,17 @@ function codexSafeguard(setup) {
   const unsafe = contexts.some((context) => context.approval === "never" && context.fullAccess);
   return { tool: "codex", guardHook: false, permissionChecks: !unsafe };
 }
+function geminiSafeguard(setup) {
+  if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  const contexts = [setup.safety, ...setup.projects.flatMap((project) => project.scanned && project.trusted && project.safety !== null ? [project.safety] : [])];
+  const open6 = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open6.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open6.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  return { tool: "gemini", guardHook: false, permissionChecks: true };
+}
 function safeguardOf(tool) {
   if (tool.tool === "codex") return codexSafeguard(tool.setup);
+  if (tool.tool === "gemini") return geminiSafeguard(tool.setup);
   const { setup } = tool;
   const old = seesProjectBypass(tool.highestVersion);
   if (globalSettingsUnread(setup) || old && projectSettingsUnread(setup)) return { tool: tool.tool, guardHook: null, permissionChecks: null };
@@ -1080,8 +1096,8 @@ function s5(tool) {
   const failedSessions = totals2.mainSessions.filter((session) => session.mcpConnectionFailure).length;
   const evidence = { enabledServers, failedSessions, mainSessions: totals2.mainSessions.length };
   if (tool.coverage.mcpFailuresAndHooks === "unsupported") return unmeasured("unsupported", blank(evidence));
-  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : enablementUnread(tool.setup);
-  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
+  const enablementUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : tool.tool === "gemini" ? geminiSettingsUnread(tool.setup) : enablementUnread(tool.setup);
+  const placesUnknown = tool.tool === "codex" ? codexSettingsUnread(tool.setup) : tool.tool === "gemini" ? geminiSettingsUnread(tool.setup) : mcpPlacesUnread(tool.setup);
   if (enablementUnknown) return unmeasured("unreadable", { ...evidence, enabledServers: null });
   if (enabledServers === 0) return placesUnknown ? unmeasured("unreadable", { ...evidence, enabledServers: null }) : unmeasured("not_applicable", evidence);
   return countGate(true, totals2.mainSessions.length, 1, evidence) ?? scored(failedSessions / totals2.mainSessions.length, evidence);
@@ -1231,7 +1247,9 @@ function evaluate(input) {
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
   const setups = scored2.map(({ input: tool, totals: totals2 }) => {
     const common = { totals: totals2, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
-    return tool.tool === "codex" ? { ...common, tool: "codex", setup: tool.setup } : { ...common, tool: "claude-code", setup: tool.setup };
+    if (tool.tool === "codex") return { ...common, tool: "codex", setup: tool.setup };
+    if (tool.tool === "gemini") return { ...common, tool: "gemini", setup: tool.setup };
+    return { ...common, tool: "claude-code", setup: tool.setup };
   });
   const usage2 = projectUsage(setups, lookup);
   const judged = scored2.map((tool, index) => {
@@ -1277,7 +1295,8 @@ function evaluate(input) {
 // src/core/copy/common.ts
 var TOOL_NAMES = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
-  codex: { en: "Codex", ko: "Codex" }
+  codex: { en: "Codex", ko: "Codex" },
+  gemini: { en: "Gemini CLI", ko: "Gemini CLI" }
 };
 var AXIS_NAMES = {
   setup: { en: "Setup", ko: "\uC14B\uD305" },
@@ -1342,6 +1361,8 @@ var SAFEGUARD_COPY = {
     none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
     codexGuarded: "no place combines no approval with full sandbox access",
     codexNone: "no safeguard (a place combines no approval with full sandbox access)",
+    geminiGuarded: "no place lets shell commands run without asking while the sandbox is off",
+    geminiNone: "no safeguard (a place lets shell commands run without asking while the sandbox is off)",
     unknown: "left out, because a settings file that decides the safeguard could not be read"
   },
   ko: {
@@ -1352,6 +1373,8 @@ var SAFEGUARD_COPY = {
     none: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uC774\uACE0 \uC178 \uBA85\uB839\uC744 \uB36E\uB294 \uD655\uC778 \uD6C5\uC774 \uC5C6\uC74C)",
     codexGuarded: "\uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC5C6\uC74C",
     codexNone: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC788\uC74C)",
+    geminiGuarded: "\uC178 \uBA85\uB839\uC744 \uBB3B\uC9C0 \uC54A\uACE0 \uC2E4\uD589\uD558\uAC8C \uB450\uBA74\uC11C \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uB048 \uACF3\uC774 \uC5C6\uC74C",
+    geminiNone: "\uC548\uC804\uC7A5\uCE58 \uC5C6\uC74C(\uC178 \uBA85\uB839\uC744 \uBB3B\uC9C0 \uC54A\uACE0 \uC2E4\uD589\uD558\uAC8C \uB450\uBA74\uC11C \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uB048 \uACF3\uC774 \uC788\uC74C)",
     unknown: "\uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574 \uBE7C\uACE0 \uC7C0\uC74C"
   }
 };
@@ -1360,9 +1383,10 @@ var PROXY_LINE = {
   ko: "{tool}: \uAE30\uB85D\uC774 \uADF8\uB300\uB85C \uB0A8\uAE30\uC9C0 \uC54A\uB294 \uAC12\uC774\uB77C \uAC00\uAE4C\uC6B4 \uAC12\uC73C\uB85C \uC7C0\uC2B5\uB2C8\uB2E4."
 };
 var TOOL_CALL_GRAIN = {
-  en: "Tool calls are counted at a different grain in each tool. In Claude Code one call the model makes is one, and in Codex one action that actually ran is one.",
-  ko: "\uB3C4\uAD6C \uD638\uCD9C\uC744 \uC138\uB294 \uAD75\uAE30\uAC00 \uB3C4\uAD6C\uB9C8\uB2E4 \uB2E4\uB985\uB2C8\uB2E4. Claude Code\uB294 \uBAA8\uB378\uC774 \uB0B8 \uD638\uCD9C \uD558\uB098\uAC00, Codex\uB294 \uC2E4\uC81C\uB85C \uC2E4\uD589\uB41C \uC791\uC5C5 \uD558\uB098\uAC00 \uD558\uB098\uC785\uB2C8\uB2E4."
+  en: "Tool calls are counted at a different grain in each tool. In {models} one call the model makes is one, and in Codex one action that actually ran is one.",
+  ko: "\uB3C4\uAD6C \uD638\uCD9C\uC744 \uC138\uB294 \uAD75\uAE30\uAC00 \uB3C4\uAD6C\uB9C8\uB2E4 \uB2E4\uB985\uB2C8\uB2E4. {models}\uB294 \uBAA8\uB378\uC774 \uB0B8 \uD638\uCD9C \uD558\uB098\uAC00, Codex\uB294 \uC2E4\uC81C\uB85C \uC2E4\uD589\uB41C \uC791\uC5C5 \uD558\uB098\uAC00 \uD558\uB098\uC785\uB2C8\uB2E4."
 };
+var TOOL_CALL_GRAIN_JOIN = { en: " and ", ko: "\uC640 " };
 var UNJUDGED_COPY = {
   en: {
     intro: "Servers left out of the judgment that have no record of being called. They are not suggested for turning off.",
@@ -2001,15 +2025,16 @@ var SETUP_COPY = {
     en: {
       name: "Safeguard",
       good: "Has a safeguard on shell commands",
-      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, and in Codex it is asking for approval or a sandbox limit. What a hook actually filters is not checked.",
+      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, in Codex it is asking for approval or a sandbox limit, and in Gemini CLI it is asking before each shell command or a sandbox. What a hook actually filters is not checked.",
       fix: "Add a safeguard on shell commands",
       problem: "{value} of the tools whose settings were read have a safeguard. A tool can run shell commands without asking first.",
       prescription: "Add a check before shell commands in each tool that has no safeguard.",
       prescriptionByTool: {
         "claude-code": "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
-        codex: "In Codex, if you set the approval policy to never, do not give the sandbox full access (danger-full-access). If you need full access, set the approval policy to on-request. Both your user config.toml and the settings of trusted projects count."
+        codex: "In Codex, if you set the approval policy to never, do not give the sandbox full access (danger-full-access). If you need full access, set the approval policy to on-request. Both your user config.toml and the settings of trusted projects count.",
+        gemini: "In Gemini CLI, take run_shell_command out of tools.allowed, or turn on the sandbox (tools.sandbox). Your user settings, the system settings, and the settings of trusted projects all count."
       },
-      method: "Share of the tools whose settings were read that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands. Codex has one if no place (the user settings or a trusted project) combines no approval with full sandbox access. A tool whose deciding settings could not be read is left out.",
+      method: "Share of the tools whose settings were read that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands. Codex has one if no place (the user settings or a trusted project) combines no approval with full sandbox access. Gemini CLI has one if no place (the user and system settings or a trusted project) lets shell commands run without asking (run_shell_command in tools.allowed) while the sandbox is off. Approving everything (--yolo) is turned on only when Gemini CLI starts, so the settings cannot show it. A tool whose deciding settings could not be read is left out.",
       evidence: "Tools with a safeguard {guarded} \xB7 tools measured {tools} \xB7 tools left out with unreadable settings {unreadTools}",
       unit: "%",
       reasons: {
@@ -2020,15 +2045,16 @@ var SETUP_COPY = {
     ko: {
       name: "\uC548\uC804\uC7A5\uCE58",
       good: "\uC178 \uBA85\uB839\uC5D0 \uC548\uC804\uC7A5\uCE58\uB97C \uB460",
-      why: "\uB3C4\uAD6C\uB9C8\uB2E4 \uB73B\uD558\uC9C0 \uC54A\uC740 \uC178 \uBA85\uB839\uC744 \uBA48\uCD9C \uC790\uB9AC\uAC00 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uC758 \uAD8C\uD55C \uD655\uC778\uC774\uB098 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC774\uACE0, Codex\uB294 \uC2B9\uC778 \uC694\uCCAD\uC774\uB098 \uC0CC\uB4DC\uBC15\uC2A4 \uC81C\uD55C\uC785\uB2C8\uB2E4. \uD6C5\uC774 \uBB34\uC5C7\uC744 \uAC78\uB7EC \uB0B4\uB294\uC9C0\uB294 \uBCF4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
+      why: "\uB3C4\uAD6C\uB9C8\uB2E4 \uB73B\uD558\uC9C0 \uC54A\uC740 \uC178 \uBA85\uB839\uC744 \uBA48\uCD9C \uC790\uB9AC\uAC00 \uC788\uB294\uC9C0 \uBD05\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uC758 \uAD8C\uD55C \uD655\uC778\uC774\uB098 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC774\uACE0, Codex\uB294 \uC2B9\uC778 \uC694\uCCAD\uC774\uB098 \uC0CC\uB4DC\uBC15\uC2A4 \uC81C\uD55C\uC774\uACE0, Gemini CLI\uB294 \uC178 \uBA85\uB839\uB9C8\uB2E4 \uBB3B\uB294 \uD655\uC778\uC774\uB098 \uC0CC\uB4DC\uBC15\uC2A4\uC785\uB2C8\uB2E4. \uD6C5\uC774 \uBB34\uC5C7\uC744 \uAC78\uB7EC \uB0B4\uB294\uC9C0\uB294 \uBCF4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.",
       fix: "\uC178 \uBA85\uB839\uC5D0 \uC548\uC804\uC7A5\uCE58 \uB450\uAE30",
       problem: "\uC124\uC815\uC744 \uC77D\uC740 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uB294 {value}\uC785\uB2C8\uB2E4. \uBB3B\uC9C0 \uC54A\uACE0 \uC178 \uBA85\uB839\uC744 \uC2E4\uD589\uD560 \uC218 \uC788\uB294 \uB3C4\uAD6C\uAC00 \uC788\uC2B5\uB2C8\uB2E4.",
       prescription: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC5C6\uB294 \uB3C4\uAD6C\uB9C8\uB2E4 \uC178 \uBA85\uB839 \uC55E\uC5D0 \uD655\uC778\uC744 \uB450\uC138\uC694.",
       prescriptionByTool: {
         "claude-code": "Claude Code\uC5D0\uC11C \uC178 \uBA85\uB839(Bash \uB610\uB294 PowerShell)\uC758 \uC2E4\uD589 \uC804\uC5D0 \uACB0\uACFC\uB97C \uAE30\uB2E4\uB9AC\uBA70 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 PreToolUse \uD6C5\uC744 \uC0AC\uC6A9\uC790 \uC124\uC815\uC5D0 \uB450\uACE0 \uCF1C\uAC70\uB098, \uAE30\uBCF8 \uBAA8\uB4DC\uB97C \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2CC \uAC83\uC73C\uB85C \uBC14\uAFB8\uC138\uC694. \uAD8C\uD55C \uC6B0\uD68C \uBAA8\uB4DC\uB97C \uACC4\uC18D \uC4F0\uB824\uBA74 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uD655\uC778 \uD6C5\uC744 \uB450\uC138\uC694.",
-        codex: "Codex\uC5D0\uC11C \uC2B9\uC778 \uC815\uCC45\uC744 never\uB85C \uB450\uB824\uBA74 \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uC804\uBA74 \uD574\uC81C(danger-full-access)\uD558\uC9C0 \uB9C8\uC138\uC694. \uC804\uBA74 \uD574\uC81C\uAC00 \uD544\uC694\uD558\uBA74 \uC2B9\uC778 \uC815\uCC45\uC744 on-request\uB85C \uB450\uC138\uC694. \uC0AC\uC6A9\uC790 config.toml\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8\uC758 \uC124\uC815\uC744 \uBAA8\uB450 \uBD05\uB2C8\uB2E4."
+        codex: "Codex\uC5D0\uC11C \uC2B9\uC778 \uC815\uCC45\uC744 never\uB85C \uB450\uB824\uBA74 \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uC804\uBA74 \uD574\uC81C(danger-full-access)\uD558\uC9C0 \uB9C8\uC138\uC694. \uC804\uBA74 \uD574\uC81C\uAC00 \uD544\uC694\uD558\uBA74 \uC2B9\uC778 \uC815\uCC45\uC744 on-request\uB85C \uB450\uC138\uC694. \uC0AC\uC6A9\uC790 config.toml\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8\uC758 \uC124\uC815\uC744 \uBAA8\uB450 \uBD05\uB2C8\uB2E4.",
+        gemini: "Gemini CLI\uC5D0\uC11C tools.allowed\uC5D0\uC11C run_shell_command\uB97C \uBE7C\uAC70\uB098 \uC0CC\uB4DC\uBC15\uC2A4(tools.sandbox)\uB97C \uCF1C\uC138\uC694. \uC0AC\uC6A9\uC790 \uC124\uC815, \uC2DC\uC2A4\uD15C \uC124\uC815, \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8\uC758 \uC124\uC815\uC744 \uBAA8\uB450 \uBD05\uB2C8\uB2E4."
       },
-      method: "\uC124\uC815\uC744 \uC77D\uC740 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. Codex\uB294 \uC0AC\uC6A9\uC790 \uC124\uC815\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370 \uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC5C6\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. \uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD55C \uB3C4\uAD6C\uB294 \uBE7C\uACE0 \uC7BD\uB2C8\uB2E4.",
+      method: "\uC124\uC815\uC744 \uC77D\uC740 \uB3C4\uAD6C \uAC00\uC6B4\uB370 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C\uC758 \uBAAB\uC785\uB2C8\uB2E4. Claude Code\uB294 \uAE30\uBCF8 \uBAA8\uB4DC\uAC00 \uAD8C\uD55C \uC6B0\uD68C\uAC00 \uC544\uB2C8\uAC70\uB098, \uC178 \uBA85\uB839\uC5D0 \uAC78\uB9AC\uACE0 \uC2E4\uD589\uC744 \uB9C9\uC744 \uC218 \uC788\uB294 \uB3C4\uAD6C \uC2E4\uD589 \uC804 \uD655\uC778 \uD6C5\uC774 \uC788\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. Codex\uB294 \uC0AC\uC6A9\uC790 \uC124\uC815\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370 \uC2B9\uC778 \uC5C6\uC74C\uACFC \uC0CC\uB4DC\uBC15\uC2A4 \uC804\uBA74 \uD574\uC81C\uB97C \uD568\uAED8 \uC4F0\uB294 \uACF3\uC774 \uC5C6\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. Gemini CLI\uB294 \uC0AC\uC6A9\uC790\xB7\uC2DC\uC2A4\uD15C \uC124\uC815\uACFC \uC2E0\uB8B0\uD55C \uD504\uB85C\uC81D\uD2B8 \uAC00\uC6B4\uB370 \uC178 \uBA85\uB839\uC744 \uBB3B\uC9C0 \uC54A\uACE0 \uC2E4\uD589\uD558\uAC8C \uB450\uBA74\uC11C(tools.allowed\uC758 run_shell_command) \uC0CC\uB4DC\uBC15\uC2A4\uB97C \uB048 \uACF3\uC774 \uC5C6\uC73C\uBA74 \uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uAC83\uC73C\uB85C \uBD05\uB2C8\uB2E4. \uBAA8\uB450 \uC790\uB3D9 \uC2B9\uC778(--yolo)\uC740 Gemini CLI\uB97C \uC2DC\uC791\uD560 \uB54C\uB9CC \uCF1C\uC838\uC11C \uC124\uC815\uC73C\uB85C\uB294 \uBCF4\uC9C0 \uBABB\uD569\uB2C8\uB2E4. \uC548\uC804\uC7A5\uCE58\uB97C \uC815\uD558\uB294 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD55C \uB3C4\uAD6C\uB294 \uBE7C\uACE0 \uC7BD\uB2C8\uB2E4.",
       evidence: "\uC548\uC804\uC7A5\uCE58\uAC00 \uC788\uB294 \uB3C4\uAD6C {guarded} \xB7 \uC7B0 \uB3C4\uAD6C {tools} \xB7 \uC124\uC815\uC744 \uC77D\uC9C0 \uBABB\uD574 \uBE80 \uB3C4\uAD6C {unreadTools}",
       unit: "%",
       reasons: {
@@ -2178,6 +2204,7 @@ function safeguardCondition(safeguard, copy2) {
   const { guardHook, permissionChecks } = safeguard;
   if (guardHook === null || permissionChecks === null) return copy2.unknown;
   if (safeguard.tool === "codex") return permissionChecks ? copy2.codexGuarded : copy2.codexNone;
+  if (safeguard.tool === "gemini") return permissionChecks ? copy2.geminiGuarded : copy2.geminiNone;
   return guardHook && permissionChecks ? copy2.both : guardHook ? copy2.hook : permissionChecks ? copy2.permissions : copy2.none;
 }
 function safeguardLine(safeguard, lang) {
@@ -2195,7 +2222,11 @@ function measurementNotes(finding, details, lang) {
   if (finding.status !== "scored") return [];
   const used = ruleSpec(finding.ruleId).unit === "merged" ? details.mergedTools?.[finding.ruleId] ?? [] : finding.tools.filter((value) => value.status === "scored").map((value) => ({ tool: value.tool, observed: value.observed }));
   const lines = used.filter((item2) => item2.observed === "proxy").map((item2) => fill(PROXY_LINE[lang], { tool: TOOL_NAMES[item2.tool][lang] }));
-  if (finding.ruleId === "I3" && new Set(used.map((item2) => item2.tool)).size > 1) lines.push(TOOL_CALL_GRAIN[lang]);
+  const usedTools = new Set(used.map((item2) => item2.tool));
+  const modelGrain = ["claude-code", "gemini"].filter((tool) => usedTools.has(tool));
+  if (finding.ruleId === "I3" && usedTools.has("codex") && modelGrain.length > 0) {
+    lines.push(fill(TOOL_CALL_GRAIN[lang], { models: modelGrain.map((tool) => TOOL_NAMES[tool][lang]).join(TOOL_CALL_GRAIN_JOIN[lang]) }));
+  }
   return lines;
 }
 var WHY_ORDER = ["no_definition", "plugin_unread", "not_established", "observation_incomplete"];
@@ -2328,6 +2359,7 @@ var UNREADABLE_SETUP = {
   plugins_file: { en: "plugin install records", ko: "\uD50C\uB7EC\uADF8\uC778 \uC124\uCE58 \uAE30\uB85D" },
   codex_config: { en: "config.toml", ko: "config.toml" },
   codex_project_config: { en: "project config.toml", ko: "\uD504\uB85C\uC81D\uD2B8\uC758 config.toml" },
+  gemini_trusted_folders: { en: "trustedFolders.json", ko: "trustedFolders.json" },
   skill_dirs: { en: "skill folders", ko: "\uC2A4\uD0AC \uD3F4\uB354" },
   instructions: { en: "instruction files", ko: "\uC9C0\uCE68 \uD30C\uC77C" },
   hook_settings: { en: "settings with hooks", ko: "\uD6C5\uC744 \uC801\uC740 \uC124\uC815" },
@@ -2621,7 +2653,12 @@ function deepFiles(input) {
 }
 
 // src/core/result/notices.ts
-var VERIFIED_VERSIONS = { "claude-code": { from: "2.1.220", to: "2.1.322" }, codex: { from: "0.140.0", to: "0.169.0" } };
+var VERIFIED_VERSIONS = {
+  "claude-code": { from: "2.1.220", to: "2.1.322" },
+  codex: { from: "0.140.0", to: "0.169.0" },
+  // 제미나이 CLI는 세션 기록에 버전을 적지 않아 이 범위로 견줄 버전이 없다. 해석 규약은 공개 소스 v0.68.0으로 확인했다(설계 「0.4.0에서 정한 것」)
+  gemini: { from: "0.68.0", to: "0.68.0" }
+};
 var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
@@ -2686,6 +2723,22 @@ function codexSetupNotices(setup, projects) {
   notices2.push(...unscoredProblems("codex", setup.problems));
   return notices2;
 }
+function geminiSetupNotices(setup, projects) {
+  const notices2 = [];
+  const rootOf = new Map(projects.map((project) => [project.normRoot, project.root]));
+  const unreadable = [
+    ["user_settings", unread2(setup.settings), []],
+    ["managed_settings", false, setup.managedParts.filter((part) => unread2(part.status)).map((part) => part.path)],
+    ["project_settings", false, setup.projects.filter((project) => project.trusted && unread2(project.settingsStatus)).map((project) => rootOf.get(project.normRoot) ?? project.normRoot)],
+    ["gemini_trusted_folders", setup.folderTrust && unread2(setup.trustedFolders), []],
+    ["instructions", false, [setup.globalInstructions, ...setup.projects.map((project) => project.instructions)].flatMap((set) => [...set.unreadable, ...set.unreadableDirs])]
+  ];
+  for (const [what, whole, targets] of unreadable) {
+    if (whole || targets.length > 0) notices2.push({ kind: "setup_unreadable", tool: "gemini", what, targets: sortedUnique(targets) });
+  }
+  notices2.push(...unscoredProblems("gemini", setup.problems));
+  return notices2;
+}
 function setupNotices(input, evaluation, run2) {
   const notices2 = [];
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
@@ -2694,6 +2747,10 @@ function setupNotices(input, evaluation, run2) {
     if (tool.setup.secrets.length > 0) notices2.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices2.push(...codexSetupNotices(tool.setup, input.projects));
+      continue;
+    }
+    if (tool.tool === "gemini") {
+      notices2.push(...geminiSetupNotices(tool.setup, input.projects));
       continue;
     }
     const id = tool.tool;
@@ -2829,7 +2886,7 @@ function mergedObserved(rule2, tools2) {
 }
 
 // src/core/result/tools.ts
-var FORMATS = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"] };
+var FORMATS = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"] };
 var inRange2 = (date, range) => date >= range.from && date <= range.to;
 function resultTools(input, evaluation, collected) {
   return evaluation.tools.map((tool) => {
@@ -3836,6 +3893,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .tools .t>b{font-family:var(--mono)}
 .splitbar{grid-column:1/-1;display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;background:var(--track)}
 .splitbar i{display:block;height:100%}
+/* \uB3C4\uAD6C \uC774\uB984\uD45C\uB294 \uB760\uC758 \uCC28\uB840\uB300\uB85C \uD55C \uC904\uC5D0 \uB450\uACE0, \uC881\uC73C\uBA74 \uB2E4\uC74C \uC904\uB85C \uB118\uAE34\uB2E4(\uB3C4\uAD6C\uAC00 \uC14B\uC774\uC5B4\uB3C4 \uC77D\uB294 \uCC28\uB840\uAC00 \uB760\uC640 \uAC19\uB2E4) */
+.tools .lg{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .tools small{font-size:12px;color:var(--ink2)}
 .shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}
@@ -3882,6 +3941,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 .sheet{margin:0 0 40px;padding:28px 18px 22px}
 .hd{grid-template-columns:1fr}.hdr{justify-items:start}
 .info{grid-auto-flow:row;grid-template-columns:1fr 1fr}.info div:nth-child(odd){border-left:0}.info div:nth-child(n+3){border-top:1px solid var(--ink)}
+.info dd.tl{white-space:normal}.info dd.tl .nm{white-space:nowrap}
 .title{font-size:26px}
 .hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
 .ax{grid-template-columns:100px 1fr 60px;gap:12px}
@@ -3896,7 +3956,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 
 // src/report/html.ts
 var RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"];
-var TOOL_COLORS = { "claude-code": "#2a78d6", codex: "#c8660a" };
+var TOOL_COLORS = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70" };
 var REPO = "chunsik-garage";
 function esc(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -4016,7 +4076,7 @@ function item(finding, view, lang) {
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
-  const tools2 = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : `<dd>${both(textsOf2((l) => view.tools.map((tool) => TOOL_NAMES[tool][l]).join(" \xB7 ")))}</dd>`;
+  const tools2 = view.tools.length === 0 ? `<dd class="tx">${both(REPORT_COPY.noTools)}</dd>` : view.tools.length > 2 ? `<dd class="tl">${pairHtml(textsOf2((l) => view.tools.map((tool) => `<span class="nm">${esc(TOOL_NAMES[tool][l])}</span>`).join(" \xB7 ")))}</dd>` : `<dd>${both(textsOf2((l) => view.tools.map((tool) => TOOL_NAMES[tool][l]).join(" \xB7 ")))}</dd>`;
   const round = !view.saved ? `<dd class="tx">${both(REPORT_COPY.notSaved)}</dd>` : `<dd>${view.round === null ? "\u2014" : both(copy("roundValue", { n: view.round }))}</dd>`;
   const langButton = (code, label) => `<button type="button" data-set-lang="${code}" aria-pressed="${code === lang}" lang="${code}">${label}</button>`;
   return `<header class="hd"><div><div class="brandrow">${face}<div class="brand">${both(REPORT_COPY.brand)}</div></div><h1 class="title" id="h-title">${both(REPORT_COPY.title)}</h1></div><div class="hdr"><div class="langsw" role="group"${swap(lang, { "aria-label": REPORT_COPY.langGroup })}>${langButton("en", "English")}${langButton("ko", "\uD55C\uAD6D\uC5B4")}</div><dl class="info"><div><dt>${both(REPORT_COPY.date)}</dt><dd>${esc(view.today)}</dd></div><div><dt>${both(REPORT_COPY.tools)}</dt>${tools2}</div><div><dt>${both(REPORT_COPY.period)}</dt><dd>${esc(view.window.from.slice(5))} ~ ${esc(view.window.to.slice(5))}</dd></div><div><dt>${both(REPORT_COPY.round)}</dt>${round}</div></dl></div></header>`;
@@ -4097,7 +4157,7 @@ function tools(view) {
   const row = (label, value, format) => {
     const total = list.reduce((sum2, tool) => sum2 + value(tool), 0);
     return perLang(
-      (lang) => `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div>${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div>`
+      (lang) => `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`
     );
   };
   const chart = `<div class="tools">${row(REPORT_COPY.kMain, (tool) => tool.mainSessions, (count) => groupDigits(count))}${row(REPORT_COPY.kOut, (tool) => tool.outputTokens, shortTokens)}</div>`;
@@ -4584,7 +4644,7 @@ function reviveCodex(v) {
 function reviveSummary(value) {
   if (!isObject2(value)) return null;
   const v = value;
-  if (v.tool !== "claude-code" && v.tool !== "codex" || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
+  if (v.tool !== "claude-code" && v.tool !== "codex" && v.tool !== "gemini" || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
   if (!isNullableString(v.parentSessionId) || !isNullableString(v.cwd) || !isNullableString(v.version)) return null;
   if (!isNullableString(v.firstDate) || v.firstDate !== null && !DATE_KEY.test(v.firstDate)) return null;
   if (!isObject2(v.days)) return null;
@@ -5039,8 +5099,8 @@ function reviveNotify(value) {
 var RULE_ORDER = new Map(RULES.map((spec, index) => [spec.id, index]));
 function reviveIgnoredRules(value) {
   if (!Array.isArray(value)) return [];
-  const known = value.filter((id) => typeof id === "string" && RULE_ORDER.has(id));
-  return [...new Set(known)].sort((a, b) => RULE_ORDER.get(a) - RULE_ORDER.get(b));
+  const known2 = value.filter((id) => typeof id === "string" && RULE_ORDER.has(id));
+  return [...new Set(known2)].sort((a, b) => RULE_ORDER.get(a) - RULE_ORDER.get(b));
 }
 function reviveState(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -5241,7 +5301,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.3.1";
+var PROGRAM_VERSION = "0.4.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {
@@ -5506,8 +5566,8 @@ var ResponseTable = class {
   }
   /** 응답 ID의 줄 번호. 처음 보는 ID면 줄을 더하고 isNew를 참으로 돌려준다. */
   row(id, date, synthetic) {
-    const known = this.rows.get(id);
-    if (known !== void 0) return { row: known, isNew: false };
+    const known2 = this.rows.get(id);
+    if (known2 !== void 0) return { row: known2, isNew: false };
     const row = this.rows.size;
     if (row === this.capacity) this.grow();
     const base = row * NAME_WIDTH;
@@ -6490,6 +6550,362 @@ var CodexSessionParser = class {
   }
 };
 
+// src/adapters/gemini/observation.ts
+var GEMINI_COVERAGE = {
+  responsesAndTokens: "measured",
+  humanRequests: "proxy",
+  toolCalls: "measured",
+  toolErrors: "measured",
+  shellExitCodes: "proxy",
+  deniedAndLengthStops: "unsupported",
+  interruptedTurns: "unsupported",
+  autoCompaction: "unsupported",
+  effort: "unsupported",
+  loadedNames: "unsupported",
+  skillUsage: "unsupported",
+  mcpCalls: "measured",
+  mcpFailuresAndHooks: "unsupported",
+  instructionSize: "unsupported",
+  subagents: "measured"
+};
+var GEMINI_MCP_NON_SIGNAL_TYPES = /* @__PURE__ */ new Set(["user", "info", "error", "warning"]);
+function geminiMcpObservation(summaries, unreadableCount2) {
+  return observeRecords(summaries, unreadableCount2, GEMINI_MCP_NON_SIGNAL_TYPES, (summary) => summary.missing.tooLongMcpLines ?? summary.missing.tooLongLines);
+}
+var GEMINI_USAGE_MARKERS = [
+  { name: "mcp", bytes: Buffer.from('"mcp_', "utf8") },
+  { name: "skill", bytes: Buffer.from('"activate_skill"', "utf8") }
+];
+
+// src/adapters/gemini/parser.ts
+var GEMINI_PARSER_VERSION = 2;
+var GEMINI_SHELL_TOOLS = ["run_shell_command"];
+var SUBAGENT_TOOLS2 = /* @__PURE__ */ new Set(["invoke_agent"]);
+var SKILL_TOOL = "activate_skill";
+var MCP_PREFIX = "mcp_";
+var MESSAGE_TYPES = /* @__PURE__ */ new Set(["user", "gemini", "info", "error", "warning"]);
+var FIRST_RESPONSE_IDS2 = 20;
+var UNKNOWN_TOOL2 = "?";
+var num3 = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
+var str3 = (value) => typeof value === "string" && value !== "" ? value : null;
+var obj3 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+var bump2 = (record, key, by = 1) => {
+  record[key] = (Object.hasOwn(record, key) ? record[key] : 0) + by;
+};
+function parseObject3(text) {
+  try {
+    return obj3(JSON.parse(text));
+  } catch {
+    return null;
+  }
+}
+function geminiMcpServerKey(toolName) {
+  if (!toolName.startsWith(MCP_PREFIX)) return null;
+  const rest = toolName.slice(MCP_PREFIX.length);
+  const cut = rest.indexOf("_");
+  const server = cut === -1 ? rest : rest.slice(0, cut);
+  return server === "" ? null : server;
+}
+var NOT_HUMAN_HEADS = ["/", "?", "<session_context>", "<hook_context>", "<state_snapshot>"];
+var humanText = (text) => {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && !NOT_HUMAN_HEADS.some((head) => trimmed.startsWith(head));
+};
+function isHumanContent(content) {
+  if (typeof content === "string") return humanText(content);
+  const parts = Array.isArray(content) ? content : [content];
+  return parts.some((part) => {
+    if (typeof part === "string") return humanText(part);
+    const piece = obj3(part);
+    return piece !== null && typeof piece.text === "string" && piece.thought !== true && humanText(piece.text);
+  });
+}
+var EXIT_CODE = /\nExit Code: (-?\d+)(?:\n(?:Signal|Background PIDs|Process Group PGID): [^\n]*)*\s*$/;
+var UNTRUSTED = /^<untrusted_context(?: [^>]*)?>\n([\s\S]*)\n<\/untrusted_context>\s*$/;
+var unwrapped = (text) => UNTRUSTED.exec(text)?.[1] ?? text;
+var POLICY_DENIAL = "Tool execution denied by policy";
+function responseTexts(result) {
+  const parts = Array.isArray(result) ? result : [result];
+  const texts = [];
+  for (const part of parts) {
+    const response = obj3(obj3(obj3(part)?.functionResponse)?.response);
+    if (response === null) continue;
+    for (const value of Object.values(response)) if (typeof value === "string") texts.push(value);
+  }
+  return texts;
+}
+var GeminiSessionParser = class {
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
+  ctx;
+  days = /* @__PURE__ */ new Map();
+  /** 메시지 ID → 마지막 줄. 같은 ID가 다시 적히면 뒤의 줄이 이긴다(소스 chatRecordingService의 pushMessage). Map은 처음 나온 차례를 지킨다 */
+  messages = /* @__PURE__ */ new Map();
+  toolIds = /* @__PURE__ */ new Set();
+  /** 메시지 ID → 처음 나온 차례 */
+  firstSeen = /* @__PURE__ */ new Map();
+  /** 이력 동기화가 새 ID로 다시 적은 user 메시지(압축 요약, 남겨 둔 대화의 사본). 사람 요청으로 세지 않는다 */
+  copies = /* @__PURE__ */ new Set();
+  firstIds = [];
+  unconfirmedTypes = nameRecord();
+  metaSessionId = null;
+  firstDate = null;
+  lines = 0;
+  brokenLines = 0;
+  tailFragments = 0;
+  tooLongLines = 0;
+  tooLongSkillLines = 0;
+  tooLongMcpLines = 0;
+  undatedLines = 0;
+  withoutId = 0;
+  /** 줄바꿈으로 끝난 줄 하나. 빈 줄은 세지 않는다 */
+  line(text) {
+    if (text.trim() === "") return;
+    this.lines++;
+    const parsed = parseObject3(text);
+    if (parsed === null) this.missing(text, "broken");
+    else this.accept(parsed);
+  }
+  /** 옛 꼴(.json) 파일 하나. 세션 정보와 메시지 목록이 든 JSON 한 덩어리다. 풀리지 않으면 깨진 줄 하나로 센다 */
+  legacy(text) {
+    const parsed = parseObject3(text);
+    if (parsed === null) {
+      this.lines++;
+      this.missing(text, "broken");
+      return;
+    }
+    const { messages, ...meta } = parsed;
+    this.lines++;
+    this.accept(meta);
+    if (!Array.isArray(messages)) return;
+    for (const message of messages) {
+      this.lines++;
+      const record = obj3(message);
+      if (record === null) {
+        this.brokenLines++;
+        bump2(this.unconfirmedTypes, "?");
+      } else this.accept(record);
+    }
+  }
+  /** 상한을 넘은 줄 하나. found는 줄의 바이트에서 찾은 사용 흔적의 표지다 */
+  tooLong(found) {
+    this.lines++;
+    this.tooLongLines++;
+    if (found?.has("skill")) this.tooLongSkillLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
+  }
+  /** 끝 조각을 정리하고 요약을 낸다. 한 번만 부른다 */
+  finish(tail, inProgress) {
+    if (tail !== null && tail.trim() !== "") {
+      this.lines++;
+      const parsed = parseObject3(tail);
+      if (parsed !== null) this.accept(parsed);
+      else this.missing(tail, inProgress ? "tail" : "broken");
+    }
+    for (const [id, record] of this.messages) this.count(id, record);
+    const days = {};
+    for (const date of [...this.days.keys()].sort()) days[date] = canonicalDay(this.days.get(date));
+    return {
+      tool: "gemini",
+      sessionId: this.metaSessionId ?? this.ctx.sessionId,
+      kind: this.ctx.kind,
+      parentSessionId: this.ctx.parentSessionId,
+      cwd: this.ctx.cwd,
+      // 제미나이 CLI는 세션 기록에 자기 버전을 적지 않는다
+      version: null,
+      firstDate: this.firstDate,
+      days,
+      instructionChars: null,
+      initialSkills: null,
+      initialMcpServers: null,
+      missing: {
+        lines: this.lines,
+        brokenLines: this.brokenLines,
+        tailFragments: this.tailFragments,
+        tooLongLines: this.tooLongLines,
+        tooLongSkillLines: this.tooLongSkillLines,
+        tooLongMcpLines: this.tooLongMcpLines,
+        unconfirmedTypes: sortedRecord(this.unconfirmedTypes)
+      },
+      firstResponseIdHashes: this.firstIds.map(fnv1a64),
+      notes: { syntheticResponses: 0, responsesWithoutId: this.withoutId, undatedLines: this.undatedLines, unknownHookKinds: nameRecord() }
+    };
+  }
+  missing(text, kind) {
+    if (kind === "broken") this.brokenLines++;
+    else this.tailFragments++;
+    bump2(this.unconfirmedTypes, outerTypeOf(text) ?? "?");
+  }
+  /** 고침 줄의 도구 결과를 이미 읽은 메시지에 얹는다(셸의 종료 코드가 결과로 나중에 붙을 수 있다). 내용 고침, 지우기, 차례 바꾸기는 세는 것을 바꾸지 않아 보지 않는다 */
+  patch(patch) {
+    const single = (update) => {
+      const target = this.messages.get(str3(update.id) ?? "");
+      if (target === void 0 || !Array.isArray(update.toolCalls) || !Array.isArray(target.toolCalls)) return;
+      for (const raw of update.toolCalls) {
+        const change = obj3(raw);
+        const callId = str3(change?.id);
+        if (change === null || callId === null || !Object.hasOwn(change, "result")) continue;
+        for (const call of target.toolCalls) {
+          const shaped = obj3(call);
+          if (shaped !== null && shaped.id === callId) shaped.result = change.result;
+        }
+      }
+    };
+    single(patch);
+    if (Array.isArray(patch.updates)) {
+      for (const update of patch.updates) if (obj3(update) !== null) single(obj3(update));
+    }
+    if (Array.isArray(patch.removeIds)) this.markCopies(new Set(patch.removeIds.filter((id) => typeof id === "string")));
+  }
+  /**
+   * 이력을 새 ID로 다시 적으면(압축 뒤의 요약·확인과 남긴 대화, 압축이 실패한 뒤의 잘라내기) 제미나이는 다시 적은 메시지를 한 번에 붙이고 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 다시 적은 gemini 메시지에는 모델 이름도 토큰도 없다. 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지가 그 구간이고, 구간의 user 메시지 가운데
+   * 다음 user 메시지 전까지 실제 응답(모델 이름이나 토큰이 있는 gemini)이 따르지 않는 것을 사본으로 본다. 실제 응답이 따르는 요청은 압축이 아닌 이력 고침 뒤에 남은 새 요청이라 센다.
+   * 구간 안에서 응답을 받지 못하고 끝난 진짜 새 요청은 사본과 가를 정보가 기록에 없어 사본으로 본다(사람 요청은 대신 보는 값이다)
+   * (소스 geminiChat.ts의 생성자·initialize·setHistory, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts, 짝 검토 4차 필수 1)
+   */
+  markCopies(removed) {
+    let last = -1;
+    for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
+    if (last < 0) return;
+    const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id) > last);
+    const answer = (record) => record.type === "gemini" && (str3(record.model) !== null || obj3(record.tokens) !== null);
+    for (let index = 0; index < window.length; index++) {
+      if (this.messages.get(window[index]).type !== "user") continue;
+      let answered = false;
+      for (let next = index + 1; next < window.length && !answered; next++) {
+        const after = this.messages.get(window[next]);
+        if (after.type === "user") break;
+        answered = answer(after);
+      }
+      if (!answered) this.copies.add(window[index]);
+    }
+  }
+  /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */
+  accept(record) {
+    if (Object.hasOwn(record, "$patch")) {
+      const patch = obj3(record.$patch);
+      if (patch !== null) this.patch(patch);
+      return;
+    }
+    if (Object.hasOwn(record, "$set")) {
+      const set = obj3(record.$set);
+      if (set !== null && Array.isArray(set.messages)) {
+        for (const message of set.messages) if (obj3(message) !== null && str3(obj3(message).type) !== null) this.accept(obj3(message));
+      }
+      return;
+    }
+    if (Object.hasOwn(record, "$rewindTo")) return;
+    const type = str3(record.type);
+    if (type === null) {
+      if (typeof record.sessionId === "string" && this.metaSessionId === null) this.metaSessionId = record.sessionId;
+      this.noteDate(localDateOfIso(record.startTime, this.ctx.timeZone));
+      return;
+    }
+    if (!MESSAGE_TYPES.has(type)) {
+      bump2(this.unconfirmedTypes, type);
+      return;
+    }
+    const id = str3(record.id);
+    if (id === null) {
+      this.withoutId++;
+      this.messages.set(`#${this.withoutId}`, record);
+      return;
+    }
+    if (!this.firstSeen.has(id)) this.firstSeen.set(id, this.firstSeen.size);
+    this.messages.set(id, record);
+  }
+  noteDate(date) {
+    if (date !== null && (this.firstDate === null || date < this.firstDate)) this.firstDate = date;
+  }
+  day(date) {
+    let cell = this.days.get(date);
+    if (cell === void 0) {
+      cell = emptyDay();
+      this.days.set(date, cell);
+    }
+    return cell;
+  }
+  tool(day, name) {
+    let counts = day.tools[name];
+    if (counts === void 0) {
+      counts = emptyToolCounts();
+      day.tools[name] = counts;
+    }
+    return counts;
+  }
+  skillSignal(day, name) {
+    let counts = day.skillSignals[name];
+    if (counts === void 0) {
+      counts = emptySkillSignalCounts();
+      day.skillSignals[name] = counts;
+    }
+    return counts;
+  }
+  /** 메시지 하나(그 ID의 마지막 줄)를 날짜 칸에 센다 */
+  count(id, record) {
+    const date = localDateOfIso(record.timestamp, this.ctx.timeZone);
+    if (date === null) {
+      this.undatedLines++;
+      return;
+    }
+    this.noteDate(date);
+    const day = this.day(date);
+    if (record.type === "user") {
+      if (this.ctx.kind === "main" && !this.copies.has(id) && isHumanContent(record.content)) day.humanRequests++;
+      return;
+    }
+    if (record.type !== "gemini") return;
+    const model = str3(record.model);
+    const tokens = obj3(record.tokens);
+    if (model !== null || tokens !== null) {
+      day.responses++;
+      const responseId = str3(record.id);
+      if (responseId !== null && this.firstIds.length < FIRST_RESPONSE_IDS2) this.firstIds.push(responseId);
+      if (tokens !== null) {
+        day.tokens.input += num3(tokens.input);
+        day.tokens.cacheRead += num3(tokens.cached);
+        day.tokens.output += num3(tokens.output);
+        day.tokens.thinking += num3(tokens.thoughts);
+      }
+      if (model !== null) bump2(day.models, model);
+      day.unknownEffort++;
+    }
+    if (!Array.isArray(record.toolCalls)) return;
+    for (const raw of record.toolCalls) {
+      const call = obj3(raw);
+      if (call === null) continue;
+      const callId = str3(call.id);
+      if (callId !== null) {
+        if (this.toolIds.has(callId)) continue;
+        this.toolIds.add(callId);
+      }
+      const name = str3(call.name) ?? UNKNOWN_TOOL2;
+      const server = geminiMcpServerKey(name);
+      const counts = this.tool(day, server === null ? name : `${MCP_PREFIX}${server}`);
+      counts.calls++;
+      const status = str3(call.status);
+      const texts = responseTexts(call.result);
+      if (status === "error" && texts.some((text) => text.startsWith(POLICY_DENIAL))) {
+        counts.deniedByPermission++;
+      } else if (status === "success" || status === "error") {
+        counts.results++;
+        const failedExit = GEMINI_SHELL_TOOLS.includes(name) && texts.some((text) => Number(EXIT_CODE.exec(unwrapped(text))?.[1] ?? 0) !== 0);
+        if (status === "error" || failedExit) counts.errors++;
+      } else if (status === "cancelled") {
+        counts.unknownDenial++;
+      }
+      if (server !== null) bump2(day.mcpCalls, server);
+      if (name === SKILL_TOOL) {
+        const skill = str3(obj3(call.args)?.name);
+        if (skill !== null) this.skillSignal(day, skill).tool++;
+      }
+      if (SUBAGENT_TOOLS2.has(name)) day.subagentCalls++;
+    }
+  }
+};
+
 // src/collect/claude.ts
 import { join as join11 } from "node:path";
 
@@ -7362,24 +7778,241 @@ async function collectCodexFromList(home, list, options) {
   };
 }
 
+// src/collect/gemini.ts
+import { readFile as readFile6 } from "node:fs/promises";
+import { join as join15 } from "node:path";
+
+// src/adapters/gemini/locate.ts
+import { readdir as readdir6, readFile as readFile5, stat as stat5 } from "node:fs/promises";
+import { join as join14, resolve as resolve3 } from "node:path";
+function geminiHome(env, homedir2) {
+  const fromEnv = env.GEMINI_CLI_HOME?.trim();
+  return join14(fromEnv ? resolve3(fromEnv) : homedir2, ".gemini");
+}
+function geminiRecordHomes(env, homedir2) {
+  const fromEnv = env.GEMINI_CLI_HOME?.trim();
+  const base = fromEnv ? resolve3(fromEnv) : homedir2;
+  return [join14(base, ".gemini"), join14(base, ".cache", ".gemini")];
+}
+var isMissing5 = (error) => error?.code === "ENOENT";
+var MAIN_FILE = /^session-.*\.(jsonl|json)$/;
+var PROJECT_ROOT_FILE = ".project_root";
+var PROJECT_ROOT_MAX = 4096;
+async function projectRootOf(dir) {
+  try {
+    const info = await stat5(join14(dir, PROJECT_ROOT_FILE));
+    if (!info.isFile() || info.size > PROJECT_ROOT_MAX) return null;
+    const text = (await readFile5(join14(dir, PROJECT_ROOT_FILE), "utf8")).trim();
+    return text === "" ? null : text;
+  } catch {
+    return null;
+  }
+}
+async function listGeminiFiles(home, minMtimeMs) {
+  const tmp = join14(home, "tmp");
+  const files = [];
+  const unreadableDirs = [];
+  const unreadableFiles = [];
+  let olderThanWindow = 0;
+  let projectEntries;
+  try {
+    projectEntries = await readdir6(tmp, { withFileTypes: true });
+  } catch (error) {
+    if (isMissing5(error)) return { tmpFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unreadableFiles: [] };
+    return { tmpFound: true, files: [], olderThanWindow: 0, unreadableDirs: [tmp], unreadableFiles: [] };
+  }
+  const consider = async (path, entry) => {
+    try {
+      const info = await stat5(path);
+      if (minMtimeMs !== null && info.mtimeMs < minMtimeMs) {
+        olderThanWindow++;
+        return;
+      }
+      const big = await stat5(path, { bigint: true });
+      const identity = big.ino !== 0n ? `${big.dev}:${big.ino}` : normalizePath(path);
+      files.push({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs, identity, ...entry });
+    } catch {
+      unreadableFiles.push(path);
+    }
+  };
+  for (const project of projectEntries) {
+    if (!project.isDirectory()) continue;
+    const projectDir = join14(tmp, project.name);
+    const chats = join14(projectDir, "chats");
+    let entries;
+    try {
+      entries = await readdir6(chats, { withFileTypes: true });
+    } catch (error) {
+      if (!isMissing5(error)) unreadableDirs.push(chats);
+      continue;
+    }
+    const cwd = await projectRootOf(projectDir);
+    const names2 = new Set(entries.map((entry) => entry.name));
+    for (const entry of entries) {
+      if (entry.isFile() && MAIN_FILE.test(entry.name)) {
+        const legacy = entry.name.endsWith(".json");
+        if (legacy && names2.has(`${entry.name}l`)) continue;
+        await consider(join14(chats, entry.name), { sessionId: entry.name.slice(0, entry.name.lastIndexOf(".")), kind: "main", parentSessionId: null, cwd, legacy });
+        continue;
+      }
+      if (!entry.isDirectory()) continue;
+      const subDir = join14(chats, entry.name);
+      let subs;
+      try {
+        subs = await readdir6(subDir, { withFileTypes: true });
+      } catch {
+        unreadableDirs.push(subDir);
+        continue;
+      }
+      for (const sub of subs) {
+        if (sub.isFile() && sub.name.endsWith(".jsonl")) {
+          await consider(join14(subDir, sub.name), { sessionId: sub.name.slice(0, -".jsonl".length), kind: "sub", parentSessionId: entry.name, cwd, legacy: false });
+        }
+      }
+    }
+  }
+  files.sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
+  unreadableDirs.sort();
+  unreadableFiles.sort();
+  return { tmpFound: true, files, olderThanWindow, unreadableDirs, unreadableFiles };
+}
+async function listGeminiRecordFiles(homes, minMtimeMs) {
+  const merged = { tmpFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unreadableFiles: [] };
+  const seen = /* @__PURE__ */ new Set();
+  for (const home of homes) {
+    const list = await listGeminiFiles(home, minMtimeMs);
+    merged.tmpFound ||= list.tmpFound;
+    merged.olderThanWindow += list.olderThanWindow;
+    merged.unreadableDirs.push(...list.unreadableDirs);
+    merged.unreadableFiles.push(...list.unreadableFiles);
+    for (const file of list.files) {
+      if (seen.has(file.identity)) continue;
+      seen.add(file.identity);
+      merged.files.push(file);
+    }
+  }
+  merged.files.sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
+  merged.unreadableDirs.sort();
+  merged.unreadableFiles.sort();
+  return merged;
+}
+
+// src/collect/gemini.ts
+var GEMINI_PARSER_ID = `gemini@${GEMINI_PARSER_VERSION}`;
+async function collectGemini(options) {
+  const home = geminiHome(options.env, options.homedir);
+  const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
+  const list = await listGeminiRecordFiles(geminiRecordHomes(options.env, options.homedir), options.rescan ? null : windows.collectStartLowerBoundMs);
+  return collectGeminiFromList(home, list, options);
+}
+async function parseLegacy(file, parser) {
+  if (file.size > MAX_LINE_BYTES) {
+    parser.tooLong();
+    return { bytesRead: 0 };
+  }
+  const text = await readFile6(file.path, "utf8");
+  parser.legacy(text);
+  return { bytesRead: Buffer.byteLength(text) };
+}
+async function collectGeminiFromList(home, list, options) {
+  const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
+  const cacheDir = options.cacheDir === null ? null : join15(options.cacheDir, "gemini");
+  const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
+  const summaries = [];
+  const unreadableFiles = [...list.unreadableFiles];
+  let unreadableFileBytes = 0;
+  let bytes = 0;
+  let fromCache = 0;
+  let inProgress = 0;
+  const markUnreadable = (path, size) => {
+    unreadableFiles.push(path);
+    unreadableFileBytes += size;
+  };
+  for (const file of files) {
+    let key = null;
+    try {
+      if (cacheDir !== null) {
+        key = await cacheKeyFor(file, GEMINI_PARSER_ID, options.clock.timeZone);
+        if (!options.rescan && key !== null) {
+          const hit = await loadCached(cacheDir, key);
+          if (hit !== null) {
+            summaries.push({ ...hit.summary, cwd: file.cwd });
+            bytes += hit.bytesRead;
+            fromCache++;
+            if (mostlyBroken(hit.summary)) markUnreadable(file.path, file.size);
+            continue;
+          }
+        }
+      }
+      const parser = new GeminiSessionParser({ sessionId: file.sessionId, kind: file.kind, parentSessionId: file.parentSessionId, cwd: file.cwd, timeZone: options.clock.timeZone });
+      if (file.legacy) {
+        const outcome2 = await parseLegacy(file, parser);
+        const summary2 = parser.finish(null, false);
+        summaries.push(summary2);
+        bytes += outcome2.bytesRead;
+        if (mostlyBroken(summary2)) markUnreadable(file.path, file.size);
+        continue;
+      }
+      const outcome = await readLines(file.path, options.clock.nowMs, { line: (text) => parser.line(text), tooLong: (found) => parser.tooLong(found) }, { markers: GEMINI_USAGE_MARKERS });
+      const summary = parser.finish(outcome.tail, outcome.inProgress);
+      summaries.push(summary);
+      bytes += outcome.bytesRead;
+      if (mostlyBroken(summary) || outcome.endedEarly) markUnreadable(file.path, file.size);
+      if (outcome.inProgress) {
+        inProgress++;
+        continue;
+      }
+      if (key !== null && cacheDir !== null && outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs) {
+        try {
+          if (await keyStillMatches(file.path, key)) await storeCached(cacheDir, { key, summary, bytesRead: outcome.bytesRead });
+        } catch {
+        }
+      }
+    } catch {
+      markUnreadable(file.path, file.size);
+    }
+  }
+  unreadableFiles.sort();
+  return {
+    tool: "gemini",
+    home,
+    detected: list.tmpFound,
+    summaries,
+    read: {
+      files: files.length + list.unreadableFiles.length,
+      listedBytes: files.reduce((sum2, file) => sum2 + file.size, 0),
+      bytes,
+      fromCache,
+      inProgress,
+      olderThanWindow: list.olderThanWindow,
+      unreadableFiles,
+      unreadableFileBytes,
+      unknownSizeFiles: list.unreadableFiles.length,
+      unreadableDirs: [...list.unreadableDirs].sort()
+    },
+    visibleFrom: visibleFrom(summaries, list.olderThanWindow, windows.collectDates[0]),
+    overlappingSessions: overlappingSessions(summaries)
+  };
+}
+
 // src/scan/claude.ts
-import { basename as basename6, join as join20, relative as relative3 } from "node:path";
+import { basename as basename6, join as join22, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join15, resolve as resolve4 } from "node:path";
+import { join as join17, resolve as resolve5 } from "node:path";
 
 // src/scan/fs.ts
-import { lstat as lstat4, readdir as readdir6, readFile as readFile5, realpath as realpath4, stat as stat5 } from "node:fs/promises";
-var isMissing5 = (error) => {
+import { lstat as lstat4, readdir as readdir7, readFile as readFile7, realpath as realpath4, stat as stat6 } from "node:fs/promises";
+var isMissing6 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
 };
 var stripBom = (text) => text.charCodeAt(0) === 65279 ? text.slice(1) : text;
 async function readText(path) {
   try {
-    return { status: "ok", text: stripBom(await readFile5(path, "utf8")) };
+    return { status: "ok", text: stripBom(await readFile7(path, "utf8")) };
   } catch (error) {
-    return isMissing5(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing6(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 async function readJson(path) {
@@ -7393,9 +8026,9 @@ async function readJson(path) {
 }
 async function listDir(path) {
   try {
-    return { status: "ok", names: (await readdir6(path)).sort() };
+    return { status: "ok", names: (await readdir7(path)).sort() };
   } catch (error) {
-    return isMissing5(error) ? { status: "missing" } : { status: "unreadable" };
+    return isMissing6(error) ? { status: "missing" } : { status: "unreadable" };
   }
 }
 function createdMsOf(info) {
@@ -7414,7 +8047,7 @@ async function entryInfo(path) {
   let target = own;
   if (isLink) {
     try {
-      target = await stat5(path);
+      target = await stat6(path);
     } catch {
       target = null;
     }
@@ -7438,7 +8071,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename3, join as join14, resolve as resolve3 } from "node:path";
+import { basename as basename3, join as join16, resolve as resolve4 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -7593,7 +8226,7 @@ function declarationsOf(value) {
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join14(root, name));
+  const info = await entryInfo(join16(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -7615,16 +8248,16 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known = await readJson(join14(claudeHome2, "plugins", "known_marketplaces.json"));
-  if (known.status === "missing") return { file: "missing", markets };
-  if (known.status !== "ok" || !isObject5(known.value)) return { file: "unreadable", markets };
-  for (const [market, info] of Object.entries(known.value)) {
+  const known2 = await readJson(join16(claudeHome2, "plugins", "known_marketplaces.json"));
+  if (known2.status === "missing") return { file: "missing", markets };
+  if (known2.status !== "ok" || !isObject5(known2.value)) return { file: "unreadable", markets };
+  for (const [market, info] of Object.entries(known2.value)) {
     if (!isObject5(info) || typeof info.installLocation !== "string") {
       markets.set(market, "unreadable");
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join14(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join16(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -7693,7 +8326,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join14(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join16(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -7735,14 +8368,14 @@ async function readPluginInstall(group, markets) {
   addComponents(base);
   addComponents(appended);
   const prefix = manifest !== null ? "manifest" : "entry";
-  const unknownKeys = (source, from, known) => {
+  const unknownKeys = (source, from, known2) => {
     for (const key of Object.keys(source)) {
       if (key === "experimental") {
         const experimental = isObject5(source.experimental) ? source.experimental : {};
         for (const inner of Object.keys(experimental)) if (inner !== "themes" && inner !== "monitors") plugin.unknownEntries.push(`${from}:experimental.${inner}`);
         continue;
       }
-      if (!known.has(key) && !COMPONENT_KEYS.has(key) && key !== "themes") plugin.unknownEntries.push(`${from}:${key}`);
+      if (!known2.has(key) && !COMPONENT_KEYS.has(key) && key !== "themes") plugin.unknownEntries.push(`${from}:${key}`);
     }
   };
   if (manifest !== null) unknownKeys(manifest, "manifest", INTRO_KEYS);
@@ -7766,7 +8399,7 @@ async function readPluginInstall(group, markets) {
   };
   const declaredPath = async (declared2) => {
     if (!wellFormedPath(declared2)) return null;
-    const path = resolve3(installPath, declared2);
+    const path = resolve4(installPath, declared2);
     return await insideRoot(path) ? path : null;
   };
   const hookSources = [];
@@ -7788,7 +8421,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join14(installPath, "hooks", "hooks.json");
+  const defaultHooks = join16(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -7820,7 +8453,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join14(installPath, ".mcp.json"), false);
+  await addMcpFile(join16(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -7838,7 +8471,7 @@ async function readPluginInstall(group, markets) {
   const declared = [...pathsOf(base.skills).map((path) => ({ path, from: prefix })), ...pathsOf(appended.skills).map((path) => ({ path, from: "entry" }))];
   const skillRoots = [];
   for (const { path, from } of declared) {
-    if (await isPluginRoot(resolve3(installPath, path))) {
+    if (await isPluginRoot(resolve4(installPath, path))) {
       plugin.unknownEntries.push(`${from}:skills=.`);
       continue;
     }
@@ -7846,7 +8479,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join14(installPath, "skills");
+  const defaultSkills = join16(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -7857,7 +8490,7 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join14(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join16(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
     const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
@@ -7866,7 +8499,7 @@ async function readSkillsDirPlugins(refs) {
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join14(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join16(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -7895,7 +8528,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join15(resolve4(fromEnv), ".claude.json") : join15(homedir2, ".claude.json");
+  return fromEnv ? join17(resolve5(fromEnv), ".claude.json") : join17(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -7953,10 +8586,11 @@ async function readClaudeJson(path) {
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
 import { lstat as lstat5, readlink } from "node:fs/promises";
-import { basename as basename4, dirname as dirname3, isAbsolute, join as join16, parse, resolve as resolve5 } from "node:path";
+import { basename as basename4, dirname as dirname3, isAbsolute, join as join18, parse, resolve as resolve6 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 var MAX_IMPORT_HOPS = 4;
+var GEMINI_IMPORT_HOPS = 5;
 function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
@@ -7988,7 +8622,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join16(current, name);
+      const path = join18(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -8022,7 +8656,7 @@ function countMentions(text, targets) {
   }
   return out;
 }
-function importsOf(text) {
+function importsOf(text, style = "claude") {
   const prose = [];
   let fence = null;
   for (const raw of text.split("\n")) {
@@ -8042,6 +8676,24 @@ function importsOf(text) {
   }
   const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
   const out = [];
+  if (style === "gemini") {
+    const space = (char) => char === " " || char === "	" || char === "\n" || char === "\r";
+    let index = 0;
+    while (index < cleaned.length) {
+      index = cleaned.indexOf("@", index);
+      if (index === -1) break;
+      if (index > 0 && !space(cleaned[index - 1])) {
+        index++;
+        continue;
+      }
+      let end = index + 1;
+      while (end < cleaned.length && !space(cleaned[end])) end++;
+      const token = cleaned.slice(index + 1, end);
+      if (/^[./A-Za-z]/.test(token)) out.push(token);
+      index = end + 1;
+    }
+    return out;
+  }
   for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
     const token = match[1].replace(/\\ /g, " ");
     if (token.startsWith('"') || token.startsWith("'")) continue;
@@ -8052,12 +8704,17 @@ function importsOf(text) {
 var NETWORK_PATH = /^(\\\\|\/\/)/;
 function importTarget(token, from, homedir2) {
   if (NETWORK_PATH.test(token)) return null;
-  const target = token.startsWith("~/") || token.startsWith("~\\") ? join16(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve5(dirname3(from), token);
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join18(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve6(dirname3(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
+}
+function geminiImportTarget(token, from) {
+  if (/^(file|https?):\/\//i.test(token) || NETWORK_PATH.test(token)) return null;
+  const target = resolve6(dirname3(from), token);
   return NETWORK_PATH.test(target) ? null : target;
 }
 var MAX_LINK_HOPS = 40;
 async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
-  let pending = resolve5(path);
+  let pending = resolve6(path);
   for (let hops = 0; hops <= MAX_LINK_HOPS; hops++) {
     if (NETWORK_PATH.test(pending)) return true;
     const { root } = parse(pending);
@@ -8065,7 +8722,7 @@ async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
     let current = root;
     let followed = false;
     for (let index = 0; index < parts.length && !followed; index++) {
-      current = join16(current, parts[index]);
+      current = join18(current, parts[index]);
       let info;
       try {
         info = await ops.lstat(current);
@@ -8080,7 +8737,7 @@ async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
         return false;
       }
       if (NETWORK_PATH.test(target)) return true;
-      pending = join16(resolve5(dirname3(current), target), ...parts.slice(index + 1));
+      pending = join18(resolve6(dirname3(current), target), ...parts.slice(index + 1));
       followed = true;
     }
     if (!followed) return false;
@@ -8113,11 +8770,12 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
     const info = await entryInfo(path);
     if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
     if (info.realPath !== null) readReal.add(info.realPath);
-    if (imports !== null && hops < MAX_IMPORT_HOPS) {
-      for (const token of importsOf(read.text)) {
-        const target = importTarget(token, path, imports.homedir);
+    if (imports !== null && hops < (imports.style === "gemini" ? GEMINI_IMPORT_HOPS : MAX_IMPORT_HOPS)) {
+      const gemini = imports.style === "gemini";
+      for (const token of importsOf(read.text, gemini ? "gemini" : "claude")) {
+        const target = gemini ? geminiImportTarget(token, path) : importTarget(token, path, imports.homedir);
         if (target === null) continue;
-        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        if (imports.within !== null && !gemini && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -8140,15 +8798,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join16(claudeHome2, "rules"));
-  return { paths: [join16(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join18(claudeHome2, "rules"));
+  return { paths: [join18(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join16(root, "CLAUDE.md"), join16(root, ".claude", "CLAUDE.md"), join16(root, "CLAUDE.local.md")];
+  const claudeFiles = [join18(root, "CLAUDE.md"), join18(root, ".claude", "CLAUDE.md"), join18(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join16(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join16(root, "AGENTS.md"), join16(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join18(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join18(root, "AGENTS.md"), join18(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets, options = null) {
@@ -8363,22 +9021,22 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname4, isAbsolute as isAbsolute2, join as join17, parse as parse2, resolve as resolve6 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join19, parse as parse2, resolve as resolve7 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
-  const gitDir = isAbsolute2(match[1]) ? match[1] : resolve6(dir, match[1]);
-  const common = await readText(join17(gitDir, "commondir"));
+  const gitDir = isAbsolute2(match[1]) ? match[1] : resolve7(dir, match[1]);
+  const common = await readText(join19(gitDir, "commondir"));
   if (common.status !== "ok") return null;
-  const commonDir = resolve6(gitDir, common.text.trim());
+  const commonDir = resolve7(gitDir, common.text.trim());
   return parse2(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join17(dir, ".git");
+    const dotGit = join19(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
@@ -8390,13 +9048,13 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join17(context.homedir, "Desktop"), join17(context.homedir, "Documents"), join17(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join19(context.homedir, "Desktop"), join19(context.homedir, "Documents"), join19(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
 }
 async function resolveProject(cwd, context) {
-  const absolute = resolve6(cwd);
+  const absolute = resolve7(cwd);
   const info = await entryInfo(absolute);
   const exists = info.exists && info.isDir;
   const gitRoot = exists ? await gitRootFrom(absolute) : null;
@@ -8431,7 +9089,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join18 } from "node:path";
+import { join as join20 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -8533,12 +9191,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join18(dir, "managed-settings.json"));
-  const dropIns = await listDir(join18(dir, "managed-settings.d"));
+  await take(join20(dir, "managed-settings.json"));
+  const dropIns = await listDir(join20(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join18(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join20(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join18(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join20(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -8589,8 +9247,8 @@ function viewOf(value) {
 
 // src/scan/skills.ts
 import { createHash as createHash5 } from "node:crypto";
-import { lstat as lstat6, readdir as readdir7, readFile as readFile6, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename5, join as join19, relative as relative2 } from "node:path";
+import { lstat as lstat6, readdir as readdir8, readFile as readFile8, realpath as realpath5 } from "node:fs/promises";
+import { basename as basename5, join as join21, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -8728,12 +9386,12 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
   const walk = async (current) => {
     let names2;
     try {
-      names2 = (await readdir7(current)).sort();
+      names2 = (await readdir8(current)).sort();
     } catch {
       return false;
     }
     for (const name of names2) {
-      const path = join19(current, name);
+      const path = join21(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -8750,7 +9408,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       if (total > maxBytes) return false;
       let data;
       try {
-        data = await readFile6(path);
+        data = await readFile8(path);
       } catch {
         return false;
       }
@@ -8765,7 +9423,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join19(path, "SKILL.md"));
+  const skillMd = await readText(join21(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -8792,13 +9450,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join19(dir, name);
+    const path = join21(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join19(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join21(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -8808,7 +9466,7 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join19(path, "SKILL.md"))).isFile) {
+  if ((await entryInfo(join21(path, "SKILL.md"))).isFile) {
     const single = await readSkillFolder(path, basename5(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
@@ -8883,14 +9541,14 @@ function projectNamesOf(refs) {
 }
 var slashed = (path) => path.replace(/\\/g, "/");
 async function defaultCopySecrets(input) {
-  const defaultHome = join20(input.homedir, ".claude");
+  const defaultHome = join22(input.homedir, ".claude");
   if (!input.env.CLAUDE_CONFIG_DIR?.trim() || normalizePath(claudeHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
   const found = [];
-  const settings = await readJson(join20(defaultHome, "settings.json"));
+  const settings = await readJson(join22(defaultHome, "settings.json"));
   if (settings.status === "ok" && typeof settings.value === "object" && settings.value !== null) {
     for (const key of envSecretKeys(settings.value.env)) found.push({ scope: "settings", server: null, projectRoot: null, field: "env", key });
   }
-  const claudeJson = await readClaudeJson(join20(input.homedir, ".claude.json"));
+  const claudeJson = await readClaudeJson(join22(input.homedir, ".claude.json"));
   for (const entry of claudeJson.userMcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "user", server: entry.name, projectRoot: null, ...spot });
   for (const project of claudeJson.projects) for (const entry of project.mcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "local", server: entry.name, projectRoot: project.normKey, ...spot });
   return sortSecrets(found).map((secret) => ({ ...secret, copy: "default" }));
@@ -8899,7 +9557,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join20(home, "settings.json"));
+  const userLayer = await readLayer(join22(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -8922,8 +9580,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join20(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join20(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join22(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join22(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -8938,9 +9596,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active, { homedir: input.homedir });
-  const userSkillScan = await scanSkillRoot(join20(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join22(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join20(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join22(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -9012,7 +9670,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join20(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join22(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -9120,7 +9778,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join20(ref.root, ".mcp.json");
+    const file = join22(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -9222,7 +9880,7 @@ async function scanClaudeSetup(input) {
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute3, join as join24, relative as relative5, resolve as resolve9 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join26, relative as relative5, resolve as resolve10 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -9694,10 +10352,10 @@ function parseNumber(ctx, startPtr, startChr, sign, endChr) {
   }
   if (!(state & 1))
     TomlError.x("unfinished numeric value", ctx, startPtr);
-  let str3 = ctx.s.slice(startPtr, ctx.p);
+  let str4 = ctx.s.slice(startPtr, ctx.p);
   if (hasUnderscores)
-    str3 = str3.replaceAll("_", "");
-  return state > 1 ? parseFloat(str3) : parseInteger(ctx, str3, 10, startPtr);
+    str4 = str4.replaceAll("_", "");
+  return state > 1 ? parseFloat(str4) : parseInteger(ctx, str4, 10, startPtr);
 }
 function parseIntegerBaseN(ctx, startPtr, base, endChr) {
   let c, underscore = 1;
@@ -9713,15 +10371,15 @@ function parseIntegerBaseN(ctx, startPtr, base, endChr) {
   }
   if (underscore & 1)
     TomlError.x("unfinished numeric value", ctx);
-  let str3 = ctx.s.slice(startPtr + 2, ctx.p);
+  let str4 = ctx.s.slice(startPtr + 2, ctx.p);
   if (underscore)
-    str3 = str3.replaceAll("_", "");
-  return parseInteger(ctx, str3, base, startPtr);
+    str4 = str4.replaceAll("_", "");
+  return parseInteger(ctx, str4, base, startPtr);
 }
-function parseInteger(ctx, str3, base, startPtr) {
+function parseInteger(ctx, str4, base, startPtr) {
   if (ctx.bi !== true)
     int: {
-      let val = parseInt(str3, base);
+      let val = parseInt(str4, base);
       if (!Number.isSafeInteger(val)) {
         if (ctx.bi)
           break int;
@@ -9729,7 +10387,7 @@ function parseInteger(ctx, str3, base, startPtr) {
       }
       return val;
     }
-  return base === 10 ? BigInt(str3) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str3);
+  return base === 10 ? BigInt(str4) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str4);
 }
 function parseDate(ctx, c, endChr) {
   let startPtr = ctx.p++, unsafeSeparator;
@@ -9776,25 +10434,25 @@ function parseTime(ctx, c, endChr) {
   let t = ctx.s.slice(start, ctx.p);
   return readDate(ctx, t, 4, false, start);
 }
-function readDate(ctx, str3, type, unsafeDelim, errPtr, temporalSuffix) {
+function readDate(ctx, str4, type, unsafeDelim, errPtr, temporalSuffix) {
   if (ctx.ld) {
-    let date = new TomlDate(str3, type, unsafeDelim);
+    let date = new TomlDate(str4, type, unsafeDelim);
     if (!date.isValid())
       TomlError.x("invalid date", ctx, errPtr);
     return date;
   }
   try {
     if (temporalSuffix)
-      str3 += temporalSuffix;
+      str4 += temporalSuffix;
     switch (type) {
       case 1:
-        return Temporal.ZonedDateTime.from(str3);
+        return Temporal.ZonedDateTime.from(str4);
       case 2:
-        return Temporal.PlainDateTime.from(str3);
+        return Temporal.PlainDateTime.from(str4);
       case 3:
-        return Temporal.PlainDate.from(str3);
+        return Temporal.PlainDate.from(str4);
       case 4:
-        return Temporal.PlainTime.from(str3);
+        return Temporal.PlainTime.from(str4);
     }
   } catch (e) {
     TomlError.x(e instanceof Error ? e.message : "" + e, ctx, errPtr);
@@ -10308,12 +10966,12 @@ function tomlToJson(value) {
 }
 
 // src/scan/codex-instructions.ts
-import { join as join21 } from "node:path";
+import { join as join23 } from "node:path";
 var NAMES = ["AGENTS.override.md", "AGENTS.md"];
 async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
   const unreadable = [];
   for (const name of NAMES) {
-    const path = join21(codexHome2, name);
+    const path = join23(codexHome2, name);
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "unreadable") unreadable.push(path);
@@ -10328,7 +10986,7 @@ async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
 }
 async function readCodexProjectInstructions(root, fallback) {
   for (const name of [...NAMES, ...fallback]) {
-    const path = join21(root, name);
+    const path = join23(root, name);
     if ((await entryInfo(path)).isFile) return (await readInstructionSet([path])).set;
   }
   return emptyInstructionSet();
@@ -10391,12 +11049,12 @@ function codexMcpFacts(input) {
 }
 
 // src/scan/codex-plugins.ts
-import { join as join23, relative as relative4, resolve as resolve7, sep } from "node:path";
+import { join as join25, relative as relative4, resolve as resolve8, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
-import { readFile as readFile7 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname5, join as join22 } from "node:path";
+import { readFile as readFile9 } from "node:fs/promises";
+import { basename as basename7, dirname as dirname5, join as join24 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -10410,8 +11068,8 @@ function codexFrontmatterOk(bytes) {
   return front.unreadable.includes("description") || front.unreadable.includes("name");
 }
 async function manifestNamespace(pluginRoot) {
-  for (const relative6 of CODEX_MANIFEST_PATHS) {
-    const path = join22(pluginRoot, ...relative6.split("/"));
+  for (const relative7 of CODEX_MANIFEST_PATHS) {
+    const path = join24(pluginRoot, ...relative7.split("/"));
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status !== "ok") return null;
@@ -10448,7 +11106,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
         break walk;
       }
       entries++;
-      const path = join22(dir, name);
+      const path = join24(dir, name);
       const info = await entryInfo(path);
       if (info.dangling) {
         out.danglingLinks.push(path);
@@ -10486,10 +11144,10 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
   for (const { dir, viaLink } of found) {
     const folder = await readSkillFolder(dir, basename7(dir));
     if (folder === null) continue;
-    const skillFile = join22(dir, "SKILL.md");
+    const skillFile = join24(dir, "SKILL.md");
     let bytes = null;
     try {
-      bytes = await readFile7(skillFile);
+      bytes = await readFile9(skillFile);
     } catch {
       bytes = null;
     }
@@ -10584,12 +11242,12 @@ async function installRoot(base) {
   const versions = [];
   for (const name of listing.names) {
     if (name === "." || name === ".." || !VERSION_SEGMENT.test(name)) continue;
-    const info = await entryInfo(join23(base, name));
+    const info = await entryInfo(join25(base, name));
     if (info.isDir && !info.isLink) versions.push(name);
   }
   if (versions.length === 0) return { install: "missing", root: null };
   const chosen = versions.includes("local") ? "local" : versions.reduce((best, version) => compareCodexPluginVersions(version, best) > 0 ? version : best);
-  return { install: "ok", root: join23(base, chosen) };
+  return { install: "ok", root: join25(base, chosen) };
 }
 async function findManifest(root) {
   const own = async (path) => {
@@ -10600,7 +11258,7 @@ async function findManifest(root) {
       return error.code === "ENOENT" ? { kind: "none" } : null;
     }
   };
-  const agentPath = join23(root, "plugin.json");
+  const agentPath = join25(root, "plugin.json");
   const agent = await own(agentPath);
   if (agent === null) return { status: "unreadable" };
   if (agent.kind === "dir" || agent.kind === "other") return { status: "missing" };
@@ -10617,11 +11275,11 @@ async function findManifest(root) {
   }
   for (const relativePath of CODEX_MANIFEST_PATHS) {
     const [dir, file] = relativePath.split("/");
-    const parent = await own(join23(root, dir));
+    const parent = await own(join25(root, dir));
     if (parent === null) return { status: "unreadable" };
     if (parent.kind === "none") continue;
     if (parent.kind !== "dir") return { status: "missing" };
-    const path = join23(root, dir, file);
+    const path = join25(root, dir, file);
     const manifest = await own(path);
     if (manifest === null) return { status: "unreadable" };
     if (manifest.kind === "none") continue;
@@ -10633,7 +11291,7 @@ function manifestPath(root, raw) {
   if (typeof raw !== "string" || !raw.startsWith("./")) return null;
   const rest = raw.slice(2);
   if (rest === "" || rest.split(/[\\/]/).includes("..") || rest.startsWith("/") || rest.startsWith("\\") || /^[A-Za-z]:/.test(rest)) return null;
-  const resolved = resolve7(root, rest);
+  const resolved = resolve8(root, rest);
   const inside2 = relative4(root, resolved);
   return inside2 !== "" && !inside2.startsWith("..") && !inside2.startsWith(sep) ? resolved : null;
 }
@@ -10658,7 +11316,7 @@ async function readCodexPlugin(codexHome2, id) {
   const out = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
   if (!out.idValid) return out;
   const at = id.lastIndexOf("@");
-  const located = await installRoot(join23(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
+  const located = await installRoot(join25(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
   out.install = located.install;
   out.root = located.root;
   out.compositionKnown = located.install !== "unreadable";
@@ -10698,15 +11356,15 @@ async function readCodexPlugin(codexHome2, id) {
   }
   const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item2) => typeof item2 === "string") ? manifest.skills : [];
   const declared = listed.map((raw) => manifestPath(root, raw)).filter((path) => path !== null);
-  const roots = declared.length > 0 ? declared : (await entryInfo(join23(root, "skills"))).isDir ? [join23(root, "skills")] : [];
-  if ((await entryInfo(join23(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join23(root, ".codex-plugin", "migrated-command-skills"));
+  const roots = declared.length > 0 ? declared : (await entryInfo(join25(root, "skills"))).isDir ? [join25(root, "skills")] : [];
+  if ((await entryInfo(join25(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join25(root, ".codex-plugin", "migrated-command-skills"));
   out.skillRoots = [...new Set(roots)].sort();
   if (isObject5(manifest.mcpServers)) {
     out.mcpServers = serversOf2(manifest.mcpServers);
     return out;
   }
   const declaredFile = manifestPath(root, manifest.mcpServers);
-  const file = declaredFile ?? ((await entryInfo(join23(root, ".mcp.json"))).isFile ? join23(root, ".mcp.json") : null);
+  const file = declaredFile ?? ((await entryInfo(join25(root, ".mcp.json"))).isFile ? join25(root, ".mcp.json") : null);
   if (file === null) return out;
   const text = await readText(file);
   if (text.status === "missing") return out;
@@ -10725,9 +11383,9 @@ async function readCodexPlugin(codexHome2, id) {
 }
 
 // src/scan/codex-settings.ts
-import { resolve as resolve8 } from "node:path";
+import { resolve as resolve9 } from "node:path";
 var asciiLower = (text, platform) => platform === "win32" ? text.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : text;
-var trustKeyForm = (path, platform) => asciiLower(resolve8(path).replace(/\\/g, "/"), platform);
+var trustKeyForm = (path, platform) => asciiLower(resolve9(path).replace(/\\/g, "/"), platform);
 function trustOf(user, root, platform = process.platform) {
   const projects = isTable(user.projects) ? user.projects : {};
   const rootForm = trustKeyForm(root, platform);
@@ -10789,8 +11447,8 @@ var cmp4 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
 var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
-  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join24(homedir2, raw.slice(2)) : raw;
-  const absolute = isAbsolute3(expanded) ? expanded : resolve9(home, expanded);
+  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join26(homedir2, raw.slice(2)) : raw;
+  const absolute = isAbsolute3(expanded) ? expanded : resolve10(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
 async function skillRules(user, home, homedir2) {
@@ -10821,15 +11479,15 @@ function configuredIn(merged, id) {
 }
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
 async function codexDefaultCopySecrets(input) {
-  const defaultHome = join24(input.homedir, ".codex");
+  const defaultHome = join26(input.homedir, ".codex");
   if (!input.env.CODEX_HOME?.trim() || normalizePath(codexHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
-  const read = await readCodexConfig(join24(defaultHome, "config.toml"));
+  const read = await readCodexConfig(join26(defaultHome, "config.toml"));
   if (read.status !== "ok") return [];
   return codexMcpSecrets(read.value, []).map((secret) => ({ ...secret, copy: "default" }));
 }
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
-  const userFile = join24(home, "config.toml");
+  const userFile = join26(home, "config.toml");
   const userRead = await readCodexConfig(userFile);
   const user = userRead.status === "ok" ? userRead.value : {};
   const problems = [];
@@ -10847,11 +11505,11 @@ async function scanCodexSetup(input) {
   const perProject = /* @__PURE__ */ new Map();
   for (const ref of active) {
     const trust = trustOf(user, ref.root, input.platform);
-    if (trust !== "trusted" || await sameAsHome(join24(ref.root, ".codex"))) {
+    if (trust !== "trusted" || await sameAsHome(join26(ref.root, ".codex"))) {
       perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
       continue;
     }
-    const file = join24(ref.root, ".codex", "config.toml");
+    const file = join26(ref.root, ".codex", "config.toml");
     const text = await readText(file);
     const layer = text.status === "ok" ? parseCodexConfig(text.text) : null;
     let status = text.status === "ok" ? layer === null ? "unparsable" : "ok" : text.status;
@@ -10923,13 +11581,13 @@ async function scanCodexSetup(input) {
     }
   };
   const userRoots = [
-    { dir: join24(home, "skills"), place: codexPlace },
-    { dir: join24(input.homedir, ".agents", "skills"), place: homePlace }
+    { dir: join26(home, "skills"), place: codexPlace },
+    { dir: join26(input.homedir, ".agents", "skills"), place: homePlace }
   ].filter((root, index, all) => all.findIndex((other) => normalizePath(other.dir) === normalizePath(root.dir)) === index);
   for (const root of userRoots) addScan(root.dir, await scanCodexSkillRoot(root.dir), root.place, { scope: "user" });
   for (const ref of active) {
-    const dirs = [join24(ref.root, ".agents", "skills")];
-    if (!await sameAsHome(join24(ref.root, ".codex"))) dirs.push(join24(ref.root, ".codex", "skills"));
+    const dirs = [join26(ref.root, ".agents", "skills")];
+    if (!await sameAsHome(join26(ref.root, ".codex"))) dirs.push(join26(ref.root, ".codex", "skills"));
     for (const dir of dirs) addScan(dir, await scanCodexSkillRoot(dir), (path) => projectPlace(ref, path), { scope: "project", projectRoot: ref.normRoot });
   }
   for (const plugin of reads) {
@@ -10954,14 +11612,14 @@ async function scanCodexSetup(input) {
   const projects = [];
   for (const ref of refs) {
     const trust = trustOf(user, ref.root, input.platform);
-    const known = perProject.get(ref.normRoot);
-    if (known === void 0) {
+    const known2 = perProject.get(ref.normRoot);
+    if (known2 === void 0) {
       projects.push({ normRoot: ref.normRoot, scanned: false, trust, configStatus: null, instructions: emptyInstructionSet(), safety: null });
       continue;
     }
-    const skip = trust === "untrusted" || projectDocDisabled(known.merged);
-    const instructions = skip ? emptyInstructionSet() : await readCodexProjectInstructions(ref.root, fallbackNames(known.merged, input.platform));
-    projects.push({ normRoot: ref.normRoot, scanned: true, trust, configStatus: known.status, instructions, safety: known.safety });
+    const skip = trust === "untrusted" || projectDocDisabled(known2.merged);
+    const instructions = skip ? emptyInstructionSet() : await readCodexProjectInstructions(ref.root, fallbackNames(known2.merged, input.platform));
+    projects.push({ normRoot: ref.normRoot, scanned: true, trust, configStatus: known2.status, instructions, safety: known2.safety });
   }
   skills.sort((a, b) => cmp4(a.name, b.name) || SKILL_SCOPE_ORDER2[a.scope] - SKILL_SCOPE_ORDER2[b.scope] || cmp4(normalizePath(a.path), normalizePath(b.path)) || cmp4(a.pluginId, b.pluginId));
   const uniqueProblems = [];
@@ -10987,9 +11645,337 @@ async function scanCodexSetup(input) {
   };
 }
 
+// src/scan/gemini.ts
+import { lstat as lstat8 } from "node:fs/promises";
+import { dirname as dirname7, isAbsolute as isAbsolute4, join as join27, relative as relative6, resolve as resolve11 } from "node:path";
+
+// src/scan/gemini-settings.ts
+import { dirname as dirname6, posix, win32 } from "node:path";
+var QUOTE = 34;
+var BACKSLASH2 = 92;
+var SLASH = 47;
+var STAR = 42;
+var NEWLINE = 10;
+function stripJsonComments(text) {
+  let out = "";
+  let index = 0;
+  let inString = false;
+  while (index < text.length) {
+    const code = text.charCodeAt(index);
+    if (inString) {
+      out += text[index];
+      if (code === BACKSLASH2 && index + 1 < text.length) {
+        out += text[index + 1];
+        index += 2;
+        continue;
+      }
+      if (code === QUOTE) inString = false;
+      index++;
+      continue;
+    }
+    if (code === QUOTE) {
+      inString = true;
+      out += text[index];
+      index++;
+      continue;
+    }
+    if (code === SLASH && text.charCodeAt(index + 1) === SLASH) {
+      while (index < text.length && text.charCodeAt(index) !== NEWLINE) index++;
+      continue;
+    }
+    if (code === SLASH && text.charCodeAt(index + 1) === STAR) {
+      const end = text.indexOf("*/", index + 2);
+      index = end === -1 ? text.length : end + 2;
+      out += " ";
+      continue;
+    }
+    out += text[index];
+    index++;
+  }
+  return out;
+}
+async function readGeminiSettings(path) {
+  const read = await readText(path);
+  if (read.status !== "ok") return { status: read.status, value: {} };
+  try {
+    const value = JSON.parse(stripJsonComments(read.text));
+    return isObject5(value) ? { status: "ok", value } : { status: "unparsable", value: {} };
+  } catch {
+    return { status: "unparsable", value: {} };
+  }
+}
+var section = (settings, key) => isObject5(settings[key]) ? settings[key] : {};
+var strings4 = (value) => Array.isArray(value) ? value.filter((item2) => typeof item2 === "string") : [];
+function contextFileNames(layers) {
+  let names2 = [];
+  for (const layer of layers) {
+    const value = section(layer, "context").fileName;
+    if (typeof value === "string" && value.trim() !== "") names2 = [value.trim()];
+    else if (Array.isArray(value)) {
+      const list = strings4(value).map((name) => name.trim()).filter((name) => name !== "");
+      if (list.length > 0) names2 = list;
+    }
+  }
+  return [.../* @__PURE__ */ new Set([...names2, "GEMINI.md"])];
+}
+function boundaryMarkersOf(layers) {
+  let markers = [".git"];
+  for (const layer of layers) {
+    const value = section(layer, "context").memoryBoundaryMarkers;
+    if (Array.isArray(value)) markers = strings4(value);
+  }
+  return markers;
+}
+function folderTrustOn(layers) {
+  let on = true;
+  for (const layer of layers) {
+    const value = section(section(layer, "security"), "folderTrust").enabled;
+    if (typeof value === "boolean") on = value;
+  }
+  return on;
+}
+var TRUST_LEVELS = /* @__PURE__ */ new Set(["TRUST_FOLDER", "TRUST_PARENT", "DO_NOT_TRUST"]);
+function trustRulesValid(rules) {
+  return Object.values(rules).every((value) => typeof value === "string" && TRUST_LEVELS.has(value));
+}
+function trustRuleBases(rules) {
+  return Object.entries(rules).filter((entry) => typeof entry[1] === "string" && TRUST_LEVELS.has(entry[1])).map(([rulePath2, value]) => value === "TRUST_PARENT" ? dirname6(rulePath2) : rulePath2);
+}
+function geminiTrustOf(rules, root, platform = process.platform, realOf = (base) => base) {
+  const norm = (path) => platform === "darwin" ? normalizePath(path, platform).toLowerCase() : normalizePath(path, platform);
+  const target = norm(root);
+  let longest = -1;
+  let level = null;
+  for (const [rulePath2, value] of Object.entries(rules)) {
+    if (typeof value !== "string" || !TRUST_LEVELS.has(value)) continue;
+    const base = norm(realOf(value === "TRUST_PARENT" ? dirname6(rulePath2) : rulePath2));
+    const inside2 = target === base || target.startsWith(base.endsWith("/") ? base : `${base}/`);
+    if (inside2 && rulePath2.length > longest) {
+      longest = rulePath2.length;
+      level = value;
+    }
+  }
+  return level === null ? null : level === "DO_NOT_TRUST" ? "untrusted" : "trusted";
+}
+function geminiSystemPaths(env, platform) {
+  const fixed2 = platform === "darwin" ? "/Library/Application Support/GeminiCli/settings.json" : platform === "win32" ? "C:\\ProgramData\\gemini-cli\\settings.json" : "/etc/gemini-cli/settings.json";
+  const settings = env.GEMINI_CLI_SYSTEM_SETTINGS_PATH?.trim() || fixed2;
+  const defaults = env.GEMINI_CLI_SYSTEM_DEFAULTS_PATH?.trim() || (platform === "win32" ? win32 : posix).join((platform === "win32" ? win32 : posix).dirname(settings), "system-defaults.json");
+  return { settings, defaults };
+}
+var SHELL_NAMES = /* @__PURE__ */ new Set(["run_shell_command", "ShellTool"]);
+var SANDBOX_COMMANDS = /* @__PURE__ */ new Set(["docker", "podman", "sandbox-exec", "runsc", "lxc", "windows-native"]);
+function commandAllowed(command, platform) {
+  if (command === "runsc") return platform === "linux";
+  if (command === "windows-native") return platform === "win32";
+  if (command === "sandbox-exec") return platform === "darwin";
+  return true;
+}
+function sandboxOn(value, platform) {
+  if (value === void 0 || value === null || value === false) return false;
+  if (value === true) return true;
+  if (typeof value === "string") {
+    if (value === "" || value === "0" || value === "false") return false;
+    if (value === "1" || value === "true") return true;
+    return SANDBOX_COMMANDS.has(value) && commandAllowed(value, platform) ? true : null;
+  }
+  if (isObject5(value)) {
+    if (!value.enabled) return false;
+    const command = value.command;
+    return command === void 0 || command === null ? true : typeof command === "string" ? sandboxOn(command, platform) : null;
+  }
+  return null;
+}
+function geminiSafetyOf(layers, platform = process.platform) {
+  let approvalMode = "default";
+  let box = void 0;
+  let toolSandboxing = false;
+  let allowed = [];
+  for (const layer of layers) {
+    const mode = section(layer, "general").defaultApprovalMode;
+    if (typeof mode === "string" && mode !== "") approvalMode = mode;
+    const tools2 = section(layer, "tools");
+    if (Object.hasOwn(tools2, "sandbox")) box = isObject5(box) && isObject5(tools2.sandbox) ? { ...box, ...tools2.sandbox } : tools2.sandbox;
+    if (Object.hasOwn(tools2, "allowed")) allowed = strings4(tools2.allowed);
+    const toolLevel = section(layer, "security").toolSandboxing;
+    if (typeof toolLevel === "boolean") toolSandboxing = toolLevel;
+  }
+  const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
+  const on = sandboxOn(box, platform);
+  return { approvalMode, sandbox: on === null ? null : on || toolSandboxing, shellAutoApproved };
+}
+function unknownGeminiSafety() {
+  return { approvalMode: null, sandbox: null, shellAutoApproved: null };
+}
+function mcpFilterOf(layers) {
+  let allowed = null;
+  let excluded = [];
+  for (const layer of layers) {
+    const mcp = section(layer, "mcp");
+    if (Array.isArray(mcp.allowed)) allowed = strings4(mcp.allowed);
+    if (Array.isArray(mcp.excluded)) excluded = strings4(mcp.excluded);
+  }
+  return { allowed, excluded };
+}
+function serversOfLayer(layer) {
+  return section(layer, "mcpServers");
+}
+
+// src/scan/gemini.ts
+var slashed3 = (path) => path.replace(/\\/g, "/");
+var cmp5 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
+var SCOPE_ORDER6 = { user: 0, local: 1, project: 2, plugin: 3, "claude-ai": 4 };
+var known = (status) => status === "ok" || status === "missing";
+function geminiServerRecordName(name) {
+  const valid = name.replace(/[^a-zA-Z0-9_\-.:]/g, "_");
+  const cut = valid.indexOf("_");
+  return cut === -1 ? valid : valid.slice(0, cut);
+}
+async function realOrSelf(path) {
+  if (await reachesNetwork(path)) return path;
+  return (await entryInfo(path)).realPath ?? path;
+}
+var LOCAL_BOUNDARY_OPS = {
+  reachesNetwork: (path) => reachesNetwork(path),
+  exists: async (path) => {
+    try {
+      await lstat8(path);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+};
+async function importBoundary(dir, markers, ops = LOCAL_BOUNDARY_OPS) {
+  const start = resolve11(dir);
+  if (markers.length === 0 || await ops.reachesNetwork(start)) return start;
+  for (let current = start; ; ) {
+    for (const marker2 of markers) {
+      if (marker2 === "" || isAbsolute4(marker2) || marker2.includes("..")) continue;
+      const path = join27(current, marker2);
+      if (await ops.reachesNetwork(path)) continue;
+      if (await ops.exists(path)) return current;
+    }
+    const parent = dirname7(current);
+    if (parent === current) return start;
+    current = parent;
+  }
+}
+function serverOn(filter, name) {
+  if (filter.allowed !== null && !filter.allowed.includes(name)) return false;
+  return !filter.excluded.includes(name);
+}
+async function scanGeminiSetup(input) {
+  const home = geminiHome(input.env, input.homedir);
+  const userFile = join27(home, "settings.json");
+  const userRead = await readGeminiSettings(userFile);
+  const user = userRead.value;
+  const problems = [];
+  const geminiPlace = (path) => `${input.env.GEMINI_CLI_HOME?.trim() ? "$GEMINI_CLI_HOME/.gemini" : "~/.gemini"}/${slashed3(relative6(home, path))}`;
+  if (userRead.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: userFile, place: geminiPlace(userFile) });
+  const systemPaths = geminiSystemPaths(input.env, input.platform);
+  const defaultsRead = await readGeminiSettings(systemPaths.defaults);
+  const systemRead = await readGeminiSettings(systemPaths.settings);
+  const managedParts = [
+    { path: systemPaths.defaults, status: defaultsRead.status },
+    { path: systemPaths.settings, status: systemRead.status }
+  ].filter((part) => part.status !== "missing");
+  for (const part of managedParts) if (part.status === "unparsable") problems.push({ kind: "unparsable", owner: "managed", path: part.path, place: null });
+  const outerKnown = known(userRead.status) && known(defaultsRead.status) && known(systemRead.status);
+  const layersWith = (project) => [defaultsRead.value, user, ...project === null ? [] : [project], systemRead.value];
+  const folderTrust = folderTrustOn(layersWith(null));
+  const defaultTrustFile = join27(home, "trustedFolders.json");
+  const trustFile = input.env.GEMINI_CLI_TRUSTED_FOLDERS_PATH?.trim() || defaultTrustFile;
+  const trustRead = await readGeminiSettings(trustFile);
+  const trustStatus = trustRead.status === "ok" && !trustRulesValid(trustRead.value) ? "unparsable" : trustRead.status;
+  if (folderTrust && trustStatus === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: trustFile, place: trustFile === defaultTrustFile ? geminiPlace(trustFile) : "$GEMINI_CLI_TRUSTED_FOLDERS_PATH" });
+  const realBases = /* @__PURE__ */ new Map();
+  if (folderTrust && trustStatus === "ok") {
+    for (const base of trustRuleBases(trustRead.value)) if (!realBases.has(base)) realBases.set(base, await realOrSelf(base));
+  }
+  const trustedRoot = async (root) => !folderTrust || trustStatus === "ok" && geminiTrustOf(trustRead.value, await realOrSelf(root), input.platform, (base) => realBases.get(base) ?? base) === "trusted";
+  const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
+  const active = refs.filter((ref) => ref.exists && !ref.excluded);
+  const projectNames = projectNamesOf(refs);
+  const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed3(relative6(ref.root, path))}`;
+  const homeReal = (await entryInfo(home)).realPath ?? normalizePath(home);
+  const markers = boundaryMarkersOf(layersWith(null));
+  const globalRead = await readInstructionSet(
+    contextFileNames(layersWith(null)).map((name) => join27(home, name)),
+    active,
+    /* @__PURE__ */ new Set(),
+    { homedir: input.homedir, within: await importBoundary(home, markers), style: "gemini" }
+  );
+  const projects = [];
+  const projectLayers = [];
+  for (const ref of refs) {
+    const trusted = ref.exists && !ref.excluded && await trustedRoot(ref.root);
+    if (!ref.exists || ref.excluded || !trusted) {
+      projects.push({ normRoot: ref.normRoot, scanned: ref.exists && !ref.excluded, trusted, settingsStatus: null, instructions: emptyInstructionSet(), safety: null });
+      continue;
+    }
+    const dir = join27(ref.root, ".gemini");
+    const sameAsHome = normalizePath(dir) === normalizePath(home) || (await entryInfo(dir)).realPath === homeReal;
+    const file = join27(dir, "settings.json");
+    const read = sameAsHome ? { status: "missing", value: {} } : await readGeminiSettings(file);
+    if (read.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
+    const layers = layersWith(read.value);
+    const within = await importBoundary(ref.root, boundaryMarkersOf(layers));
+    const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join27(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
+    projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers, input.platform) : null });
+    if (read.status === "ok") projectLayers.push({ normRoot: ref.normRoot, layer: read.value });
+  }
+  const mcpServers = [];
+  const secrets = [];
+  const addServers = (scope, projectRoot, layer, filter) => {
+    for (const [name, definition] of Object.entries(serversOfLayer(layer))) {
+      const shaped = isObject5(definition) ? definition : null;
+      mcpServers.push({
+        scope,
+        name,
+        recordNames: [geminiServerRecordName(name)],
+        projectRoot,
+        pluginId: null,
+        definitionHash: shaped === null ? null : definitionHash(input.salt, shaped),
+        enabled: shaped !== null && serverOn(filter, name),
+        managedFixed: false,
+        // 이 버전은 제미나이 서버의 안 쓰는 것을 판정하지 않아 관측 기록에 넣지 않는다
+        installKey: null
+      });
+      for (const spot of secretSpots(shaped)) secrets.push({ scope, server: name, projectRoot, ...spot });
+    }
+  };
+  addServers("user", null, user, mcpFilterOf(layersWith(null)));
+  for (const project of projectLayers) addServers("project", project.normRoot, project.layer, mcpFilterOf(layersWith(project.layer)));
+  mcpServers.sort((a, b) => cmp5(a.name, b.name) || SCOPE_ORDER6[a.scope] - SCOPE_ORDER6[b.scope] || cmp5(a.projectRoot, b.projectRoot));
+  const uniqueProblems = [];
+  for (const problem of new Map(problems.map((p) => [`${p.kind}|${p.owner}|${p.path}`, p])).values()) uniqueProblems.push({ ...problem, realPath: (await entryInfo(problem.path)).realPath });
+  uniqueProblems.sort((a, b) => cmp5(a.path, b.path) || cmp5(a.kind, b.kind));
+  return {
+    tool: "gemini",
+    home,
+    settings: userRead.status,
+    managedParts,
+    folderTrust,
+    trustedFolders: trustStatus,
+    globalInstructions: globalRead.set,
+    globalMentions: globalRead.mentions,
+    safety: outerKnown ? geminiSafetyOf(layersWith(null), input.platform) : unknownGeminiSafety(),
+    // 스킬 폴더는 이 버전에서 훑지 않는다. 사용자 스킬 자리를 읽지 못한 것으로 두어 스킬 규칙이 0으로 재지 않게 한다
+    skills: [],
+    mcpServers,
+    projects,
+    problems: uniqueProblems,
+    secrets: sortSecrets(secrets),
+    unreadableDirs: [...new Set(globalRead.set.unreadableDirs)].sort(),
+    unreadableSkillPlaces: { user: true, projects: [], plugins: [] }
+  };
+}
+
 // src/commands/checkup-input.ts
 var CLAUDE_AI_PREFIX = "claude.ai ";
 var CODEX_SKILL_OBSERVATION = { complete: false, reasons: ["not-recorded"] };
+var GEMINI_SKILL_OBSERVATION = { complete: false, reasons: ["not-recorded"] };
 var INHERITED_METRICS = ["responsesAndTokens", "toolCalls", "toolErrors", "shellExitCodes"];
 function codexCoverage(unverifiedInheritance) {
   if (unverifiedInheritance === 0) return CODEX_COVERAGE;
@@ -11014,10 +12000,11 @@ async function gatherCheckupInput(options) {
   const collectOptions = { env: options.env, homedir: options.homedir, clock: options.clock, cacheDir: options.cacheDir, rescan: options.rescan };
   const claude = await collectClaude(collectOptions);
   const codex = await collectCodex(collectOptions);
+  const gemini = await collectGemini(collectOptions);
   const collectDates = new Set(makeWindows(options.clock.nowMs, options.clock.timeZone).collectDates);
   const cwds = /* @__PURE__ */ new Set();
   const normalizedCwds = /* @__PURE__ */ Object.create(null);
-  for (const summary of [...claude.summaries, ...codex.summaries]) {
+  for (const summary of [...claude.summaries, ...codex.summaries, ...gemini.summaries]) {
     if (summary.cwd !== null) normalizedCwds[summary.cwd] = normalizePath(summary.cwd, options.platform);
     if (summary.kind === "main" && summary.cwd !== null && Object.entries(summary.days).some(([date, day]) => collectDates.has(date) && day.responses > 0)) cwds.add(summary.cwd);
   }
@@ -11039,9 +12026,11 @@ async function gatherCheckupInput(options) {
     ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
   });
   const codexFacts = await scanCodexSetup({ env: options.env, homedir: options.homedir, tmpdir: options.tmpdir, platform: options.platform, cwds: sortedCwds, salt: options.state.salt });
+  const geminiFacts = await scanGeminiSetup({ env: options.env, homedir: options.homedir, tmpdir: options.tmpdir, platform: options.platform, cwds: sortedCwds, salt: options.state.salt });
   const claudeUnreadable = unreadableCount(claude.read);
   const claudeObserved = { skills: claudeObservation(claude.summaries, claudeUnreadable, "skill"), mcp: claudeObservation(claude.summaries, claudeUnreadable, "mcp") };
   const codexObserved = { skills: CODEX_SKILL_OBSERVATION, mcp: codexMcpObservation(codex.summaries, codexUnreadableCount(codex.read)) };
+  const geminiObserved = { skills: GEMINI_SKILL_OBSERVATION, mcp: geminiMcpObservation(gemini.summaries, unreadableCount(gemini.read)) };
   const input = {
     clock: options.clock,
     tools: [
@@ -11060,15 +12049,24 @@ async function gatherCheckupInput(options) {
         shellTools: [...CODEX_SHELL_TOOLS].sort(),
         complete: { skills: codexObserved.skills.complete, mcp: codexObserved.mcp.complete },
         setup: codexFacts
+      },
+      {
+        tool: "gemini",
+        summaries: gemini.summaries,
+        coverage: GEMINI_COVERAGE,
+        shellTools: [...GEMINI_SHELL_TOOLS].sort(),
+        complete: { skills: geminiObserved.skills.complete, mcp: geminiObserved.mcp.complete },
+        setup: geminiFacts
       }
     ],
-    // Codex의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
+    // Codex와 제미나이의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
     projects: claudeFacts.projects,
     normalizedCwds: { ...normalizedCwds },
     installs: options.state.installs,
     self: options.self
   };
   const { fromCache: _fromCache, ...claudeRead } = claude.read;
+  const { fromCache: _geminiFromCache, ...geminiRead } = gemini.read;
   const tools2 = [
     { tool: "claude-code", detected: claude.detected, visibleFrom: claude.visibleFrom, overlappingSessions: claude.overlappingSessions, read: claudeRead, observation: claudeObserved },
     // Codex는 다른 기록에서 이어받은 앞부분을 빼고 세므로 다른 세션과 겹쳐 세는 응답이 없다(설계 「5단계 계획 전 결정」 7번)
@@ -11091,9 +12089,10 @@ async function gatherCheckupInput(options) {
         unverifiedInheritance: codex.unverifiedInheritance,
         idFallbacks: codex.idFallbacks
       }
-    }
+    },
+    { tool: "gemini", detected: gemini.detected, visibleFrom: gemini.visibleFrom, overlappingSessions: gemini.overlappingSessions, read: geminiRead, observation: geminiObserved }
   ];
-  return { input, collected: { claude, codex }, facts: { claude: claudeFacts, codex: codexFacts }, tools: tools2 };
+  return { input, collected: { claude, codex, gemini }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools: tools2 };
 }
 
 // src/commands/run-notices.ts
@@ -11158,15 +12157,15 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname6 } from "node:path";
+import { basename as basename8, dirname as dirname8 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname6(entryFile)) === "scripts") {
+  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname8(entryFile)) === "scripts") {
     try {
-      skillRealPaths.push(normalizePath(await realpath6(dirname6(dirname6(entryFile)))));
+      skillRealPaths.push(normalizePath(await realpath6(dirname8(dirname8(entryFile)))));
     } catch {
     }
   }
@@ -11185,7 +12184,7 @@ async function runCheckup(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join25(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join28(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -11251,7 +12250,7 @@ async function runCheckup(options) {
     }
   }
   if (reportPath !== null && options.open !== void 0 && !await options.open(reportPath)) notices2.push({ kind: "report_unopened" });
-  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
+  const run2 = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache + gathered.collected.gemini.read.fromCache, saved, reportPath, resultPath, notices: notices2, text: { notices: notices2.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run: run2, result };
 }
 async function withLatestNotify(next, stateDir2, env, homedir2) {
@@ -11262,7 +12261,7 @@ async function withLatestNotify(next, stateDir2, env, homedir2) {
 }
 
 // src/commands/deep-hints.ts
-import { join as join26 } from "node:path";
+import { join as join29 } from "node:path";
 
 // src/core/copy/deep-hints.ts
 var DEEP_HINT_COPY = {
@@ -11304,7 +12303,7 @@ async function runDeepHints(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join26(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join29(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -11392,31 +12391,31 @@ async function runIgnore(action, rule2, options) {
 
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { join as join30 } from "node:path";
+import { join as join33 } from "node:path";
 
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
-import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { dirname as dirname7, join as join27 } from "node:path";
+import { lstat as lstat9, readFile as readFile10 } from "node:fs/promises";
+import { dirname as dirname9, join as join30 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
-  return join27(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
+  return join30(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
-  const folder = await lstat8(dirname7(path)).then(
+  const folder = await lstat9(dirname9(path)).then(
     (info) => info.isDirectory(),
     () => false
   );
   let file;
   try {
-    file = await lstat8(path);
+    file = await lstat9(path);
   } catch (error) {
     const code = error?.code;
     return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing", folder } : { status: "unreadable" };
   }
   try {
-    return { status: "ok", bytes: await readFile8(path), regular: file.isFile() && folder };
+    return { status: "ok", bytes: await readFile10(path), regular: file.isFile() && folder };
   } catch {
     return { status: "unreadable" };
   }
@@ -11882,8 +12881,13 @@ function verifyText(result, lang) {
 
 // src/tune/plan.ts
 import { mkdir as mkdir6 } from "node:fs/promises";
-import { join as join28 } from "node:path";
-var TUNE_VERIFIED = { "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } };
+import { join as join31 } from "node:path";
+var TUNE_VERIFIED = {
+  "claude-code": { from: "2.1.220", to: "2.1.325" },
+  codex: { from: "0.166.0", to: "0.166.0" },
+  // 제미나이는 정비하지 않는다. 기록에 버전이 없어 늘 범위 밖이다(설계 「0.4.0에서 정한 것」)
+  gemini: { from: "0.68.0", to: "0.68.0" }
+};
 function versionVerified(tool, version) {
   const parsed = parseVersion(version);
   if (parsed === null) return false;
@@ -11893,21 +12897,21 @@ function versionVerified(tool, version) {
 function planIdOf(nowMs, random) {
   return `${resultStamp(nowMs)}-${random}`;
 }
-var PLANS_DIR = join28("tune", "plans");
+var PLANS_DIR = join31("tune", "plans");
 async function writePlan(stateDir2, plan) {
-  const dir = join28(stateDir2, PLANS_DIR);
+  const dir = join31(stateDir2, PLANS_DIR);
   await mkdir6(dir, { recursive: true });
-  const path = join28(dir, `${plan.planId}.json`);
+  const path = join31(dir, `${plan.planId}.json`);
   await writeJson(path, plan);
   return path;
 }
 
 // src/tune/work.ts
-import { chmod, mkdir as mkdir7, open as open5, readdir as readdir8, readFile as readFile9, rename as rename5, rm as rm4, unlink as unlink2 } from "node:fs/promises";
-import { join as join29 } from "node:path";
+import { chmod, mkdir as mkdir7, open as open5, readdir as readdir9, readFile as readFile11, rename as rename5, rm as rm4, unlink as unlink2 } from "node:fs/promises";
+import { join as join32 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
-var LOCK_FILE = join29(TUNE_DIR, "lock");
+var LOCK_FILE = join32(TUNE_DIR, "lock");
 async function writeDurable(path, data, mode) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
@@ -11925,9 +12929,9 @@ async function writeDurable(path, data, mode) {
     throw error;
   }
 }
-var workPath = (stateDir2, workId) => join29(stateDir2, TUNE_DIR, `${workId}.json`);
+var workPath = (stateDir2, workId) => join32(stateDir2, TUNE_DIR, `${workId}.json`);
 async function saveWork(stateDir2, work) {
-  await mkdir7(join29(stateDir2, TUNE_DIR), { recursive: true });
+  await mkdir7(join32(stateDir2, TUNE_DIR), { recursive: true });
   await writeDurable(workPath(stateDir2, work.workId), `${JSON.stringify(work, null, 2)}
 `);
 }
@@ -11938,7 +12942,7 @@ var isWork = (value) => {
 async function loadWork(stateDir2, workId) {
   if (!ID_PATTERN.test(workId)) return null;
   try {
-    const value = JSON.parse(await readFile9(workPath(stateDir2, workId), "utf8"));
+    const value = JSON.parse(await readFile11(workPath(stateDir2, workId), "utf8"));
     return isWork(value) && value.workId === workId ? value : null;
   } catch {
     return null;
@@ -11947,7 +12951,7 @@ async function loadWork(stateDir2, workId) {
 async function listWorks(stateDir2) {
   let names2;
   try {
-    names2 = await readdir8(join29(stateDir2, TUNE_DIR));
+    names2 = await readdir9(join32(stateDir2, TUNE_DIR));
   } catch {
     return [];
   }
@@ -11969,8 +12973,8 @@ function isAlive(pid) {
   }
 }
 async function takeLock(stateDir2, alive = isAlive) {
-  const path = join29(stateDir2, LOCK_FILE);
-  await mkdir7(join29(stateDir2, TUNE_DIR), { recursive: true });
+  const path = join32(stateDir2, LOCK_FILE);
+  await mkdir7(join32(stateDir2, TUNE_DIR), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const handle = await open5(path, "wx");
@@ -11985,7 +12989,7 @@ async function takeLock(stateDir2, alive = isAlive) {
     }
     let pid;
     try {
-      pid = JSON.parse(await readFile9(path, "utf8")).pid;
+      pid = JSON.parse(await readFile11(path, "utf8")).pid;
     } catch {
       return null;
     }
@@ -12033,7 +13037,7 @@ async function judgeTune(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.cache ? join30(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join33(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -12080,12 +13084,12 @@ async function runTunePlan(options) {
 
 // src/commands/tune-run.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import { readFile as readFile10 } from "node:fs/promises";
-import { join as join31 } from "node:path";
+import { readFile as readFile12 } from "node:fs/promises";
+import { join as join34 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
 // src/tune/engine.ts
-import { stat as stat6 } from "node:fs/promises";
+import { stat as stat7 } from "node:fs/promises";
 
 // src/tune/json-edit.ts
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
@@ -12373,7 +13377,7 @@ function tomlMeaningOk(original, candidate, ops) {
 
 // src/tune/engine.ts
 async function replaceSetting(path, data) {
-  const mode = await stat6(path).then(
+  const mode = await stat7(path).then(
     (info) => info.mode & 4095,
     () => void 0
   );
@@ -12476,7 +13480,7 @@ async function runFiles(work, io, planned) {
 var failure4 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure4("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure4("locked", `another tune run holds the lock: ${join34(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -12486,7 +13490,7 @@ async function withLock(options, body) {
 async function loadPlan(stateDir2, planId) {
   if (!ID_PATTERN.test(planId)) return null;
   try {
-    const plan = JSON.parse(await readFile10(join31(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
+    const plan = JSON.parse(await readFile12(join34(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
     return plan !== null && plan.planId === planId && Array.isArray(plan.items) && Array.isArray(plan.files) ? plan : null;
   } catch {
     return null;
@@ -12625,45 +13629,45 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve10) => {
+  return new Promise((resolve12) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve10(false));
+      child.once("error", () => resolve12(false));
       child.once("spawn", () => {
         child.unref();
-        resolve10(true);
+        resolve12(true);
       });
     } catch {
-      resolve10(false);
+      resolve12(false);
     }
   });
 }
 
 // src/commands/clean.ts
-import { lstat as lstat9, readdir as readdir9, realpath as realpath7 } from "node:fs/promises";
-import { join as join32 } from "node:path";
-var isMissing6 = (error) => error?.code === "ENOENT";
+import { lstat as lstat10, readdir as readdir10, realpath as realpath7 } from "node:fs/promises";
+import { join as join35 } from "node:path";
+var isMissing7 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
-    return await lstat9(path);
+    return await lstat10(path);
   } catch (error) {
-    if (isMissing6(error)) return null;
+    if (isMissing7(error)) return null;
     throw error;
   }
 }
 async function cleanReports(path, boundary) {
-  const names2 = (await readdir9(path)).sort();
+  const names2 = (await readdir10(path)).sort();
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat9(join32(path, name));
+    const info = await lstat10(join35(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join32(path, name);
-    const info = await lstat9(full);
+    const full = join35(path, name);
+    const info = await lstat10(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
       kept.bytes += info.size;
@@ -12676,7 +13680,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join32(dir, spec.name);
+  const path = join35(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -12719,13 +13723,13 @@ async function clean(dir, level) {
 
 // src/commands/doctor.ts
 import { mkdir as mkdir8, rm as rm5, writeFile as writeFile5 } from "node:fs/promises";
-import { join as join33 } from "node:path";
+import { join as join36 } from "node:path";
 import * as zlib2 from "node:zlib";
 function hasZstd() {
   return typeof zlib2.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join33(dir, `.write-probe-${process.pid}`);
+  const probe = join36(dir, `.write-probe-${process.pid}`);
   try {
     await mkdir8(dir, { recursive: true });
     await writeFile5(probe, "ok");
@@ -12741,6 +13745,8 @@ async function doctor(input) {
   const codex = codexHome(input.env, input.homedir);
   const records = await listCodexFiles(codex, null);
   const groups = groupCopies(records.files);
+  const gemini = geminiHome(input.env, input.homedir);
+  const geminiList = await listGeminiRecordFiles(geminiRecordHomes(input.env, input.homedir), null);
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),
@@ -12752,21 +13758,22 @@ async function doctor(input) {
       compressedOnly: groups.filter((group) => group.copies.every((copy2) => copy2.compressed)).length,
       unreadable: records.unreadableDirs.length + records.files.filter((file) => file.size === null).length
     },
+    gemini: { home: gemini, tmpFound: geminiList.tmpFound, sessionFiles: geminiList.files.length, unreadable: geminiList.unreadableDirs.length + geminiList.unreadableFiles.length },
     state: { dir: input.stateDir, writable: await canWrite(input.stateDir) }
   };
 }
 
 // src/commands/where.ts
-import { lstat as lstat10, readdir as readdir10 } from "node:fs/promises";
-import { join as join34 } from "node:path";
-var isMissing7 = (error) => error?.code === "ENOENT";
+import { lstat as lstat11, readdir as readdir11 } from "node:fs/promises";
+import { join as join37 } from "node:path";
+var isMissing8 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
   let dirInfo;
   try {
-    dirInfo = await lstat10(dir);
+    dirInfo = await lstat11(dir);
   } catch (error) {
-    if (!isMissing7(error)) throw error;
+    if (!isMissing8(error)) throw error;
   }
   report.exists = dirInfo !== void 0;
   report.link = dirInfo?.isSymbolicLink() ?? false;
@@ -12775,16 +13782,16 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat10(join34(dir, spec.name));
+        const info = await lstat11(join37(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join34(dir, spec.name));
+          const size = await treeSize(join37(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
       } catch (error) {
-        if (!isMissing7(error)) entry.unreadable = true;
+        if (!isMissing8(error)) entry.unreadable = true;
       }
     }
     report.files += entry.files;
@@ -12792,8 +13799,8 @@ async function where(dir) {
     report.entries.push(entry);
   }
   if (inside2) {
-    const known = new Set(STATE_ENTRIES.map((spec) => spec.name));
-    report.others = (await readdir10(dir)).filter((name) => !known.has(name)).sort();
+    const known2 = new Set(STATE_ENTRIES.map((spec) => spec.name));
+    report.others = (await readdir11(dir)).filter((name) => !known2.has(name)).sort();
   }
   return report;
 }

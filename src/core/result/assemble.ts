@@ -13,6 +13,7 @@ import { anyIn, calledMcpNames } from "../installs/signals.ts";
 import { nextGrade, type NextGrade } from "../next-grade.ts";
 import type { MissingInstructions, WorstOverlap } from "../metrics/fit.ts";
 import type { CountedProblem, ToolSafeguard } from "../metrics/setup.ts";
+import type { RuleId } from "../rules.ts";
 import type { AxisScore, Finding, Overall, ToolRuleId, ToolValue } from "../scoreboard.ts";
 import { resultCoverage, type ResultCoverage } from "./coverage.ts";
 import { deepHints, type DeepHint } from "./hints.ts";
@@ -32,6 +33,8 @@ export interface ResultInput {
   appVersion: string;
   lang: Lang;
   run: { stateBroken: boolean };
+  /** 사용자가 그대로 두기로 한 규칙(0.3.0). 다음 등급의 차례에서 빼고 결과에 싣는다. 점수는 그대로다 */
+  ignored?: readonly RuleId[];
 }
 
 export type ResultToolValue = ToolValue & { observed: Coverage };
@@ -89,8 +92,10 @@ export interface CheckupResult {
     /** 점수 구간에 연결에 실패한 MCP 서버와 실패가 있었던 주 세션의 수(0.3.0). 결과 화면이 S5 항목에 보인다. 오류 글은 없다 */
     failedMcpServers: FailedServer[];
   };
-  /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다 */
+  /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다. 그대로 두기로 한 규칙은 차례에 없다(0.3.0) */
   nextGrade: (NextGrade & { text: Texts<string> }) | null;
+  /** 사용자가 그대로 두기로 한 규칙(규칙 차례, 0.3.0). 고칠 목록과 다음 등급 차례에서 빠지고 점수에는 그대로 든다 */
+  ignored: RuleId[];
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -168,7 +173,8 @@ export function checkupResult(source: ResultInput): CheckupResult {
   const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
   // 점수판의 규칙 점수(맞추지 않은 값)로 다시 계산한다. 문장의 규칙 이름은 결과 항목의 것이다
-  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const ignored = [...(source.ignored ?? [])];
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score, new Set(ignored));
   const nameOf = (lang: Lang) => (ruleId: Finding["ruleId"]): string => findings.find((finding) => finding.ruleId === ruleId)!.text[lang].name;
   return {
     schema: RESULT_SCHEMA,
@@ -190,5 +196,6 @@ export function checkupResult(source: ResultInput): CheckupResult {
     notices: notices.map((notice): ResultNotice => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details,
     nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) },
+    ignored,
   };
 }

@@ -54,12 +54,12 @@ function totals(rules: readonly GradeInput[], fixed: ReadonlySet<RuleId>): { rou
 /**
  * 다음 등급까지의 차례. AQ가 없거나 S등급이면 null이다.
  * 차례마다 아직 고르지 않은 것 가운데, 넣었을 때 반올림한 기준 점수의 합이 가장 큰 것을 고른다. 같으면 반올림 전의 합, 그 규칙만의 예상 효과, 들어온 차례 순이다.
- * 다음 등급에 닿거나 NEXT_GRADE_STEPS개가 차면 멈춘다
+ * 다음 등급에 닿거나 NEXT_GRADE_STEPS개가 차면 멈춘다. exclude의 규칙(사용자가 그대로 두기로 한 것, 0.3.0)은 고르지 않지만 점수 계산에는 그대로 넣는다
  */
-export function nextGrade(rules: readonly GradeInput[], score: { aq: number | null; grade: Grade | null }): NextGrade | null {
+export function nextGrade(rules: readonly GradeInput[], score: { aq: number | null; grade: Grade | null }, exclude: ReadonlySet<RuleId> = new Set()): NextGrade | null {
   if (score.aq === null || score.grade === null || score.grade === "S") return null;
   const target = NEXT[score.grade];
-  const candidates = rules.filter((rule) => rule.score !== null && settleScore(rule.score) < 1);
+  const candidates = rules.filter((rule) => rule.score !== null && settleScore(rule.score) < 1 && !exclude.has(rule.ruleId));
   const fixed = new Set<RuleId>();
   const steps: NextGradeStep[] = [];
   while (steps.length < NEXT_GRADE_STEPS && (steps.at(-1)?.aq ?? score.aq) < target.at) {

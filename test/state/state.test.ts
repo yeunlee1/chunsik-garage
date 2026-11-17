@@ -49,6 +49,14 @@ describe("상태 파일", () => {
     expect(await loadState(dir)).toEqual({ status: "broken" });
   });
 
+  it("그대로 두기로 한 규칙은 없으면 빼고, 아는 규칙만 차례대로 한 번씩 되살린다. 모양이 어긋나도 상태 파일 전체를 깨진 것으로 보지 않는다(0.3.0)", () => {
+    const base = { schema: 1, salt: "0".repeat(64), lastCheckupAt: null, installs: null, notify: null };
+    expect(reviveState(base)).toEqual(base);
+    expect(reviveState({ ...base, ignoredRules: ["F1", "E4", "F1", "Z9", 5] })).toEqual({ ...base, ignoredRules: ["E4", "F1"] });
+    expect(reviveState({ ...base, ignoredRules: "F1" })).toEqual(base);
+    expect(reviveState({ ...base, ignoredRules: [] })).toEqual(base);
+  });
+
   it("관측 기록의 날짜가 날짜 꼴이 아니면 모양이 다른 것이다", () => {
     const base = { schema: 1, salt: "0".repeat(64), lastCheckupAt: null };
     expect(reviveState({ ...base, installs: [{ key: "k", firstSeen: "11/13", appeared: true }] })).toBeNull();

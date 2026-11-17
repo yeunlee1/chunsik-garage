@@ -28,6 +28,20 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
 
+describe("그대로 두기로 한 규칙(0.3.0, 다른 PC 피드백 5번)", () => {
+  it("결과에 목록을 싣고, 다음 등급의 차례에서 빼되 점수는 그대로 둔다", () => {
+    const plain = checkupResult(resultInput({}));
+    expect(plain.ignored).toEqual([]);
+    expect(plain.nextGrade).not.toBeNull();
+    const first = plain.nextGrade!.steps[0]!.ruleId;
+    const kept = checkupResult({ ...resultInput({}), ignored: [first] });
+    expect(kept.ignored).toEqual([first]);
+    expect(kept.score).toEqual(plain.score);
+    expect(kept.findings.map((f) => [f.ruleId, f.score])).toEqual(plain.findings.map((f) => [f.ruleId, f.score]));
+    expect(kept.nextGrade?.steps.map((step) => step.ruleId) ?? []).not.toContain(first);
+  });
+});
+
 describe("연결에 실패한 MCP 서버(0.3.0, 다른 PC 피드백 2번)", () => {
   it("점수 구간에 응답이 있는 주 세션마다 실패한 서버를 세어, 세션 수가 많은 차례로 싣는다. 점수 구간 밖의 실패와 하위 세션은 세지 않는다", () => {
     const sessions: SummaryInput[] = [
@@ -115,7 +129,7 @@ describe("평가 결과의 조립", () => {
   it("필드를 정해진 차례로 싣고 형식 버전, 규칙 버전, 프로그램 버전, 평가 시계, 시간대, 구간을 담는다", () => {
     const input = resultInput({});
     const result = checkupResult(input);
-    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details", "nextGrade"]);
+    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details", "nextGrade", "ignored"]);
     expect(RESULT_SCHEMA).toBe(1);
     expect(result).toMatchObject({ schema: 1, rulesVersion: "1.0.0", appVersion: "0.1.0", evaluatedAt: "2026-11-13T03:00:00.000Z", timezone: "Asia/Seoul", lang: "ko", window: input.evaluation.windows });
     expect(result.score).toEqual(input.evaluation.score);

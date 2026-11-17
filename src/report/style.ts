@@ -92,7 +92,7 @@ h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:7
 .it p{margin:4px 0 0;font-size:14px;color:var(--ink2)}
 .it p.fix{color:var(--ink)}
 .tag{font-size:12px;font-weight:700;white-space:nowrap;color:var(--ink2)}
-.tag.up{font-family:var(--mono);color:var(--up)}
+.tag.up{font-family:var(--mono);color:var(--up)}.tag.kept{color:var(--ink2);border:1px solid var(--hair);border-radius:10px;padding:0 7px;font-weight:600}
 .chips{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
 .chips li{font-family:var(--mono);padding:2px 8px;border:1px solid var(--hair);border-radius:12px;background:#fff}
 .chips li.k{font-family:var(--font);font-weight:700;color:var(--ink2);border:0;background:none;padding:2px 0}

@@ -85,6 +85,8 @@ export interface CheckupSummary {
   notices: SummaryNotice[];
   /** 설정에 그대로 적힌 비밀값의 자리(서버와 항목의 이름, 0.3.0). 값은 없다 */
   credentialPlaces: SecretPlace[];
+  /** 사용자가 그대로 두기로 한 규칙(0.3.0). 먼저 고칠 것과 다음 등급 차례에 없다 */
+  ignored: RuleId[];
   /** 결과 화면의 경로. 결과 화면을 만들지 않았으면 null */
   reportPath: string | null;
   lang: Lang;
@@ -185,7 +187,9 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
   const secretCount = result.notices.reduce((sum, notice) => sum + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
   // AQ를 내지 않았으면 먼저 고칠 것을 보이지 않는다. 칸은 그대로 두고 비운다. 빈 목록의 문장(noFixFirst)은 결과의 것 그대로라 정비할 것이 실제로 없을 때만 있다(설계 12.3, 「3단계 계획 전 결정」의 6번)
-  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  // 사용자가 그대로 두기로 한 규칙은 먼저 고칠 것에서 뺀다(0.3.0, 다른 PC 피드백 5번)
+  const ignored = new Set(result.ignored);
+  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair" && !ignored.has(finding.ruleId)).slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding): SummaryFix => ({
     ruleId: finding.ruleId,
     axis: finding.axis,
@@ -210,6 +214,7 @@ export function checkupSummary(result: CheckupResult, reportPath: string | null)
     nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     credentialPlaces: result.details.credentialPlaces.map((place) => ({ ...place })),
+    ignored: [...result.ignored],
     reportPath,
     lang,
     text: {

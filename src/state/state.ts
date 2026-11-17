@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { LocalDate } from "../adapters/common/dates.ts";
+import { RULES, type RuleId } from "../core/rules.ts";
 
 export const STATE_SCHEMA = 1;
 export const STATE_FILE = "state.json";
@@ -33,6 +34,8 @@ export interface StateFile {
   installs: InstallRecord[] | null;
   /** 세션 시작 알림. 켠 적이 없으면 null이다(꺼진 것과 같다) */
   notify: NotifySettings | null;
+  /** 사용자가 그대로 두기로 한 규칙(규칙 차례, 0.3.0). 고칠 목록과 다음 등급 차례에서 빠지고 점수에는 그대로 든다. 없으면 칸이 없다 */
+  ignoredRules?: RuleId[];
 }
 
 export type StateLoad = { status: "missing" } | { status: "broken" } | { status: "ok"; state: StateFile };
@@ -61,6 +64,15 @@ function reviveNotify(value: unknown): NotifySettings | null | undefined {
   return { on: v.on, lang: v.lang, names: v.names === null ? null : [...(v.names as string[])].sort() };
 }
 
+const RULE_ORDER = new Map<string, number>(RULES.map((spec, index) => [spec.id, index]));
+
+/** 그대로 두기로 한 규칙을 되살린다. 아는 규칙만 규칙 차례로 한 번씩 남긴다. 모양이 어긋나면 없는 것으로 본다(이 칸 때문에 관측 기록까지 버리지 않는다) */
+export function reviveIgnoredRules(value: unknown): RuleId[] {
+  if (!Array.isArray(value)) return [];
+  const known = value.filter((id): id is RuleId => typeof id === "string" && RULE_ORDER.has(id));
+  return [...new Set(known)].sort((a, b) => RULE_ORDER.get(a)! - RULE_ORDER.get(b)!);
+}
+
 /** 풀어 낸 값이 상태 파일의 모양이면 같은 모양으로 되살린다. 하나라도 어긋나면 null이다. */
 export function reviveState(value: unknown): StateFile | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -80,7 +92,8 @@ export function reviveState(value: unknown): StateFile | null {
   }
   const notify = reviveNotify(v.notify);
   if (notify === undefined) return null;
-  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify };
+  const ignoredRules = reviveIgnoredRules(v.ignoredRules);
+  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify, ...(ignoredRules.length > 0 ? { ignoredRules } : {}) };
 }
 
 export async function loadState(dir: string): Promise<StateLoad> {

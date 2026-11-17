@@ -2455,10 +2455,10 @@ function totals(rules, fixed2) {
   }
   return { rounded, raw };
 }
-function nextGrade(rules, score) {
+function nextGrade(rules, score, exclude = /* @__PURE__ */ new Set()) {
   if (score.aq === null || score.grade === null || score.grade === "S") return null;
   const target = NEXT[score.grade];
-  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1);
+  const candidates = rules.filter((rule2) => rule2.score !== null && settleScore(rule2.score) < 1 && !exclude.has(rule2.ruleId));
   const fixed2 = /* @__PURE__ */ new Set();
   const steps = [];
   while (steps.length < NEXT_GRADE_STEPS && (steps.at(-1)?.aq ?? score.aq) < target.at) {
@@ -2931,7 +2931,8 @@ function checkupResult(source) {
   });
   const notices2 = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
-  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const ignored = [...source.ignored ?? []];
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score, new Set(ignored));
   const nameOf = (lang) => (ruleId) => findings.find((finding) => finding.ruleId === ruleId).text[lang].name;
   return {
     schema: RESULT_SCHEMA,
@@ -2952,7 +2953,8 @@ function checkupResult(source) {
     deepHints: deepHints(input),
     notices: notices2.map((notice) => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details,
-    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) }
+    nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) },
+    ignored
   };
 }
 
@@ -3041,7 +3043,8 @@ function checkupSummary(result, reportPath) {
   const lang = result.lang;
   const secretCount = result.notices.reduce((sum2, notice) => sum2 + (notice.kind === "credentials_in_config" ? notice.places.length : 0), 0);
   const strength = result.findings.find((finding) => finding.category === "strength") ?? null;
-  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair").slice(0, FIX_FIRST_LIMIT);
+  const ignored = new Set(result.ignored);
+  const repairs = result.score.aq === null ? [] : result.findings.filter((finding) => finding.category === "repair" && !ignored.has(finding.ruleId)).slice(0, FIX_FIRST_LIMIT);
   const fixFirst = repairs.map((finding) => ({
     ruleId: finding.ruleId,
     axis: finding.axis,
@@ -3066,6 +3069,7 @@ function checkupSummary(result, reportPath) {
     nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
     credentialPlaces: result.details.credentialPlaces.map((place) => ({ ...place })),
+    ignored: [...result.ignored],
     reportPath,
     lang,
     text: {
@@ -3192,6 +3196,7 @@ var REPORT_COPY = {
   missingProjects: { en: "Projects without instructions", ko: "\uC9C0\uCE68\uC774 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8" },
   failedServers: { en: "Servers that failed to connect", ko: "\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84" },
   nextTitle: { en: "How to reach grade {grade}", ko: "{grade}\uB4F1\uAE09\uC73C\uB85C \uAC00\uB294 \uC14B\uD305 \uBC29\uBC95" },
+  kept: { en: "Kept as you chose", ko: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD568" },
   nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uC704\uC5D0\uC11C\uBD80\uD130 \uCC28\uB840\uB85C \uACE0\uCE58\uBA74 \uC904\uB9C8\uB2E4 \uC801\uD78C AQ\uAC00 \uB429\uB2C8\uB2E4." },
   nextShort: { en: "These alone reach {last}.", ko: "\uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4." },
   nextNow: { en: "Now {now} \u2192 aim for {target}", ko: "\uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
@@ -3745,7 +3750,7 @@ h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:7
 .it p{margin:4px 0 0;font-size:14px;color:var(--ink2)}
 .it p.fix{color:var(--ink)}
 .tag{font-size:12px;font-weight:700;white-space:nowrap;color:var(--ink2)}
-.tag.up{font-family:var(--mono);color:var(--up)}
+.tag.up{font-family:var(--mono);color:var(--up)}.tag.kept{color:var(--ink2);border:1px solid var(--hair);border-radius:10px;padding:0 7px;font-weight:600}
 .chips{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px;font-size:12px}
 .chips li{font-family:var(--mono);padding:2px 8px;border:1px solid var(--hair);border-radius:12px;background:#fff}
 .chips li.k{font-family:var(--font);font-weight:700;color:var(--ink2);border:0;background:none;padding:2px 0}
@@ -3970,13 +3975,14 @@ function item(finding, view, lang) {
   const repair = finding.category === "repair";
   const gain = repair && view.score.aq !== null && finding.gain !== null ? finding.gain : null;
   const tag = gain === null ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>` : `<span class="tag up">${both(textsOf2((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
+  const kept = view.ignored.includes(finding.ruleId) ? `<span class="tag kept">${both(REPORT_COPY.kept)}</span>` : "";
   const description2 = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf2((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
   const named2 = ruleChips(finding, view, lang, repair);
   const phrase = textsOf2((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how = finding.text.en.method.length + finding.text.ko.method.length === 0 ? "" : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${named2}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${kept}${tag}</span></div>${description2}${prescription}${named2}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
@@ -4000,7 +4006,7 @@ function hero(view, art, lang) {
   const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
   const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   const best = view.findings.find((finding) => finding.category === "strength") ?? null;
-  const first = scored2 ? view.findings.find((finding) => finding.category === "repair") ?? null : null;
+  const first = scored2 ? view.findings.find((finding) => finding.category === "repair" && !view.ignored.includes(finding.ruleId)) ?? null : null;
   const bestLine = best === null ? "<div></div>" : `<div class="pt">${ICONS.good}<span><b>${both(REPORT_COPY.best)}</b>${both(
     textsOf2((l) => {
       const text = best.text[l];
@@ -4219,6 +4225,7 @@ function reportView(result, run2) {
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
     nextGrade: result.nextGrade?.text ?? null,
+    ignored: [...result.ignored],
     nextPlan: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ruleId: step.ruleId, aq: step.aq })) },
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
   };
@@ -4996,6 +5003,12 @@ function reviveNotify(value) {
   if (v.names !== null && (!Array.isArray(v.names) || !v.names.every((name) => typeof name === "string"))) return void 0;
   return { on: v.on, lang: v.lang, names: v.names === null ? null : [...v.names].sort() };
 }
+var RULE_ORDER = new Map(RULES.map((spec, index) => [spec.id, index]));
+function reviveIgnoredRules(value) {
+  if (!Array.isArray(value)) return [];
+  const known = value.filter((id) => typeof id === "string" && RULE_ORDER.has(id));
+  return [...new Set(known)].sort((a, b) => RULE_ORDER.get(a) - RULE_ORDER.get(b));
+}
 function reviveState(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value;
@@ -5014,7 +5027,8 @@ function reviveState(value) {
   }
   const notify = reviveNotify(v.notify);
   if (notify === void 0) return null;
-  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify };
+  const ignoredRules = reviveIgnoredRules(v.ignoredRules);
+  return { schema: STATE_SCHEMA, salt: v.salt, lastCheckupAt: v.lastCheckupAt, installs, notify, ...ignoredRules.length > 0 ? { ignoredRules } : {} };
 }
 async function loadState(dir) {
   let text;
@@ -6965,14 +6979,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure4 = null;
+  let failure5 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure4 ??= "unknown-size";
+      failure5 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure4 ??= "skipped";
+      failure5 ??= "skipped";
       continue;
     }
     try {
@@ -6990,10 +7004,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure4 ??= "failed";
+      failure5 ??= "failed";
     }
   }
-  return failure4 ?? "failed";
+  return failure5 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -10995,7 +11009,7 @@ async function runCheckup(options) {
     ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken }, ignored: opened.broken ? [] : opened.state.ignoredRules ?? [] });
   const stamp = resultStamp(options.clock.nowMs);
   const notices2 = [];
   let saved = false;
@@ -11147,6 +11161,50 @@ async function runNotify(action, options) {
   const on = state.notify?.on === true;
   const text = action === "on" ? COPY3[options.lang].on : action === "off" ? COPY3[options.lang].off : on ? COPY3[options.lang].statusOn : COPY3[options.lang].statusOff;
   return { notify: { on, lang: state.notify?.lang ?? options.lang }, lastCheckupAt: state.lastCheckupAt, run: { text } };
+}
+
+// src/commands/ignore.ts
+var COPY4 = {
+  en: {
+    added: '"{name}" is now kept as you chose. It is left out of what to fix first and the next-grade steps, and it still counts in the score.',
+    removed: '"{name}" is back on the list of what to fix.',
+    list: "Kept as you chose: {names}.",
+    none: "Nothing is kept as you chose.",
+    quote: (name) => `"${name}"`
+  },
+  ko: {
+    added: "\u300C{name}\u300D \uD56D\uBAA9\uC740 \uC815\uD55C \uB300\uB85C \uB450\uACE0, \uACE0\uCE60 \uBAA9\uB85D\uACFC \uB2E4\uC74C \uB4F1\uAE09 \uCC28\uB840\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uC810\uC218\uC5D0\uB294 \uADF8\uB300\uB85C \uB4E4\uC5B4\uAC11\uB2C8\uB2E4.",
+    removed: "\u300C{name}\u300D \uD56D\uBAA9\uC744 \uB2E4\uC2DC \uACE0\uCE60 \uBAA9\uB85D\uC5D0 \uB123\uC5C8\uC2B5\uB2C8\uB2E4.",
+    list: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC740 {names}\uC785\uB2C8\uB2E4.",
+    none: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
+    quote: (name) => `\u300C${name}\u300D`
+  }
+};
+var failure3 = (code, message) => Object.assign(new Error(message), { code });
+function ruleIdOf(text) {
+  if (text === null) return null;
+  return RULES.find((spec) => spec.id === text.trim().toUpperCase())?.id ?? null;
+}
+async function runIgnore(action, rule2, options) {
+  const copy2 = COPY4[options.lang];
+  const nameOf = (id2) => RULE_COPY[id2][options.lang].name;
+  const opened = await openState(options.stateDir);
+  if (action === "list") {
+    const ignored = opened.broken ? [] : reviveIgnoredRules(opened.state.ignoredRules);
+    return { ignored, run: { text: ignored.length === 0 ? copy2.none : copy2.list.replace("{names}", ignored.map((id2) => copy2.quote(nameOf(id2))).join(", ")) } };
+  }
+  const id = ruleIdOf(rule2);
+  if (id === null) throw failure3("unknown-rule", `not a rule id: ${rule2 ?? "(none)"}`);
+  if (opened.broken) throw failure3("state-broken", "the state file could not be read; run a checkup first");
+  const { state } = opened;
+  const current = reviveIgnoredRules(state.ignoredRules);
+  const next = reviveIgnoredRules(action === "add" ? [...current, id] : current.filter((value) => value !== id));
+  if (next.join(",") !== current.join(",") || opened.fresh) {
+    if (next.length > 0) state.ignoredRules = next;
+    else delete state.ignoredRules;
+    if (next.length > 0 || !opened.fresh) await saveState(options.stateDir, state);
+  }
+  return { ignored: next, run: { text: (action === "add" ? copy2.added : copy2.removed).replace("{name}", nameOf(id)) } };
 }
 
 // src/commands/tune-plan.ts
@@ -12232,10 +12290,10 @@ async function runFiles(work, io, planned) {
 }
 
 // src/commands/tune-run.ts
-var failure3 = (code, message) => Object.assign(new Error(message), { code });
+var failure4 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure3("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure4("locked", `another tune run holds the lock: ${join31(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -12286,9 +12344,9 @@ async function runTuneApply(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const plan = await loadPlan(options.stateDir, options.planId);
-    if (plan === null) throw failure3("plan-not-found", `no saved plan: ${options.planId}`);
+    if (plan === null) throw failure4("plan-not-found", `no saved plan: ${options.planId}`);
     const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure3("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure4("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
     const { items: fresh } = await judgeTune({ ...options, cache: true });
     const work = newWork(options, "apply", plan.planId, null);
     for (const id of options.itemIds) {
@@ -12316,10 +12374,10 @@ async function runTuneUndo(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
-    if (target === null && options.workId === null) throw failure3("nothing-to-undo", "no apply run has changes left to undo");
-    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null && options.workId === null) throw failure4("nothing-to-undo", "no apply run has changes left to undo");
+    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure3("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure4("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
     const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
     const work = newWork(options, "undo", null, target.workId);
     work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
@@ -12356,7 +12414,7 @@ async function runTuneVerify(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure3("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
     const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
@@ -12644,6 +12702,14 @@ async function run(command, rest, context) {
     const args2 = checkupArgs(rest.slice(1), /* @__PURE__ */ new Set());
     if (args2 === null) return null;
     printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "ignore" && (rest[0] === "add" || rest[0] === "remove" || rest[0] === "list")) {
+    const action = rest[0];
+    const rule2 = action === "list" ? null : rest[1] ?? null;
+    const args2 = checkupArgs(rest.slice(action === "list" ? 1 : 2), /* @__PURE__ */ new Set());
+    if (args2 === null || action !== "list" && (rule2 === null || rule2.startsWith("--"))) return null;
+    printJson(await runIgnore(action, rule2, { stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
     return 0;
   }
   if (command === "deep-hints") {

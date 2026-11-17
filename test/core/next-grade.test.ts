@@ -41,6 +41,20 @@ describe("다음 등급까지", () => {
     expect(nextGrade(rules, scoreOf(rules))!.steps[0]!.ruleId).toBe("E1");
   });
 
+  it("사용자가 그대로 두기로 한 규칙은 차례에 넣지 않지만, 기준 점수와 AQ의 계산에는 그대로 넣는다(0.3.0, 다른 PC 피드백 5번)", () => {
+    const rules = [rule("S1", "setup", 3, 0.5), rule("S2", "setup", 1, 1), rule("E1", "efficiency", 2, 0.9), rule("F1", "fit", 1, 0), rule("I1", "intensity", 1, 0.6)];
+    const all = nextGrade(rules, scoreOf(rules))!;
+    expect(all.steps.map((step) => step.ruleId)).toContain("F1");
+    const kept = nextGrade(rules, scoreOf(rules), new Set<RuleId>(["F1"]))!;
+    expect(kept.steps.map((step) => step.ruleId)).not.toContain("F1");
+    // 각 차례의 AQ는 F1을 0점 그대로 둔 채 다시 낸 값이다
+    let done = new Set<RuleId>();
+    for (const step of kept.steps) {
+      done = new Set([...done, step.ruleId]);
+      expect(step.aq).toBe(scoreOf(fixed(rules, done)).aq);
+    }
+  });
+
   it("S등급이거나 AQ가 없으면 없다", () => {
     const top = [rule("S1", "setup", 1, 1), rule("E1", "efficiency", 1, 0.95)];
     expect(scoreOf(top).grade).toBe("S");

@@ -375,3 +375,19 @@ describe("점수 매기는 법(0.3.0, 사용자 추가 요청)", () => {
     expect(withheld).toContain('<section class="how-score"');
   });
 });
+
+describe("그대로 두기로 한 규칙(0.3.0, 다른 PC 피드백 5번)", () => {
+  it("정비할 것의 항목에 꼬리표를 붙이고, 진단 칸의 먼저 고칠 것에서는 뺀다", () => {
+    const view = viewOf(result());
+    const repairs = view.findings.filter((finding) => finding.category === "repair");
+    expect(repairs.length).toBeGreaterThan(0);
+    const first = repairs[0]!;
+    const kept: ReportView = { ...view, ignored: [first.ruleId] };
+    const html = reportHtml(kept, art);
+    const card = between(html, `<div class="it" id="it-${first.ruleId}">`, '<div class="it" id="it-');
+    expect(card).toContain(REPORT_COPY.kept.ko);
+    const verdict = between(html, '<div class="verdict">', "</section>");
+    expect(verdict).not.toContain(esc(first.text.ko.title));
+    expect(reportHtml(view, art)).not.toContain(REPORT_COPY.kept.ko);
+  });
+});

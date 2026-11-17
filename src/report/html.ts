@@ -182,6 +182,7 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
     gain === null
       ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>`
       : `<span class="tag up">${both(textsOf((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
+  const kept = view.ignored.includes(finding.ruleId) ? `<span class="tag kept">${both(REPORT_COPY.kept)}</span>` : "";
   const description = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
   const named = ruleChips(finding, view, lang, repair);
@@ -191,7 +192,7 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
     finding.text.en.method.length + finding.text.ko.method.length === 0
       ? ""
       : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${named}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${kept}${tag}</span></div>${description}${prescription}${named}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 
 function header(view: ReportView, art: ReportArt, lang: Lang): string {
@@ -228,7 +229,8 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
   const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
   const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   const best = view.findings.find((finding) => finding.category === "strength") ?? null;
-  const first = scored ? (view.findings.find((finding) => finding.category === "repair") ?? null) : null;
+  // 사용자가 그대로 두기로 한 규칙은 먼저 고칠 것에서 뺀다(0.3.0)
+  const first = scored ? (view.findings.find((finding) => finding.category === "repair" && !view.ignored.includes(finding.ruleId)) ?? null) : null;
   const bestLine =
     best === null
       ? "<div></div>"

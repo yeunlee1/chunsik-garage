@@ -52,6 +52,7 @@ export const REPORT_COPY = {
   missingProjects: { en: "Projects without instructions", ko: "지침이 없는 프로젝트" },
   failedServers: { en: "Servers that failed to connect", ko: "연결에 실패한 서버" },
   nextTitle: { en: "How to reach grade {grade}", ko: "{grade}등급으로 가는 셋팅 방법" },
+  kept: { en: "Kept as you chose", ko: "그대로 두기로 함" },
   nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}등급까지 {need}점입니다. 위에서부터 차례로 고치면 줄마다 적힌 AQ가 됩니다." },
   nextShort: { en: "These alone reach {last}.", ko: "이것만으로는 {last}점입니다." },
   nextNow: { en: "Now {now} → aim for {target}", ko: "지금 {now} → 목표 {target}" },

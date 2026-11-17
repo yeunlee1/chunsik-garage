@@ -32,7 +32,7 @@ describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
     const result = baseResult();
     const summary = checkupSummary(result, null);
-    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "credentialPlaces", "reportPath", "lang", "text"]);
+    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "credentialPlaces", "ignored", "reportPath", "lang", "text"]);
     expect(summary).toMatchObject({ aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: result.score.withheld, reportPath: null });
     expect(summary.axes).toEqual(result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })));
   });
@@ -92,6 +92,15 @@ describe("요약", () => {
       { ruleId: "E5", axis: "efficiency", gain: null, measured: false, candidates: 1, unmeasuredTools: ["claude-code"], targets: ["A1:claude-code:x"], value: null, score: null, zeroAt: 0.8, fullAt: 0.2 },
       { ruleId: "E6", axis: "efficiency", gain: null, measured: true, candidates: 2, unmeasuredTools: [], targets: ["A3:claude-code:a", "A3:claude-code:b"], value: 0, score: 1, zeroAt: 0.7, fullAt: 0.1 },
     ]);
+  });
+
+  it("사용자가 그대로 두기로 한 규칙은 먼저 고칠 것에서 빼고 그 목록을 따로 싣는다(0.3.0, 다른 PC 피드백 5번)", () => {
+    const result = { ...baseResult(), ignored: ["E3" as const], findings: [finding("E3", { category: "repair", gain: 6 }), finding("F1", { axis: "fit", category: "repair", gain: 2 }), finding("E2", { category: "repair", gain: 1 })] };
+    const summary = checkupSummary(result, null);
+    expect(summary.fixFirst.map((fix) => fix.ruleId)).toEqual(["F1", "E2"]);
+    expect(summary.text.fixFirst).toHaveLength(2);
+    expect(summary.ignored).toEqual(["E3"]);
+    expect(checkupSummary(baseResult(), null).ignored).toEqual([]);
   });
 
   it("먼저 고칠 것마다 고칠 대상의 이름을 싣는다. S3은 문제의 위치, S5는 연결에 실패한 서버, F3은 지침이 없는 프로젝트, F4는 가장 많이 겹친 프로젝트다(0.3.0, 다른 PC 피드백 2번)", () => {

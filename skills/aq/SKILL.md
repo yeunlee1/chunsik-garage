@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), to make an AQ badge for a README ("AQ 배지 만들어 줘"), or to fix what it found ("고쳐 줘").
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), to make an AQ badge for a README ("AQ 배지 만들어 줘"), to fix what it found ("고쳐 줘"), or to leave an item as is ("이건 그대로 둘래").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -192,3 +192,15 @@ When the user asks to fix or improve what the checkup found (Korean such as "고
 - `summary.fixFirst[].value`, `zeroAt`, and `fullAt` are the measured value and the rule's thresholds. Use them to say how far the item is, without changing the numbers.
 - `summary.credentialPlaces` lists where an API key or token is written as it is: the tool, the scope, the server, the field, and the key name. A place whose `copy` is `default` is a leftover copy in the tool's default settings location. The values are not in the summary. If the user asks you to move a key into an environment variable, change only that field so it refers to a variable, and ask the user to set the variable themselves. Never print, copy, or repeat a key's value.
 - Say what you will change before you change it, and change settings only after the user agrees.
+
+## 11. Leaving an item as the user's choice
+
+When the user says they keep something on purpose and do not want it among what to fix (Korean such as "이건 그대로 둘래", "추론 강도는 지금대로 쓸게"), find the rule in the latest summary (`summary.fixFirst[].ruleId` or the steps of `summary.nextGrade`), say which item you mean, then run:
+
+```bash
+node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" ignore add <rule ID> --lang <lang>
+```
+
+- The program prints `{"ignored": [...], "run": {"text": ...}}`. Relay `run.text`. The item still counts in the score. From the next checkup on, it is left out of what to fix first and the next-grade steps, and `summary.ignored` lists it.
+- To put it back, run `ignore remove <rule ID>`. To see the list, run `ignore list`.
+- `unknown-rule` means the rule ID is not one of the checkup's rules. `state-broken` means the state file could not be read, so offer a checkup first.

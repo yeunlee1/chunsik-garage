@@ -103,7 +103,7 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     ...(options.managedDir === undefined ? {} : { managedDir: options.managedDir }),
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken } });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken }, ignored: opened.broken ? [] : (opened.state.ignoredRules ?? []) });
   const stamp = resultStamp(options.clock.nowMs);
 
   const notices: RunNotice[] = [];

@@ -6,7 +6,7 @@ import type { ResultText } from "../core/copy/grades.ts";
 import type { Lang, Texts } from "../core/copy/lang.ts";
 import { daysBefore } from "../core/installs/age.ts";
 import type { CountedProblem } from "../core/metrics/setup.ts";
-import type { CheckupResult, ResultFinding, SecretPlace, UnjudgedServer } from "../core/result/assemble.ts";
+import type { CheckupResult, FailedServer, ResultFinding, SecretPlace, UnjudgedServer } from "../core/result/assemble.ts";
 import type { ResultUsage } from "../core/result/usage.ts";
 import type { AxisScore, Withheld } from "../core/scoreboard.ts";
 
@@ -20,6 +20,9 @@ export interface ViewFinding {
   measured: boolean;
   /** 예상 효과. 없으면 null이다 */
   gain: number | null;
+  /** 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다(0.3.0. 덧붙이는 말과 다음 등급으로 가는 법에 쓴다) */
+  value: number | null;
+  score: number | null;
   /** 정리할 것의 이름(정비 후보의 대상). 후보의 차례 그대로다 */
   targets: string[];
   /** 규칙은 쟀지만 비율을 못 잰 도구 가운데 후보가 나온 도구(먼저 고칠 것의 덧붙이는 말) */
@@ -66,6 +69,8 @@ export interface ReportView {
   notices: { kind: string; tool: ToolId | null; text: Texts<string> }[];
   /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 그 도구의 알림 아래에 보인다 */
   credentialPlaces: SecretPlace[];
+  /** 점수 구간에 연결에 실패한 MCP 서버와 세션 수(0.3.0). S5 항목에 보인다 */
+  failedServers: FailedServer[];
   servers: ViewServer[];
   setupProblems: CountedProblem[];
   /** F3에서 지침이 없다고 센 프로젝트의 폴더 이름 */
@@ -110,6 +115,8 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
       severity: finding.severity,
       measured: finding.status === "scored",
       gain: finding.gain,
+      value: finding.value,
+      score: finding.score,
       targets: targetsOf(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text,
@@ -117,6 +124,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     usage: result.usage,
     notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
     credentialPlaces: result.details.credentialPlaces,
+    failedServers: result.details.failedMcpServers.map((server) => ({ ...server })),
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,

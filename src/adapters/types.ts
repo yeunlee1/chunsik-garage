@@ -81,6 +81,8 @@ export interface DayCell {
   interruptedTurns: number;
   subagentCalls: number;
   mcpConnectionFailure: boolean;
+  /** 연결에 실패한 MCP 서버의 이름과 그날 실패가 적힌 횟수(0.3.0). 오류 글은 남기지 않는다 */
+  mcpFailedServers: Record<string, number>;
   skillSignals: Record<string, SkillSignalCounts>;
   mcpCalls: Record<string, number>;
   mcpAttributions: Record<string, number>;
@@ -159,6 +161,7 @@ export function emptyDay(): DayCell {
     interruptedTurns: 0,
     subagentCalls: 0,
     mcpConnectionFailure: false,
+    mcpFailedServers: nameRecord(),
     skillSignals: nameRecord(),
     mcpCalls: nameRecord(),
     mcpAttributions: nameRecord(),
@@ -180,6 +183,7 @@ export function canonicalDay(day: DayCell): DayCell {
     efforts: sortedRecord(day.efforts),
     tools: sortedRecord(day.tools),
     unknownDenialKinds: sortedRecord(day.unknownDenialKinds),
+    mcpFailedServers: sortedRecord(day.mcpFailedServers),
     skillSignals: sortedRecord(day.skillSignals),
     mcpCalls: sortedRecord(day.mcpCalls),
     mcpAttributions: sortedRecord(day.mcpAttributions),
@@ -211,6 +215,7 @@ const DAY_SHAPE: Record<keyof DayCell, Shape> = {
   interruptedTurns: "number",
   subagentCalls: "number",
   mcpConnectionFailure: "boolean",
+  mcpFailedServers: "numbers",
   skillSignals: "skills",
   mcpCalls: "numbers",
   mcpAttributions: "numbers",

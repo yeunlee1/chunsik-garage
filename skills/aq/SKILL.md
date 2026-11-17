@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, or to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), or to make an AQ badge for a README ("AQ 배지 만들어 줘").
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code and Codex records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), to make an AQ badge for a README ("AQ 배지 만들어 줘"), or to fix what it found ("고쳐 줘").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -183,3 +183,12 @@ This never changes the score. Do it only when the user asks for a deep checkup o
 
 2. The program prints `{"badge": {...}, "run": {...}}`. Relay the `made` and `howTo` sentences in the `text` of `run`, then show `badge.markdown` in a code block so the user can copy it. The badge has only the AQ and the grade of the latest saved checkup that had an AQ.
 3. If the program stops with `{"error": {...}}`, `no-score` means no saved checkup has an AQ yet, so offer a checkup first. `badge-unwritten` means the badge file could not be written, for example in a sandbox, so tell the user it needs permission to write the folder.
+
+## 10. Fixing what the checkup found
+
+When the user asks to fix or improve what the checkup found (Korean such as "고쳐 줘", "보완해 줘"), use the summary of the latest checkup in this conversation. If there is none, run a checkup first. Do not open the report or result files.
+
+- `summary.fixFirst[].targets` names what each item is about: where a setup problem is (S3), the MCP servers that failed to connect (S5), the projects without instructions (F3), the project whose instructions overlap the global ones most (F4), or the skills, plugins, and MCP servers to turn off. Turning things off goes through the tune-up in section 5.
+- `summary.fixFirst[].value`, `zeroAt`, and `fullAt` are the measured value and the rule's thresholds. Use them to say how far the item is, without changing the numbers.
+- `summary.credentialPlaces` lists where an API key or token is written as it is: the tool, the scope, the server, the field, and the key name. A place whose `copy` is `default` is a leftover copy in the tool's default settings location. The values are not in the summary. If the user asks you to move a key into an environment variable, change only that field so it refers to a variable, and ask the user to set the variable themselves. Never print, copy, or repeat a key's value.
+- Say what you will change before you change it, and change settings only after the user agrees.

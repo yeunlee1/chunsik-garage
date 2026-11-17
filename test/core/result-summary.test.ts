@@ -32,7 +32,7 @@ describe("요약", () => {
   it("AQ, 등급, 단계, 보류한 까닭, 기준 점수를 평가 결과 그대로 싣는다", () => {
     const result = baseResult();
     const summary = checkupSummary(result, null);
-    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "reportPath", "lang", "text"]);
+    expect(Object.keys(summary)).toEqual(["aq", "grade", "tier", "withheld", "axes", "best", "fixFirst", "nextGrade", "notices", "credentialPlaces", "reportPath", "lang", "text"]);
     expect(summary).toMatchObject({ aq: result.score.aq, grade: result.score.grade, tier: result.score.tier, withheld: result.score.withheld, reportPath: null });
     expect(summary.axes).toEqual(result.axes.map((axis) => ({ axis: axis.axis, score: axis.score })));
   });
@@ -46,19 +46,27 @@ describe("요약", () => {
     expect(checkupSummary({ ...result, nextGrade: null }, null)).toMatchObject({ nextGrade: null, text: { nextGrade: null } });
   });
 
-  it("설정 속 비밀값은 두 도구의 자리 수를 더한 한 문장으로 싣고, 이름은 싣지 않는다. 없으면 null이다(0.2.0)", () => {
+  it("설정 속 비밀값은 두 도구의 자리 수를 더한 한 문장으로 싣고, 자리(서버와 항목의 이름)는 값 없이 따로 싣는다. 없으면 null과 빈 목록이다(0.2.0, 0.3.0 다른 PC 피드백 2번)", () => {
     const place = (server: string) => ({ scope: "user" as const, server, projectRoot: null, field: "env" as const, key: "API_TOKEN" });
     const notices: Notice[] = [
       { kind: "credentials_in_config", tool: "claude-code", places: [place("secret-a"), place("secret-b")] },
       { kind: "credentials_in_config", tool: "codex", places: [place("secret-c")] },
     ];
     const withText = notices.map((notice) => ({ ...notice, text: { en: noticeText(notice, "en"), ko: noticeText(notice, "ko") } }));
-    const en = checkupSummary({ ...baseResult(), notices: withText }, null);
+    const base = baseResult();
+    const places = [
+      { tool: "claude-code" as const, scope: "user" as const, server: "secret-a", projectName: null, field: "env" as const, key: "API_TOKEN" },
+      { tool: "codex" as const, scope: "user" as const, server: "secret-c", projectName: null, field: "env" as const, key: "API_TOKEN", copy: "default" as const },
+    ];
+    const en = checkupSummary({ ...base, notices: withText, details: { ...base.details, credentialPlaces: places } }, null);
     expect(en.text.credentials).toBe("3 places in your settings have an API key or token written as it is. See where in the report page and move them into environment variables.");
     const ko = checkupSummary({ ...baseResult(), lang: "ko", notices: withText }, null);
     expect(ko.text.credentials).toBe("설정 3곳에 API 키나 토큰이 그대로 적혀 있습니다. 결과 화면에서 위치를 보고 환경 변수로 옮기세요.");
-    expect(JSON.stringify(en)).not.toContain("secret-");
+    // 고칠 자리를 AI가 알 수 있게 이름은 싣는다(값은 사실에도 없다). 알림 칸에는 여전히 수만 싣는다
+    expect(en.credentialPlaces).toEqual(places);
+    expect(JSON.stringify(en.notices)).not.toContain("secret-");
     expect(checkupSummary(baseResult(), null).text.credentials).toBeNull();
+    expect(checkupSummary(baseResult(), null).credentialPlaces).toEqual([]);
   });
 
   it("가장 잘하는 것은 잘하고 있는 것의 첫 항목이고, 없으면 null이다", () => {
@@ -80,10 +88,47 @@ describe("요약", () => {
       ],
     };
     expect(checkupSummary(result, null).fixFirst).toEqual([
-      { ruleId: "E3", axis: "efficiency", gain: 6, measured: true, candidates: 0, unmeasuredTools: [] },
-      { ruleId: "E5", axis: "efficiency", gain: null, measured: false, candidates: 1, unmeasuredTools: ["claude-code"] },
-      { ruleId: "E6", axis: "efficiency", gain: null, measured: true, candidates: 2, unmeasuredTools: [] },
+      { ruleId: "E3", axis: "efficiency", gain: 6, measured: true, candidates: 0, unmeasuredTools: [], targets: [], value: 0.5, score: 0.5, zeroAt: 3, fullAt: 0.2 },
+      { ruleId: "E5", axis: "efficiency", gain: null, measured: false, candidates: 1, unmeasuredTools: ["claude-code"], targets: ["A1:claude-code:x"], value: null, score: null, zeroAt: 0.8, fullAt: 0.2 },
+      { ruleId: "E6", axis: "efficiency", gain: null, measured: true, candidates: 2, unmeasuredTools: [], targets: ["A3:claude-code:a", "A3:claude-code:b"], value: 0, score: 1, zeroAt: 0.7, fullAt: 0.1 },
     ]);
+  });
+
+  it("먼저 고칠 것마다 고칠 대상의 이름을 싣는다. S3은 문제의 위치, S5는 연결에 실패한 서버, F3은 지침이 없는 프로젝트, F4는 가장 많이 겹친 프로젝트다(0.3.0, 다른 PC 피드백 2번)", () => {
+    const base = baseResult();
+    const result = {
+      ...base,
+      findings: [
+        finding("S3", { axis: "setup", kind: "count", category: "repair", gain: 2 }),
+        finding("S5", { axis: "setup", category: "repair", gain: 3 }),
+        finding("F3", { axis: "fit", category: "repair", gain: 1 }),
+        finding("F4", { axis: "fit", category: "repair", gain: 1 }),
+      ],
+      details: {
+        ...base.details,
+        setupProblems: [{ tool: "claude-code" as const, kind: "unparsable" as const, place: "~/.claude/settings.json" }],
+        failedMcpServers: [{ tool: "claude-code" as const, name: "gone", sessions: 4 }, { tool: "codex" as const, name: "gone", sessions: 1 }, { tool: "claude-code" as const, name: "auth", sessions: 1 }],
+        missingInstructions: [{ normRoot: "/w/a", name: "app" }],
+        worstOverlap: { normRoot: "/w/b", name: "site", lines: 3 },
+      },
+    } as unknown as CheckupResult;
+    const summary = checkupSummary({ ...result, findings: result.findings.slice(0, 3) }, null);
+    expect(summary.fixFirst.map((fix) => [fix.ruleId, fix.targets])).toEqual([
+      ["S3", ["~/.claude/settings.json"]],
+      ["S5", ["gone", "auth"]],
+      ["F3", ["app"]],
+    ]);
+    expect(checkupSummary({ ...result, findings: [result.findings[3]!] }, null).fixFirst[0]!.targets).toEqual(["site"]);
+  });
+
+  it("규칙 점수가 0이면 덧붙이는 말에 지금 값과 점수가 오르기 시작하는 값을 함께 적는다(0.3.0, 다른 PC 피드백 4번)", () => {
+    const result = {
+      ...baseResult(),
+      lang: "ko" as const,
+      findings: [finding("E4", { category: "repair", kind: "amount", value: 24400, score: 0, gain: 11 }), finding("F2", { axis: "fit", category: "repair", value: 0.05, score: 0, gain: 2 }), finding("E3", { category: "repair", kind: "rate", value: 2, score: 0.4, gain: 5 })],
+    };
+    expect(checkupSummary(result, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["효율 최대 +11 · 지금 24,400토큰(어림), 16,000토큰(어림) 아래로 줄여야 오르기 시작", "상황 적합 최대 +2 · 지금 5%, 10% 위로 올려야 오르기 시작", "효율 최대 +5"]);
+    expect(checkupSummary({ ...result, lang: "en" }, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["Efficiency up to +11 · now 24,400 tokens (est.), rises only below 16,000 tokens (est.)", "Fit up to +2 · now 5%, rises only above 10%", "Efficiency up to +5"]);
   });
 
   it("알림 스물세 종류마다 정해진 값과 대상의 수만 싣고, 알림에 든 경로와 이름은 싣지 않는다", () => {

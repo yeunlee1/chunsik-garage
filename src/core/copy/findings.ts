@@ -171,6 +171,12 @@ function unjudgedNotes(servers: readonly UnjudgedServer[], lang: Lang): string[]
   return lines;
 }
 
+/** 규칙의 값 하나를 잰 값과 같은 꼴로 단위까지 붙인 글(0.3.0. 기준값을 보일 때 쓴다) */
+export function ruleValueText(ruleId: RuleId, value: number, lang: Lang): string {
+  const shown = measured(ruleSpec(ruleId).kind, value, RULE_COPY[ruleId][lang]);
+  return joinValue(shown.value, shown.unit, lang);
+}
+
 export function findingText(finding: FindingInput, details: FindingDetails, lang: Lang): FindingText {
   const copy = RULE_COPY[finding.ruleId][lang];
   const shown = finding.status === "scored" ? measured(finding.kind, finding.value!, copy) : null;

@@ -22,9 +22,9 @@ export const AXIS_NAMES: Record<Axis, Texts<string>> = {
  * 터미널 요약의 덧붙이는 말. 가장 잘하는 것은 규칙 이름에 잰 값을 붙이고, 먼저 고칠 것은 예상 효과가 있으면 그것을,
  * 없으면 후보의 수를 적는다. 예상 효과의 자리에 0을 넣지 않는다(설계 11.5 「터미널의 요약에 실릴 때」, 15)
  */
-export const SUMMARY_COPY: Texts<{ best: string; gain: string; unmeasured: string; otherTools: string; candidates: string; credentials: string }> = {
-  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up · share not measured", otherTools: "{candidates} to clean up · share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { credentials: "설정 {count}곳에 API 키나 토큰이 그대로 적혀 있습니다. 결과 화면에서 위치를 보고 환경 변수로 옮기세요.", best: "{name} {value}", gain: "{axis} 최대 +{gain}", unmeasured: "정리할 것 {candidates}개 · 비율은 잴 수 없음", otherTools: "정리할 것 {candidates}개 · {tools}의 비율은 잴 수 없음", candidates: "정리할 것 {candidates}개" },
+export const SUMMARY_COPY: Texts<{ best: string; gain: string; gainBelow: string; gainAbove: string; unmeasured: string; otherTools: string; candidates: string; credentials: string }> = {
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", gainBelow: "{axis} up to +{gain} · now {now}, rises only below {start}", gainAbove: "{axis} up to +{gain} · now {now}, rises only above {start}", unmeasured: "{candidates} to clean up · share not measured", otherTools: "{candidates} to clean up · share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "설정 {count}곳에 API 키나 토큰이 그대로 적혀 있습니다. 결과 화면에서 위치를 보고 환경 변수로 옮기세요.", best: "{name} {value}", gain: "{axis} 최대 +{gain}", gainBelow: "{axis} 최대 +{gain} · 지금 {now}, {start} 아래로 줄여야 오르기 시작", gainAbove: "{axis} 최대 +{gain} · 지금 {now}, {start} 위로 올려야 오르기 시작", unmeasured: "정리할 것 {candidates}개 · 비율은 잴 수 없음", otherTools: "정리할 것 {candidates}개 · {tools}의 비율은 잴 수 없음", candidates: "정리할 것 {candidates}개" },
 };
 
 /** 못 잰 이유의 낱말과 설명. 규칙이 따로 쓴 것이 없을 때 쓴다(설계 11.4) */

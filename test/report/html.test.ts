@@ -184,6 +184,16 @@ describe("reportHtml", () => {
     expect(reportHtml(viewOf(result()), art)).not.toContain('class="spots"');
   });
 
+  it("S5 항목에 연결에 실패한 서버를 실패한 세션 수와 함께 늘어놓는다. 없으면 그리지 않는다(0.3.0, 다른 PC 피드백 2번)", () => {
+    const view = viewOf(result());
+    const withServers: ReportView = { ...view, failedServers: [{ tool: "claude-code", name: "gone<x>", sessions: 4 }, { tool: "claude-code", name: "auth", sessions: 1 }] };
+    const s5 = between(reportHtml(withServers, art), '<div class="it" id="it-S5">', '<div class="it" id="it-');
+    expect(s5).toContain(`aria-label="${REPORT_COPY.failedServers.ko}" data-en-aria-label="${REPORT_COPY.failedServers.en}"`);
+    expect(s5).toContain(`<li>gone&lt;x&gt;<small><span lang="en" data-l="en">4 sessions</span><span lang="ko" data-l="ko">세션 4곳</span></small></li>`);
+    expect(s5).toContain(`<li>auth<small><span lang="en" data-l="en">1 session</span><span lang="ko" data-l="ko">세션 1곳</span></small></li>`);
+    expect(reportHtml({ ...view, failedServers: [] }, art)).not.toContain(`aria-label="${REPORT_COPY.failedServers.ko}"`);
+  });
+
   it("옮긴 설정 폴더를 쓰는 동안 기본 위치의 사본에서 찾은 자리는 사본이라고 붙인다(0.3.0, 다른 PC 피드백 3번)", () => {
     const checked = result({ setup: { secrets: [{ scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" }, { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN", copy: "default" }] } });
     expect(checked.details.credentialPlaces.map((place) => place.copy ?? null)).toEqual([null, "default"]);

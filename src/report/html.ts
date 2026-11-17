@@ -45,11 +45,11 @@ const swap = (lang: Lang, attrs: Partial<Record<SwapAttr, Texts<string>>>): stri
   ` data-tr${Object.entries(attrs)
     .map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`)
     .join("")}`;
-/** 문구 틀을 바꾼 뒤 자리에 HTML 조각을 끼운다 */
 /** 다음 등급 문장의 「(→ 92)」를 한 덩어리로 묶어 줄이 바뀌어도 화살표와 숫자가 떨어지지 않게 한다(0.3.0. 문장에는 보통 빈칸을 쓴다) */
 const keepArrows = (html: string): string => html.replace(/\(→ (\d+)\)/g, '<span class="nw">(→ $1)</span>');
 
-const fillHtml = (template: string, values: Readonly<Record<string, string>>): string => fill(esc(template), values);
+/** 문구 틀을 바꾼 뒤 자리에 HTML 조각을 끼운다 */
+const fillHtml =(template: string, values: Readonly<Record<string, string>>): string => fill(esc(template), values);
 
 const dayNumber = (date: LocalDate): number => {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
@@ -129,6 +129,7 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
   const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
   const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
   const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
   const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
   const phrase = textsOf((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
@@ -137,7 +138,7 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
     finding.text.en.method.length + finding.text.ko.method.length === 0
       ? ""
       : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${targets}${places}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${targets}${places}${failed}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 
 function header(view: ReportView, art: ReportArt, lang: Lang): string {
@@ -193,7 +194,7 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
         ? ""
         : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>`
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`),
+          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score }, l)}`),
         )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }

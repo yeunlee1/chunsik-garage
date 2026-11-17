@@ -11,6 +11,7 @@ import type { CollectedTool } from "../../src/core/result/tools.ts";
 import type { SetupProblem } from "../../src/scan/types.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
 import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import type { SummaryInput } from "../helpers/summaries.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -26,6 +27,23 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   const input = evaluationInput([claudeTool({ sessions: enough, ...tool })]);
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
+
+describe("연결에 실패한 MCP 서버(0.3.0, 다른 PC 피드백 2번)", () => {
+  it("점수 구간에 응답이 있는 주 세션마다 실패한 서버를 세어, 세션 수가 많은 차례로 싣는다. 점수 구간 밖의 실패와 하위 세션은 세지 않는다", () => {
+    const sessions: SummaryInput[] = [
+      ...enough,
+      { days: { "2026-11-12": { responses: 1, mcpConnectionFailure: true, mcpFailedServers: { gone: 3, auth: 1 } } } },
+      { days: { "2026-11-13": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { gone: 1 } } } },
+      { days: { "2026-09-01": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { old: 9 } } } },
+      { kind: "sub", days: { "2026-11-13": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { sub: 1 } } } },
+    ];
+    const result = checkupResult(resultInput({ sessions }));
+    expect(result.details.failedMcpServers).toEqual([
+      { tool: "claude-code", name: "gone", sessions: 2 },
+      { tool: "claude-code", name: "auth", sessions: 1 },
+    ]);
+  });
+});
 
 describe("설정 속 비밀값의 자리(0.2.0)", () => {
   it("결과 화면이 그릴 자리 목록은 도구 차례로 두고, 프로젝트 범위에는 프로젝트 폴더 이름을 붙인다. 값은 없다", () => {
@@ -129,7 +147,7 @@ describe("평가 결과의 조립", () => {
     const sessions = [...enough, { days: { "2026-11-12": { responses: 1, mcpCalls: { called: 2 } } } }];
     const input = resultInput({ sessions, setup: { mcpServers: servers } });
     const result = checkupResult(input);
-    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems", "credentialPlaces"]);
+    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems", "credentialPlaces", "failedMcpServers"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
       { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established", judgeFrom: "2026-11-28" },

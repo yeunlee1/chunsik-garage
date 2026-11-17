@@ -1157,8 +1157,10 @@ function toolTotals(summaries, windows, shellTools) {
       autoCompactions: 0,
       subagentCalls: 0,
       mcpConnectionFailure: false,
+      mcpFailedServers: [],
       instructionTokens: instructionTokens(summary.instructionChars)
     };
+    const failedServers = /* @__PURE__ */ new Set();
     let sessionResponses = 0;
     for (const [date, cell] of Object.entries(summary.days)) {
       if (collect.has(date)) totals2.collectResponses += cell.responses;
@@ -1191,7 +1193,9 @@ function toolTotals(summaries, windows, shellTools) {
       session.autoCompactions += cell.autoCompactions;
       session.subagentCalls += cell.subagentCalls;
       if (cell.mcpConnectionFailure) session.mcpConnectionFailure = true;
+      for (const name of Object.keys(cell.mcpFailedServers)) failedServers.add(name);
     }
+    session.mcpFailedServers = [...failedServers].sort();
     if (summary.kind === "main" && sessionResponses > 0) totals2.mainSessions.push(session);
   }
   for (const name of [...efforts.keys()].sort()) totals2.efforts[name] = efforts.get(name);
@@ -1267,8 +1271,8 @@ var AXIS_NAMES = {
   intensity: { en: "Intensity", ko: "\uAC15\uB3C4" }
 };
 var SUMMARY_COPY = {
-  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
-  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
+  en: { credentials: "{count} {count:place in your settings has|places in your settings have} an API key or token written as it is. See where in the report page and move {count:it|them} into environment variables.", best: "{name} {value}", gain: "{axis} up to +{gain}", gainBelow: "{axis} up to +{gain} \xB7 now {now}, rises only below {start}", gainAbove: "{axis} up to +{gain} \xB7 now {now}, rises only above {start}", unmeasured: "{candidates} to clean up \xB7 share not measured", otherTools: "{candidates} to clean up \xB7 share for {tools} not measured", candidates: "{candidates} to clean up" },
+  ko: { credentials: "\uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uACB0\uACFC \uD654\uBA74\uC5D0\uC11C \uC704\uCE58\uB97C \uBCF4\uACE0 \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694.", best: "{name} {value}", gain: "{axis} \uCD5C\uB300 +{gain}", gainBelow: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC544\uB798\uB85C \uC904\uC5EC\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", gainAbove: "{axis} \uCD5C\uB300 +{gain} \xB7 \uC9C0\uAE08 {now}, {start} \uC704\uB85C \uC62C\uB824\uC57C \uC624\uB974\uAE30 \uC2DC\uC791", unmeasured: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", otherTools: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C \xB7 {tools}\uC758 \uBE44\uC728\uC740 \uC7B4 \uC218 \uC5C6\uC74C", candidates: "\uC815\uB9AC\uD560 \uAC83 {candidates}\uAC1C" }
 };
 var REASON_COPY = {
   unsupported: {
@@ -2193,6 +2197,10 @@ function unjudgedNotes(servers, lang) {
   if (servers.some((server) => server.scope === "claude-ai")) lines.push(copy2.deny);
   return lines;
 }
+function ruleValueText(ruleId, value, lang) {
+  const shown = measured(ruleSpec(ruleId).kind, value, RULE_COPY[ruleId][lang]);
+  return joinValue(shown.value, shown.unit, lang);
+}
 function findingText(finding, details, lang) {
   const copy2 = RULE_COPY[finding.ruleId][lang];
   const shown = finding.status === "scored" ? measured(finding.kind, finding.value, copy2) : null;
@@ -2900,6 +2908,13 @@ function unjudgedServers(input, evaluation) {
   }
   return servers.sort((a, b) => byText10(a.name, b.name) || SCOPE_ORDER3.indexOf(a.scope) - SCOPE_ORDER3.indexOf(b.scope) || byText10(a.projectRoot ?? "", b.projectRoot ?? "") || byText10(a.pluginId ?? "", b.pluginId ?? "") || byText10(a.tool, b.tool));
 }
+function failedMcpServers(evaluation) {
+  return evaluation.tools.filter((tool) => tool.scored).flatMap((tool) => {
+    const sessions = /* @__PURE__ */ new Map();
+    for (const session of tool.totals.mainSessions) for (const name of session.mcpFailedServers) sessions.set(name, (sessions.get(name) ?? 0) + 1);
+    return [...sessions].map(([name, count]) => ({ tool: tool.tool, name, sessions: count }));
+  }).sort((a, b) => b.sessions - a.sessions || byText10(a.tool, b.tool) || byText10(a.name, b.name));
+}
 function credentialPlaces(input) {
   const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key, ...secret.copy === void 0 ? {} : { copy: secret.copy } })));
@@ -2907,7 +2922,7 @@ function credentialPlaces(input) {
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input), failedMcpServers: failedMcpServers(evaluation) };
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool) }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
   const findings = evaluation.findings.map((finding) => {
@@ -2987,10 +3002,34 @@ function summaryNotice(notice) {
 }
 function fixDetail(fix, lang) {
   const copy2 = SUMMARY_COPY[lang];
-  if (fix.gain !== null) return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  if (fix.gain !== null) {
+    const spec = ruleSpec(fix.ruleId);
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0) {
+      const template = spec.zeroAt > spec.fullAt ? copy2.gainBelow : copy2.gainAbove;
+      return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now: ruleValueText(fix.ruleId, fix.value, lang), start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
+    }
+    return fill(copy2.gain, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain });
+  }
   if (!fix.measured) return fill(copy2.unmeasured, { candidates: fix.candidates });
   if (fix.unmeasuredTools.length > 0) return fill(copy2.otherTools, { candidates: fix.candidates, tools: fix.unmeasuredTools.map((tool) => TOOL_NAMES[tool][lang]).join(", ") });
   return fill(copy2.candidates, { candidates: fix.candidates });
+}
+function targetsOf(finding, result) {
+  const names2 = (() => {
+    switch (finding.ruleId) {
+      case "S3":
+        return result.details.setupProblems.map((problem) => problem.place);
+      case "S5":
+        return result.details.failedMcpServers.map((server) => server.name);
+      case "F3":
+        return result.details.missingInstructions.map((project) => project.name);
+      case "F4":
+        return result.details.worstOverlap === null ? [] : [result.details.worstOverlap.name];
+      default:
+        return finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
+    }
+  })();
+  return [...new Set(names2)];
 }
 function checkupSummary(result, reportPath) {
   const lang = result.lang;
@@ -3003,7 +3042,12 @@ function checkupSummary(result, reportPath) {
     gain: finding.gain,
     measured: finding.status === "scored",
     candidates: finding.candidates.length,
-    unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool)
+    unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
+    targets: targetsOf(finding, result),
+    value: finding.value,
+    score: finding.score,
+    zeroAt: ruleSpec(finding.ruleId).zeroAt,
+    fullAt: ruleSpec(finding.ruleId).fullAt
   }));
   return {
     aq: result.score.aq,
@@ -3015,6 +3059,7 @@ function checkupSummary(result, reportPath) {
     fixFirst,
     nextGrade: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ...step })) },
     notices: result.notices.map(summaryNotice),
+    credentialPlaces: result.details.credentialPlaces.map((place) => ({ ...place })),
     reportPath,
     lang,
     text: {
@@ -3139,6 +3184,8 @@ var REPORT_COPY = {
   targets: { en: "To clean up", ko: "\uC815\uB9AC\uD560 \uAC83" },
   places: { en: "Where", ko: "\uACE0\uCE60 \uACF3" },
   missingProjects: { en: "Projects without instructions", ko: "\uC9C0\uCE68\uC774 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8" },
+  failedServers: { en: "Servers that failed to connect", ko: "\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84" },
+  failedSessions: { en: "{n} {n:session|sessions}", ko: "\uC138\uC158 {n}\uACF3" },
   overlapProject: { en: "Project with the most overlap", ko: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8" },
   serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 {n}\uAC1C" },
   judgeFrom: { en: "If nothing else changes, it can be judged from the check-up {n} {n:day|days} from now.", ko: "\uB2E4\uB978 \uC870\uAC74\uC774 \uAC19\uC73C\uBA74 {n}\uC77C \uB4A4\uC758 \uC810\uAC80\uBD80\uD130 \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." },
@@ -3180,8 +3227,8 @@ var REPORT_COPY = {
   partialReadUnknown: { en: "Only part of the {tool} records could be read. How much could not be read is unknown.", ko: "{tool} \uAE30\uB85D\uC744 \uC77C\uBD80\uB9CC \uC77D\uC5C8\uC2B5\uB2C8\uB2E4. \uC5BC\uB9C8\uB098 \uC77D\uC9C0 \uBABB\uD588\uB294\uC9C0\uB294 \uC54C \uC218 \uC5C6\uC2B5\uB2C8\uB2E4." },
   footCalc: { en: "Computed on this PC.", ko: "\uC774 PC\uC5D0\uC11C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4." },
   footPromise: {
-    en: "The program and this page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.",
-    ko: "\uD504\uB85C\uADF8\uB7A8\uACFC \uACB0\uACFC \uD654\uBA74\uC740 \uB124\uD2B8\uC6CC\uD06C\uB85C \uC694\uCCAD\uC744 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uD504\uB85C\uADF8\uB7A8\uC774 \uB0B4\uB193\uB294 \uAE00\uC740 \uC9C0\uAE08 \uC4F0\uB294 AI \uB300\uD654\uB85C \uC804\uD574\uC9D1\uB2C8\uB2E4. \uC810\uAC80\uC774\uBA74 \uC810\uC218\uC640 \uC9D1\uACC4, \uACB0\uACFC \uD654\uBA74\uACFC \uACB0\uACFC \uD30C\uC77C\uC758 \uACBD\uB85C\uC785\uB2C8\uB2E4. \uC815\uBE44\uBA74 \uC815\uBE44\uD560 \uAC83\uC758 \uC774\uB984, \uC124\uC815 \uD30C\uC77C\uC758 \uACBD\uB85C, \uBC14\uAFC0 \uD56D\uBAA9\uACFC \uADF8 \uAC12\uB3C4 \uC804\uD574\uC9D1\uB2C8\uB2E4. \uB300\uD654 \uB0B4\uC6A9\uACFC \uC9C0\uCE68\uC758 \uAE00\uC740 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC815\uBC00 \uC810\uAC80\uC744 \uC2DC\uD0A4\uBA74 \uACE0\uB978 \uC9C0\uCE68 \uD30C\uC77C\uB9CC AI\uAC00 \uC77D\uC2B5\uB2C8\uB2E4."
+    en: "The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, the paths of the report and result files, and the names of what to fix, such as MCP servers that failed to connect and where API keys are written. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. The values of API keys, your conversations, and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.",
+    ko: "\uD504\uB85C\uADF8\uB7A8\uACFC \uACB0\uACFC \uD654\uBA74\uC740 \uB124\uD2B8\uC6CC\uD06C\uB85C \uC694\uCCAD\uC744 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uD504\uB85C\uADF8\uB7A8\uC774 \uB0B4\uB193\uB294 \uAE00\uC740 \uC9C0\uAE08 \uC4F0\uB294 AI \uB300\uD654\uB85C \uC804\uD574\uC9D1\uB2C8\uB2E4. \uC810\uAC80\uC774\uBA74 \uC810\uC218\uC640 \uC9D1\uACC4, \uACB0\uACFC \uD654\uBA74\uACFC \uACB0\uACFC \uD30C\uC77C\uC758 \uACBD\uB85C, \uACE0\uCE60 \uB300\uC0C1\uC758 \uC774\uB984(\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84, API \uD0A4\uAC00 \uC801\uD78C \uC790\uB9AC \uAC19\uC740 \uAC83)\uC785\uB2C8\uB2E4. \uC815\uBE44\uBA74 \uC815\uBE44\uD560 \uAC83\uC758 \uC774\uB984, \uC124\uC815 \uD30C\uC77C\uC758 \uACBD\uB85C, \uBC14\uAFC0 \uD56D\uBAA9\uACFC \uADF8 \uAC12\uB3C4 \uC804\uD574\uC9D1\uB2C8\uB2E4. API \uD0A4\uC758 \uAC12\uACFC \uB300\uD654 \uB0B4\uC6A9, \uC9C0\uCE68\uC758 \uAE00\uC740 \uBCF4\uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4. \uC815\uBC00 \uC810\uAC80\uC744 \uC2DC\uD0A4\uBA74 \uACE0\uB978 \uC9C0\uCE68 \uD30C\uC77C\uB9CC AI\uAC00 \uC77D\uC2B5\uB2C8\uB2E4."
   },
   footNames: { en: "This file contains the names of your skills and project folders. Anyone you send the file to can see them. To share your result, use the card.", ko: "\uC774 \uD30C\uC77C\uC5D0\uB294 \uC2A4\uD0AC\uACFC \uD504\uB85C\uC81D\uD2B8 \uD3F4\uB354\uC758 \uC774\uB984\uC774 \uB4E4\uC5B4 \uC788\uC2B5\uB2C8\uB2E4. \uD30C\uC77C\uC9F8 \uBCF4\uB0B4\uBA74 \uADF8 \uC774\uB984\uB3C4 \uBCF4\uC785\uB2C8\uB2E4. \uACB0\uACFC\uB97C \uB098\uB20C \uB54C\uB294 \uCE74\uB4DC\uB97C \uC4F0\uC138\uC694." },
   cardBtn: { en: "Save as card", ko: "\uCE74\uB4DC\uB85C \uC800\uC7A5" },
@@ -3865,12 +3912,13 @@ function item(finding, view, lang) {
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
   const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
   const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
   const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
   const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
   const phrase = textsOf2((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how = finding.text.en.method.length + finding.text.ko.method.length === 0 ? "" : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${targets}${places}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${targets}${places}${failed}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
@@ -3904,7 +3952,7 @@ function hero(view, art, lang) {
   )}</span></div>`;
   const next = scored2 && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf2((l) => keepArrows(esc(view.nextGrade[l]))))}</span>` : "";
   const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
+    textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score }, l)}`)
   )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf2((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
@@ -4068,7 +4116,7 @@ ${cardDialog(client.card !== null)}
 
 // src/report/view.ts
 function reportView(result, run2) {
-  const targetsOf = (finding) => finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
+  const targetsOf2 = (finding) => finding.candidates.map((id) => result.candidates.find((candidate) => candidate.id === id)?.target ?? id);
   const withheld = result.score.aq === null ? result.notices.find((notice) => notice.kind === "score_withheld")?.text ?? null : null;
   return {
     lang: result.lang,
@@ -4091,13 +4139,16 @@ function reportView(result, run2) {
       severity: finding.severity,
       measured: finding.status === "scored",
       gain: finding.gain,
-      targets: targetsOf(finding),
+      value: finding.value,
+      score: finding.score,
+      targets: targetsOf2(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text
     })),
     usage: result.usage,
     notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
     credentialPlaces: result.details.credentialPlaces,
+    failedServers: result.details.failedMcpServers.map((server) => ({ ...server })),
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -4269,6 +4320,7 @@ function emptyDay() {
     interruptedTurns: 0,
     subagentCalls: 0,
     mcpConnectionFailure: false,
+    mcpFailedServers: nameRecord(),
     skillSignals: nameRecord(),
     mcpCalls: nameRecord(),
     mcpAttributions: nameRecord(),
@@ -4288,6 +4340,7 @@ function canonicalDay(day) {
     efforts: sortedRecord(day.efforts),
     tools: sortedRecord(day.tools),
     unknownDenialKinds: sortedRecord(day.unknownDenialKinds),
+    mcpFailedServers: sortedRecord(day.mcpFailedServers),
     skillSignals: sortedRecord(day.skillSignals),
     mcpCalls: sortedRecord(day.mcpCalls),
     mcpAttributions: sortedRecord(day.mcpAttributions),
@@ -4312,6 +4365,7 @@ var DAY_SHAPE = {
   interruptedTurns: "number",
   subagentCalls: "number",
   mcpConnectionFailure: "boolean",
+  mcpFailedServers: "numbers",
   skillSignals: "skills",
   mcpCalls: "numbers",
   mcpAttributions: "numbers",
@@ -5427,7 +5481,7 @@ var ResponseTable = class {
 };
 
 // src/adapters/claude/parser.ts
-var CLAUDE_PARSER_VERSION = 2;
+var CLAUDE_PARSER_VERSION = 3;
 var COUNTED_TYPES = /* @__PURE__ */ new Set(["assistant", "user", "attachment", "system"]);
 var FIRST_RESPONSE_IDS = 20;
 var SHELL_TOOLS = /* @__PURE__ */ new Set(["Bash", "PowerShell"]);
@@ -5829,7 +5883,13 @@ var ClaudeSessionParser = class {
       return;
     }
     if (type === "deferred_tools_delta") {
-      if (Array.isArray(body.failedMcpServers) && body.failedMcpServers.length > 0) day.mcpConnectionFailure = true;
+      if (Array.isArray(body.failedMcpServers) && body.failedMcpServers.length > 0) {
+        day.mcpConnectionFailure = true;
+        for (const item2 of body.failedMcpServers) {
+          const name = typeof item2 === "string" ? item2 : str(obj(item2)?.name);
+          if (name !== null && name !== "") bump(day.mcpFailedServers, name);
+        }
+      }
       return;
     }
     if (type === "hook_success" || type === "hook_non_blocking_error") {

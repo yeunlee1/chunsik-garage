@@ -86,6 +86,8 @@ export interface CheckupResult {
     setupProblems: CountedProblem[];
     /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 결과 화면이 그 알림 아래에 보인다. 값은 없다 */
     credentialPlaces: SecretPlace[];
+    /** 점수 구간에 연결에 실패한 MCP 서버와 실패가 있었던 주 세션의 수(0.3.0). 결과 화면이 S5 항목에 보인다. 오류 글은 없다 */
+    failedMcpServers: FailedServer[];
   };
   /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다 */
   nextGrade: (NextGrade & { text: Texts<string> }) | null;
@@ -126,6 +128,25 @@ export interface SecretPlace {
   copy?: "default";
 }
 
+export interface FailedServer {
+  tool: ToolId;
+  name: string;
+  /** 점수 구간에 그 서버의 연결 실패가 있었던 주 세션의 수 */
+  sessions: number;
+}
+
+/** 점수에 넣는 도구마다 연결에 실패한 서버를 모은다. 세션 수가 많은 차례, 같으면 도구와 이름의 차례다(0.3.0) */
+function failedMcpServers(evaluation: Evaluation): FailedServer[] {
+  return evaluation.tools
+    .filter((tool) => tool.scored)
+    .flatMap((tool) => {
+      const sessions = new Map<string, number>();
+      for (const session of tool.totals.mainSessions) for (const name of session.mcpFailedServers) sessions.set(name, (sessions.get(name) ?? 0) + 1);
+      return [...sessions].map(([name, count]): FailedServer => ({ tool: tool.tool, name, sessions: count }));
+    })
+    .sort((a, b) => b.sessions - a.sessions || byText(a.tool, b.tool) || byText(a.name, b.name));
+}
+
 function credentialPlaces(input: EvaluationInput): SecretPlace[] {
   const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   return [...input.tools]
@@ -136,7 +157,7 @@ function credentialPlaces(input: EvaluationInput): SecretPlace[] {
 export function checkupResult(source: ResultInput): CheckupResult {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input), failedMcpServers: failedMcpServers(evaluation) };
   // 합침 규칙에는 도구별 값이 없어, 그 규칙을 잰 도구와 관측 범위를 문장을 지을 때만 넘긴다. 결과의 details에는 싣지 않는다(설계 「5단계 4부 계획 전 결정」 7번)
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool)! }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };

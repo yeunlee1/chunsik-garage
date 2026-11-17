@@ -2902,7 +2902,7 @@ function unjudgedServers(input, evaluation) {
 }
 function credentialPlaces(input) {
   const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
-  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key })));
+  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key, ...secret.copy === void 0 ? {} : { copy: secret.copy } })));
 }
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
@@ -3122,6 +3122,7 @@ var REPORT_COPY = {
   fixFirst: { en: "Fix first", ko: "\uBA3C\uC800 \uACE0\uCE60 \uAC83" },
   nextGrade: { en: "Next grade", ko: "\uB2E4\uC74C \uB4F1\uAE09\uAE4C\uC9C0" },
   spotSettings: { en: "Settings", ko: "\uC124\uC815" },
+  spotDefaultCopy: { en: "copy in the default location", ko: "\uAE30\uBCF8 \uC704\uCE58\uC758 \uC0AC\uBCF8" },
   spotEnv: { en: "env", ko: "env" },
   spotHeaders: { en: "header", ko: "\uBA38\uB9AC\uB9D0" },
   spotField: { en: "field", ko: "\uCE78" },
@@ -3997,7 +3998,7 @@ function partialBand(view) {
   return `<div class="partial" role="note">${ICONS.caution}<div>${lines.join("")}</div></div>`;
 }
 var SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl };
-var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+var spotLabel = (place, lang) => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} \xB7 ${SPOT_FIELDS[place.field][lang]} ${place.key}${place.copy === "default" ? ` \xB7 ${REPORT_COPY.spotDefaultCopy[lang]}` : ""}`;
 function notices(view) {
   if (view.notices.length === 0) return "";
   const spots = (notice) => {

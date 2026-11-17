@@ -305,7 +305,7 @@ function partialBand(view: ReportView): string {
 
 const SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl } as const;
 /** 비밀값의 자리 한 줄. 「서버(프로젝트) · 칸 항목」이고, 설정의 env는 서버 자리에 「설정」이다. 값은 없다(0.2.0) */
-const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}${place.copy === "default" ? ` · ${REPORT_COPY.spotDefaultCopy[lang]}` : ""}`;
 
 function notices(view: ReportView): string {
   if (view.notices.length === 0) return "";

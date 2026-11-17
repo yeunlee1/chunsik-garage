@@ -184,6 +184,14 @@ describe("reportHtml", () => {
     expect(reportHtml(viewOf(result()), art)).not.toContain('class="spots"');
   });
 
+  it("옮긴 설정 폴더를 쓰는 동안 기본 위치의 사본에서 찾은 자리는 사본이라고 붙인다(0.3.0, 다른 PC 피드백 3번)", () => {
+    const checked = result({ setup: { secrets: [{ scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" }, { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN", copy: "default" }] } });
+    expect(checked.details.credentialPlaces.map((place) => place.copy ?? null)).toEqual([null, "default"]);
+    const notices = between(reportHtml(viewOf(checked), art), '<section class="notices"', "</section>");
+    expect(notices).toContain('<li><span lang="en" data-l="en">ctx · env API_TOKEN</span><span lang="ko" data-l="ko">ctx · env API_TOKEN</span></li>');
+    expect(notices).toContain('<li><span lang="en" data-l="en">ctx · env API_TOKEN · copy in the default location</span><span lang="ko" data-l="ko">ctx · env API_TOKEN · 기본 위치의 사본</span></li>');
+  });
+
   it("다음 등급까지의 문장을 진단 칸의 먼저 고칠 것 아래에 두 언어로 그리고, 없으면 그리지 않는다(0.2.0)", () => {
     const checked = result();
     expect(checked.nextGrade).not.toBeNull();

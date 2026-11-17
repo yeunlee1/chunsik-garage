@@ -122,13 +122,15 @@ export interface SecretPlace {
   projectName: string | null;
   field: SecretFact["field"];
   key: string;
+  /** 옮긴 설정 폴더를 쓰는 동안 기본 위치의 사본에서 찾았다. 지금 쓰는 곳이면 없다(0.3.0) */
+  copy?: "default";
 }
 
 function credentialPlaces(input: EvaluationInput): SecretPlace[] {
   const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   return [...input.tools]
     .sort((a, b) => byText(a.tool, b.tool))
-    .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key })));
+    .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key, ...(secret.copy === undefined ? {} : { copy: secret.copy }) })));
 }
 
 export function checkupResult(source: ResultInput): CheckupResult {

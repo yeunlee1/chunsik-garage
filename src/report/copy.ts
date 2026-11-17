@@ -33,6 +33,7 @@ export const REPORT_COPY = {
   fixFirst: { en: "Fix first", ko: "먼저 고칠 것" },
   nextGrade: { en: "Next grade", ko: "다음 등급까지" },
   spotSettings: { en: "Settings", ko: "설정" },
+  spotDefaultCopy: { en: "copy in the default location", ko: "기본 위치의 사본" },
   spotEnv: { en: "env", ko: "env" },
   spotHeaders: { en: "header", ko: "머리말" },
   spotField: { en: "field", ko: "칸" },

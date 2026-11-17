@@ -3236,6 +3236,7 @@ var REPORT_COPY = {
   howAq: { en: "AQ is the average of the four dimension scores (Setup, Efficiency, Fit, Intensity), rounded. A dimension that could not be measured is left out.", ko: "AQ\uB294 \uB124 \uAE30\uC900(\uC14B\uD305, \uD6A8\uC728, \uC0C1\uD669 \uC801\uD569, \uAC15\uB3C4) \uC810\uC218\uC758 \uD3C9\uADE0\uC744 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uAE30\uC900\uC740 \uBE7C\uACE0 \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
   howAxis: { en: "A dimension score is the weighted average of its rule scores on a scale of 100, rounded. A rule that could not be measured is left out.", ko: "\uAE30\uC900 \uC810\uC218\uB294 \uADF8 \uAE30\uC900\uC5D0 \uB4E0 \uADDC\uCE59 \uC810\uC218\uB97C \uBB34\uAC8C\uB85C \uD3C9\uADE0\uD574 100\uC810 \uB9CC\uC810\uC73C\uB85C \uBC14\uAFB8\uACE0 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uADDC\uCE59\uC740 \uBE8D\uB2C8\uB2E4." },
   howRule: { en: "A rule scores 0 at its zero mark and 1 at its full mark, in proportion in between. A rule measured per tool is scored for each tool, then averaged by the number of responses.", ko: "\uADDC\uCE59 \uC810\uC218\uB294 \uC7B0 \uAC12\uC774 0\uC810 \uAE30\uC900\uC774\uBA74 0, \uB9CC\uC810 \uAE30\uC900\uC774\uBA74 1\uC774\uACE0, \uADF8 \uC0AC\uC774\uB294 \uAC70\uB9AC\uC5D0 \uBE44\uB840\uD569\uB2C8\uB2E4. \uB3C4\uAD6C\uB9C8\uB2E4 \uC7AC\uB294 \uADDC\uCE59\uC740 \uB3C4\uAD6C\uB9C8\uB2E4 \uC810\uC218\uB97C \uB0B8 \uB4A4 \uC751\uB2F5 \uC218\uB85C \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
+  howRounded: { en: "Measured values on this page are rounded for display; rule scores use the unrounded values.", ko: "\uD654\uBA74\uC758 \uC7B0 \uAC12\uC740 \uBC18\uC62C\uB9BC\uD574 \uBCF4\uC774\uACE0, \uADDC\uCE59 \uC810\uC218\uB294 \uBC18\uC62C\uB9BC\uD558\uAE30 \uC804 \uAC12\uC73C\uB85C \uACC4\uC0B0\uD569\uB2C8\uB2E4." },
   howGrades: { en: "Grades are S 90 or higher, A 80 to 89, B 65 to 79, C 50 to 64, and D 49 or lower.", ko: "\uB4F1\uAE09\uC740 S 90 \uC774\uC0C1, A 80~89, B 65~79, C 50~64, D 49 \uC774\uD558\uC785\uB2C8\uB2E4." },
   howWithheld: { en: "No AQ is given when the last {days} days have fewer than {requests} requests from you or fewer than {active} days of use.", ko: "\uCD5C\uADFC {days}\uC77C \uB3D9\uC548 \uC0AC\uB78C \uC694\uCCAD\uC774 {requests}\uAC1C\uBCF4\uB2E4 \uC801\uAC70\uB098 \uC4F4 \uB0A0\uC774 {active}\uC77C\uBCF4\uB2E4 \uC801\uC73C\uBA74 AQ\uB97C \uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." },
   howTable: { en: "Weights and marks of the {n} rules", ko: "\uADDC\uCE59 {n}\uAC1C\uC758 \uBB34\uAC8C\uC640 \uAE30\uC900" },
@@ -3991,7 +3992,7 @@ function nextPath(view, lang) {
   return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
 }
 function howScore() {
-  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howRounded, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
   const mark = (ruleId, value) => both(textsOf2((l) => ruleValueText(ruleId, value, l)));
   const rows = AXES.map(
     (axis) => `<tr class="grp"><th colspan="4" scope="colgroup">${both(AXIS_NAMES[axis])}</th></tr>` + RULES.filter((spec) => spec.axis === axis).map((spec) => `<tr class="rule"><th scope="row">${both(textsOf2((l) => RULE_COPY[spec.id][l].name))}</th><td class="n">${spec.weight}</td><td>${mark(spec.id, spec.zeroAt)}</td><td>${mark(spec.id, spec.fullAt)}</td></tr>`).join("")
@@ -5240,7 +5241,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.3.0";
+var PROGRAM_VERSION = "0.3.1";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {

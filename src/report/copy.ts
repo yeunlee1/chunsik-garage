@@ -64,6 +64,7 @@ export const REPORT_COPY = {
   howAq: { en: "AQ is the average of the four dimension scores (Setup, Efficiency, Fit, Intensity), rounded. A dimension that could not be measured is left out.", ko: "AQ는 네 기준(셋팅, 효율, 상황 적합, 강도) 점수의 평균을 반올림한 값입니다. 재지 못한 기준은 빼고 평균합니다." },
   howAxis: { en: "A dimension score is the weighted average of its rule scores on a scale of 100, rounded. A rule that could not be measured is left out.", ko: "기준 점수는 그 기준에 든 규칙 점수를 무게로 평균해 100점 만점으로 바꾸고 반올림한 값입니다. 재지 못한 규칙은 뺍니다." },
   howRule: { en: "A rule scores 0 at its zero mark and 1 at its full mark, in proportion in between. A rule measured per tool is scored for each tool, then averaged by the number of responses.", ko: "규칙 점수는 잰 값이 0점 기준이면 0, 만점 기준이면 1이고, 그 사이는 거리에 비례합니다. 도구마다 재는 규칙은 도구마다 점수를 낸 뒤 응답 수로 평균합니다." },
+  howRounded: { en: "Measured values on this page are rounded for display; rule scores use the unrounded values.", ko: "화면의 잰 값은 반올림해 보이고, 규칙 점수는 반올림하기 전 값으로 계산합니다." },
   howGrades: { en: "Grades are S 90 or higher, A 80 to 89, B 65 to 79, C 50 to 64, and D 49 or lower.", ko: "등급은 S 90 이상, A 80~89, B 65~79, C 50~64, D 49 이하입니다." },
   howWithheld: { en: "No AQ is given when the last {days} days have fewer than {requests} requests from you or fewer than {active} days of use.", ko: "최근 {days}일 동안 사람 요청이 {requests}개보다 적거나 쓴 날이 {active}일보다 적으면 AQ를 내지 않습니다." },
   howTable: { en: "Weights and marks of the {n} rules", ko: "규칙 {n}개의 무게와 기준" },

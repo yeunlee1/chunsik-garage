@@ -410,6 +410,9 @@ describe("점수 매기는 법(0.3.0, 사용자 추가 요청)", () => {
     const html = reportHtml(viewOf(result()), art);
     const section = between(html, '<section class="how-score"', "</section>");
     expect(section).toContain("S 90 이상, A 80~89, B 65~79, C 50~64, D 49 이하");
+    // 화면의 값은 반올림해 보이지만 점수는 반올림 전 값으로 낸다(0.3.1, 짝 4차 참고: E7 0.149가 0.15로 보임)
+    expect(section).toContain("화면의 잰 값은 반올림해 보이고, 규칙 점수는 반올림하기 전 값으로 계산합니다.");
+    expect(section).toContain("Measured values on this page are rounded for display; rule scores use the unrounded values.");
     expect([gradeOf(90).grade, gradeOf(89).grade, gradeOf(80).grade, gradeOf(79).grade, gradeOf(65).grade, gradeOf(64).grade, gradeOf(50).grade, gradeOf(49).grade]).toEqual(["S", "A", "A", "B", "B", "C", "C", "D"]);
     expect(section).toContain(`최근 ${SCORE_WINDOW_DAYS}일 동안 사람 요청이 ${MIN_REQUESTS_FOR_AQ}개보다 적거나 쓴 날이 ${MIN_DAYS_FOR_AQ}일보다 적으면`);
     expect(count(section, '<tr class="rule">')).toBe(RULES.length);

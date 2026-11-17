@@ -167,7 +167,7 @@ function nextPath(view: ReportView, lang: Lang): string {
 
 /** 점수 매기는 법(0.3.0). AQ·기준 점수·규칙 점수를 어떻게 내는지, 등급의 경계, AQ를 내지 않는 조건과 규칙마다의 무게와 기준이다. 숫자는 규칙 표와 상수에서 가져온다 */
 function howScore(): string {
-  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howRounded, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
   const mark = (ruleId: (typeof RULES)[number]["id"], value: number): string => both(textsOf((l) => ruleValueText(ruleId, value, l)));
   const rows = AXES.map(
     (axis) =>

@@ -1,7 +1,12 @@
 // 결과 화면 HTML을 시험한다. 두 언어를 함께 그리는지, 바깥으로 나가는 요청을 CSP로 막는지, 스크립트가 찾는 요소가 있는지, 경로와 이름을 어떻게 그리는지, AQ가 없을 때 무엇을 숨기는지 본다(설계 13, 14, 19.1, 「3단계 계획 전 결정」의 1·2·5·6·10·12번)
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { RULE_COPY, ruleValueText } from "../../src/core/copy/findings.ts";
 import type { Lang } from "../../src/core/copy/lang.ts";
+import { SCORE_WINDOW_DAYS } from "../../src/adapters/common/dates.ts";
+import { RULES, ruleSpec } from "../../src/core/rules.ts";
+import { gradeOf } from "../../src/core/score.ts";
+import { MIN_DAYS_FOR_AQ, MIN_REQUESTS_FOR_AQ } from "../../src/core/scoreboard.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, type CheckupResult } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
@@ -329,5 +334,44 @@ describe("점검 이력 그래프(7단계)", () => {
   it("점이 하나뿐이거나 저장하지 않은 점검이면 그리지 않는다", () => {
     expect(count(reportHtml(viewOf(result(), { saved: true, round: 1, history: history.slice(0, 1) }), art), "<svg class=\"histsvg\"")).toBe(0);
     expect(count(reportHtml(viewOf(result(), { saved: false, round: null, history }), art), "<svg class=\"histsvg\"")).toBe(0);
+  });
+});
+
+describe("다음 등급으로 가는 셋팅 방법(0.3.0, 사용자 추가 요청)", () => {
+  it("다음 등급까지의 차례마다 할 일, 지금 값과 목표 값, 거기까지 고친 AQ, 처방을 두 언어로 그린다. 다음 등급이 없으면 그리지 않는다", () => {
+    const checked = result();
+    expect(checked.nextGrade).not.toBeNull();
+    const view = viewOf(checked);
+    const section = between(reportHtml(view, art), '<section class="next"', "</section>");
+    expect(section).toContain(`${REPORT_COPY.nextTitle.ko.replace("{grade}", checked.nextGrade!.grade)}`);
+    expect(count(section, '<li class="step">')).toBe(checked.nextGrade!.steps.length);
+    for (const step of checked.nextGrade!.steps) {
+      const finding = checked.findings.find((f) => f.ruleId === step.ruleId)!;
+      expect(section).toContain(esc(finding.text.ko.title));
+      expect(section).toContain(esc(`여기까지 고치면 AQ ${step.aq}`));
+      expect(section).toContain(esc(`지금 ${finding.text.ko.value}${finding.text.ko.unit} → 목표 ${ruleValueText(step.ruleId, ruleSpec(step.ruleId).fullAt, "ko")}`));
+      if (finding.text.ko.prescription !== null) expect(section).toContain(esc(finding.text.ko.prescription));
+    }
+    expect(reportHtml({ ...view, nextPlan: null }, art)).not.toContain('<section class="next"');
+  });
+});
+
+describe("점수 매기는 법(0.3.0, 사용자 추가 요청)", () => {
+  it("AQ·기준 점수·규칙 점수의 계산과 등급의 경계, AQ를 내지 않는 조건을 적고, 규칙 스물둘의 무게와 0점·만점 기준을 표로 보인다", () => {
+    const html = reportHtml(viewOf(result()), art);
+    const section = between(html, '<section class="how-score"', "</section>");
+    expect(section).toContain("S 90 이상, A 80~89, B 65~79, C 50~64, D 49 이하");
+    expect([gradeOf(90).grade, gradeOf(89).grade, gradeOf(80).grade, gradeOf(79).grade, gradeOf(65).grade, gradeOf(64).grade, gradeOf(50).grade, gradeOf(49).grade]).toEqual(["S", "A", "A", "B", "B", "C", "C", "D"]);
+    expect(section).toContain(`최근 ${SCORE_WINDOW_DAYS}일 동안 사람 요청이 ${MIN_REQUESTS_FOR_AQ}개보다 적거나 쓴 날이 ${MIN_DAYS_FOR_AQ}일보다 적으면`);
+    expect(count(section, '<tr class="rule">')).toBe(RULES.length);
+    for (const spec of RULES) {
+      const name = RULE_COPY[spec.id].ko.name;
+      const pair = (en: string, ko: string): string => `<span lang="en" data-l="en">${esc(en)}</span><span lang="ko" data-l="ko">${esc(ko)}</span>`;
+      const mark = (value: number): string => pair(ruleValueText(spec.id, value, "en"), ruleValueText(spec.id, value, "ko"));
+      expect(section).toContain(`<tr class="rule"><th scope="row">${pair(RULE_COPY[spec.id].en.name, name)}</th><td class="n">${spec.weight}</td><td>${mark(spec.zeroAt)}</td><td>${mark(spec.fullAt)}</td></tr>`);
+    }
+    // AQ를 내지 않은 화면에도 같은 설명이 있다
+    const withheld = reportHtml({ ...viewOf(result()), score: { aq: null, grade: null, tier: null, withheld: ["too_few_requests"] } }, art);
+    expect(withheld).toContain('<section class="how-score"');
   });
 });

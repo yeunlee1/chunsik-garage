@@ -79,6 +79,8 @@ export interface ReportView {
   worstOverlap: string | null;
   /** 다음 등급까지 할 일의 문장(0.2.0). 없으면 null이다 */
   nextGrade: Texts<string> | null;
+  /** 다음 등급까지 할 일의 차례(0.3.0, 다음 등급으로 가는 셋팅 방법). 없으면 null이다 */
+  nextPlan: { grade: string; need: number; reaches: boolean; steps: { ruleId: ResultFinding["ruleId"]; aq: number }[] } | null;
   /** 「일부만 읽었다」 띠를 띄울 도구마다 읽지 못한 비율(낼 수 없으면 null)과 그 비율이 아래 경계인지다(설계 9.8, 20.1) */
   partialReads: { tool: ToolId; share: number | null; lowerBound: boolean }[];
 }
@@ -137,6 +139,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
     nextGrade: result.nextGrade?.text ?? null,
+    nextPlan: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ruleId: step.ruleId, aq: step.aq })) },
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound })),
   };
 }

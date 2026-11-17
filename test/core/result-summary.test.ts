@@ -127,6 +127,9 @@ describe("요약", () => {
       lang: "ko" as const,
       findings: [finding("E4", { category: "repair", kind: "amount", value: 24400, score: 0, gain: 11 }), finding("F2", { axis: "fit", category: "repair", value: 0.05, score: 0, gain: 2 }), finding("E3", { category: "repair", kind: "rate", value: 2, score: 0.4, gain: 5 })],
     };
+    // 지금 값이 0점 기준과 같으면 조금만 고쳐도 오르므로 덧붙이지 않는다(합성 홈에서 「0% 위로 올려야」가 나왔다)
+    const atMark = { ...result, findings: [finding("S1", { axis: "setup", category: "repair", value: 0, score: 0, gain: 37 })] };
+    expect(checkupSummary(atMark, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["셋팅 최대 +37"]);
     expect(checkupSummary(result, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["효율 최대 +11 · 지금 24,400토큰(어림), 16,000토큰(어림) 아래로 줄여야 오르기 시작", "상황 적합 최대 +2 · 지금 5%, 10% 위로 올려야 오르기 시작", "효율 최대 +5"]);
     expect(checkupSummary({ ...result, lang: "en" }, null).text.fixFirst.map((fix) => fix.detail)).toEqual(["Efficiency up to +11 · now 24,400 tokens (est.), rises only below 16,000 tokens (est.)", "Fit up to +2 · now 5%, rises only above 10%", "Efficiency up to +5"]);
   });

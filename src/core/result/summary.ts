@@ -134,15 +134,23 @@ function summaryNotice(notice: Notice): SummaryNotice {
   }
 }
 
+/** 지금 값이 0점 기준보다 나쁘다(같으면 조금만 고쳐도 오르므로 거짓이다, 0.3.0) */
+export function beyondZeroMark(ruleId: RuleId, value: number): boolean {
+  const spec = ruleSpec(ruleId);
+  const now = settleScore(value);
+  const mark = settleScore(spec.zeroAt);
+  return spec.zeroAt > spec.fullAt ? now > mark : now < mark;
+}
+
 /**
- * 먼저 고칠 것의 덧붙이는 말. 결과 화면의 진단 띠도 같은 말을 쓴다. 규칙 점수가 0이면 조금 고쳐서는 오르지 않으므로
+ * 먼저 고칠 것의 덧붙이는 말. 결과 화면의 진단 띠도 같은 말을 쓴다. 규칙 점수가 0이고 지금 값이 0점 기준보다 나쁘면 조금 고쳐서는 오르지 않으므로
  * 지금 값과 점수가 오르기 시작하는 값(0점 기준)을 함께 적는다(0.3.0, 다른 PC 피드백 4번)
  */
 export function fixDetail(fix: FixDetailInput, lang: Lang): string {
   const copy = SUMMARY_COPY[lang];
   if (fix.gain !== null) {
     const spec = ruleSpec(fix.ruleId);
-    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0) {
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyondZeroMark(fix.ruleId, fix.value)) {
       const template = spec.zeroAt > spec.fullAt ? copy.gainBelow : copy.gainAbove;
       return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now: ruleValueText(fix.ruleId, fix.value, lang), start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
     }

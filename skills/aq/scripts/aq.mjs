@@ -3000,11 +3000,17 @@ function summaryNotice(notice) {
       return { kind: notice.kind, tool, detail: null, count: notice.count };
   }
 }
+function beyondZeroMark(ruleId, value) {
+  const spec = ruleSpec(ruleId);
+  const now = settleScore(value);
+  const mark = settleScore(spec.zeroAt);
+  return spec.zeroAt > spec.fullAt ? now > mark : now < mark;
+}
 function fixDetail(fix, lang) {
   const copy2 = SUMMARY_COPY[lang];
   if (fix.gain !== null) {
     const spec = ruleSpec(fix.ruleId);
-    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0) {
+    if (fix.value !== null && fix.score !== null && settleScore(fix.score) === 0 && beyondZeroMark(fix.ruleId, fix.value)) {
       const template = spec.zeroAt > spec.fullAt ? copy2.gainBelow : copy2.gainAbove;
       return fill(template, { axis: AXIS_NAMES[fix.axis][lang], gain: fix.gain, now: ruleValueText(fix.ruleId, fix.value, lang), start: ruleValueText(fix.ruleId, spec.zeroAt, lang) });
     }
@@ -3185,6 +3191,24 @@ var REPORT_COPY = {
   places: { en: "Where", ko: "\uACE0\uCE60 \uACF3" },
   missingProjects: { en: "Projects without instructions", ko: "\uC9C0\uCE68\uC774 \uC5C6\uB294 \uD504\uB85C\uC81D\uD2B8" },
   failedServers: { en: "Servers that failed to connect", ko: "\uC5F0\uACB0\uC5D0 \uC2E4\uD328\uD55C \uC11C\uBC84" },
+  nextTitle: { en: "How to reach grade {grade}", ko: "{grade}\uB4F1\uAE09\uC73C\uB85C \uAC00\uB294 \uC14B\uD305 \uBC29\uBC95" },
+  nextLead: { en: "{need} {need:point|points} to grade {grade}. Fix these from the top; each line shows the AQ once everything up to it is fixed.", ko: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uC704\uC5D0\uC11C\uBD80\uD130 \uCC28\uB840\uB85C \uACE0\uCE58\uBA74 \uC904\uB9C8\uB2E4 \uC801\uD78C AQ\uAC00 \uB429\uB2C8\uB2E4." },
+  nextShort: { en: "These alone reach {last}.", ko: "\uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4." },
+  nextNow: { en: "Now {now} \u2192 aim for {target}", ko: "\uC9C0\uAE08 {now} \u2192 \uBAA9\uD45C {target}" },
+  nextBelow: { en: "The score starts to rise below {start}.", ko: "{start}\uBCF4\uB2E4 \uC904\uC5EC\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
+  nextAbove: { en: "The score starts to rise above {start}.", ko: "{start}\uBCF4\uB2E4 \uB298\uB824\uC57C \uC810\uC218\uAC00 \uC624\uB974\uAE30 \uC2DC\uC791\uD569\uB2C8\uB2E4." },
+  nextAfter: { en: "AQ {aq} once fixed up to here", ko: "\uC5EC\uAE30\uAE4C\uC9C0 \uACE0\uCE58\uBA74 AQ {aq}" },
+  howTitle: { en: "How the score works", ko: "\uC810\uC218 \uB9E4\uAE30\uB294 \uBC95" },
+  howAq: { en: "AQ is the average of the four dimension scores (Setup, Efficiency, Fit, Intensity), rounded. A dimension that could not be measured is left out.", ko: "AQ\uB294 \uB124 \uAE30\uC900(\uC14B\uD305, \uD6A8\uC728, \uC0C1\uD669 \uC801\uD569, \uAC15\uB3C4) \uC810\uC218\uC758 \uD3C9\uADE0\uC744 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uAE30\uC900\uC740 \uBE7C\uACE0 \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
+  howAxis: { en: "A dimension score is the weighted average of its rule scores on a scale of 100, rounded. A rule that could not be measured is left out.", ko: "\uAE30\uC900 \uC810\uC218\uB294 \uADF8 \uAE30\uC900\uC5D0 \uB4E0 \uADDC\uCE59 \uC810\uC218\uB97C \uBB34\uAC8C\uB85C \uD3C9\uADE0\uD574 100\uC810 \uB9CC\uC810\uC73C\uB85C \uBC14\uAFB8\uACE0 \uBC18\uC62C\uB9BC\uD55C \uAC12\uC785\uB2C8\uB2E4. \uC7AC\uC9C0 \uBABB\uD55C \uADDC\uCE59\uC740 \uBE8D\uB2C8\uB2E4." },
+  howRule: { en: "A rule scores 0 at its zero mark and 1 at its full mark, in proportion in between. A rule measured per tool is scored for each tool, then averaged by the number of responses.", ko: "\uADDC\uCE59 \uC810\uC218\uB294 \uC7B0 \uAC12\uC774 0\uC810 \uAE30\uC900\uC774\uBA74 0, \uB9CC\uC810 \uAE30\uC900\uC774\uBA74 1\uC774\uACE0, \uADF8 \uC0AC\uC774\uB294 \uAC70\uB9AC\uC5D0 \uBE44\uB840\uD569\uB2C8\uB2E4. \uB3C4\uAD6C\uB9C8\uB2E4 \uC7AC\uB294 \uADDC\uCE59\uC740 \uB3C4\uAD6C\uB9C8\uB2E4 \uC810\uC218\uB97C \uB0B8 \uB4A4 \uC751\uB2F5 \uC218\uB85C \uD3C9\uADE0\uD569\uB2C8\uB2E4." },
+  howGrades: { en: "Grades are S 90 or higher, A 80 to 89, B 65 to 79, C 50 to 64, and D 49 or lower.", ko: "\uB4F1\uAE09\uC740 S 90 \uC774\uC0C1, A 80~89, B 65~79, C 50~64, D 49 \uC774\uD558\uC785\uB2C8\uB2E4." },
+  howWithheld: { en: "No AQ is given when the last {days} days have fewer than {requests} requests from you or fewer than {active} days of use.", ko: "\uCD5C\uADFC {days}\uC77C \uB3D9\uC548 \uC0AC\uB78C \uC694\uCCAD\uC774 {requests}\uAC1C\uBCF4\uB2E4 \uC801\uAC70\uB098 \uC4F4 \uB0A0\uC774 {active}\uC77C\uBCF4\uB2E4 \uC801\uC73C\uBA74 AQ\uB97C \uB0B4\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4." },
+  howTable: { en: "Weights and marks of the {n} rules", ko: "\uADDC\uCE59 {n}\uAC1C\uC758 \uBB34\uAC8C\uC640 \uAE30\uC900" },
+  thRule: { en: "Rule", ko: "\uADDC\uCE59" },
+  thWeight: { en: "Weight", ko: "\uBB34\uAC8C" },
+  thZero: { en: "Zero mark", ko: "0\uC810 \uAE30\uC900" },
+  thFull: { en: "Full mark", ko: "\uB9CC\uC810 \uAE30\uC900" },
   failedSessions: { en: "{n} {n:session|sessions}", ko: "\uC138\uC158 {n}\uACF3" },
   overlapProject: { en: "Project with the most overlap", ko: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8" },
   serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 {n}\uAC1C" },
@@ -3785,7 +3809,7 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .partial svg{margin-top:2px}
 .partial p{margin:0;font-size:14px;color:var(--ink)}
 .partial p+p{margin-top:4px}
-.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
+.next{border-top:1px dashed var(--mute);padding:22px 0 14px}.next .lead{margin:6px 0 0;font-size:14px;color:var(--ink2)}.steps{margin:10px 0 0;padding:0;list-style:none;counter-reset:step}.step{counter-increment:step;position:relative;padding:12px 0 12px 36px;border-top:1px solid var(--hair)}.step:first-child{border-top:0}.step::before{content:counter(step);position:absolute;left:0;top:13px;width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font:700 12px/24px var(--mono);text-align:center}.step .sh{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;align-items:baseline}.step .sh b{font-size:16px;line-height:1.35;letter-spacing:-.01em;flex:1 1 12em;min-width:0}.step .aq{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--up);white-space:nowrap}.step p{margin:4px 0 0;font-size:14px;color:var(--ink2)}.step p.fix{color:var(--ink)}.step .now{font-variant-numeric:tabular-nums}.how-score{border-top:1px dashed var(--mute);padding:22px 0 18px}.rulesum{margin:10px 0 0;padding:0 0 0 18px;display:grid;gap:4px;font-size:14px;color:var(--ink);line-height:1.5}.ruletable{margin-top:12px}.ruletable>summary{font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}.ruletable .tvwrap{max-height:none;margin-top:8px}table.rules tr.grp th{background:var(--wash);font-weight:800;color:var(--ink)}table.tv th.n{text-align:right;white-space:nowrap}table.rules td{white-space:nowrap}.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
 .notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
@@ -3903,6 +3927,44 @@ ${connectors.map((server) => `  { "serverName": ${JSON.stringify(server.name)} }
 ]`)}</pre><span class="when">${both(copy("blockNote"))}</span></li>`;
   return `<details class="how"><summary>${both(copy("serversOut", { n: view.servers.length }))}</summary>${notes}<ul class="names">${items}${deny}</ul></details>`;
 }
+function ruleChips(finding, view, lang, withTargets) {
+  const targets = withTargets ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
+  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  return `${targets}${places}${failed}${missing}${overlap}`;
+}
+function nextPath(view, lang) {
+  const plan = view.nextPlan;
+  if (view.score.aq === null || plan === null) return "";
+  const lead = textsOf2((l) => fill(REPORT_COPY.nextLead[l], { need: plan.need, grade: plan.grade }) + (plan.reaches ? "" : ` ${fill(REPORT_COPY.nextShort[l], { last: plan.steps.at(-1).aq })}`));
+  const steps = plan.steps.map((step) => {
+    const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
+    if (finding === void 0) return "";
+    const spec = ruleSpec(step.ruleId);
+    const now = textsOf2((l) => {
+      const text = finding.text[l];
+      const current = text.value === null || text.unit === null ? null : joinValue(text.value, text.unit, l);
+      const line = current === null ? "" : fill(REPORT_COPY.nextNow[l], { now: current, target: ruleValueText(step.ruleId, spec.fullAt, l) });
+      const atZero = finding.score !== null && finding.value !== null && settleScore(finding.score) === 0 && beyondZeroMark(step.ruleId, finding.value);
+      const start = atZero ? ` ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}` : "";
+      return `${line}${start}`.trim();
+    });
+    const fix = finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
+    return `<li class="step"><div class="sh"><b>${both(textsOf2((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${now.en === "" ? "" : `<p class="now">${both(now)}</p>`}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+  }).join("");
+  return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
+}
+function howScore() {
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const mark = (ruleId, value) => both(textsOf2((l) => ruleValueText(ruleId, value, l)));
+  const rows = AXES.map(
+    (axis) => `<tr class="grp"><th colspan="4" scope="colgroup">${both(AXIS_NAMES[axis])}</th></tr>` + RULES.filter((spec) => spec.axis === axis).map((spec) => `<tr class="rule"><th scope="row">${both(textsOf2((l) => RULE_COPY[spec.id][l].name))}</th><td class="n">${spec.weight}</td><td>${mark(spec.id, spec.zeroAt)}</td><td>${mark(spec.id, spec.fullAt)}</td></tr>`).join("")
+  ).join("");
+  const table = `<table class="tv rules"><thead><tr><th scope="col">${both(REPORT_COPY.thRule)}</th><th scope="col" class="n">${both(REPORT_COPY.thWeight)}</th><th scope="col">${both(REPORT_COPY.thZero)}</th><th scope="col">${both(REPORT_COPY.thFull)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<section class="how-score" aria-labelledby="h-how"><h2 id="h-how"><span class="no">04</span>${both(REPORT_COPY.howTitle)}</h2><ul class="rulesum">${lines.map((line) => `<li>${both(line)}</li>`).join("")}</ul><details class="ruletable"><summary>${both(copy("howTable", { n: RULES.length }))}</summary><div class="tvwrap">${table}</div></details></section>`;
+}
 function item(finding, view, lang) {
   const status = statusOf(finding);
   const repair = finding.category === "repair";
@@ -3910,15 +3972,11 @@ function item(finding, view, lang) {
   const tag = gain === null ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>` : `<span class="tag up">${both(textsOf2((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
   const description2 = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf2((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">\u2192 ${both(textsOf2((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-  const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
-  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
-  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  const named2 = ruleChips(finding, view, lang, repair);
   const phrase = textsOf2((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how = finding.text.en.method.length + finding.text.ko.method.length === 0 ? "" : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${targets}${places}${failed}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf2((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description2}${prescription}${named2}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 function header(view, art, lang) {
   const face = art.face === null ? '<span class="noart" aria-hidden="true"></span>' : `<img id="${SCRIPT_IDS.face}" src="${esc(art.face)}" alt="" width="32" height="32">`;
@@ -4104,7 +4162,7 @@ function reportHtml(view, art) {
 </head>
 <body>
 <div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
-<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${nextPath(view, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${howScore()}${notices(view)}${footer(client.card !== null)}</article></main>
 ${cardDialog(client.card !== null)}
 <div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
 <script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>
@@ -4161,6 +4219,7 @@ function reportView(result, run2) {
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
     nextGrade: result.nextGrade?.text ?? null,
+    nextPlan: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ruleId: step.ruleId, aq: step.aq })) },
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound }))
   };
 }
@@ -7800,30 +7859,37 @@ function countMentions(text, targets) {
   return out;
 }
 function importsOf(text) {
-  const out = [];
+  const prose = [];
   let fence = null;
   for (const raw of text.split("\n")) {
-    const marker = /^(`{3,}|~{3,})/.exec(raw.trimStart())?.[1] ?? null;
+    const body = raw.replace(/^(?:[ \t]*(?:[-*+]|\d{1,9}[.)]|>)(?=[ \t]|$))*[ \t]*/, "");
+    const marker = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
     if (fence !== null) {
-      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length && body.slice(marker.length).trim() === "") fence = null;
+      prose.push("");
       continue;
     }
     if (marker !== null) {
       fence = marker;
+      prose.push("");
       continue;
     }
-    const line = raw.replace(/(`+)[\s\S]*?\1/g, " ");
-    for (const match of line.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
-      const token = match[1].replace(/\\ /g, " ");
-      if (token.startsWith('"') || token.startsWith("'")) continue;
-      out.push(token);
-    }
+    prose.push(raw);
+  }
+  const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
+  const out = [];
+  for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+    const token = match[1].replace(/\\ /g, " ");
+    if (token.startsWith('"') || token.startsWith("'")) continue;
+    out.push(token);
   }
   return out;
 }
-function resolveImport(token, from, homedir2) {
-  if (token.startsWith("~/") || token.startsWith("~\\")) return join16(homedir2, token.slice(2));
-  return isAbsolute(token) ? token : resolve5(dirname3(from), token);
+var NETWORK_PATH = /^(\\\\|\/\/)/;
+function importTarget(token, from, homedir2) {
+  if (NETWORK_PATH.test(token)) return null;
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join16(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve5(dirname3(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
 }
 var insideOf = (path, folder) => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
 async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set(), imports = null) {
@@ -7833,9 +7899,14 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
   const seen = new Set(queue.map((item2) => normalizePath(item2.path)));
   const readReal = /* @__PURE__ */ new Set();
+  const rootReal = imports?.within ? ((await entryInfo(imports.within)).realPath ?? normalizePath(imports.within)).replace(/\/$/, "") : null;
   for (let index = 0; index < queue.length; index++) {
     const { path, hops } = queue[index];
-    if (hops > 0 && !(await entryInfo(path)).isFile) continue;
+    if (hops > 0) {
+      const target = await entryInfo(path);
+      if (!target.isFile) continue;
+      if (rootReal !== null && (target.realPath === null || !target.realPath.startsWith(`${rootReal}/`))) continue;
+    }
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -7847,7 +7918,8 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
     if (info.realPath !== null) readReal.add(info.realPath);
     if (imports !== null && hops < MAX_IMPORT_HOPS) {
       for (const token of importsOf(read.text)) {
-        const target = resolveImport(token, path, imports.homedir);
+        const target = importTarget(token, path, imports.homedir);
+        if (target === null) continue;
         if (imports.within !== null && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);
         if (seen.has(key)) continue;

@@ -3,10 +3,14 @@ import { createHash } from "node:crypto";
 import type { LocalDate } from "../adapters/common/dates.ts";
 import type { ToolId } from "../adapters/types.ts";
 import { AXIS_NAMES, SUMMARY_COPY, TOOL_NAMES, UNJUDGED_COPY } from "../core/copy/common.ts";
-import { joinValue } from "../core/copy/findings.ts";
+import { joinValue, RULE_COPY, ruleValueText } from "../core/copy/findings.ts";
 import { fill, groupDigits } from "../core/copy/format.ts";
 import { LANGS, type Lang, type Texts } from "../core/copy/lang.ts";
-import { fixDetail } from "../core/result/summary.ts";
+import { beyondZeroMark, fixDetail } from "../core/result/summary.ts";
+import { SCORE_WINDOW_DAYS } from "../adapters/common/dates.ts";
+import { AXES, MIN_DAYS_FOR_AQ, MIN_REQUESTS_FOR_AQ } from "../core/scoreboard.ts";
+import { RULES, ruleSpec } from "../core/rules.ts";
+import { settleScore } from "../core/score.ts";
 import type { CalendarCell } from "../core/result/usage.ts";
 import { sceneFor, type ReportArt } from "./assets.ts";
 import { PROBLEM_KIND_COPY, REPORT_COPY, SCENE_ALT, STATUS_COPY, WEEKDAYS, type CopyKey } from "./copy.ts";
@@ -116,6 +120,59 @@ function serversBlock(finding: ViewFinding, view: ReportView): string {
   return `<details class="how"><summary>${both(copy("serversOut", { n: view.servers.length }))}</summary>${notes}<ul class="names">${items}${deny}</ul></details>`;
 }
 
+/** 규칙이 가리키는 이름의 칩. 정리할 것(withTargets일 때), S3의 고칠 곳, S5의 연결에 실패한 서버, F3·F4의 프로젝트다. 항목과 다음 등급으로 가는 셋팅 방법이 같이 쓴다 */
+function ruleChips(finding: ViewFinding, view: ReportView, lang: Lang, withTargets: boolean): string {
+  const targets = withTargets ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
+  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  return `${targets}${places}${failed}${missing}${overlap}`;
+}
+
+/**
+ * 다음 등급으로 가는 셋팅 방법(0.3.0). 다음 등급까지의 차례마다 할 일, 지금 값과 목표(만점 기준), 거기까지 고친 AQ, 처방, 가리키는 이름을 보인다.
+ * 규칙 점수가 0이면 점수가 오르기 시작하는 값(0점 기준)도 적는다. AQ가 없거나 다음 등급이 없으면(S등급) 그리지 않는다
+ */
+function nextPath(view: ReportView, lang: Lang): string {
+  const plan = view.nextPlan;
+  if (view.score.aq === null || plan === null) return "";
+  const lead = textsOf((l) => fill(REPORT_COPY.nextLead[l], { need: plan.need, grade: plan.grade }) + (plan.reaches ? "" : ` ${fill(REPORT_COPY.nextShort[l], { last: plan.steps.at(-1)!.aq })}`));
+  const steps = plan.steps
+    .map((step) => {
+      const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
+      if (finding === undefined) return "";
+      const spec = ruleSpec(step.ruleId);
+      const now = textsOf((l) => {
+        const text = finding.text[l];
+        const current = text.value === null || text.unit === null ? null : joinValue(text.value, text.unit, l);
+        const line = current === null ? "" : fill(REPORT_COPY.nextNow[l], { now: current, target: ruleValueText(step.ruleId, spec.fullAt, l) });
+        const atZero = finding.score !== null && finding.value !== null && settleScore(finding.score) === 0 && beyondZeroMark(step.ruleId, finding.value);
+        const start = atZero ? ` ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}` : "";
+        return `${line}${start}`.trim();
+      });
+      const fix = finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
+      return `<li class="step"><div class="sh"><b>${both(textsOf((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${now.en === "" ? "" : `<p class="now">${both(now)}</p>`}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+    })
+    .join("");
+  return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
+}
+
+/** 점수 매기는 법(0.3.0). AQ·기준 점수·규칙 점수를 어떻게 내는지, 등급의 경계, AQ를 내지 않는 조건과 규칙마다의 무게와 기준이다. 숫자는 규칙 표와 상수에서 가져온다 */
+function howScore(): string {
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const mark = (ruleId: (typeof RULES)[number]["id"], value: number): string => both(textsOf((l) => ruleValueText(ruleId, value, l)));
+  const rows = AXES.map(
+    (axis) =>
+      `<tr class="grp"><th colspan="4" scope="colgroup">${both(AXIS_NAMES[axis])}</th></tr>` +
+      RULES.filter((spec) => spec.axis === axis)
+        .map((spec) => `<tr class="rule"><th scope="row">${both(textsOf((l) => RULE_COPY[spec.id][l].name))}</th><td class="n">${spec.weight}</td><td>${mark(spec.id, spec.zeroAt)}</td><td>${mark(spec.id, spec.fullAt)}</td></tr>`)
+        .join(""),
+  ).join("");
+  const table = `<table class="tv rules"><thead><tr><th scope="col">${both(REPORT_COPY.thRule)}</th><th scope="col" class="n">${both(REPORT_COPY.thWeight)}</th><th scope="col">${both(REPORT_COPY.thZero)}</th><th scope="col">${both(REPORT_COPY.thFull)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<section class="how-score" aria-labelledby="h-how"><h2 id="h-how"><span class="no">04</span>${both(REPORT_COPY.howTitle)}</h2><ul class="rulesum">${lines.map((line) => `<li>${both(line)}</li>`).join("")}</ul><details class="ruletable"><summary>${both(copy("howTable", { n: RULES.length }))}</summary><div class="tvwrap">${table}</div></details></section>`;
+}
+
 /** 항목 하나. 큰 숫자와 상태, 제목, 설명, 처방, 정리할 것, 위치와 이름, 단추, 어떻게 쟀나다(설계 13.1) */
 function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
   const status = statusOf(finding);
@@ -127,18 +184,14 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
       : `<span class="tag up">${both(textsOf((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
   const description = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-  const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
-  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
-  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  const named = ruleChips(finding, view, lang, repair);
   const phrase = textsOf((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how =
     finding.text.en.method.length + finding.text.ko.method.length === 0
       ? ""
       : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${targets}${places}${failed}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${named}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 
 function header(view: ReportView, art: ReportArt, lang: Lang): string {
@@ -376,7 +429,7 @@ export function reportHtml(view: ReportView, art: ReportArt): string {
 </head>
 <body>
 <div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
-<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${nextPath(view, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${howScore()}${notices(view)}${footer(client.card !== null)}</article></main>
 ${cardDialog(client.card !== null)}
 <div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
 <script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>

@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import type { Transform } from "node:stream";
 import * as zlib from "node:zlib";
-import { IN_PROGRESS_WINDOW_MS, lineSplitter, MAX_LINE_BYTES, type LineSink } from "../common/lines.ts";
+import { IN_PROGRESS_WINDOW_MS, lineSplitter, MAX_LINE_BYTES, type LineMarker, type LineSink } from "../common/lines.ts";
 
 const ZSTD_MAGIC = 0xfd2fb528;
 const SKIPPABLE_MASK = 0xfffffff0;
@@ -164,7 +164,7 @@ async function decodeRange(path: string, start: number, end: number, push: (chun
 }
 
 /** 연 순간의 크기까지만, 프레임마다 따로 흘려 풀어 한 줄씩 낸다. 끝까지 있는 프레임을 차례로 풀고, 잘렸거나 깨진 프레임은 나오는 만큼 푼다. 풀다가 오류가 나면(풀 범위를 다 받지 못한 것도 든다) 그 앞까지의 줄만 내고 오류를 돌려준다 */
-export async function readZstdLines(path: string, nowMs: number, sink: LineSink, options: { maxLineBytes?: number; afterOpen?: () => Promise<void> } = {}): Promise<ZstdReadOutcome> {
+export async function readZstdLines(path: string, nowMs: number, sink: LineSink, options: { maxLineBytes?: number; afterOpen?: () => Promise<void>; markers?: readonly LineMarker[] } = {}): Promise<ZstdReadOutcome> {
   const opened = await stat(path);
   const sizeAtOpen = opened.size;
   const mtimeMsAtOpen = opened.mtimeMs;
@@ -173,7 +173,7 @@ export async function readZstdLines(path: string, nowMs: number, sink: LineSink,
   // 프레임 훑기도 연 순간의 크기까지만 한다(연 뒤에 덧붙거나 완성된 프레임이 그 앞의 판정을 바꾸지 않게)
   const seen = { endedEarly: false };
   const frames = await scanZstdFrames(path, sizeAtOpen, seen);
-  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES);
+  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES, options.markers ?? []);
   let bytesRead = 0;
   let decodedBytes = 0;
   let decodeError: string | null = sizeAtOpen === 0 ? "EMPTY" : null;

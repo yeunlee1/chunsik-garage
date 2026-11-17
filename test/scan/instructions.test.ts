@@ -15,6 +15,7 @@ import {
   readGlobalInstructions,
   readInstructionSet,
   readProjectInstructions,
+  reachesNetwork,
   realPaths,
 } from "../../src/scan/instructions.ts";
 import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
@@ -144,6 +145,29 @@ describe("가져오기(@경로, 0.3.0)", () => {
     expect(importTarget("//review.invalid/share/rules.md", from, root)).toBeNull();
     expect(importTarget("rules.md", from, root)).toBe(join(root, "rules.md"));
     expect(importTarget("~/x.md", from, join(root, "home"))).toBe(join(root, "home", "x.md"));
+  });
+
+  it("경로의 어느 칸이 네트워크를 가리키는 연결이면, 그 연결을 따라가는 조회 없이 알아본다. 그 뒤의 칸은 조회하지 않는다(짝 검토 2차 필수 1)", async () => {
+    const links = new Map<string, string>([
+      [join(root, "proj", "linked.md"), "\\\\review.invalid\\share\\rules.md"],
+      [join(root, "proj", "net"), "//review.invalid/share"],
+      [join(root, "proj", "local"), join(root, "elsewhere")],
+    ]);
+    const looked: string[] = [];
+    const ops = {
+      lstat: async (path: string) => {
+        looked.push(path);
+        return { isSymbolicLink: () => links.has(path) };
+      },
+      readlink: async (path: string) => links.get(path)!,
+    };
+    expect(await reachesNetwork(join(root, "proj", "linked.md"), ops)).toBe(true);
+    looked.length = 0;
+    expect(await reachesNetwork(join(root, "proj", "net", "deep", "rules.md"), ops)).toBe(true);
+    expect(looked).not.toContain(join(root, "proj", "net", "deep"));
+    expect(await reachesNetwork(join(root, "proj", "local", "rules.md"), ops)).toBe(false);
+    expect(await reachesNetwork(join(root, "proj", "plain.md"), ops)).toBe(false);
+    expect(await reachesNetwork("\\\\server\\share\\x.md", ops)).toBe(true);
   });
 
   it("프로젝트 안의 연결 폴더를 거쳐 프로젝트 밖을 가리키는 가져오기는 따르지 않는다. 프로젝트 뿌리 자체가 연결이면 안쪽 가져오기는 따른다(짝 검토 1차 필수 2)", async () => {

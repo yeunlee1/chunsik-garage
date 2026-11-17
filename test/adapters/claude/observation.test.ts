@@ -1,6 +1,7 @@
 // 스킬 사용과 MCP 호출의 관측이 빠짐없는지 가르는 것을 시험한다(설계 9.8, 21.1 반례)
 import { describe, expect, it } from "vitest";
-import { claudeObservation, mostlyBroken } from "../../../src/adapters/claude/observation.ts";
+import { CLAUDE_USAGE_MARKERS, claudeObservation, mostlyBroken } from "../../../src/adapters/claude/observation.ts";
+import { ClaudeSessionParser } from "../../../src/adapters/claude/parser.ts";
 import type { SessionSummary } from "../../../src/adapters/types.ts";
 import { parseLines } from "../../helpers/claude-lines.ts";
 
@@ -20,6 +21,30 @@ describe("claudeObservation", () => {
     const s = withMissing({}, 1);
     expect(claudeObservation([s], 0, "skill").complete).toBe(false);
     expect(claudeObservation([s], 0, "mcp").reasons).toEqual(["too-long-lines"]);
+  });
+  it("너무 긴 줄의 표지를 셌으면 그 지표의 표지가 든 긴 줄만 막는다. 세지 않은 옛 요약은 긴 줄이 하나라도 있으면 막는다(0.3.0, 다른 PC 피드백 7번)", () => {
+    const base = withMissing({}, 3);
+    const counted = { ...base, missing: { ...base.missing, tooLongSkillLines: 0, tooLongMcpLines: 1 } };
+    expect(claudeObservation([counted], 0, "skill")).toEqual({ complete: true, reasons: [] });
+    expect(claudeObservation([counted], 0, "mcp")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    expect(claudeObservation([base], 0, "skill").complete).toBe(false);
+  });
+  it("파서는 너무 긴 줄에서 찾은 표지를 지표마다 센다", () => {
+    const parser = new ClaudeSessionParser({ sessionId: "s1", kind: "main", parentSessionId: null, timeZone: "UTC" });
+    parser.tooLong(new Set(["skill"]));
+    parser.tooLong(new Set(["mcp", "skill"]));
+    parser.tooLong(new Set());
+    parser.tooLong();
+    const missing = parser.finish(null, false).missing;
+    expect([missing.tooLongLines, missing.tooLongSkillLines, missing.tooLongMcpLines]).toEqual([4, 2, 1]);
+    expect(CLAUDE_USAGE_MARKERS.map((marker) => [marker.name, marker.bytes.toString()])).toEqual([
+      ["skill", '"name":"Skill"'],
+      ["skill", "<command-name>"],
+      ["skill", '"attributionSkill":"'],
+      ["skill", '"type":"invoked_skills"'],
+      ["mcp", '"name":"mcp__'],
+      ["mcp", '"attributionMcpServer":"'],
+    ]);
   });
   it("깨진 줄이 system으로 온전히 읽히면 상관없는 줄이다", () => {
     const s = withMissing({ system: 1 });

@@ -1,7 +1,7 @@
 // 지침 파일을 읽어 크기, 글자 종류별 글자 수, 줄마다의 지문만 남기고 글은 버린다. 전역 지침에 프로젝트의 경로나 이름이 몇 번 나오는지도 센다(설계 10 「지침 파일의 범위」, 11.3 S1·F3·F4, 17)
 import { createHash } from "node:crypto";
-import { lstat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import { lstat, readlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { entryInfo, listDir, readText } from "./fs.ts";
 
@@ -176,6 +176,51 @@ export function importTarget(token: string, from: string, homedir: string): stri
   return NETWORK_PATH.test(target) ? null : target;
 }
 
+/** 경로를 살피는 데 쓰는 파일 계층. 둘 다 연결을 따라가지 않는다(시험이 가짜로 바꾼다) */
+export interface LinkOps {
+  lstat(path: string): Promise<{ isSymbolicLink(): boolean }>;
+  readlink(path: string): Promise<string>;
+}
+
+const MAX_LINK_HOPS = 40;
+
+/**
+ * 경로를 뿌리부터 한 칸씩, 연결을 따라가지 않고(lstat, readlink) 살펴서 어느 칸이 네트워크 경로(\\서버, //서버)를 가리키는 연결이면 참이다.
+ * 연결을 따라가는 조회(stat, realpath)는 그것만으로 네트워크에 닿을 수 있어 그 전에 거른다. 그 뒤의 칸은 조회하지 않는다(짝 검토 2차 필수 1).
+ * 없는 칸에 이르면 거짓이다(읽을 것도 없다). 연결이 너무 깊으면 참으로 보고 따르지 않는다. 연결된 네트워크 드라이브(Z: 같은 것)는 알아볼 수 없다
+ */
+export async function reachesNetwork(path: string, ops: LinkOps = { lstat, readlink }): Promise<boolean> {
+  let pending = resolve(path);
+  for (let hops = 0; hops <= MAX_LINK_HOPS; hops++) {
+    if (NETWORK_PATH.test(pending)) return true;
+    const { root } = parse(pending);
+    const parts = pending.slice(root.length).split(/[\\/]+/).filter((part) => part !== "");
+    let current = root;
+    let followed = false;
+    for (let index = 0; index < parts.length && !followed; index++) {
+      current = join(current, parts[index]!);
+      let info: { isSymbolicLink(): boolean };
+      try {
+        info = await ops.lstat(current);
+      } catch {
+        return false;
+      }
+      if (!info.isSymbolicLink()) continue;
+      let target: string;
+      try {
+        target = await ops.readlink(current);
+      } catch {
+        return false;
+      }
+      if (NETWORK_PATH.test(target)) return true;
+      pending = join(resolve(dirname(current), target), ...parts.slice(index + 1));
+      followed = true;
+    }
+    if (!followed) return false;
+  }
+  return true;
+}
+
 const insideOf = (path: string, folder: string): boolean => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
 
 /**
@@ -200,6 +245,8 @@ export async function readInstructionSet(
   for (let index = 0; index < queue.length; index++) {
     const { path, hops } = queue[index]!;
     if (hops > 0) {
+      // 네트워크를 가리키는 연결을 거치는 대상은 연결을 따라가는 조회 전에 거른다(짝 검토 2차 필수 1)
+      if (await reachesNetwork(path)) continue;
       // 가져오기의 대상이 파일이 아니면(없는 경로, 폴더, 경로가 아닌 낱말) 건너뛰고, 프로젝트 지침은 연결 폴더를 거쳐 밖으로 나가는 대상을 읽기 전에 거른다
       const target = await entryInfo(path);
       if (!target.isFile) continue;

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { makeWindows, type LocalDate } from "../adapters/common/dates.ts";
 import { readLines } from "../adapters/common/lines.ts";
 import { claudeHome, listClaudeFiles, type FileList } from "../adapters/claude/locate.ts";
-import { mostlyBroken } from "../adapters/claude/observation.ts";
+import { mostlyBroken, CLAUDE_USAGE_MARKERS } from "../adapters/claude/observation.ts";
 import { CLAUDE_PARSER_VERSION, ClaudeSessionParser } from "../adapters/claude/parser.ts";
 import type { SessionSummary } from "../adapters/types.ts";
 import { cacheKeyFor, keyStillMatches, loadCached, storeCached, type CacheKey } from "../state/cache.ts";
@@ -105,10 +105,16 @@ export async function collectFromList(home: string, list: FileList, options: Col
         parentSessionId: file.parentSessionId,
         timeZone: options.clock.timeZone,
       });
-      const outcome = await readLines(file.path, options.clock.nowMs, {
-        line: (text) => parser.line(text),
-        tooLong: () => parser.tooLong(),
-      });
+      // 너무 긴 줄은 풀지 않지만 사용 흔적의 표지가 있는지만 훑는다(0.3.0, 다른 PC 피드백 7번)
+      const outcome = await readLines(
+        file.path,
+        options.clock.nowMs,
+        {
+          line: (text) => parser.line(text),
+          tooLong: (found) => parser.tooLong(found),
+        },
+        { markers: CLAUDE_USAGE_MARKERS },
+      );
       const summary = parser.finish(outcome.tail, outcome.inProgress);
       summaries.push(summary);
       bytes += outcome.bytesRead;

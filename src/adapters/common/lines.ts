@@ -7,8 +7,14 @@ export const IN_PROGRESS_WINDOW_MS = 2000;
 export interface LineSink {
   /** 줄바꿈으로 끝난 줄. 끝의 \r은 뗐다. */
   line(text: string): void;
-  /** 상한을 넘은 줄 하나. 풀지 않고 센다. */
-  tooLong(): void;
+  /** 상한을 넘은 줄 하나. 풀지 않고 센다. found는 그 줄의 바이트에서 찾은 표지의 이름이다(0.3.0. 표지를 주지 않았으면 비어 있다) */
+  tooLong(found?: ReadonlySet<string>): void;
+}
+
+/** 상한을 넘은 줄에서 찾을 바이트 표지. 사용 흔적이 실릴 수 있는 줄인지 가를 때 쓴다(0.3.0, 다른 PC 피드백 7번) */
+export interface LineMarker {
+  name: string;
+  bytes: Buffer;
 }
 
 export interface ReadOutcome {
@@ -28,6 +34,8 @@ export interface ReadOptions {
   chunkBytes?: number;
   /** 시험용. 파일을 연 직후에 부른다. */
   afterOpen?: () => Promise<void>;
+  /** 상한을 넘은 줄에서 찾을 표지 */
+  markers?: readonly LineMarker[];
 }
 
 /** 버퍼의 [start, end)를 UTF-8로 푼다. 끝의 \r은 뗀다. */
@@ -42,11 +50,26 @@ export interface LineSplitter {
   finish(): string | null;
 }
 
-export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES): LineSplitter {
+export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES, markers: readonly LineMarker[] = []): LineSplitter {
   // 읽은 조각을 넘는 줄만 여기에 모은다. 필요할 때 두 배씩, 상한까지만 키우고 파일 하나 동안 다시 쓴다.
   let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
   let carryBytes = 0;
   let skipping = false; // 상한을 넘은 줄의 나머지를 줄바꿈까지 버리는 중이다
+  // 상한을 넘은 줄을 버리면서 표지를 훑는다. 조각 경계에 걸친 표지를 찾으려고 앞 조각의 끝을 표지 길이만큼 남긴다
+  const longest = markers.reduce((most, marker) => Math.max(most, marker.bytes.length), 0);
+  let found = new Set<string>();
+  let edge = Buffer.alloc(0);
+  const scan = (piece: Buffer): void => {
+    if (markers.length === 0 || piece.length === 0) return;
+    const joined = edge.length > 0 ? Buffer.concat([edge, piece]) : piece;
+    for (const marker of markers) if (!found.has(marker.name) && joined.indexOf(marker.bytes) !== -1) found.add(marker.name);
+    edge = Buffer.from(joined.subarray(Math.max(0, joined.length - (longest - 1))));
+  };
+  const endLong = (): void => {
+    sink.tooLong(found);
+    found = new Set();
+    edge = Buffer.alloc(0);
+  };
   return {
     push(view: Buffer): void {
       let start = 0;
@@ -57,6 +80,8 @@ export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES): 
           const length = end - start;
           if (carryBytes + length > maxLine) {
             skipping = true;
+            scan(carry.subarray(0, carryBytes));
+            scan(view.subarray(start, end));
             carryBytes = 0;
           } else if (newline !== -1 && carryBytes === 0) {
             sink.line(decode(view, start, end)); // 조각 하나 안에서 끝난 줄은 복사하지 않고 바로 푼다
@@ -71,10 +96,12 @@ export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES): 
             view.copy(carry, carryBytes, start, end);
             carryBytes += length;
           }
+        } else {
+          scan(view.subarray(start, end));
         }
         if (newline === -1) break;
         if (skipping) {
-          sink.tooLong();
+          endLong();
           skipping = false;
         } else {
           sink.line(decode(carry, 0, carryBytes));
@@ -85,7 +112,7 @@ export function lineSplitter(sink: LineSink, maxLine: number = MAX_LINE_BYTES): 
     },
     finish(): string | null {
       if (skipping) {
-        sink.tooLong();
+        endLong();
         return null;
       }
       return carryBytes > 0 ? decode(carry, 0, carryBytes) : null;
@@ -104,7 +131,7 @@ export async function readLines(path: string, nowMs: number, sink: LineSink, opt
     if (options.afterOpen) await options.afterOpen();
 
     const buffer = Buffer.allocUnsafe(chunkSize);
-    const splitter = lineSplitter(sink, maxLine);
+    const splitter = lineSplitter(sink, maxLine, options.markers ?? []);
     let position = 0;
 
     while (position < sizeAtOpen) {

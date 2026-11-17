@@ -1,13 +1,15 @@
 // Codex가 지표마다 무엇을 기록하는지(설계 9.7)와, 깨진 줄·끝 조각의 맨 바깥 종류를 세는 것, MCP 호출의 관측이 빠짐없는지(설계 9.8)를 시험한다
 import { describe, expect, it } from "vitest";
-import { CODEX_COVERAGE, CODEX_MCP_NON_SIGNAL_TYPES, codexMcpObservation } from "../../../src/adapters/codex/observation.ts";
+import { CODEX_COVERAGE, CODEX_MCP_NON_SIGNAL_TYPES, codexMcpObservation, CODEX_USAGE_MARKERS } from "../../../src/adapters/codex/observation.ts";
 import { CodexSessionParser } from "../../../src/adapters/codex/parser.ts";
 
 const META = JSON.stringify({ timestamp: "2026-11-10T01:00:00Z", type: "session_meta", payload: { id: "s", thread_source: "user" } });
-function summaryOf(lines: string[], options: { tail?: string; inProgress?: boolean; tooLong?: number } = {}) {
+function summaryOf(lines: string[], options: { tail?: string; inProgress?: boolean; tooLong?: number; plainLong?: number } = {}) {
   const parser = new CodexSessionParser({ recordId: "r", timeZone: "Asia/Seoul" });
   for (const text of lines) parser.line(text);
-  for (let i = 0; i < (options.tooLong ?? 0); i++) parser.tooLong();
+  // tooLong은 MCP 호출의 표지가 든 너무 긴 줄, plainLong은 표지가 없는 너무 긴 줄이다(0.3.0)
+  for (let i = 0; i < (options.tooLong ?? 0); i++) parser.tooLong(new Set(["mcp"]));
+  for (let i = 0; i < (options.plainLong ?? 0); i++) parser.tooLong(new Set());
   return parser.finish(options.tail ?? null, options.inProgress ?? false);
 }
 
@@ -59,8 +61,14 @@ describe("MCP 호출의 관측", () => {
     expect(codexMcpObservation([summaryOf([META])], 1)).toEqual({ complete: false, reasons: ["unreadable-files"] });
   });
 
-  it("너무 긴 줄이 있으면 빠짐없지 않다", () => {
+  it("MCP 호출의 표지가 든 너무 긴 줄이 있으면 빠짐없지 않고, 표지가 없는 긴 줄은 상관없다(0.3.0, 다른 PC 피드백 7번)", () => {
     expect(codexMcpObservation([summaryOf([META], { tooLong: 1 })], 0)).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    expect(codexMcpObservation([summaryOf([META], { plainLong: 2 })], 0)).toEqual({ complete: true, reasons: [] });
+    // 표지를 세지 않은 옛 요약은 긴 줄이 하나라도 있으면 막는다
+    const old = summaryOf([META], { plainLong: 1 });
+    const { tooLongMcpLines: _dropped, ...withoutCount } = old.missing;
+    expect(codexMcpObservation([{ ...old, missing: withoutCount }], 0).complete).toBe(false);
+    expect(CODEX_USAGE_MARKERS.map((marker) => [marker.name, marker.bytes.toString()])).toEqual([["mcp", '"McpToolCall"'], ["mcp", '"mcp__']]);
   });
 
   it("깨진 줄과 끝 조각이 사용 신호가 될 수 없는 종류로 온전히 읽히면 상관없는 줄이다", () => {

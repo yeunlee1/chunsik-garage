@@ -4593,6 +4593,8 @@ function reviveSummary(value) {
       brokenLines: missing.brokenLines,
       tailFragments: missing.tailFragments,
       tooLongLines: missing.tooLongLines,
+      ...isObject2(v.missing) && isNumber(v.missing.tooLongSkillLines) ? { tooLongSkillLines: v.missing.tooLongSkillLines } : {},
+      ...isObject2(v.missing) && isNumber(v.missing.tooLongMcpLines) ? { tooLongMcpLines: v.missing.tooLongMcpLines } : {},
       unconfirmedTypes
     },
     firstResponseIdHashes: hashes,
@@ -5245,11 +5247,11 @@ var REASON_ORDER = ["unreadable-files", "too-long-lines", "unconfirmed-pieces"];
 function mostlyBroken(summary) {
   return summary.missing.brokenLines * 2 > summary.missing.lines;
 }
-function observeRecords(summaries, unreadableCount2, harmless) {
+function observeRecords(summaries, unreadableCount2, harmless, longLines = (summary) => summary.missing.tooLongLines) {
   const found = /* @__PURE__ */ new Set();
   if (unreadableCount2 > 0) found.add("unreadable-files");
   for (const summary of summaries) {
-    if (summary.missing.tooLongLines > 0) found.add("too-long-lines");
+    if (longLines(summary) > 0) found.add("too-long-lines");
     for (const [type, count] of Object.entries(summary.missing.unconfirmedTypes)) {
       if (count > 0 && !harmless.has(type)) found.add("unconfirmed-pieces");
     }
@@ -5258,8 +5260,18 @@ function observeRecords(summaries, unreadableCount2, harmless) {
   return { complete: reasons.length === 0, reasons };
 }
 function claudeObservation(summaries, unreadableCount2, metric) {
-  return observeRecords(summaries, unreadableCount2, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES);
+  const longLines = (summary) => (metric === "skill" ? summary.missing.tooLongSkillLines : summary.missing.tooLongMcpLines) ?? summary.missing.tooLongLines;
+  return observeRecords(summaries, unreadableCount2, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES, longLines);
 }
+var marker = (name, text) => ({ name, bytes: Buffer.from(text, "utf8") });
+var CLAUDE_USAGE_MARKERS = [
+  marker("skill", '"name":"Skill"'),
+  marker("skill", "<command-name>"),
+  marker("skill", '"attributionSkill":"'),
+  marker("skill", '"type":"invoked_skills"'),
+  marker("mcp", '"name":"mcp__'),
+  marker("mcp", '"attributionMcpServer":"')
+];
 
 // src/adapters/common/hash.ts
 var OFFSET = 0xcbf29ce484222325n;
@@ -5575,7 +5587,7 @@ var strings = (value) => Array.isArray(value) ? value.filter((v) => typeof v ===
 var HOOK_FAILURE_MARKERS = ["blocking because onFailure is", "blocking because Git Bash wasn't found"];
 function hasFailureMarker(blockingError) {
   const text = typeof blockingError === "string" ? blockingError : str(obj(blockingError)?.blockingError) ?? "";
-  return HOOK_FAILURE_MARKERS.some((marker) => text.includes(marker));
+  return HOOK_FAILURE_MARKERS.some((marker2) => text.includes(marker2));
 }
 var num = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
 var str = (value) => typeof value === "string" && value !== "" ? value : null;
@@ -5606,6 +5618,8 @@ var ClaudeSessionParser = class {
   brokenLines = 0;
   tailFragments = 0;
   tooLongLines = 0;
+  tooLongSkillLines = 0;
+  tooLongMcpLines = 0;
   unconfirmedTypes = nameRecord();
   responsesWithoutId = 0;
   undatedLines = 0;
@@ -5633,10 +5647,12 @@ var ClaudeSessionParser = class {
     if (parsed === null) this.missing(text, "broken");
     else this.accept(parsed);
   }
-  /** 상한을 넘은 줄 하나를 받는다. */
-  tooLong() {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 사용 흔적의 표지다(0.3.0) */
+  tooLong(found) {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("skill")) this.tooLongSkillLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
   }
   /** 끝 조각을 정리하고 요약을 낸다. 한 번만 부른다. */
   finish(tail, inProgress) {
@@ -5676,6 +5692,8 @@ var ClaudeSessionParser = class {
         brokenLines: this.brokenLines,
         tailFragments: this.tailFragments,
         tooLongLines: this.tooLongLines,
+        tooLongSkillLines: this.tooLongSkillLines,
+        tooLongMcpLines: this.tooLongMcpLines,
         unconfirmedTypes: sortedRecord(this.unconfirmedTypes)
       },
       firstResponseIdHashes: this.firstIds.map(fnv1a64),
@@ -6036,8 +6054,12 @@ var CODEX_COVERAGE = {
 };
 var CODEX_MCP_NON_SIGNAL_TYPES = /* @__PURE__ */ new Set(["session_meta", "turn_context", "token_usage_record", "world_state", "compacted"]);
 function codexMcpObservation(summaries, unreadableCount2) {
-  return observeRecords(summaries, unreadableCount2, CODEX_MCP_NON_SIGNAL_TYPES);
+  return observeRecords(summaries, unreadableCount2, CODEX_MCP_NON_SIGNAL_TYPES, (summary) => summary.missing.tooLongMcpLines ?? summary.missing.tooLongLines);
 }
+var CODEX_USAGE_MARKERS = [
+  { name: "mcp", bytes: Buffer.from('"McpToolCall"', "utf8") },
+  { name: "mcp", bytes: Buffer.from('"mcp__', "utf8") }
+];
 
 // src/adapters/codex/parser.ts
 var EXEC_TOOLS = /* @__PURE__ */ new Map([
@@ -6051,7 +6073,7 @@ var EXEC_TOOLS = /* @__PURE__ */ new Map([
 var CODEX_SHELL_TOOLS = ["shell"];
 var NON_TOOL_ITEMS = /* @__PURE__ */ new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
 var CALL_TYPES = /* @__PURE__ */ new Set(["function_call", "custom_tool_call", "web_search_call"]);
-var CODEX_PARSER_VERSION = 1;
+var CODEX_PARSER_VERSION = 2;
 var SUB_THREAD_SOURCES = /* @__PURE__ */ new Set(["subagent", "guardian_review", "memory_consolidation"]);
 var obj2 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 var num2 = (value) => typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -6102,6 +6124,7 @@ var CodexSessionParser = class {
   brokenLines = 0;
   tailFragments = 0;
   tooLongLines = 0;
+  tooLongMcpLines = 0;
   undatedLines = 0;
   /** 깨진 줄과 끝 조각의 맨 바깥 종류(온전히 읽히지 않으면 ?)별 수. MCP 호출의 관측이 빠짐없는지 가른다(설계 9.8) */
   unconfirmedTypes = nameRecord();
@@ -6194,10 +6217,11 @@ var CodexSessionParser = class {
     else if (parsed.type !== "session_meta") this.idFallback = "first-line-not-meta";
     else this.identityPending = true;
   }
-  /** 상한을 넘은 줄 하나를 받는다 */
-  tooLong() {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 MCP 호출의 표지다(0.3.0) */
+  tooLong(found) {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
     this.firstLine(null);
   }
   day(date) {
@@ -6422,7 +6446,7 @@ var CodexSessionParser = class {
       instructionChars: this.instructionChars,
       initialSkills: null,
       initialMcpServers: null,
-      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
+      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, tooLongMcpLines: this.tooLongMcpLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord() },
       codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: sortedRecord(this.unknownItemTypes), inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine }
@@ -6440,10 +6464,24 @@ var IN_PROGRESS_WINDOW_MS = 2e3;
 function decode(buffer, start, end) {
   return buffer.toString("utf8", start, end > start && buffer[end - 1] === 13 ? end - 1 : end);
 }
-function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
+function lineSplitter(sink, maxLine = MAX_LINE_BYTES, markers = []) {
   let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
   let carryBytes = 0;
   let skipping = false;
+  const longest = markers.reduce((most, marker2) => Math.max(most, marker2.bytes.length), 0);
+  let found = /* @__PURE__ */ new Set();
+  let edge = Buffer.alloc(0);
+  const scan = (piece) => {
+    if (markers.length === 0 || piece.length === 0) return;
+    const joined = edge.length > 0 ? Buffer.concat([edge, piece]) : piece;
+    for (const marker2 of markers) if (!found.has(marker2.name) && joined.indexOf(marker2.bytes) !== -1) found.add(marker2.name);
+    edge = Buffer.from(joined.subarray(Math.max(0, joined.length - (longest - 1))));
+  };
+  const endLong = () => {
+    sink.tooLong(found);
+    found = /* @__PURE__ */ new Set();
+    edge = Buffer.alloc(0);
+  };
   return {
     push(view) {
       let start = 0;
@@ -6454,6 +6492,8 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
           const length = end - start;
           if (carryBytes + length > maxLine) {
             skipping = true;
+            scan(carry.subarray(0, carryBytes));
+            scan(view.subarray(start, end));
             carryBytes = 0;
           } else if (newline !== -1 && carryBytes === 0) {
             sink.line(decode(view, start, end));
@@ -6468,10 +6508,12 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
             view.copy(carry, carryBytes, start, end);
             carryBytes += length;
           }
+        } else {
+          scan(view.subarray(start, end));
         }
         if (newline === -1) break;
         if (skipping) {
-          sink.tooLong();
+          endLong();
           skipping = false;
         } else {
           sink.line(decode(carry, 0, carryBytes));
@@ -6482,7 +6524,7 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES) {
     },
     finish() {
       if (skipping) {
-        sink.tooLong();
+        endLong();
         return null;
       }
       return carryBytes > 0 ? decode(carry, 0, carryBytes) : null;
@@ -6499,7 +6541,7 @@ async function readLines(path, nowMs, sink, options = {}) {
     const mtimeMsAtOpen = opened.mtimeMs;
     if (options.afterOpen) await options.afterOpen();
     const buffer = Buffer.allocUnsafe(chunkSize);
-    const splitter = lineSplitter(sink, maxLine);
+    const splitter = lineSplitter(sink, maxLine, options.markers ?? []);
     let position = 0;
     while (position < sizeAtOpen) {
       const { bytesRead } = await handle.read(buffer, 0, Math.min(chunkSize, sizeAtOpen - position), position);
@@ -6563,10 +6605,15 @@ async function collectFromList(home, list, options) {
         parentSessionId: file.parentSessionId,
         timeZone: options.clock.timeZone
       });
-      const outcome = await readLines(file.path, options.clock.nowMs, {
-        line: (text) => parser.line(text),
-        tooLong: () => parser.tooLong()
-      });
+      const outcome = await readLines(
+        file.path,
+        options.clock.nowMs,
+        {
+          line: (text) => parser.line(text),
+          tooLong: (found) => parser.tooLong(found)
+        },
+        { markers: CLAUDE_USAGE_MARKERS }
+      );
       const summary = parser.finish(outcome.tail, outcome.inProgress);
       summaries.push(summary);
       bytes += outcome.bytesRead;
@@ -6735,6 +6782,8 @@ function mergeRecords(records, outside2 = []) {
   const unknownHookKinds = nameRecord();
   const unknownItemTypes = nameRecord();
   const missing = { lines: 0, brokenLines: 0, tailFragments: 0, tooLongLines: 0 };
+  let longMcp = 0;
+  let mcpCounted = true;
   const notes = { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: 0 };
   const inheritedSkipped = { items: 0, totals: 0, responses: 0 };
   let firstDate = null;
@@ -6751,6 +6800,8 @@ function mergeRecords(records, outside2 = []) {
     missing.brokenLines += summary.missing.brokenLines;
     missing.tailFragments += summary.missing.tailFragments;
     missing.tooLongLines += summary.missing.tooLongLines;
+    if (summary.missing.tooLongMcpLines === void 0) mcpCounted = false;
+    else longMcp += summary.missing.tooLongMcpLines;
     addNumbers(unconfirmedTypes, summary.missing.unconfirmedTypes);
     notes.syntheticResponses += summary.notes.syntheticResponses;
     notes.responsesWithoutId += summary.notes.responsesWithoutId;
@@ -6782,7 +6833,7 @@ function mergeRecords(records, outside2 = []) {
     instructionChars: instructionChars === null ? null : { ascii: instructionChars.ascii, other: instructionChars.other },
     initialSkills: base.initialSkills === null ? null : [...base.initialSkills],
     initialMcpServers: base.initialMcpServers === null ? null : [...base.initialMcpServers],
-    missing: { ...missing, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
+    missing: { ...missing, ...mcpCounted ? { tooLongMcpLines: longMcp } : {}, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
     firstResponseIdHashes: [...base.firstResponseIdHashes],
     notes: { ...notes, unknownHookKinds: sortedRecord(unknownHookKinds) },
     ...codex === void 0 ? {} : {
@@ -6921,7 +6972,7 @@ async function readZstdLines(path, nowMs, sink, options = {}) {
   if (options.afterOpen) await options.afterOpen();
   const seen = { endedEarly: false };
   const frames = await scanZstdFrames(path, sizeAtOpen, seen);
-  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES);
+  const splitter = lineSplitter(sink, options.maxLineBytes ?? MAX_LINE_BYTES, options.markers ?? []);
   let bytesRead = 0;
   let decodedBytes = 0;
   let decodeError = sizeAtOpen === 0 ? "EMPTY" : null;
@@ -6961,15 +7012,15 @@ var keysOf2 = (group) => [.../* @__PURE__ */ new Set([group.recordId, ...group.c
 var recentlyChanged = (file, options) => file.changedMs !== null && options.clock.nowMs - file.changedMs < IN_PROGRESS_WINDOW_MS;
 async function parseCopy(file, inherited, options) {
   const parser = new CodexSessionParser({ recordId: file.recordId, timeZone: options.clock.timeZone, inherited });
-  const sink = { line: (text) => parser.line(text), tooLong: () => parser.tooLong() };
+  const sink = { line: (text) => parser.line(text), tooLong: (found) => parser.tooLong(found) };
   if (!file.compressed) {
-    const outcome2 = await readLines(file.path, options.clock.nowMs, sink);
+    const outcome2 = await readLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
     const stable2 = outcome2.sizeAtOpen === file.size && outcome2.mtimeMsAtOpen === file.mtimeMs;
     const inProgress2 = outcome2.inProgress || !stable2 || recentlyChanged(file, options);
     const summary2 = parser.finish(outcome2.tail, inProgress2);
     return { summary: summary2, prints: parser.fingerprints(), bytesRead: outcome2.bytesRead, inProgress: inProgress2, partial: outcome2.endedEarly, storable: !inProgress2 };
   }
-  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink);
+  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
   const incomplete = outcome.frames.status !== "complete" || outcome.decodeError !== null || outcome.endedEarly;
   if (incomplete && outcome.decodedBytes === 0) throw new Error(outcome.decodeError ?? outcome.frames.status);
   const stable = outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs;
@@ -7802,8 +7853,8 @@ async function readClaudeJson(path) {
 
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
-import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, dirname as dirname3, isAbsolute, join as join16, resolve as resolve5 } from "node:path";
+import { lstat as lstat5, readlink } from "node:fs/promises";
+import { basename as basename4, dirname as dirname3, isAbsolute, join as join16, parse, resolve as resolve5 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 var MAX_IMPORT_HOPS = 4;
@@ -7877,14 +7928,14 @@ function importsOf(text) {
   let fence = null;
   for (const raw of text.split("\n")) {
     const body = raw.replace(/^(?:[ \t]*(?:[-*+]|\d{1,9}[.)]|>)(?=[ \t]|$))*[ \t]*/, "");
-    const marker = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
+    const marker2 = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
     if (fence !== null) {
-      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length && body.slice(marker.length).trim() === "") fence = null;
+      if (marker2 !== null && marker2[0] === fence[0] && marker2.length >= fence.length && body.slice(marker2.length).trim() === "") fence = null;
       prose.push("");
       continue;
     }
-    if (marker !== null) {
-      fence = marker;
+    if (marker2 !== null) {
+      fence = marker2;
       prose.push("");
       continue;
     }
@@ -7905,6 +7956,38 @@ function importTarget(token, from, homedir2) {
   const target = token.startsWith("~/") || token.startsWith("~\\") ? join16(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve5(dirname3(from), token);
   return NETWORK_PATH.test(target) ? null : target;
 }
+var MAX_LINK_HOPS = 40;
+async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
+  let pending = resolve5(path);
+  for (let hops = 0; hops <= MAX_LINK_HOPS; hops++) {
+    if (NETWORK_PATH.test(pending)) return true;
+    const { root } = parse(pending);
+    const parts = pending.slice(root.length).split(/[\\/]+/).filter((part) => part !== "");
+    let current = root;
+    let followed = false;
+    for (let index = 0; index < parts.length && !followed; index++) {
+      current = join16(current, parts[index]);
+      let info;
+      try {
+        info = await ops.lstat(current);
+      } catch {
+        return false;
+      }
+      if (!info.isSymbolicLink()) continue;
+      let target;
+      try {
+        target = await ops.readlink(current);
+      } catch {
+        return false;
+      }
+      if (NETWORK_PATH.test(target)) return true;
+      pending = join16(resolve5(dirname3(current), target), ...parts.slice(index + 1));
+      followed = true;
+    }
+    if (!followed) return false;
+  }
+  return true;
+}
 var insideOf = (path, folder) => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
 async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set(), imports = null) {
   const set = emptyInstructionSet();
@@ -7917,6 +8000,7 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   for (let index = 0; index < queue.length; index++) {
     const { path, hops } = queue[index];
     if (hops > 0) {
+      if (await reachesNetwork(path)) continue;
       const target = await entryInfo(path);
       if (!target.isFile) continue;
       if (rootReal !== null && (target.realPath === null || !target.realPath.startsWith(`${rootReal}/`))) continue;
@@ -8180,7 +8264,7 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname4, isAbsolute as isAbsolute2, join as join17, parse, resolve as resolve6 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join17, parse as parse2, resolve as resolve6 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
@@ -8190,7 +8274,7 @@ async function mainRootFromGitFile(dir, dotGit) {
   const common = await readText(join17(gitDir, "commondir"));
   if (common.status !== "ok") return null;
   const commonDir = resolve6(gitDir, common.text.trim());
-  return parse(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
+  return parse2(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
@@ -9909,7 +9993,7 @@ function validateTablePeek(ctx, peek, ptr) {
   if (peek === null || ctx.uk === 2)
     TomlError.x(peek === null ? "trying to redefine an already defined table or value" : "document contains an unsafe property", ctx, ptr);
 }
-function parse2(toml, options = {}) {
+function parse3(toml, options = {}) {
   let ctx = {
     s: toml,
     p: 0,
@@ -10072,7 +10156,7 @@ function exceedsLimits(value, maxDepth = MAX_CONFIG_DEPTH) {
 function parseCodexConfig(text) {
   let value;
   try {
-    value = parse2(text, { integersAsBigInt: "asNeeded" });
+    value = parse3(text, { integersAsBigInt: "asNeeded" });
   } catch {
     return null;
   }

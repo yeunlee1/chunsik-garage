@@ -48,6 +48,21 @@ describe("readLines", () => {
     expect(r.tooLong).toBe(2);
     expect(r.outcome.tail).toBeNull();
   });
+  it("상한을 넘는 줄은 풀지 않지만 그 안에 사용 흔적의 표지가 있는지 바이트로 훑어 알린다. 조각 경계에 걸리거나 상한을 넘기 전 부분에 있어도 찾는다(0.3.0, 다른 PC 피드백 7번)", async () => {
+    const markers = [
+      { name: "skill", bytes: Buffer.from('"name":"Skill"') },
+      { name: "mcp", bytes: Buffer.from('"name":"mcp__') },
+    ];
+    const withSkill = `{"a":"${"x".repeat(5)}","name":"Skill","b":"${"y".repeat(60)}"}`;
+    const withMcp = `{"pad":"${"z".repeat(60)}","name":"mcp__db__q"}`;
+    const plain = `{"c":"${"w".repeat(80)}"}`;
+    const path = await fileWith("m.jsonl", `${withSkill}\nok\n${withMcp}\n${plain}\n${plain}`);
+    const hits: string[][] = [];
+    const lines: string[] = [];
+    await readLines(path, Date.now(), { line: (t) => lines.push(t), tooLong: (found) => hits.push([...(found ?? [])].sort()) }, { maxLineBytes: 20, chunkBytes: 7, markers });
+    expect(lines).toEqual(["ok"]);
+    expect(hits).toEqual([["skill"], ["mcp"], [], []]);
+  });
   it("줄은 LF로만 가른다. 본문 안의 U+2028, U+2029, 홀로 있는 \\r에서는 가르지 않는다", async () => {
     const one = '{"type":"user","message":{"content":"a\u2028b\u2029c\rd"}}';
     const r = await read(await fileWith("u.jsonl", `${one}\nnext\n`), Date.now(), { chunkBytes: 8 });

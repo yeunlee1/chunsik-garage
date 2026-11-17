@@ -734,3 +734,28 @@ describe("collectClaude", () => {
     expect(result.visibleFrom).toBeNull();
   });
 });
+
+describe("너무 긴 줄의 사용 흔적 표지(0.3.0, 다른 PC 피드백 7번)", () => {
+  it("수집기는 너무 긴 줄에서 찾은 표지를 파서에 넘겨, MCP 호출 표지가 든 긴 줄만 MCP 판정을 막고 표지가 없는 긴 줄은 스킬 판정을 막지 않는다", async () => {
+    const pad = "p".repeat(200);
+    await session("p-long", "s1", [
+      ...sampleLines("a"),
+      JSON.stringify({ type: "user", timestamp: "2026-11-11T01:01:00Z", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "x", content: pad }] } }),
+      JSON.stringify({ type: "assistant", timestamp: "2026-11-11T01:02:00Z", message: { id: "m-2", role: "assistant", content: [{ type: "tool_use", id: "t-2", name: "mcp__db__query", input: { q: pad } }] } }),
+    ]);
+    const realReadLines = linesModule.readLines;
+    const spy = vi.spyOn(linesModule, "readLines").mockImplementation((file, nowMs, sink, readOptions) => realReadLines(file, nowMs, sink, { ...readOptions, maxLineBytes: 150 }));
+    let result: Awaited<ReturnType<typeof collectClaude>>;
+    try {
+      result = await collectClaude(options());
+    } finally {
+      spy.mockRestore();
+    }
+    const summary = result.summaries.find((s) => s.sessionId === "s1")!;
+    // 보기 줄 가운데에도 150바이트를 넘는 것이 있어 긴 줄은 둘보다 많을 수 있다. 표지가 든 것은 mcp__ 줄 하나뿐이다
+    expect(summary.missing.tooLongLines).toBeGreaterThanOrEqual(2);
+    expect([summary.missing.tooLongSkillLines, summary.missing.tooLongMcpLines]).toEqual([0, 1]);
+    expect(claudeObservation(result.summaries, 0, "skill").complete).toBe(true);
+    expect(claudeObservation(result.summaries, 0, "mcp")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+  });
+});

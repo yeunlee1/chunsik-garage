@@ -66,7 +66,7 @@ describe("같은 세션의 기록 파일 합치기", () => {
 
   it("빠진 것, 알림의 수, 정체 모를 종류, 이어받아 뺀 수를 더한다", () => {
     const merged = mergeRecords([ORIGINAL, REVERTED]);
-    expect(merged.missing).toEqual({ lines: ORIGINAL.missing.lines + REVERTED.missing.lines, brokenLines: 1, tailFragments: 0, tooLongLines: 0, unconfirmedTypes: { "?": 1 } });
+    expect(merged.missing).toEqual({ lines: ORIGINAL.missing.lines + REVERTED.missing.lines, brokenLines: 1, tailFragments: 0, tooLongLines: 0, tooLongMcpLines: 0, unconfirmedTypes: { "?": 1 } });
     expect(merged.codex?.unknownItemTypes).toEqual({ Alpha: 1, Zeta: 1 });
     expect(merged.codex?.inheritedSkipped).toEqual({ items: 0, totals: 0, responses: 0 });
   });

@@ -100,6 +100,12 @@ export interface MissingCounts {
   brokenLines: number;
   tailFragments: number;
   tooLongLines: number;
+  /**
+   * 너무 긴 줄 가운데 스킬 사용과 MCP 호출의 표지가 든 줄의 수(0.3.0, 다른 PC 피드백 7번). 이 칸이 없는 옛 요약은
+   * 긴 줄마다 표지가 있다고 본다(판정을 막는 쪽으로만 틀린다)
+   */
+  tooLongSkillLines?: number;
+  tooLongMcpLines?: number;
   unconfirmedTypes: Record<string, number>;
 }
 
@@ -393,6 +399,8 @@ export function reviveSummary(value: unknown): SessionSummary | null {
       brokenLines: missing.brokenLines!,
       tailFragments: missing.tailFragments!,
       tooLongLines: missing.tooLongLines!,
+      ...(isObject(v.missing) && isNumber(v.missing.tooLongSkillLines) ? { tooLongSkillLines: v.missing.tooLongSkillLines } : {}),
+      ...(isObject(v.missing) && isNumber(v.missing.tooLongMcpLines) ? { tooLongMcpLines: v.missing.tooLongMcpLines } : {}),
       unconfirmedTypes,
     },
     firstResponseIdHashes: hashes,

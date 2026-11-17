@@ -100,6 +100,8 @@ export class ClaudeSessionParser {
   private brokenLines = 0;
   private tailFragments = 0;
   private tooLongLines = 0;
+  private tooLongSkillLines = 0;
+  private tooLongMcpLines = 0;
   private readonly unconfirmedTypes = nameRecord<number>();
   private responsesWithoutId = 0;
   private undatedLines = 0;
@@ -131,10 +133,12 @@ export class ClaudeSessionParser {
     else this.accept(parsed);
   }
 
-  /** 상한을 넘은 줄 하나를 받는다. */
-  tooLong(): void {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 사용 흔적의 표지다(0.3.0) */
+  tooLong(found?: ReadonlySet<string>): void {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("skill")) this.tooLongSkillLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
   }
 
   /** 끝 조각을 정리하고 요약을 낸다. 한 번만 부른다. */
@@ -175,6 +179,8 @@ export class ClaudeSessionParser {
         brokenLines: this.brokenLines,
         tailFragments: this.tailFragments,
         tooLongLines: this.tooLongLines,
+        tooLongSkillLines: this.tooLongSkillLines,
+        tooLongMcpLines: this.tooLongMcpLines,
         unconfirmedTypes: sortedRecord(this.unconfirmedTypes),
       },
       firstResponseIdHashes: this.firstIds.map(fnv1a64),

@@ -2260,14 +2260,14 @@ var COPY2 = {
   en: {
     reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
     partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
-    // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이다(화면에서 둘이 떨어지지 않게)
-    step: "{name} (\u2192\xA0{aq})",
+    // 화살표와 숫자 사이는 보통 빈칸이다. 모델이 그대로 옮기기 쉽게 하고, 결과 화면이 둘을 묶어 떨어지지 않게 한다(0.3.0)
+    step: "{name} (\u2192 {aq})",
     join: ", "
   },
   ko: {
     reaches: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}.",
     partial: "{grade}\uB4F1\uAE09\uAE4C\uC9C0 {need}\uC810\uC785\uB2C8\uB2E4. \uACE0\uCE60 \uCC28\uB840: {steps}. \uC774\uAC83\uB9CC\uC73C\uB85C\uB294 {last}\uC810\uC785\uB2C8\uB2E4.",
-    step: "{name}(\u2192\xA0{aq})",
+    step: "{name}(\u2192 {aq})",
     join: ", "
   }
 };
@@ -3646,7 +3646,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
-.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}.nw{white-space:nowrap}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}
@@ -3800,6 +3800,7 @@ var pairHtml = (html) => LANGS.map((lang) => `<span lang="${lang}" data-l="${lan
 var both = (texts) => pairHtml(textsOf2((lang) => esc(texts[lang])));
 var perLang = (make2) => LANGS.map((lang) => make2(lang).replace(/^<([a-z0-9]+)/, `<$1 lang="${lang}" data-l="${lang}"`)).join("");
 var swap = (lang, attrs) => ` data-tr${Object.entries(attrs).map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`).join("")}`;
+var keepArrows = (html) => html.replace(/\(→ (\d+)\)/g, '<span class="nw">(\u2192 $1)</span>');
 var fillHtml = (template, values) => fill(esc(template), values);
 var dayNumber = (date) => {
   const [year, month, day] = date.split("-").map(Number);
@@ -3900,7 +3901,7 @@ function hero(view, art, lang) {
       return `${text.title} \xB7 ${fill(SUMMARY_COPY[l].best, { name: text.name, value })}`;
     })
   )}</span></div>`;
-  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const next = scored2 && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf2((l) => keepArrows(esc(view.nextGrade[l]))))}</span>` : "";
   const fixLine = first === null ? next === "" ? "" : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>` : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
     textsOf2((l) => `${first.text[l].title} \xB7 ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`)
   )}${next}</span></div>`;
@@ -7668,9 +7669,10 @@ async function readClaudeJson(path) {
 // src/scan/instructions.ts
 import { createHash as createHash4 } from "node:crypto";
 import { lstat as lstat5 } from "node:fs/promises";
-import { basename as basename4, join as join16 } from "node:path";
+import { basename as basename4, dirname as dirname3, isAbsolute, join as join16, resolve as resolve5 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
+var MAX_IMPORT_HOPS = 4;
 function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
@@ -7736,11 +7738,43 @@ function countMentions(text, targets) {
   }
   return out;
 }
-async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set()) {
+function importsOf(text) {
+  const out = [];
+  let fence = null;
+  for (const raw of text.split("\n")) {
+    const marker = /^(`{3,}|~{3,})/.exec(raw.trimStart())?.[1] ?? null;
+    if (fence !== null) {
+      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length) fence = null;
+      continue;
+    }
+    if (marker !== null) {
+      fence = marker;
+      continue;
+    }
+    const line = raw.replace(/(`+)[\s\S]*?\1/g, " ");
+    for (const match of line.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+      const token = match[1].replace(/\\ /g, " ");
+      if (token.startsWith('"') || token.startsWith("'")) continue;
+      out.push(token);
+    }
+  }
+  return out;
+}
+function resolveImport(token, from, homedir2) {
+  if (token.startsWith("~/") || token.startsWith("~\\")) return join16(homedir2, token.slice(2));
+  return isAbsolute(token) ? token : resolve5(dirname3(from), token);
+}
+var insideOf = (path, folder) => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
+async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* @__PURE__ */ new Set(), imports = null) {
   const set = emptyInstructionSet();
   const hashes = /* @__PURE__ */ new Set();
   const mentions = /* @__PURE__ */ Object.create(null);
-  for (const path of [...new Set(paths)].sort()) {
+  const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
+  const seen = new Set(queue.map((item2) => normalizePath(item2.path)));
+  const readReal = /* @__PURE__ */ new Set();
+  for (let index = 0; index < queue.length; index++) {
+    const { path, hops } = queue[index];
+    if (hops > 0 && !(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -7748,6 +7782,18 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
       continue;
     }
     const info = await entryInfo(path);
+    if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
+    if (info.realPath !== null) readReal.add(info.realPath);
+    if (imports !== null && hops < MAX_IMPORT_HOPS) {
+      for (const token of importsOf(read.text)) {
+        const target = resolveImport(token, path, imports.homedir);
+        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        const key = normalizePath(target);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        queue.push({ path: target, hops: hops + 1 });
+      }
+    }
     const same = info.realPath !== null && sameAsGlobal.has(info.realPath);
     const bytes = Buffer.byteLength(read.text, "utf8");
     set.files.push({ path, realPath: info.realPath, bytes, hasContent: /\S/u.test(read.text), sameAsGlobal: same });
@@ -7759,6 +7805,8 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
     for (const [key, count] of Object.entries(countMentions(read.text, mentionTargets))) mentions[key] = (mentions[key] ?? 0) + count;
   }
   set.lineHashes = [...hashes].sort();
+  set.files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  set.unreadable.sort();
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
@@ -7773,15 +7821,15 @@ async function projectInstructionPaths(root) {
   const paths = present.length > 0 ? [...present, ...rules.paths] : [join16(root, "AGENTS.md"), join16(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
-async function readGlobalInstructions(claudeHome2, mentionTargets) {
+async function readGlobalInstructions(claudeHome2, mentionTargets, options = null) {
   const found = await globalInstructionPaths(claudeHome2);
-  const read = await readInstructionSet(found.paths, mentionTargets);
+  const read = await readInstructionSet(found.paths, mentionTargets, /* @__PURE__ */ new Set(), options === null ? null : { homedir: options.homedir, within: null });
   read.set.unreadableDirs = found.unreadableDirs;
   return read;
 }
-async function readProjectInstructions(root, global) {
+async function readProjectInstructions(root, global, options = null) {
   const found = await projectInstructionPaths(root);
-  const { set } = await readInstructionSet(found.paths, [], realPaths(global));
+  const { set } = await readInstructionSet(found.paths, [], realPaths(global), options === null ? null : { homedir: options.homedir, within: root });
   set.unreadableDirs = found.unreadableDirs;
   return set;
 }
@@ -7985,17 +8033,17 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname3, isAbsolute, join as join17, parse, resolve as resolve5 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join17, parse, resolve as resolve6 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
-  const gitDir = isAbsolute(match[1]) ? match[1] : resolve5(dir, match[1]);
+  const gitDir = isAbsolute2(match[1]) ? match[1] : resolve6(dir, match[1]);
   const common = await readText(join17(gitDir, "commondir"));
   if (common.status !== "ok") return null;
-  const commonDir = resolve5(gitDir, common.text.trim());
-  return parse(commonDir).base.toLowerCase() === ".git" ? dirname3(commonDir) : null;
+  const commonDir = resolve6(gitDir, common.text.trim());
+  return parse(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
 }
 async function gitRootFrom(start) {
   let dir = start;
@@ -8004,7 +8052,7 @@ async function gitRootFrom(start) {
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
-    const parent = dirname3(dir);
+    const parent = dirname4(dir);
     if (parent === dir) return null;
     dir = parent;
   }
@@ -8018,7 +8066,7 @@ function isExcludedFolder(normRoot, normCwd, context) {
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
 }
 async function resolveProject(cwd, context) {
-  const absolute = resolve5(cwd);
+  const absolute = resolve6(cwd);
   const info = await entryInfo(absolute);
   const exists = info.exists && info.isDir;
   const gitRoot = exists ? await gitRootFrom(absolute) : null;
@@ -8504,6 +8552,19 @@ function projectNamesOf(refs) {
   return names2;
 }
 var slashed = (path) => path.replace(/\\/g, "/");
+async function defaultCopySecrets(input) {
+  const defaultHome = join20(input.homedir, ".claude");
+  if (!input.env.CLAUDE_CONFIG_DIR?.trim() || normalizePath(claudeHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const found = [];
+  const settings = await readJson(join20(defaultHome, "settings.json"));
+  if (settings.status === "ok" && typeof settings.value === "object" && settings.value !== null) {
+    for (const key of envSecretKeys(settings.value.env)) found.push({ scope: "settings", server: null, projectRoot: null, field: "env", key });
+  }
+  const claudeJson = await readClaudeJson(join20(input.homedir, ".claude.json"));
+  for (const entry of claudeJson.userMcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "user", server: entry.name, projectRoot: null, ...spot });
+  for (const project of claudeJson.projects) for (const entry of project.mcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "local", server: entry.name, projectRoot: project.normKey, ...spot });
+  return sortSecrets(found).map((secret) => ({ ...secret, copy: "default" }));
+}
 async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
@@ -8546,7 +8607,7 @@ async function scanClaudeSetup(input) {
     });
   }
   const everyContext = [global, ...contexts.values()];
-  const globalRead = await readGlobalInstructions(home, active);
+  const globalRead = await readGlobalInstructions(home, active, { homedir: input.homedir });
   const userSkillScan = await scanSkillRoot(join20(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
   for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join20(ref.root, ".claude", "skills"), { pluginDirs: true }));
@@ -8767,7 +8828,7 @@ async function scanClaudeSetup(input) {
       mcpJsonStatus: mcpJsonStatus.get(ref.normRoot) ?? null,
       hasSettings,
       hasLocalSettings,
-      instructions: layers === void 0 ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set),
+      instructions: layers === void 0 ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set, { homedir: input.homedir }),
       bypassInProject: projectView.bypass,
       bypassInLocal: localView.bypass,
       permissionConflicts: layers === void 0 ? 0 : conflictPairs(userView, settingsStatus === "ok" ? projectView : null, localSettingsStatus === "ok" ? localView : null)
@@ -8824,14 +8885,14 @@ async function scanClaudeSetup(input) {
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
-    secrets: sortSecrets(secrets),
+    secrets: [...sortSecrets(secrets), ...await defaultCopySecrets(input)],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute2, join as join24, relative as relative5, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join24, relative as relative5, resolve as resolve9 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -10000,12 +10061,12 @@ function codexMcpFacts(input) {
 }
 
 // src/scan/codex-plugins.ts
-import { join as join23, relative as relative4, resolve as resolve6, sep } from "node:path";
+import { join as join23, relative as relative4, resolve as resolve7, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
 import { readFile as readFile7 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname4, join as join22 } from "node:path";
+import { basename as basename7, dirname as dirname5, join as join22 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -10083,13 +10144,13 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
   }
   const namespaces = /* @__PURE__ */ new Map();
   const namespaceOf = async (dir) => {
-    for (let current = dir; ; current = dirname4(current)) {
+    for (let current = dir; ; current = dirname5(current)) {
       if (pluginRoots.has(current)) {
         if (!namespaces.has(current)) namespaces.set(current, await manifestNamespace(current));
         const namespace2 = namespaces.get(current);
         if (namespace2 !== null) return namespace2;
       }
-      if (current === root || dirname4(current) === current) return null;
+      if (current === root || dirname5(current) === current) return null;
     }
   };
   for (const { dir, viaLink } of found) {
@@ -10242,7 +10303,7 @@ function manifestPath(root, raw) {
   if (typeof raw !== "string" || !raw.startsWith("./")) return null;
   const rest = raw.slice(2);
   if (rest === "" || rest.split(/[\\/]/).includes("..") || rest.startsWith("/") || rest.startsWith("\\") || /^[A-Za-z]:/.test(rest)) return null;
-  const resolved = resolve6(root, rest);
+  const resolved = resolve7(root, rest);
   const inside2 = relative4(root, resolved);
   return inside2 !== "" && !inside2.startsWith("..") && !inside2.startsWith(sep) ? resolved : null;
 }
@@ -10334,9 +10395,9 @@ async function readCodexPlugin(codexHome2, id) {
 }
 
 // src/scan/codex-settings.ts
-import { resolve as resolve7 } from "node:path";
+import { resolve as resolve8 } from "node:path";
 var asciiLower = (text, platform) => platform === "win32" ? text.replace(/[A-Z]/g, (letter) => letter.toLowerCase()) : text;
-var trustKeyForm = (path, platform) => asciiLower(resolve7(path).replace(/\\/g, "/"), platform);
+var trustKeyForm = (path, platform) => asciiLower(resolve8(path).replace(/\\/g, "/"), platform);
 function trustOf(user, root, platform = process.platform) {
   const projects = isTable(user.projects) ? user.projects : {};
   const rootForm = trustKeyForm(root, platform);
@@ -10399,7 +10460,7 @@ var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
   const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join24(homedir2, raw.slice(2)) : raw;
-  const absolute = isAbsolute2(expanded) ? expanded : resolve8(home, expanded);
+  const absolute = isAbsolute3(expanded) ? expanded : resolve9(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
 async function skillRules(user, home, homedir2) {
@@ -10429,6 +10490,13 @@ function configuredIn(merged, id) {
   return entry.enabled !== void 0 || !isTable(fallback) || fallback.enabled !== false;
 }
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
+async function codexDefaultCopySecrets(input) {
+  const defaultHome = join24(input.homedir, ".codex");
+  if (!input.env.CODEX_HOME?.trim() || normalizePath(codexHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const read = await readCodexConfig(join24(defaultHome, "config.toml"));
+  if (read.status !== "ok") return [];
+  return codexMcpSecrets(read.value, []).map((secret) => ({ ...secret, copy: "default" }));
+}
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
   const userFile = join24(home, "config.toml");
@@ -10583,7 +10651,7 @@ async function scanCodexSetup(input) {
     plugins,
     projects,
     problems: uniqueProblems,
-    secrets: codexMcpSecrets(user, trustedLayers),
+    secrets: [...codexMcpSecrets(user, trustedLayers), ...await codexDefaultCopySecrets(input)],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() }
   };
@@ -10760,15 +10828,15 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname5 } from "node:path";
+import { basename as basename8, dirname as dirname6 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname5(entryFile)) === "scripts") {
+  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname6(entryFile)) === "scripts") {
     try {
-      skillRealPaths.push(normalizePath(await realpath6(dirname5(dirname5(entryFile)))));
+      skillRealPaths.push(normalizePath(await realpath6(dirname6(dirname6(entryFile)))));
     } catch {
     }
   }
@@ -10955,14 +11023,14 @@ import { join as join30 } from "node:path";
 // src/tune/items.ts
 import { createHash as createHash6 } from "node:crypto";
 import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
-import { dirname as dirname6, join as join27 } from "node:path";
+import { dirname as dirname7, join as join27 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
   return join27(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
-  const folder = await lstat8(dirname6(path)).then(
+  const folder = await lstat8(dirname7(path)).then(
     (info) => info.isDirectory(),
     () => false
   );
@@ -12183,16 +12251,16 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve9) => {
+  return new Promise((resolve10) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve9(false));
+      child.once("error", () => resolve10(false));
       child.once("spawn", () => {
         child.unref();
-        resolve9(true);
+        resolve10(true);
       });
     } catch {
-      resolve9(false);
+      resolve10(false);
     }
   });
 }

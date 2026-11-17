@@ -7,7 +7,12 @@ import { resultStamp, writeJson } from "../state/reports.ts";
 import type { TargetRead, TuneItem } from "./items.ts";
 
 /** 정비가 바꾸는 열쇠의 뜻을 확인한 범위. Claude Code의 2.1.325는 「6단계 계획 전 결정」 2번의 실측, Codex는 5단계에서 읽은 공개 소스다 */
-export const TUNE_VERIFIED: Record<ToolId, { from: string; to: string }> = { "claude-code": { from: "2.1.220", to: "2.1.325" }, codex: { from: "0.166.0", to: "0.166.0" } };
+export const TUNE_VERIFIED: Record<ToolId, { from: string; to: string }> = {
+  "claude-code": { from: "2.1.220", to: "2.1.325" },
+  codex: { from: "0.166.0", to: "0.166.0" },
+  // 제미나이는 정비하지 않는다. 기록에 버전이 없어 늘 범위 밖이다(설계 「0.4.0에서 정한 것」)
+  gemini: { from: "0.68.0", to: "0.68.0" },
+};
 
 /** 그 도구의 버전(가장 높은 기록 버전)이 확인한 범위 안인지. 버전을 모르면 범위 밖이다 */
 export function versionVerified(tool: ToolId, version: string | null): boolean {

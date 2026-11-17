@@ -32,8 +32,8 @@ function s4(totals: ToolTotals, coverage: ToolCoverage): Measurement {
 
 function e1(totals: ToolTotals, coverage: ToolCoverage, tool: ToolId): Measurement {
   const { input, cacheRead, cacheWrite } = totals.tokens;
-  // Claude Code는 입력 칸에 캐시가 들지 않고, Codex는 입력 칸에 캐시가 든다(설계 11.3 「E1의 식」, 「5단계 3부 계획 전 결정」 6번)
-  const all = tool === "codex" ? input : input + cacheRead + cacheWrite;
+  // Claude Code는 입력 칸에 캐시가 들지 않고, Codex와 제미나이는 입력 칸에 캐시가 든다(설계 11.3 「E1의 식」, 「5단계 3부 계획 전 결정」 6번, 「0.4.0에서 정한 것」)
+  const all = tool === "codex" || tool === "gemini" ? input : input + cacheRead + cacheWrite;
   const evidence = { cacheRead, cacheWrite, input };
   return countGate(sees(coverage, "responsesAndTokens"), all, 1, evidence) ?? scored(cacheRead / all, evidence);
 }

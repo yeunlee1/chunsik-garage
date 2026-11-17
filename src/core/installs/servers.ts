@@ -4,7 +4,7 @@ import type { McpFact } from "../../scan/types.ts";
 import { blank, unmeasured, type Measurement } from "../measure.ts";
 import type { ToolSetup } from "../metrics/setup.ts";
 import { byContent } from "../order.ts";
-import { codexSettingsUnread, enablementUnread, unread } from "../readability.ts";
+import { codexSettingsUnread, enablementUnread, geminiSettingsUnread, unread } from "../readability.ts";
 import { BLANK_INSTALL_EVIDENCE, measureInstalls, type Counted } from "./gate.ts";
 import { sameInstall } from "./same.ts";
 import { serverJudgeableFrom, serverVerdict, type Verdict, type VerdictContext } from "./verdict.ts";
@@ -48,12 +48,15 @@ const byServer = (a: McpFact, b: McpFact): number =>
 function serversUnread(tool: ToolSetup): boolean {
   // Codex는 사용자 config.toml과 신뢰한 프로젝트의 .codex/config.toml이 서버와 켜짐을 정한다. 플러그인의 것은 그 서버만 세지 않는다(설계 「5단계 2부 계획 전 결정」 7번)
   if (tool.tool === "codex") return codexSettingsUnread(tool.setup);
+  if (tool.tool === "gemini") return geminiSettingsUnread(tool.setup);
   const { setup } = tool;
   const places = setup.unreadableSkillPlaces;
   return unread(setup.claudeJson) || places.user || places.projects.length > 0 || setup.projects.some((project) => unread(project.mcpJsonStatus)) || unread(setup.pluginsFile) || enablementUnread(setup);
 }
 
 export function judgeServers(tool: ToolSetup, context: VerdictContext): ServerJudgement {
+  // 제미나이는 세션마다 실린 서버 목록이 기록에 없고 확장이 넣는 서버를 이 버전에서 보지 않아 판정하지 않는다(설계 「0.4.0에서 정한 것」)
+  if (tool.tool === "gemini") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
   const { setup } = tool;
   if (tool.coverage.mcpCalls === "unsupported") return { measurement: unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };
   if (serversUnread(tool)) return { measurement: unmeasured("unreadable", blank(BLANK_INSTALL_EVIDENCE)), servers: [] };

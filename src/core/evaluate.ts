@@ -1,7 +1,7 @@
 // 입력 묶음에서 평가를 낸다. 규칙 스물둘을 재고 설치를 판정해 점수판으로 묶는다. 입력 묶음이 같으면 결과는 글자 하나 다르지 않다(순수 함수, 설계 9.3, 12.1, 12.2)
 import { makeWindows, type LocalDate } from "../adapters/common/dates.ts";
 import type { SessionSummary, ToolCoverage, ToolId } from "../adapters/types.ts";
-import type { ClaudeSetupFacts, CodexSetupFacts, ProjectFact } from "../scan/types.ts";
+import type { ClaudeSetupFacts, CodexSetupFacts, GeminiSetupFacts, ProjectFact } from "../scan/types.ts";
 import type { InstallRecord } from "../state/state.ts";
 import { candidatesOf, type Candidate, type SelfIdentity } from "./installs/candidates.ts";
 import { sessionListings } from "./installs/listing.ts";
@@ -30,7 +30,7 @@ interface ToolInputCommon {
 }
 
 /** 도구 하나의 입력. 어댑터와 스캐너가 낸 것이다. 셋팅 사실의 꼴은 도구마다 다르다(설계 「5단계 3부 계획 전 결정」 4번) */
-export type ToolInput = ToolInputCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts });
+export type ToolInput = ToolInputCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts } | { tool: "gemini"; setup: GeminiSetupFacts });
 
 /** 입력 묶음(설계 12.1). 평가 시계와 경로의 정규화처럼 순수하지 않은 것은 조립하는 쪽이 미리 해서 넣는다 */
 export interface EvaluationInput {
@@ -95,7 +95,9 @@ export function evaluate(input: EvaluationInput): Evaluation {
   const scored = all.filter((tool) => tool.totals.responses > 0);
   const setups = scored.map(({ input: tool, totals }): ToolSetup => {
     const common = { totals, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
-    return tool.tool === "codex" ? { ...common, tool: "codex", setup: tool.setup } : { ...common, tool: "claude-code", setup: tool.setup };
+    if (tool.tool === "codex") return { ...common, tool: "codex", setup: tool.setup };
+    if (tool.tool === "gemini") return { ...common, tool: "gemini", setup: tool.setup };
+    return { ...common, tool: "claude-code", setup: tool.setup };
   });
   const usage = projectUsage(setups, lookup);
 

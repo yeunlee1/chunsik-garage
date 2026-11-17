@@ -111,6 +111,8 @@ function safeguardCondition(safeguard: ToolSafeguard, copy: (typeof SAFEGUARD_CO
   const { guardHook, permissionChecks } = safeguard;
   if (guardHook === null || permissionChecks === null) return copy.unknown;
   if (safeguard.tool === "codex") return permissionChecks ? copy.codexGuarded : copy.codexNone;
+  // 제미나이도 확인 훅을 안전장치로 치지 않는다. 이 버전은 제미나이의 훅을 읽지 않는다(설계 「0.4.0에서 정한 것」)
+  if (safeguard.tool === "gemini") return permissionChecks ? copy.geminiGuarded : copy.geminiNone;
   return guardHook && permissionChecks ? copy.both : guardHook ? copy.hook : permissionChecks ? copy.permissions : copy.none;
 }
 

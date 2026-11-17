@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
 import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
+import { GEMINI_COVERAGE } from "../../src/adapters/gemini/observation.ts";
 import { gatherCheckupInput, type CheckupInputOptions } from "../../src/commands/checkup-input.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { NO_SELF } from "../../src/core/installs/candidates.ts";
@@ -55,8 +56,23 @@ async function codexSubSession(cwd: string, parent: string): Promise<void> {
   await writeFile(path, lines.join("\n") + "\n");
   await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
 }
+/** 제미나이 주 세션 하나. 응답 하나의 입력은 100이고 그 가운데 캐시가 40이다. 셸 명령 하나는 0이 아닌 종료 코드로 끝났다 */
+async function geminiSession(cwd: string): Promise<void> {
+  const dir = join(home, ".gemini", "tmp", "proj");
+  await put(join(dir, ".project_root"), cwd);
+  const shell = { id: "t1", name: "run_shell_command", args: { command: "npm test" }, status: "success", timestamp: "2026-11-11T04:00:04.000Z", result: [{ functionResponse: { id: "t1", name: "run_shell_command", response: { output: "Output: 1 failed\nExit Code: 1" } } }] };
+  const lines = [
+    { sessionId: "g-1", projectHash: "proj", startTime: "2026-11-11T04:00:00.000Z", lastUpdated: "2026-11-11T04:01:00.000Z", kind: "main" },
+    { id: "u1", timestamp: "2026-11-11T04:00:01.000Z", type: "user", content: [{ text: "고쳐 줘" }] },
+    { id: "g1", timestamp: "2026-11-11T04:00:05.000Z", type: "gemini", content: "", model: "gemini-3-pro", tokens: { input: 100, output: 5, cached: 40, thoughts: 0, tool: 0, total: 105 }, toolCalls: [shell] },
+  ];
+  const path = join(dir, "chats", "session-2026-11-11T04-00-g1000000.jsonl");
+  await put(path, lines.map((line) => JSON.stringify(line)).join("\n") + "\n");
+  await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
+}
 const options =(overrides: Partial<CheckupInputOptions> = {}): CheckupInputOptions => ({
-  env: {},
+  // 이 PC의 제미나이 시스템 설정이 끼어들지 않게 시험 폴더 안의 없는 자리를 가리킨다
+  env: { GEMINI_CLI_SYSTEM_SETTINGS_PATH: join(root, "gemini-system", "settings.json"), GEMINI_CLI_SYSTEM_DEFAULTS_PATH: join(root, "gemini-system", "system-defaults.json") },
   homedir: home,
   tmpdir: join(root, "os-tmp"),
   platform: process.platform,
@@ -97,7 +113,7 @@ describe("gatherCheckupInput", () => {
     const gathered = await gatherCheckupInput(options({ state: { salt: SALT, installs: records }, self }));
     const { input } = gathered;
     expect(input.clock).toEqual({ nowMs: NOW, timeZone: "Asia/Seoul" });
-    expect(input.tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex"]);
+    expect(input.tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini"]);
     const tool = input.tools[0]!;
     expect(tool).toMatchObject({ tool: "claude-code", coverage: CLAUDE_COVERAGE, shellTools: ["Bash", "PowerShell"], complete: { skills: true, mcp: true } });
     expect(tool.summaries.map((summary) => summary.sessionId).sort()).toEqual(["s1", "s2", "s3"]);
@@ -129,8 +145,8 @@ describe("gatherCheckupInput", () => {
   });
   it("기록 폴더가 없어도 입력 묶음을 만든다. 평가는 점수 없이 나온다", async () => {
     const { input, collected } = await gatherCheckupInput(options({ homedir: join(root, "nobody") }));
-    expect([collected.claude.detected, collected.codex.detected]).toEqual([false, false]);
-    expect(input.tools.map((tool) => tool.summaries)).toEqual([[], []]);
+    expect([collected.claude.detected, collected.codex.detected, collected.gemini.detected]).toEqual([false, false, false]);
+    expect(input.tools.map((tool) => tool.summaries)).toEqual([[], [], []]);
     expect(evaluate(input).score).toMatchObject({ aq: null, grade: null });
   });
 });
@@ -152,7 +168,7 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
 
   it("결과에 싣는 Codex의 수집 결과는 Claude Code와 같은 칸이다. 겹쳐 세는 응답은 없다", async () => {
     const { tools } = await gatherCheckupInput(options());
-    expect(tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex"]);
+    expect(tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini"]);
     expect(tools[1]).toMatchObject({ detected: true, overlappingSessions: 0, observation: { skills: { complete: false, reasons: ["not-recorded"] }, mcp: { complete: true, reasons: [] } } });
     expect(Object.keys(tools[1]!.read).sort()).toEqual(Object.keys(tools[0]!.read).sort());
     expect(tools[1]!.read).toMatchObject({ files: 1, unreadableFiles: [] });
@@ -197,6 +213,7 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
     expect(result.tools.map((tool) => [tool.tool, tool.scored, tool.totals.responses])).toEqual([
       ["claude-code", true, 2],
       ["codex", true, 1],
+      ["gemini", false, 0],
     ]);
     const e1 = result.findings.find((f) => f.ruleId === "E1")!;
     expect(e1.tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
@@ -222,6 +239,83 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
   });
 });
 
+describe("gatherCheckupInput의 Gemini CLI(설계 「0.4.0에서 정한 것」)", () => {
+  // 제미나이는 Windows에서 .project_root에 소문자로 바꾼 경로를 적는다. Claude Code 기록의 같은 폴더와 한 프로젝트로 이어져야 한다
+  const geminiRoot = (): string => (process.platform === "win32" ? proj.toLowerCase() : proj);
+  beforeEach(async () => {
+    await geminiSession(geminiRoot());
+  });
+
+  it("제미나이의 기록과 셋팅을 함께 넣는다. 관측 범위와 셸 명령 도구는 제미나이의 것이고 스킬의 관측은 늘 빠짐없지 않다", async () => {
+    const gathered = await gatherCheckupInput(options());
+    const gemini = gathered.input.tools[2]!;
+    expect(gemini).toMatchObject({ tool: "gemini", coverage: GEMINI_COVERAGE, shellTools: ["run_shell_command"], complete: { skills: false, mcp: true } });
+    expect(gemini.setup).toBe(gathered.facts.gemini);
+    expect(gemini.summaries).toBe(gathered.collected.gemini.summaries);
+    expect(gemini.summaries.map((summary) => [summary.sessionId, summary.cwd])).toEqual([["g-1", geminiRoot()]]);
+  });
+
+  it("결과에 싣는 제미나이의 수집 결과는 Claude Code와 같은 칸이다", async () => {
+    const { tools } = await gatherCheckupInput(options());
+    expect(tools[2]).toMatchObject({ tool: "gemini", detected: true, overlappingSessions: 0, observation: { skills: { complete: false, reasons: ["not-recorded"] }, mcp: { complete: true, reasons: [] } } });
+    expect(Object.keys(tools[2]!.read).sort()).toEqual(Object.keys(tools[0]!.read).sort());
+    expect(tools[2]!.codex).toBeUndefined();
+  });
+
+  it("제미나이 세션의 작업 폴더는 Claude Code의 같은 프로젝트로 묶이고, 신뢰 규칙이 정한 프로젝트만 제미나이의 프로젝트 층을 읽는다", async () => {
+    let { input, facts } = await gatherCheckupInput(options());
+    expect(input.projects.map((project) => project.normRoot)).toEqual([normalizePath(proj)]);
+    expect(facts.gemini.projects.map((project) => [project.normRoot, project.trusted])).toEqual([[normalizePath(proj), false]]);
+    await put(join(home, ".gemini", "trustedFolders.json"), JSON.stringify({ [proj]: "TRUST_FOLDER" }));
+    ({ input, facts } = await gatherCheckupInput(options()));
+    expect(facts.gemini.projects.map((project) => [project.normRoot, project.trusted])).toEqual([[normalizePath(proj), true]]);
+  });
+
+  it("제미나이의 규칙을 그 도구의 기록과 셋팅으로 잰다. 입력 토큰에는 캐시가 들어 있고, 셸 도구를 확인 없이 허용하면서 샌드박스가 없으면 안전장치가 없다", async () => {
+    await put(join(home, ".gemini", "settings.json"), JSON.stringify({ tools: { allowed: ["run_shell_command"] } }));
+    let result = evaluate((await gatherCheckupInput(options())).input);
+    expect(result.tools.map((tool) => [tool.tool, tool.scored, tool.totals.responses, tool.totals.humanRequests])).toEqual([
+      ["claude-code", true, 2, 3],
+      ["codex", false, 0, 0],
+      ["gemini", true, 1, 1],
+    ]);
+    const finding = (id: string) => result.findings.find((f) => f.ruleId === id)!;
+    expect(finding("E1").tools.find((value) => value.tool === "gemini")).toMatchObject({ status: "scored", value: 0.4 });
+    expect(finding("S2")).toMatchObject({ status: "scored", value: 0.5, evidence: { guarded: 1, tools: 2, unreadTools: 0 } });
+
+    await put(join(home, ".gemini", "settings.json"), JSON.stringify({ tools: { allowed: ["run_shell_command"], sandbox: true } }));
+    result = evaluate((await gatherCheckupInput(options())).input);
+    expect(result.findings.find((f) => f.ruleId === "S2")).toMatchObject({ status: "scored", value: 1 });
+  });
+
+  it("제미나이의 사용자 설정이 풀리지 않으면 S3이 세고 S2는 제미나이를 빼고 잰다", async () => {
+    await put(join(home, ".gemini", "settings.json"), "{ 깨진 설정");
+    const result = evaluate((await gatherCheckupInput(options())).input);
+    expect(result.findings.find((f) => f.ruleId === "S3")!.evidence).toMatchObject({ unparsable: 1 });
+    expect(result.findings.find((f) => f.ruleId === "S2")!.evidence).toMatchObject({ tools: 1, unreadTools: 1 });
+  });
+
+  it("셸 명령의 0이 아닌 종료 코드는 도구 상태가 success여도 셸 명령 실패로 센다", async () => {
+    const { input } = await gatherCheckupInput(options());
+    const day = input.tools[2]!.summaries[0]!.days["2026-11-11"]!;
+    expect(day.tools["run_shell_command"]).toMatchObject({ calls: 1, results: 1, errors: 1 });
+  });
+
+  it("캐시를 켜고 끈 경우와 연달아 두 번 돌린 경우에 글자 하나 다르지 않다", async () => {
+    const cacheDir = join(root, "state", "cache");
+    const run = async (overrides: Partial<CheckupInputOptions>) => {
+      const gathered = await gatherCheckupInput(options(overrides));
+      return { text: JSON.stringify(evaluate(gathered.input)), fromCache: gathered.collected.gemini.read.fromCache };
+    };
+    const plain = await run({});
+    const first = await run({ cacheDir });
+    const second = await run({ cacheDir });
+    const rescanned = await run({ cacheDir, rescan: true });
+    expect([plain.fromCache, first.fromCache, second.fromCache, rescanned.fromCache]).toEqual([0, 0, 1, 0]);
+    expect([first.text, second.text, rescanned.text]).toEqual([plain.text, plain.text, plain.text]);
+  });
+});
+
 describe("모은 입력으로 평가한 결과", () => {
   it("기록과 셋팅이 규칙에 이어진다", async () => {
     const result = evaluate((await gatherCheckupInput(options())).input);
@@ -229,6 +323,7 @@ describe("모은 입력으로 평가한 결과", () => {
     expect(result.tools.map((tool) => [tool.tool, tool.scored, tool.totals.responses, tool.totals.humanRequests])).toEqual([
       ["claude-code", true, 2, 3],
       ["codex", false, 0, 0],
+      ["gemini", false, 0, 0],
     ]);
     expect(finding("E1")).toMatchObject({ status: "scored", value: 0.8 });
     expect(finding("S1")).toMatchObject({ status: "scored", value: 1 });

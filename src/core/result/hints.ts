@@ -15,7 +15,8 @@ export type DeepHint =
   | { kind: "global_mentions_project"; tool: ToolId; projects: { root: string; mentions: number }[] }
   | { kind: "repeated_project_lines"; tool: ToolId; lines: number; projects: string[] }
   | { kind: "large_global_instructions"; tool: ToolId; tokens: number }
-  | { kind: "tools_instructions_differ"; shared: number; lines: Record<ToolId, number> };
+  /** Claude Code와 Codex의 전역 지침을 견준 것이다 */
+  | { kind: "tools_instructions_differ"; shared: number; lines: Record<"claude-code" | "codex", number> };
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -37,7 +38,7 @@ function hintSetup(tool: ToolInput, input: EvaluationInput): HintSetup {
       rootOf: new Map(setup.projects.map((project) => [project.normRoot, project.root])),
     };
   }
-  // Codex의 프로젝트 사실에는 경로가 없어 입력 묶음의 프로젝트 목록에서 얻는다. 스캐너가 읽지 않은 프로젝트의 지침은 보지 않는다
+  // Codex와 제미나이의 프로젝트 사실에는 경로가 없어 입력 묶음의 프로젝트 목록에서 얻는다. 스캐너가 읽지 않은 프로젝트의 지침은 보지 않는다
   const rootOf = new Map(input.projects.map((project) => [project.normRoot, project.root]));
   const { setup } = tool;
   return {

@@ -167,7 +167,7 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
   }
   if (reportPath !== null && options.open !== undefined && !(await options.open(reportPath))) notices.push({ kind: "report_unopened" });
 
-  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache, saved, reportPath, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
+  const run: RunRecord = { durationMs: now() - started, cachedFiles: gathered.collected.claude.read.fromCache + gathered.collected.codex.read.fromCache + gathered.collected.gemini.read.fromCache, saved, reportPath, resultPath, notices, text: { notices: notices.map((notice) => runNoticeText(notice, options.lang)) } };
   return { summary: checkupSummary(result, reportPath), run, result };
 }
 

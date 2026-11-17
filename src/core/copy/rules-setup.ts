@@ -38,7 +38,7 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
     en: {
       name: "Safeguard",
       good: "Has a safeguard on shell commands",
-      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, and in Codex it is asking for approval or a sandbox limit. What a hook actually filters is not checked.",
+      why: "This looks at whether each tool has something that can stop a shell command you did not mean to run. In Claude Code that is permission checks in the default mode or a confirming hook that can block commands, in Codex it is asking for approval or a sandbox limit, and in Gemini CLI it is asking before each shell command or a sandbox. What a hook actually filters is not checked.",
       fix: "Add a safeguard on shell commands",
       problem: "{value} of the tools whose settings were read have a safeguard. A tool can run shell commands without asking first.",
       prescription: "Add a check before shell commands in each tool that has no safeguard.",
@@ -47,9 +47,11 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
           "In Claude Code, add an enabled PreToolUse hook in your user settings that can block shell commands (Bash or PowerShell) before they run, or choose a default mode that does not bypass permissions. If you keep bypassing permissions, use the blocking hook.",
         codex:
           "In Codex, if you set the approval policy to never, do not give the sandbox full access (danger-full-access). If you need full access, set the approval policy to on-request. Both your user config.toml and the settings of trusted projects count.",
+        gemini:
+          "In Gemini CLI, take run_shell_command out of tools.allowed, or turn on the sandbox (tools.sandbox). Your user settings, the system settings, and the settings of trusted projects all count.",
       },
       method:
-        "Share of the tools whose settings were read that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands. Codex has one if no place (the user settings or a trusted project) combines no approval with full sandbox access. A tool whose deciding settings could not be read is left out.",
+        "Share of the tools whose settings were read that have a safeguard. Claude Code has one if its default mode does not bypass permissions, or if a PreToolUse hook that can block covers shell commands. Codex has one if no place (the user settings or a trusted project) combines no approval with full sandbox access. Gemini CLI has one if no place (the user and system settings or a trusted project) lets shell commands run without asking (run_shell_command in tools.allowed) while the sandbox is off. Approving everything (--yolo) is turned on only when Gemini CLI starts, so the settings cannot show it. A tool whose deciding settings could not be read is left out.",
       evidence: "Tools with a safeguard {guarded} · tools measured {tools} · tools left out with unreadable settings {unreadTools}",
       unit: "%",
       reasons: {
@@ -60,7 +62,7 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
     ko: {
       name: "안전장치",
       good: "셸 명령에 안전장치를 둠",
-      why: "도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.",
+      why: "도구마다 뜻하지 않은 셸 명령을 멈출 자리가 있는지 봅니다. Claude Code는 기본 모드의 권한 확인이나 실행을 막을 수 있는 확인 훅이고, Codex는 승인 요청이나 샌드박스 제한이고, Gemini CLI는 셸 명령마다 묻는 확인이나 샌드박스입니다. 훅이 무엇을 걸러 내는지는 보지 않습니다.",
       fix: "셸 명령에 안전장치 두기",
       problem: "설정을 읽은 도구 가운데 안전장치가 있는 도구는 {value}입니다. 묻지 않고 셸 명령을 실행할 수 있는 도구가 있습니다.",
       prescription: "안전장치가 없는 도구마다 셸 명령 앞에 확인을 두세요.",
@@ -69,9 +71,11 @@ export const SETUP_COPY: Record<"S1" | "S2" | "S3" | "S4" | "S5", Texts<RuleCopy
           "Claude Code에서 셸 명령(Bash 또는 PowerShell)의 실행 전에 결과를 기다리며 실행을 막을 수 있는 PreToolUse 훅을 사용자 설정에 두고 켜거나, 기본 모드를 권한 우회가 아닌 것으로 바꾸세요. 권한 우회 모드를 계속 쓰려면 실행을 막을 수 있는 확인 훅을 두세요.",
         codex:
           "Codex에서 승인 정책을 never로 두려면 샌드박스를 전면 해제(danger-full-access)하지 마세요. 전면 해제가 필요하면 승인 정책을 on-request로 두세요. 사용자 config.toml과 신뢰한 프로젝트의 설정을 모두 봅니다.",
+        gemini:
+          "Gemini CLI에서 tools.allowed에서 run_shell_command를 빼거나 샌드박스(tools.sandbox)를 켜세요. 사용자 설정, 시스템 설정, 신뢰한 프로젝트의 설정을 모두 봅니다.",
       },
       method:
-        "설정을 읽은 도구 가운데 안전장치가 있는 도구의 몫입니다. Claude Code는 기본 모드가 권한 우회가 아니거나, 셸 명령에 걸리고 실행을 막을 수 있는 도구 실행 전 확인 훅이 있으면 안전장치가 있는 것으로 봅니다. Codex는 사용자 설정과 신뢰한 프로젝트 가운데 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없으면 안전장치가 있는 것으로 봅니다. 안전장치를 정하는 설정을 읽지 못한 도구는 빼고 잽니다.",
+        "설정을 읽은 도구 가운데 안전장치가 있는 도구의 몫입니다. Claude Code는 기본 모드가 권한 우회가 아니거나, 셸 명령에 걸리고 실행을 막을 수 있는 도구 실행 전 확인 훅이 있으면 안전장치가 있는 것으로 봅니다. Codex는 사용자 설정과 신뢰한 프로젝트 가운데 승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없으면 안전장치가 있는 것으로 봅니다. Gemini CLI는 사용자·시스템 설정과 신뢰한 프로젝트 가운데 셸 명령을 묻지 않고 실행하게 두면서(tools.allowed의 run_shell_command) 샌드박스를 끈 곳이 없으면 안전장치가 있는 것으로 봅니다. 모두 자동 승인(--yolo)은 Gemini CLI를 시작할 때만 켜져서 설정으로는 보지 못합니다. 안전장치를 정하는 설정을 읽지 못한 도구는 빼고 잽니다.",
       evidence: "안전장치가 있는 도구 {guarded} · 잰 도구 {tools} · 설정을 읽지 못해 뺀 도구 {unreadTools}",
       unit: "%",
       reasons: {

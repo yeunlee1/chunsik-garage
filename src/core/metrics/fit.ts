@@ -28,7 +28,8 @@ interface ToolProject {
 
 /**
  * 도구의 프로젝트 사실을 같은 꼴로 본다. Codex는 Codex가 읽는 프로젝트 지침(신뢰하지 않은 프로젝트와 한도가 0인 프로젝트에는 없다)이고,
- * 프로젝트 쪽 설정은 신뢰한 프로젝트의 .codex/config.toml이 있는 것이다(설계 「5단계 3부 계획 전 결정」 7번)
+ * 프로젝트 쪽 설정은 신뢰한 프로젝트의 .codex/config.toml이 있는 것이다(설계 「5단계 3부 계획 전 결정」 7번).
+ * 제미나이도 같다. 신뢰하지 않은 폴더에는 지침이 없고, 프로젝트 쪽 설정은 신뢰한 프로젝트의 .gemini/settings.json이 있는 것이다(설계 「0.4.0에서 정한 것」)
  */
 function toolProjects(tool: ToolSetup): ToolProject[] {
   const projects: ToolProject[] =
@@ -36,9 +37,13 @@ function toolProjects(tool: ToolSetup): ToolProject[] {
       ? tool.setup.projects
           .filter((project) => project.scanned)
           .map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || (project.configStatus !== null && project.configStatus !== "missing") }))
-      : tool.setup.projects
-          .filter(scanned)
-          .map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
+      : tool.tool === "gemini"
+        ? tool.setup.projects
+            .filter((project) => project.scanned)
+            .map((project) => ({ normRoot: project.normRoot, name: null, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || (project.settingsStatus !== null && project.settingsStatus !== "missing") }))
+        : tool.setup.projects
+            .filter(scanned)
+            .map((project) => ({ normRoot: project.normRoot, name: project.name, instructions: project.instructions, treated: hasInstructionFiles(project.instructions) || project.hasSettings || project.hasLocalSettings }));
   return projects.sort((a, b) => byText(a.normRoot, b.normRoot));
 }
 

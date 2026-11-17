@@ -148,6 +148,8 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .tools .t>b{font-family:var(--mono)}
 .splitbar{grid-column:1/-1;display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden;background:var(--track)}
 .splitbar i{display:block;height:100%}
+/* 도구 이름표는 띠의 차례대로 한 줄에 두고, 좁으면 다음 줄로 넘긴다(도구가 셋이어도 읽는 차례가 띠와 같다) */
+.tools .lg{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 16px}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
 .tools small{font-size:12px;color:var(--ink2)}
 .shell{margin:16px 0 0;font-size:13px;color:var(--ink2)}

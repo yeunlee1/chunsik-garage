@@ -62,8 +62,11 @@ export interface ResultTool {
   visible: { from: LocalDate; to: LocalDate } | null;
 }
 
-/** 도구마다의 기록 형식. Claude Code는 한 형식이다. Codex는 새 형식과 옛 형식이 한 파일에 이어질 수 있어 하나로 본다(설계 9.6) */
-const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"] };
+/**
+ * 도구마다의 기록 형식. Claude Code는 한 형식이다. Codex는 새 형식과 옛 형식이 한 파일에 이어질 수 있어 하나로 본다(설계 9.6).
+ * 제미나이는 줄마다 하나인 JSONL과, 메시지 목록이 든 옛 JSON 파일이 있다(설계 「0.4.0에서 정한 것」)
+ */
+const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"] };
 
 const inRange = (date: string, range: { from: LocalDate; to: LocalDate }): boolean => date >= range.from && date <= range.to;
 

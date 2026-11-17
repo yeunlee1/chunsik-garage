@@ -52,6 +52,8 @@ function codexCandidates(tool: ToolSetup, servers: ServerJudgement): Candidate[]
 export function candidatesOf(tool: ToolSetup, skills: SkillJudgement, servers: ServerJudgement, day: EvalDay, self: SelfIdentity): Candidate[] {
   // Codex는 서버 끄기만 낸다. 스킬은 사용을 기록하지 않아 안 쓴 것이 확인되지 않고, 플러그인과 플러그인의 서버는 정비하지 않는다(「6단계 계획 전 결정」 4번)
   if (tool.tool === "codex") return codexCandidates(tool, servers);
+  // 제미나이는 정비하지 않는다(설계 「0.4.0에서 정한 것」)
+  if (tool.tool === "gemini") return [];
   const { setup } = tool;
   const enabledPlugins = setup.plugins.filter((plugin) => plugin.enabled);
   // 설정에 켜 두었는데 설치 기록에 없는 플러그인도 구성을 모르는 플러그인이다

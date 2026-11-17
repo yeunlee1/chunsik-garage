@@ -108,6 +108,12 @@ describe("reviveSummary", () => {
     expect(JSON.stringify(back)).toBe(JSON.stringify(summary));
     expect(back).toEqual(summary);
   });
+  it("제미나이 요약도 되살린다. 제미나이 요약에 codex 칸이 있으면 null이다(0.4.0)", () => {
+    const summary = { ...fullSummary(), tool: "gemini" as const };
+    const back = reviveSummary(JSON.parse(JSON.stringify(summary)));
+    expect(JSON.stringify(back)).toBe(JSON.stringify(summary));
+    expect(reviveSummary({ ...JSON.parse(JSON.stringify(summary)), codex: {} })).toBeNull();
+  });
   it("날짜 칸의 열쇠를 하나도 빠뜨리지 않고, 기본 속성과 같은 이름도 숫자로 되살린다", () => {
     const back = reviveSummary(JSON.parse(JSON.stringify(fullSummary())))!;
     const day = back.days["2026-11-11"]!;

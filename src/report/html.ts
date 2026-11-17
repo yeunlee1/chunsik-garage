@@ -27,8 +27,9 @@ type SwapAttr = Exclude<(typeof SWAP_TARGETS)[number], "text" | "value">;
 /** 날짜별 응답 수의 진하기(적음에서 많음). 색각 이상 검증을 통과한 자료 색이다(설계 13.2) */
 const RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"] as const;
 // 도구 색. Codex의 주황은 종이 바탕(#fcfcfb)과의 대비가 3.82:1로 비문자 대비 3:1을 넘고, Claude Code의 파랑과는 색각 이상에서도 갈리는 짝이다.
-// 두 색의 밝기가 비슷해 흑백으로는 갈리지 않으므로 도구별 띠에는 도구 이름과 값을 글로 함께 둔다(설계 「5단계 4부 계획 전 결정」 9번)
-const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a" };
+// 두 색의 밝기가 비슷해 흑백으로는 갈리지 않으므로 도구별 띠에는 도구 이름과 값을 글로 함께 둔다(설계 「5단계 4부 계획 전 결정」 9번).
+// Gemini CLI의 청록은 세 색의 모든 짝을 색 검증기로 잰 값이다. 종이 바탕과 3:1을 넘고, 색각 이상에서 가장 가까운 짝(Codex의 주황)도 ΔE 10.1이다(설계 「0.4.0에서 정한 것」)
+const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70" };
 const REPO = "chunsik-garage";
 
 /** 글과 속성 값을 HTML에 그대로 넣을 수 있게 바꾼다 */
@@ -317,7 +318,7 @@ function tools(view: ReportView): { chart: string; table: string } {
     const total = list.reduce((sum, tool) => sum + value(tool), 0);
     return perLang(
       (lang) =>
-        `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div>${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div>`,
+        `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`,
     );
   };
   const chart = `<div class="tools">${row(REPORT_COPY.kMain, (tool) => tool.mainSessions, (count) => groupDigits(count))}${row(REPORT_COPY.kOut, (tool) => tool.outputTokens, shortTokens)}</div>`;

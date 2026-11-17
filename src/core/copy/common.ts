@@ -9,6 +9,7 @@ import type { ReasonCopy } from "./types.ts";
 export const TOOL_NAMES: Record<ToolId, Texts<string>> = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
   codex: { en: "Codex", ko: "Codex" },
+  gemini: { en: "Gemini CLI", ko: "Gemini CLI" },
 };
 
 export const AXIS_NAMES: Record<Axis, Texts<string>> = {
@@ -81,7 +82,7 @@ export const OTHER_TOOL_COPY: Record<"too_little" | "watching", Texts<string>> =
  * 안전장치(S2)가 도구마다 어느 조건으로 인정됐는지(설계 11.3 S2의 근거와 처방). 훅의 명령은 싣지 않는다. codexGuarded와 codexNone은 Codex의 조건이고,
  * unknown은 안전장치를 정하는 설정을 읽지 못해 뺀 도구다(「5단계 계획 전 결정」 4번, 「5단계 4부 계획 전 결정」 6번)
  */
-export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; codexGuarded: string; codexNone: string; unknown: string }> = {
+export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: string; both: string; none: string; codexGuarded: string; codexNone: string; geminiGuarded: string; geminiNone: string; unknown: string }> = {
   en: {
     line: "{tool}: {condition}",
     hook: "a PreToolUse hook that can block covers shell commands",
@@ -90,6 +91,8 @@ export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: st
     none: "no safeguard (permissions are bypassed and no confirming hook covers shell commands)",
     codexGuarded: "no place combines no approval with full sandbox access",
     codexNone: "no safeguard (a place combines no approval with full sandbox access)",
+    geminiGuarded: "no place lets shell commands run without asking while the sandbox is off",
+    geminiNone: "no safeguard (a place lets shell commands run without asking while the sandbox is off)",
     unknown: "left out, because a settings file that decides the safeguard could not be read",
   },
   ko: {
@@ -100,6 +103,8 @@ export const SAFEGUARD_COPY: Texts<{ line: string; hook: string; permissions: st
     none: "안전장치 없음(권한 우회 모드이고 셸 명령을 덮는 확인 훅이 없음)",
     codexGuarded: "승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 없음",
     codexNone: "안전장치 없음(승인 없음과 샌드박스 전면 해제를 함께 쓰는 곳이 있음)",
+    geminiGuarded: "셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 없음",
+    geminiNone: "안전장치 없음(셸 명령을 묻지 않고 실행하게 두면서 샌드박스를 끈 곳이 있음)",
     unknown: "안전장치를 정하는 설정 파일을 읽지 못해 빼고 쟀음",
   },
 };

@@ -189,7 +189,10 @@ describe("reportHtml", () => {
     expect(checked.nextGrade).not.toBeNull();
     const html = reportHtml(viewOf(checked), art);
     const verdict = between(html, '<div class="verdict">', "</section>");
-    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${esc(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${esc(checked.nextGrade!.text.ko)}</span></span>`);
+    // 화살표와 숫자는 줄이 바뀌어도 떨어지지 않게 묶는다(0.3.0. 문장 자체에는 보통 빈칸을 쓴다)
+    const nowrap = (text: string): string => esc(text).replace(/\(→ (\d+)\)/g, '<span class="nw">(→ $1)</span>');
+    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${nowrap(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${nowrap(checked.nextGrade!.text.ko)}</span></span>`);
+    expect(count(verdict, '<span class="nw">(→ ')).toBe(checked.nextGrade!.steps.length * 2);
     expect(count(html, 'class="nx"')).toBe(1);
     // 정비할 것이 없어도 다음 등급이 있으면 그 칸에 따로 보인다
     const view = viewOf(checked);

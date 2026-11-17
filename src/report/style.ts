@@ -65,7 +65,7 @@ button:focus-visible,summary:focus-visible,a:focus-visible,[tabindex]:focus-visi
 .verdict .pt{display:grid;grid-template-columns:20px 1fr;gap:8px;align-items:start;font-size:14px;line-height:1.45}
 .verdict .pt b{display:block;font-size:12px;letter-spacing:.04em;color:var(--ink2);font-weight:700}
 .verdict .pt svg{margin-top:2px}
-.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}
+.verdict .pt .nx{display:block;margin-top:6px;color:var(--ink2);font-size:13px}.nw{white-space:nowrap}
 h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--ink);font-weight:800}
 h2 .no{font-family:var(--mono);color:var(--ink2);margin-right:10px;font-weight:700}
 h2 .cnt{font-family:var(--mono);margin-left:10px;color:var(--ink2);font-weight:700}

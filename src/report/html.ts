@@ -46,6 +46,9 @@ const swap = (lang: Lang, attrs: Partial<Record<SwapAttr, Texts<string>>>): stri
     .map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`)
     .join("")}`;
 /** 문구 틀을 바꾼 뒤 자리에 HTML 조각을 끼운다 */
+/** 다음 등급 문장의 「(→ 92)」를 한 덩어리로 묶어 줄이 바뀌어도 화살표와 숫자가 떨어지지 않게 한다(0.3.0. 문장에는 보통 빈칸을 쓴다) */
+const keepArrows = (html: string): string => html.replace(/\(→ (\d+)\)/g, '<span class="nw">(→ $1)</span>');
+
 const fillHtml = (template: string, values: Readonly<Record<string, string>>): string => fill(esc(template), values);
 
 const dayNumber = (date: LocalDate): number => {
@@ -183,7 +186,7 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
           }),
         )}</span></div>`;
   // 다음 등급까지 할 일은 먼저 고칠 것 아래에 한 줄로 둔다. 먼저 고칠 것이 없으면 그 칸에 따로 둔다(0.2.0)
-  const next = scored && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const next = scored && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf((l) => keepArrows(esc(view.nextGrade![l]))))}</span>` : "";
   const fixLine =
     first === null
       ? next === ""

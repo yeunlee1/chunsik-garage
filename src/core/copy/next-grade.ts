@@ -8,14 +8,14 @@ const COPY: Texts<{ reaches: string; partial: string; step: string; join: string
   en: {
     reaches: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}.",
     partial: "{need} {need:point|points} to grade {grade}. Fix in this order: {steps}. These alone reach {last}.",
-    // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이다(화면에서 둘이 떨어지지 않게)
-    step: "{name} (→ {aq})",
+    // 화살표와 숫자 사이는 보통 빈칸이다. 모델이 그대로 옮기기 쉽게 하고, 결과 화면이 둘을 묶어 떨어지지 않게 한다(0.3.0)
+    step: "{name} (→ {aq})",
     join: ", ",
   },
   ko: {
     reaches: "{grade}등급까지 {need}점입니다. 고칠 차례: {steps}.",
     partial: "{grade}등급까지 {need}점입니다. 고칠 차례: {steps}. 이것만으로는 {last}점입니다.",
-    step: "{name}(→ {aq})",
+    step: "{name}(→ {aq})",
     join: ", ",
   },
 };

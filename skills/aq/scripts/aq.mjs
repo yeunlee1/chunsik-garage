@@ -5271,12 +5271,14 @@ function claudeObservation(summaries, unreadableCount2, metric) {
 }
 var marker = (name, text) => ({ name, bytes: Buffer.from(text, "utf8") });
 var CLAUDE_USAGE_MARKERS = [
-  marker("skill", '"name":"Skill"'),
+  marker("skill", '"Skill"'),
   marker("skill", "<command-name>"),
-  marker("skill", '"attributionSkill":"'),
-  marker("skill", '"type":"invoked_skills"'),
-  marker("mcp", '"name":"mcp__'),
-  marker("mcp", '"attributionMcpServer":"')
+  marker("skill", "\\u003ccommand-name>"),
+  marker("skill", "\\u003Ccommand-name>"),
+  marker("skill", '"attributionSkill"'),
+  marker("skill", '"invoked_skills"'),
+  marker("mcp", '"mcp__'),
+  marker("mcp", '"attributionMcpServer"')
 ];
 
 // src/adapters/common/hash.ts

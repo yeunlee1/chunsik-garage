@@ -758,4 +758,36 @@ describe("너무 긴 줄의 사용 흔적 표지(0.3.0, 다른 PC 피드백 7번
     expect(claudeObservation(result.summaries, 0, "skill").complete).toBe(true);
     expect(claudeObservation(result.summaries, 0, "mcp")).toEqual({ complete: false, reasons: ["too-long-lines"] });
   });
+  it("콜론과 쉼표 뒤에 빈칸이 있는 JSON이어도 긴 줄의 스킬·MCP 사용 흔적을 찾는다. 짧은 줄로 읽으면 같은 줄을 사용으로 센다(0.3.0 짝 3차 필수 1번)", async () => {
+    // 줄바꿈 없이 빈칸만 넣은 유효한 JSON이다. 글 안의 줄바꿈은 \n으로 적히므로 이 바꾸기는 꾸밈 줄바꿈만 건드린다
+    const spaced = (value: unknown): string => JSON.stringify(value, null, 1).replace(/\n\s*/g, " ");
+    const pad = "p".repeat(200);
+    const lines = [
+      ...sampleLines("a"),
+      spaced({ type: "assistant", timestamp: "2026-11-11T01:02:00Z", message: { id: "m-2", role: "assistant", content: [{ type: "tool_use", id: "t-2", name: "Skill", input: { skill: "live-skill", note: pad } }] } }),
+      spaced({ type: "assistant", timestamp: "2026-11-11T01:03:00Z", message: { id: "m-3", role: "assistant", content: [{ type: "tool_use", id: "t-3", name: "mcp__live-db__query", input: { q: pad } }] } }),
+      spaced({ type: "assistant", timestamp: "2026-11-11T01:04:00Z", attributionSkill: "other-skill", attributionMcpServer: "other-db", message: { id: "m-4", role: "assistant", content: [{ type: "text", text: pad }] } }),
+      spaced({ type: "attachment", timestamp: "2026-11-11T01:05:00Z", attachment: { type: "invoked_skills", skills: [{ name: "third-skill", note: pad }] } }),
+    ];
+    expect(lines[2]).toContain('"name": "Skill"');
+    await session("p-spaced", "s1", lines);
+    const realReadLines = linesModule.readLines;
+    const spy = vi.spyOn(linesModule, "readLines").mockImplementation((file, nowMs, sink, readOptions) => realReadLines(file, nowMs, sink, { ...readOptions, maxLineBytes: 150 }));
+    let result: Awaited<ReturnType<typeof collectClaude>>;
+    try {
+      result = await collectClaude(options());
+    } finally {
+      spy.mockRestore();
+    }
+    const summary = result.summaries.find((s) => s.sessionId === "s1")!;
+    // Skill 호출, attributionSkill, invoked_skills가 든 긴 줄 셋과 mcp__ 호출, attributionMcpServer가 든 긴 줄 둘이다
+    expect([summary.missing.tooLongSkillLines, summary.missing.tooLongMcpLines]).toEqual([3, 2]);
+    expect(claudeObservation(result.summaries, 0, "skill")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    expect(claudeObservation(result.summaries, 0, "mcp")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    // 상한 안에서 읽으면 같은 줄을 사용으로 센다. 그래서 긴 줄에서 놓치면 쓰는 것을 안 쓴다고 보게 된다
+    const plain = (await collectClaude(options())).summaries.find((s) => s.sessionId === "s1")!;
+    const day = plain.days["2026-11-11"]!;
+    expect(day.skillSignals["live-skill"]?.tool).toBe(1);
+    expect(day.mcpCalls["live-db"]).toBe(1);
+  });
 });

@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { CLAUDE_USAGE_MARKERS, claudeObservation, mostlyBroken } from "../../../src/adapters/claude/observation.ts";
 import { ClaudeSessionParser } from "../../../src/adapters/claude/parser.ts";
+import { lineSplitter } from "../../../src/adapters/common/lines.ts";
 import type { SessionSummary } from "../../../src/adapters/types.ts";
 import { parseLines } from "../../helpers/claude-lines.ts";
 
@@ -38,13 +39,28 @@ describe("claudeObservation", () => {
     const missing = parser.finish(null, false).missing;
     expect([missing.tooLongLines, missing.tooLongSkillLines, missing.tooLongMcpLines]).toEqual([4, 2, 1]);
     expect(CLAUDE_USAGE_MARKERS.map((marker) => [marker.name, marker.bytes.toString()])).toEqual([
-      ["skill", '"name":"Skill"'],
+      ["skill", '"Skill"'],
       ["skill", "<command-name>"],
-      ["skill", '"attributionSkill":"'],
-      ["skill", '"type":"invoked_skills"'],
-      ["mcp", '"name":"mcp__'],
-      ["mcp", '"attributionMcpServer":"'],
+      ["skill", "\\u003ccommand-name>"],
+      ["skill", "\\u003Ccommand-name>"],
+      ["skill", '"attributionSkill"'],
+      ["skill", '"invoked_skills"'],
+      ["mcp", '"mcp__'],
+      ["mcp", '"attributionMcpServer"'],
     ]);
+  });
+  it("긴 줄의 슬래시 명령은 <를 \\u003c로 적어도 찾고, 표지가 없는 긴 줄은 아무 표지도 내지 않는다(짝 3차 필수 1번)", () => {
+    const found: string[][] = [];
+    const splitter = lineSplitter({ line: () => {}, tooLong: (names) => found.push([...(names ?? [])].sort()) }, 40, CLAUDE_USAGE_MARKERS);
+    // JSON 글에서 여는 <만 <(또는 <)로 바꾼다. 풀면 같은 글이다
+    const command = (open: string) => `${JSON.stringify({ type: "user", message: { content: "<command-name>/review</command-name>" }, pad: "p".repeat(40) }).replace("<command-name>", `${open}command-name>`)}\n`;
+    splitter.push(Buffer.from(command("\\u003c")));
+    splitter.push(Buffer.from(command("\\u003C")));
+    splitter.push(Buffer.from(`${JSON.stringify({ type: "user", message: { content: "p".repeat(60) } })}\n`));
+    splitter.finish();
+    expect(found).toEqual([["skill"], ["skill"], []]);
+    // 짧은 줄로 읽으면 JSON이 \u003c를 <로 풀어 명령으로 본다
+    expect(JSON.parse(command("\\u003c")).message.content).toBe("<command-name>/review</command-name>");
   });
   it("깨진 줄이 system으로 온전히 읽히면 상관없는 줄이다", () => {
     const s = withMissing({ system: 1 });

@@ -78,14 +78,17 @@ const marker = (name: string, text: string): LineMarker => ({ name, bytes: Buffe
 
 /**
  * 너무 긴 줄에서 찾는 Claude Code의 사용 흔적 표지(0.3.0, 다른 PC 피드백 7번). 파서가 스킬과 MCP의 사용 신호로 세는 자리를 모두 덮는다
- * (Skill 도구 호출, 슬래시 명령, 응답의 attributionSkill, invoked_skills 첨부, mcp__ 도구 호출, 응답의 attributionMcpServer). 글 안에서 따옴표가
- * 이스케이프된 것은 구조가 아니라 맞지 않고, 맞더라도 판정을 막는 쪽으로만 틀린다
+ * (Skill 도구 호출, 슬래시 명령, 응답의 attributionSkill, invoked_skills 첨부, mcp__ 도구 호출, 응답의 attributionMcpServer).
+ * 열쇠와 값을 붙여 찾지 않고 값(또는 열쇠) 하나만 찾아, 콜론 앞뒤에 빈칸이 있는 JSON도 찾는다(짝 3차 필수 1번). 슬래시 명령은 <를 <로 적은 것도 찾는다.
+ * 글 안에 같은 바이트가 있으면 사용이 아니어도 맞는데, 그때는 판정을 막는 쪽으로만 틀린다. 글자를 \u로 적은 이름(Skill 같은 것)은 찾지 못한다
  */
 export const CLAUDE_USAGE_MARKERS: readonly LineMarker[] = [
-  marker("skill", '"name":"Skill"'),
+  marker("skill", '"Skill"'),
   marker("skill", "<command-name>"),
-  marker("skill", '"attributionSkill":"'),
-  marker("skill", '"type":"invoked_skills"'),
-  marker("mcp", '"name":"mcp__'),
-  marker("mcp", '"attributionMcpServer":"'),
+  marker("skill", "\\u003ccommand-name>"),
+  marker("skill", "\\u003Ccommand-name>"),
+  marker("skill", '"attributionSkill"'),
+  marker("skill", '"invoked_skills"'),
+  marker("mcp", '"mcp__'),
+  marker("mcp", '"attributionMcpServer"'),
 ];

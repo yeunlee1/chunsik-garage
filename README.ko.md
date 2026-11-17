@@ -2,7 +2,7 @@
 
 Claude Code와 Codex의 AQ 점검입니다. 내 PC에서 도는 프로그램이 Claude Code와 Codex의 기록을 읽어, AI 코딩 도구를 얼마나 잘 갖추고 쓰는지 점수를 매기고 한 장짜리 결과 화면을 만듭니다.
 
-![합성 기록으로 만든 AQ 결과 화면](docs/images/report-ko.png)
+![합성 기록으로 만든 AQ 결과 화면](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-ko.png)
 
 ## 설치
 
@@ -31,10 +31,13 @@ Node.js 22 이상이 있어야 합니다. 명령의 `#main`과 `@main`이 배포
 
 결과 화면 파일에는 스킬과 프로젝트 폴더의 이름이 들어 있습니다. 자랑할 때는 파일 대신 점수 카드를 쓰세요.
 
+내 PC에서 도는 것은 둘입니다. 스킬이 Node.js로 `skills/aq/scripts/aq.mjs`를 돌리고, Claude Code가 세션을 시작할 때 `hooks/session-start.mjs`를 돌립니다. 훅은 알림을 켜지 않았으면 아무것도 알리지 않습니다. 두 프로그램 모두 네트워크로 요청을 보내지 않습니다.
+
 ## 지원 범위
 
 - Node.js 22 이상. 22와 24에서 시험합니다.
 - Windows 11에서 만들고 시험했습니다. macOS와 Linux는 임시 홈 폴더 시험으로만 확인했습니다.
+- 내 PC의 Claude Code와 Codex에서 쓰도록 만들었습니다. 이 도구들이 PC에 남긴 기록을 읽으므로 claude.ai 채팅이나 Cowork용이 아닙니다.
 - Claude Code는 2.1.220부터 2.1.325까지의 기록 형식을, Codex는 0.166.0의 기록 형식(그리고 0.140부터 0.142까지의 옛 형식)을 확인했습니다.
 
 ## 남기는 것과 지우는 법

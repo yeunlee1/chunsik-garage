@@ -31,6 +31,8 @@ const EXPECTED = [
   ".claude-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   "LICENSE",
+  "README.ko.md",
+  "README.md",
   "hooks/hooks.json",
   "hooks/run-hook.cmd",
   "hooks/session-start",
@@ -42,8 +44,24 @@ const EXPECTED = [
 ].sort();
 
 describe("플러그인 산출물", () => {
-  it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스다(「5단계 5부 계획 전 결정」 5번)", () => {
-    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE"]);
+  it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스, README 두 벌이다(「5단계 5부 계획 전 결정」 5번, 「0.2.1에서 정한 것」)", () => {
+    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE", "README.md", "README.ko.md"]);
+  });
+
+  it("산출물에 담는 README의 상대 링크는 산출물 안을 가리키고, 그림은 develop의 docs/images를 바깥 주소로 가리킨다(「0.2.1에서 정한 것」)", async () => {
+    const IMAGE_BASE = "https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/";
+    for (const readme of ["README.md", "README.ko.md"]) {
+      const text = await readFile(readme, "utf8");
+      const images = [...text.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)].map((match) => match[1]!);
+      expect(images.length, readme).toBeGreaterThan(0);
+      for (const image of images) {
+        expect(image.startsWith(IMAGE_BASE), `${readme}: ${image}`).toBe(true);
+        // 주소가 가리키는 그림이 develop에 있어야 한다
+        expect((await readFile(`docs/images/${image.slice(IMAGE_BASE.length)}`)).length).toBeGreaterThan(0);
+      }
+      const relative = [...text.matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!).filter((target) => !/^(https?:|mailto:|#)/.test(target));
+      for (const target of relative) expect(EXPECTED, `${readme}: ${target}`).toContain(target.split("#")[0]);
+    }
   });
 
   it("이 저장소에서 모으면 그 파일만 같은 자리에 같은 내용으로 담고, 담은 파일의 목록을 돌려준다", async () => {

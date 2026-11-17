@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { mostlyBroken } from "../adapters/claude/observation.ts";
 import { makeWindows, type LocalDate } from "../adapters/common/dates.ts";
 import { MAX_LINE_BYTES, readLines } from "../adapters/common/lines.ts";
-import { geminiHome, listGeminiFiles, type GeminiFileList, type GeminiLogFile } from "../adapters/gemini/locate.ts";
+import { geminiHome, geminiRecordHomes, listGeminiRecordFiles, type GeminiFileList, type GeminiLogFile } from "../adapters/gemini/locate.ts";
 import { GEMINI_USAGE_MARKERS } from "../adapters/gemini/observation.ts";
 import { GEMINI_PARSER_VERSION, GeminiSessionParser } from "../adapters/gemini/parser.ts";
 import type { SessionSummary } from "../adapters/types.ts";
@@ -29,7 +29,8 @@ export const GEMINI_PARSER_ID = `gemini@${GEMINI_PARSER_VERSION}`;
 export async function collectGemini(options: CollectOptions): Promise<GeminiCollectResult> {
   const home = geminiHome(options.env, options.homedir);
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const list = await listGeminiFiles(home, options.rescan ? null : windows.collectStartLowerBoundMs);
+  // 기록은 전역 폴더와, macOS sandbox-exec 샌드박스가 쓰는 <홈>/.cache/.gemini에서 찾는다
+  const list = await listGeminiRecordFiles(geminiRecordHomes(options.env, options.homedir), options.rescan ? null : windows.collectStartLowerBoundMs);
   return collectGeminiFromList(home, list, options);
 }
 

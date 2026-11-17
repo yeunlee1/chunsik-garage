@@ -75,11 +75,33 @@ export function isHumanContent(content: unknown): boolean {
   });
 }
 
+/** 사람 요청의 글(글 조각을 이은 것). 사람 요청이 아니면 null이다. 압축 뒤 사본을 지운 요청과 맞출 때 쓴다 */
+function requestKey(content: unknown): string | null {
+  if (!isHumanContent(content)) return null;
+  if (typeof content === "string") return content.trim();
+  const parts = Array.isArray(content) ? content : [content];
+  return parts
+    .map((part) => {
+      if (typeof part === "string") return part;
+      const piece = obj(part);
+      return piece !== null && typeof piece.text === "string" && piece.thought !== true ? piece.text : "";
+    })
+    .join("")
+    .trim();
+}
+
 /**
  * 셸 결과 글의 종료 코드. 셸 도구는 「Output: …」 뒤에 0이 아닐 때만 「Exit Code: N」 줄을 붙이고, 그 뒤에는 Signal, Background PIDs, Process Group PGID 줄만 온다.
  * 명령의 출력 안에 같은 글이 있어도 속지 않게 글 끝의 꼬리에서만 찾는다. 0이 아닌 종료 코드도 도구 상태는 success일 수 있다(소스 tools/shell.ts, scheduler/tool-executor.ts)
  */
 const EXIT_CODE = /\nExit Code: (-?\d+)(?:\n(?:Signal|Background PIDs|Process Group PGID): [^\n]*)*\s*$/;
+/**
+ * 셸 결과 글은 untrusted_context로 감싸서 적는다. 안의 닫는 태그는 &lt;로 바꾸므로 끝의 닫는 태그가 감싼 것의 끝이다. 감싼 것을 벗긴 안쪽 글이다
+ * (소스 tools/shell.ts, utils/textUtils.ts의 wrapUntrusted)
+ */
+const UNTRUSTED = /^<untrusted_context(?: [^>]*)?>\n([\s\S]*)\n<\/untrusted_context>\s*$/;
+const unwrapped = (text: string): string => UNTRUSTED.exec(text)?.[1] ?? text;
+
 /** 정책이 막은 호출의 오류 글(소스 scheduler/policy.ts의 getPolicyDenialError) */
 const POLICY_DENIAL = "Tool execution denied by policy";
 
@@ -223,29 +245,48 @@ export class GeminiSessionParser {
   }
 
   /**
-   * 압축 뒤 이력 동기화는 남길 대화를 새 ID로 다시 적고(모델 이름과 토큰이 없는 gemini 메시지와 그 앞의 user 메시지) 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
-   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 메시지 가운데, 바로 다음이 모델 이름도 토큰도 없는 gemini 메시지인 user 메시지가 그 사본이다(소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory)
+   * 압축 뒤 이력 동기화는 압축 요약과 확인, 남길 대화를 새 ID로 다시 적고(gemini 메시지는 모델 이름과 토큰이 없다) 옛 메시지를 지우는 고침 줄(removeIds)을 붙인다.
+   * 지운 메시지 가운데 마지막 것보다 뒤에 처음 나온 user 메시지 가운데, 바로 다음이 모델 이름도 토큰도 없는 gemini 메시지이거나(요약과 남긴 대화) 지운 사람 요청과 글이 같은 것(응답 없이 끝나거나 이어진 요청)이 그 사본이다.
+   * 지운 요청과 글로 맞추는 것은 지운 요청 하나에 사본 하나다(소스 geminiChat.ts의 생성자와 initialize, chatRecordingService.ts의 updateMessagesFromHistory, context/chatCompressionService.ts의 findCompressSplitPoint)
    */
   private markCopies(removed: ReadonlySet<string>): void {
     let last = -1;
-    for (const id of removed) last = Math.max(last, this.firstSeen.get(id) ?? -1);
+    const removedRequests = new Map<string, number>();
+    for (const id of removed) {
+      last = Math.max(last, this.firstSeen.get(id) ?? -1);
+      const record = this.messages.get(id);
+      const key = record?.type === "user" ? requestKey(record.content) : null;
+      if (key !== null) removedRequests.set(key, (removedRequests.get(key) ?? 0) + 1);
+    }
     if (last < 0) return;
     const window = [...this.messages.keys()].filter((id) => !removed.has(id) && this.firstSeen.get(id)! > last);
-    for (let index = 0; index < window.length - 1; index++) {
-      const record = this.messages.get(window[index]!)!;
-      const next = this.messages.get(window[index + 1]!)!;
-      if (record.type === "user" && next.type === "gemini" && str(next.model) === null && obj(next.tokens) === null) this.copies.add(window[index]!);
+    for (let index = 0; index < window.length; index++) {
+      const id = window[index]!;
+      const record = this.messages.get(id)!;
+      if (record.type !== "user") continue;
+      const next = index + 1 < window.length ? this.messages.get(window[index + 1]!)! : null;
+      const beforeSynthetic = next !== null && next.type === "gemini" && str(next.model) === null && obj(next.tokens) === null;
+      const key = requestKey(record.content);
+      const left = key === null ? 0 : (removedRequests.get(key) ?? 0);
+      if (left > 0) removedRequests.set(key!, left - 1);
+      if (beforeSynthetic || left > 0) this.copies.add(id);
     }
   }
 
-  /** 풀린 줄 하나. 되감기·설정 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹는다. 종류가 없는 줄은 세션 정보 줄이다 */
+  /** 풀린 줄 하나. 되감기 줄은 세지 않는다(되감은 메시지도 사용량이 든 것이라 센다). 고침 줄은 도구 결과만 얹고, 설정 줄은 옛 체크포인트의 메시지만 읽는다. 종류가 없는 줄은 세션 정보 줄이다 */
   private accept(record: Json): void {
     if (Object.hasOwn(record, "$patch")) {
       const patch = obj(record.$patch);
       if (patch !== null) this.patch(patch);
       return;
     }
-    if (Object.hasOwn(record, "$rewindTo") || Object.hasOwn(record, "$set")) return;
+    if (Object.hasOwn(record, "$set")) {
+      // 옛 버전이 쓴 전체 이력 체크포인트(messages)는 그 안의 메시지를 같은 ID 경로로 읽는다. 세션 정보 고침만 있으면 세지 않는다(소스 chatRecordingTypes.ts, chatRecordingService.ts의 재생기)
+      const set = obj(record.$set);
+      if (set !== null && Array.isArray(set.messages)) for (const message of set.messages) if (obj(message) !== null && str(obj(message)!.type) !== null) this.accept(obj(message)!);
+      return;
+    }
+    if (Object.hasOwn(record, "$rewindTo")) return;
     const type = str(record.type);
     if (type === null) {
       if (typeof record.sessionId === "string" && this.metaSessionId === null) this.metaSessionId = record.sessionId;
@@ -354,7 +395,7 @@ export class GeminiSessionParser {
         counts.deniedByPermission++;
       } else if (status === "success" || status === "error") {
         counts.results++;
-        const failedExit = GEMINI_SHELL_TOOLS.includes(name) && texts.some((text) => Number(EXIT_CODE.exec(text)?.[1] ?? 0) !== 0);
+        const failedExit = GEMINI_SHELL_TOOLS.includes(name) && texts.some((text) => Number(EXIT_CODE.exec(unwrapped(text))?.[1] ?? 0) !== 0);
         if (status === "error" || failedExit) counts.errors++;
       } else if (status === "cancelled") {
         // 사용자가 거절했는지 끊었는지는 기록으로 가를 수 없다

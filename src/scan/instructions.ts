@@ -40,7 +40,15 @@ export interface ImportOptions {
   homedir: string;
   /** 가져온 파일이 이 폴더 안일 때만 따른다(프로젝트 지침). null이면 어디든 따른다(전역 지침) */
   within: string | null;
+  /**
+   * 가져오기 규칙. 주지 않으면 Claude Code의 것(`@~/`를 홈으로 풀고 네 단계까지)이다. gemini는 `~`를 풀지 않고 가져오는 파일의 폴더 기준으로 풀며
+   * 다섯 단계까지 따른다(공개 소스 Gemini CLI v0.68.0의 utils/memoryImportProcessor.ts, 설계 「0.4.0에서 정한 것」)
+   */
+  style?: "claude" | "gemini";
 }
+
+/** 제미나이가 가져오기를 따르는 깊이(processImports의 maxDepth 5). 다섯째 단계의 파일까지 읽고 그 파일의 가져오기는 따르지 않는다 */
+export const GEMINI_IMPORT_HOPS = 5;
 
 export function emptyInstructionSet(): InstructionSet {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
@@ -176,6 +184,16 @@ export function importTarget(token: string, from: string, homedir: string): stri
   return NETWORK_PATH.test(target) ? null : target;
 }
 
+/**
+ * 제미나이의 가져오기 경로. `~`를 풀지 않고 가져오는 파일의 폴더 기준으로 푼다(절대 경로는 그대로다). file:, http:, https: 주소와 네트워크 경로는 따르지 않는다
+ * (공개 소스 Gemini CLI v0.68.0의 utils/memoryImportProcessor.ts의 validateImportPath, processImports)
+ */
+export function geminiImportTarget(token: string, from: string): string | null {
+  if (/^(file|https?):\/\//i.test(token) || NETWORK_PATH.test(token)) return null;
+  const target = resolve(dirname(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
+}
+
 /** 경로를 살피는 데 쓰는 파일 계층. 둘 다 연결을 따라가지 않는다(시험이 가짜로 바꾼다) */
 export interface LinkOps {
   lstat(path: string): Promise<{ isSymbolicLink(): boolean }>;
@@ -261,9 +279,9 @@ export async function readInstructionSet(
     const info = await entryInfo(path);
     if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
     if (info.realPath !== null) readReal.add(info.realPath);
-    if (imports !== null && hops < MAX_IMPORT_HOPS) {
+    if (imports !== null && hops < (imports.style === "gemini" ? GEMINI_IMPORT_HOPS : MAX_IMPORT_HOPS)) {
       for (const token of importsOf(read.text)) {
-        const target = importTarget(token, path, imports.homedir);
+        const target = imports.style === "gemini" ? geminiImportTarget(token, path) : importTarget(token, path, imports.homedir);
         if (target === null) continue;
         if (imports.within !== null && !insideOf(target, imports.within)) continue;
         const key = normalizePath(target);

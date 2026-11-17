@@ -127,6 +127,8 @@ function f4(tools: readonly ToolSetup[], names: ReadonlyMap<string, string>): { 
 }
 
 function f5(tool: ToolSetup): Measurement {
+  // 제미나이는 스킬 폴더를 이 버전에서 훑지 않는다. 읽지 못한 것이 아니라 재지 않는 것이다(설계 「0.4.0에서 정한 것」, 짝 검토 2차 참고 3)
+  if (tool.tool === "gemini") return unmeasured("unsupported", { differingCopies: null, identicalCopies: null, skillKinds: null });
   const places = tool.setup.unreadableSkillPlaces;
   if (places.user || places.projects.length > 0) return unmeasured("unreadable", { differingCopies: null, identicalCopies: null, skillKinds: null });
   // 같은 도구 안에서만 센다. 플러그인이 넣은 스킬은 사본으로도 종으로도 세지 않는다

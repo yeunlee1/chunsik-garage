@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { geminiHome, listGeminiFiles } from "../../../src/adapters/gemini/locate.ts";
+import { geminiHome, geminiRecordHomes, listGeminiFiles, listGeminiRecordFiles } from "../../../src/adapters/gemini/locate.ts";
 
 let root: string;
 
@@ -61,6 +61,18 @@ describe("listGeminiFiles", () => {
     await utimes(old, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
     const list = await listGeminiFiles(home, Date.parse("2026-11-01T00:00:00Z"));
     expect([list.files.length, list.olderThanWindow]).toEqual([0, 1]);
+  });
+
+  it("macOS sandbox-exec 샌드박스가 남긴 기록(<홈>/.cache/.gemini/tmp)도 함께 찾는다. GEMINI_CLI_HOME이 있으면 그 아래다(짝 검토 2차 필수 8)", async () => {
+    const base = join(root, "home");
+    expect(geminiRecordHomes({}, base)).toEqual([join(base, ".gemini"), join(base, ".cache", ".gemini")]);
+    expect(geminiRecordHomes({ GEMINI_CLI_HOME: join(root, "g") }, base)).toEqual([join(root, "g", ".gemini"), join(root, "g", ".cache", ".gemini")]);
+    await put(join(base, ".cache", ".gemini", "tmp", "b", "chats", "session-2.jsonl"));
+    let list = await listGeminiRecordFiles(geminiRecordHomes({}, base), null);
+    expect([list.tmpFound, list.files.map((file) => file.sessionId)]).toEqual([true, ["session-2"]]);
+    await put(join(base, ".gemini", "tmp", "a", "chats", "session-1.jsonl"));
+    list = await listGeminiRecordFiles(geminiRecordHomes({}, base), null);
+    expect(list.files.map((file) => file.sessionId).sort()).toEqual(["session-1", "session-2"]);
   });
 
   it(".project_root가 없는 옛 해시 폴더의 세션은 프로젝트 폴더를 모른다", async () => {

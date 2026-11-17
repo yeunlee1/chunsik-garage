@@ -196,6 +196,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 .sheet{margin:0 0 40px;padding:28px 18px 22px}
 .hd{grid-template-columns:1fr}.hdr{justify-items:start}
 .info{grid-auto-flow:row;grid-template-columns:1fr 1fr}.info div:nth-child(odd){border-left:0}.info div:nth-child(n+3){border-top:1px solid var(--ink)}
+.info dd.tl{white-space:normal}.info dd.tl .nm{white-space:nowrap}
 .title{font-size:26px}
 .hero{grid-template-columns:1fr}.score{height:150px;max-width:330px}.score .n{font-size:150px}
 .ax{grid-template-columns:100px 1fr 60px;gap:12px}

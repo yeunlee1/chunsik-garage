@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as zlib from "node:zlib";
 import { claudeHome, listClaudeFiles } from "../adapters/claude/locate.ts";
 import { codexHome, groupCopies, listCodexFiles } from "../adapters/codex/locate.ts";
-import { geminiHome, listGeminiFiles } from "../adapters/gemini/locate.ts";
+import { geminiHome, geminiRecordHomes, listGeminiRecordFiles } from "../adapters/gemini/locate.ts";
 
 export interface DoctorReport {
   node: { version: string; ok: boolean };
@@ -12,7 +12,7 @@ export interface DoctorReport {
   claudeCode: { home: string; projectsFound: boolean; sessionFiles: number; unreadable: number };
   /** 기록 파일은 같은 식별자의 사본을 하나로 센다. 압축본만 있는 기록은 zstd를 풀 수 있어야 읽는다. 읽지 못한 것은 목록을 읽지 못한 폴더와 크기를 보지 못한 파일이다(설계 9.1, 9.2, 「5단계 계획 전 결정」 2번) */
   codex: { home: string; sessionsFound: boolean; recordFiles: number; compressedOnly: number; unreadable: number };
-  /** 기록 파일은 주 세션과 하위 에이전트 세션의 파일이다. 같은 이름의 .jsonl로 옮겨 적은 옛 .json은 세지 않는다 */
+  /** 기록 파일은 주 세션과 하위 에이전트 세션의 파일이다(macOS 샌드박스의 <홈>/.cache/.gemini 것도 든다). 같은 이름의 .jsonl로 옮겨 적은 옛 .json은 세지 않는다 */
   gemini: { home: string; tmpFound: boolean; sessionFiles: number; unreadable: number };
   state: { dir: string; writable: boolean };
 }
@@ -46,7 +46,7 @@ export async function doctor(input: {
   const records = await listCodexFiles(codex, null);
   const groups = groupCopies(records.files);
   const gemini = geminiHome(input.env, input.homedir);
-  const geminiList = await listGeminiFiles(gemini, null);
+  const geminiList = await listGeminiRecordFiles(geminiRecordHomes(input.env, input.homedir), null);
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),

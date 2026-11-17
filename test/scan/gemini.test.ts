@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { normalizePath } from "../../src/adapters/claude/locate.ts";
 import { geminiServerRecordName, scanGeminiSetup, type GeminiScanInput } from "../../src/scan/gemini.ts";
 import type { GeminiSetupFacts } from "../../src/scan/types.ts";
-import { makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
+import { linkDir, makeTemp, put, removeTemp } from "../helpers/temp-fs.ts";
 
 let root: string;
 let home: string;
@@ -120,6 +120,42 @@ describe("scanGeminiSetup", () => {
     await put(join(gemini, "GEMINI.md"), "전역 지침 둘은 고친 뒤에 다시 확인한다고 말한다.\n");
     const facts = await scanGeminiSetup(input);
     expect(facts.globalInstructions.files).toHaveLength(2);
+  });
+
+  it("전역 지침의 가져오기는 제미나이의 경계 안만 따른다. 경계는 위로 .git이 있는 폴더, 없으면 그 지침의 폴더다(짝 검토 2차 필수 6)", async () => {
+    const long = "가져온 지침은 시험을 먼저 돌린 뒤에 끝났다고 말한다.\n".repeat(20);
+    await put(join(gemini, "GEMINI.md"), "@../outside.md\n@sub/inside.md\n@~/home-note.md\n");
+    await put(join(home, "outside.md"), long);
+    await put(join(gemini, "sub", "inside.md"), long);
+    await put(join(home, "home-note.md"), long);
+    let facts = await scanGeminiSetup(input);
+    expect(facts.globalInstructions.files.map((file) => file.path.replace(/\\/g, "/").split("/").slice(-2).join("/"))).toEqual([".gemini/GEMINI.md", "sub/inside.md"]);
+    // 홈 폴더가 깃 저장소면 경계가 홈이라 홈 안의 파일을 가져온다. ~는 풀지 않는다
+    await put(join(home, ".git", "HEAD"), "ref: refs/heads/main\n");
+    facts = await scanGeminiSetup(input);
+    expect(facts.globalInstructions.files.map((file) => file.path.replace(/\\/g, "/").split("/").pop())).toEqual(["GEMINI.md", "inside.md", "outside.md"]);
+  });
+
+  it("가져오기는 다섯 단계까지 따른다(제미나이의 maxDepth 5)", async () => {
+    const line = (n: number) => `단계 ${n}의 지침은 시험을 먼저 돌린 뒤에 끝났다고 말한다.\n`;
+    await put(join(gemini, "GEMINI.md"), `${line(0)}@h1.md\n`);
+    for (let depth = 1; depth <= 6; depth++) await put(join(gemini, `h${depth}.md`), `${line(depth)}@h${depth + 1}.md\n`);
+    const facts = await scanGeminiSetup(input);
+    expect(facts.globalInstructions.files.map((file) => file.path.replace(/\\/g, "/").split("/").pop()).sort()).toEqual(["GEMINI.md", "h1.md", "h2.md", "h3.md", "h4.md", "h5.md"]);
+  });
+
+  it("신뢰 규칙의 폴더와 프로젝트 폴더는 연결을 푼 실제 경로로 견준다(짝 검토 2차 필수 7)", async () => {
+    const alias = join(root, "work", "proj-alias");
+    await linkDir(proj, alias);
+    await put(join(proj, "GEMINI.md"), "프로젝트 지침은 시험을 먼저 돌린 뒤에 끝났다고 말한다.\n");
+    await put(join(gemini, "trustedFolders.json"), json({ [alias]: "TRUST_FOLDER" }));
+    let facts = await scanGeminiSetup(input);
+    expect(projectOf(facts, proj)).toMatchObject({ trusted: true });
+    expect(projectOf(facts, proj).instructions.files).toHaveLength(1);
+    // 기록의 작업 폴더가 연결 쪽이어도 실제 폴더에 준 규칙으로 신뢰한다
+    await put(join(gemini, "trustedFolders.json"), json({ [proj]: "TRUST_FOLDER" }));
+    facts = await scanGeminiSetup({ ...input, cwds: [alias] });
+    expect(facts.projects.filter((project) => project.scanned).map((project) => project.trusted)).toEqual([true]);
   });
 
   it("풀리지 않는 설정과 신뢰 규칙은 문제로 적고, 안전 설정은 모른다고 낸다", async () => {

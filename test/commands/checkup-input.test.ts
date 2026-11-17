@@ -57,12 +57,12 @@ async function codexSubSession(cwd: string, parent: string): Promise<void> {
   await utimes(path, FILE_TIME / 1000, FILE_TIME / 1000);
 }
 /** 제미나이 주 세션 하나. 응답 하나의 입력은 100이고 그 가운데 캐시가 40이다. 셸 명령 하나는 0이 아닌 종료 코드로 끝났다 */
-async function geminiSession(cwd: string): Promise<void> {
-  const dir = join(home, ".gemini", "tmp", "proj");
+async function geminiSession(cwd: string, base = join(home, ".gemini"), sessionId = "g-1"): Promise<void> {
+  const dir = join(base, "tmp", "proj");
   await put(join(dir, ".project_root"), cwd);
   const shell = { id: "t1", name: "run_shell_command", args: { command: "npm test" }, status: "success", timestamp: "2026-11-11T04:00:04.000Z", result: [{ functionResponse: { id: "t1", name: "run_shell_command", response: { output: "Output: 1 failed\nExit Code: 1" } } }] };
   const lines = [
-    { sessionId: "g-1", projectHash: "proj", startTime: "2026-11-11T04:00:00.000Z", lastUpdated: "2026-11-11T04:01:00.000Z", kind: "main" },
+    { sessionId, projectHash: "proj", startTime: "2026-11-11T04:00:00.000Z", lastUpdated: "2026-11-11T04:01:00.000Z", kind: "main" },
     { id: "u1", timestamp: "2026-11-11T04:00:01.000Z", type: "user", content: [{ text: "고쳐 줘" }] },
     { id: "g1", timestamp: "2026-11-11T04:00:05.000Z", type: "gemini", content: "", model: "gemini-3-pro", tokens: { input: 100, output: 5, cached: 40, thoughts: 0, tool: 0, total: 105 }, toolCalls: [shell] },
   ];
@@ -282,6 +282,8 @@ describe("gatherCheckupInput의 Gemini CLI(설계 「0.4.0에서 정한 것」)"
     const finding = (id: string) => result.findings.find((f) => f.ruleId === id)!;
     expect(finding("E1").tools.find((value) => value.tool === "gemini")).toMatchObject({ status: "scored", value: 0.4 });
     expect(finding("S2")).toMatchObject({ status: "scored", value: 0.5, evidence: { guarded: 1, tools: 2, unreadTools: 0 } });
+    // 스킬 폴더를 훑지 않는 제미나이의 F5는 읽지 못함이 아니라 잴 수 없음이다(짝 검토 2차 참고 3)
+    expect(finding("F5").tools.find((value) => value.tool === "gemini")).toMatchObject({ status: "unmeasured", reason: "unsupported" });
 
     await put(join(home, ".gemini", "settings.json"), JSON.stringify({ tools: { allowed: ["run_shell_command"], sandbox: true } }));
     result = evaluate((await gatherCheckupInput(options())).input);
@@ -299,6 +301,12 @@ describe("gatherCheckupInput의 Gemini CLI(설계 「0.4.0에서 정한 것」)"
     const { input } = await gatherCheckupInput(options());
     const day = input.tools[2]!.summaries[0]!.days["2026-11-11"]!;
     expect(day.tools["run_shell_command"]).toMatchObject({ calls: 1, results: 1, errors: 1 });
+  });
+
+  it("macOS sandbox-exec 샌드박스가 남긴 기록(<홈>/.cache/.gemini/tmp)도 모은다(짝 검토 2차 필수 8)", async () => {
+    await geminiSession(geminiRoot(), join(home, ".cache", ".gemini"), "g-2");
+    const { input } = await gatherCheckupInput(options());
+    expect(input.tools[2]!.summaries.map((summary) => summary.sessionId).sort()).toEqual(["g-1", "g-2"]);
   });
 
   it("캐시를 켜고 끈 경우와 연달아 두 번 돌린 경우에 글자 하나 다르지 않다", async () => {

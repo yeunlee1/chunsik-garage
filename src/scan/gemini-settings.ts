@@ -87,6 +87,16 @@ export function contextFileNames(layers: readonly Json[]): string[] {
   return [...new Set([...names, "GEMINI.md"])];
 }
 
+/** 지침의 가져오기 경계를 찾는 표지(context.memoryBoundaryMarkers). 목록을 적은 마지막 층의 것이고 기본은 .git이다. 빈 목록이면 위로 찾지 않는다 */
+export function boundaryMarkersOf(layers: readonly Json[]): string[] {
+  let markers = [".git"];
+  for (const layer of layers) {
+    const value = section(layer, "context").memoryBoundaryMarkers;
+    if (Array.isArray(value)) markers = strings(value);
+  }
+  return markers;
+}
+
 /** 작업 폴더 신뢰 기능(security.folderTrust.enabled)이 켜져 있는지. 기본은 켜짐이고 뒤의 층이 이긴다. 꺼져 있으면 모든 작업 폴더를 신뢰한다(공개 소스 cli/src/config/trustedFolders.ts) */
 export function folderTrustOn(layers: readonly Json[]): boolean {
   let on = true;
@@ -104,18 +114,26 @@ export function trustRulesValid(rules: Json): boolean {
   return Object.values(rules).every((value) => typeof value === "string" && TRUST_LEVELS.has(value));
 }
 
+/** 신뢰 규칙마다의 폴더(TRUST_PARENT는 그 부모 폴더). 견주기 전에 실제 경로를 풀 때 쓴다 */
+export function trustRuleBases(rules: Json): string[] {
+  return Object.entries(rules)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string" && TRUST_LEVELS.has(entry[1]))
+    .map(([rulePath, value]) => (value === "TRUST_PARENT" ? dirname(rulePath) : rulePath));
+}
+
 /**
  * 신뢰 규칙으로 본 폴더의 신뢰. 규칙의 폴더(TRUST_PARENT는 그 부모 폴더) 안에 드는 규칙 가운데 경로가 가장 긴 것이 정한다. 맞는 규칙이 없으면 null이고, 제미나이는 그 폴더를 신뢰하지 않는다
- * (공개 소스 utils/trust.ts의 isPathTrusted, config/config.ts의 isTrustedFolder). 경로는 Windows와 macOS에서 대소문자를 가리지 않는다
+ * (공개 소스 utils/trust.ts의 isPathTrusted, config/config.ts의 isTrustedFolder). 제미나이는 두 쪽 모두 연결을 푼 실제 경로로 견주므로, root는 실제 경로로 주고
+ * realOf로 규칙 폴더의 실제 경로를 준다. 경로는 Windows와 macOS에서 대소문자를 가리지 않는다
  */
-export function geminiTrustOf(rules: Json, root: string, platform: NodeJS.Platform = process.platform): "trusted" | "untrusted" | null {
+export function geminiTrustOf(rules: Json, root: string, platform: NodeJS.Platform = process.platform, realOf: (base: string) => string = (base) => base): "trusted" | "untrusted" | null {
   const norm = (path: string): string => (platform === "darwin" ? normalizePath(path, platform).toLowerCase() : normalizePath(path, platform));
   const target = norm(root);
   let longest = -1;
   let level: string | null = null;
   for (const [rulePath, value] of Object.entries(rules)) {
     if (typeof value !== "string" || !TRUST_LEVELS.has(value)) continue;
-    const base = norm(value === "TRUST_PARENT" ? dirname(rulePath) : rulePath);
+    const base = norm(realOf(value === "TRUST_PARENT" ? dirname(rulePath) : rulePath));
     const inside = target === base || target.startsWith(base.endsWith("/") ? base : `${base}/`);
     if (inside && rulePath.length > longest) {
       longest = rulePath.length;
@@ -140,24 +158,41 @@ export function geminiSystemPaths(env: Record<string, string | undefined>, platf
 const SHELL_NAMES: ReadonlySet<string> = new Set(["run_shell_command", "ShellTool"]);
 
 /**
- * 층들(사용자, 그 위에 프로젝트)의 안전 설정. 승인 방식과 샌드박스는 뒤의 층이 정했으면 그것이고, 셸 자동 허용은 어느 층에서든 들면 참이다.
- * 샌드박스는 참, 비지 않은 문자열(프로필 경로나 명령), 설정 묶음이면 켜진 것이다
+ * 합친 tools.sandbox 값이 샌드박스를 켜는지. 참·거짓은 그대로, 글은 false·0·빈 글이면 끔이고 그 밖(true, 1, 명령 이름)은 켬이다.
+ * 설정 묶음은 enabled가 참일 때만 켬이다(공개 소스 cli/src/config/sandboxConfig.ts의 loadSandboxConfig, getSandboxCommand)
+ */
+function sandboxOn(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const text = value.trim().toLowerCase();
+    return !(text === "" || text === "0" || text === "false");
+  }
+  if (isObject(value)) return Boolean(value.enabled);
+  return false;
+}
+
+/**
+ * 층들(시스템 기본값, 사용자, 신뢰한 프로젝트, 시스템 설정의 차례)의 안전 설정. 제미나이의 층 합치기를 따른다(공개 소스 cli/src/utils/deepMerge.ts).
+ * 승인 방식과 도구 샌드박스(security.toolSandboxing)는 뒤의 층이 정한 값이다. tools.sandbox는 묶음끼리는 칸을 합치고 그 밖에는 뒤의 값으로 바꾼다.
+ * tools.allowed는 합치는 방식이 없는 목록이라 그 칸을 적은 마지막 층의 목록이 정한다. 도구 샌드박스가 켜져 있으면 tools.sandbox가 없어도 샌드박스가 있다(core/src/config/config.ts)
  */
 export function geminiSafetyOf(layers: readonly Json[]): GeminiSafetyFact {
   let approvalMode = "default";
-  let sandbox = false;
-  let shellAutoApproved = false;
+  let box: unknown = undefined;
+  let toolSandboxing = false;
+  let allowed: string[] = [];
   for (const layer of layers) {
     const mode = section(layer, "general").defaultApprovalMode;
     if (typeof mode === "string" && mode !== "") approvalMode = mode;
     const tools = section(layer, "tools");
-    const box = tools.sandbox;
-    if (typeof box === "boolean") sandbox = box;
-    else if (typeof box === "string") sandbox = box.trim() !== "";
-    else if (isObject(box)) sandbox = true;
-    if (strings(tools.allowed).some((name) => SHELL_NAMES.has(name.trim()))) shellAutoApproved = true;
+    if (Object.hasOwn(tools, "sandbox")) box = isObject(box) && isObject(tools.sandbox) ? { ...box, ...tools.sandbox } : tools.sandbox;
+    if (Object.hasOwn(tools, "allowed")) allowed = strings(tools.allowed);
+    const toolLevel = section(layer, "security").toolSandboxing;
+    if (typeof toolLevel === "boolean") toolSandboxing = toolLevel;
   }
-  return { approvalMode, sandbox, shellAutoApproved };
+  // 인자가 붙은 허용(run_shell_command(git) 같은 것)은 그 명령만 묻지 않으므로 통째로 허용한 것이 아니다
+  const shellAutoApproved = allowed.some((name) => SHELL_NAMES.has(name.trim()));
+  return { approvalMode, sandbox: sandboxOn(box) || toolSandboxing, shellAutoApproved };
 }
 
 /** 읽지 못한 층의 안전 설정(모두 모름) */

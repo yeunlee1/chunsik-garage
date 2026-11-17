@@ -95,6 +95,37 @@ describe("GeminiSessionParser", () => {
     expect(summary.days["2026-11-10"]!.tools["run_shell_command"]).toMatchObject({ calls: 3, results: 3, errors: 1 });
   });
 
+  it("셸 결과 글이 untrusted_context로 감싸져 있어도 끝의 종료 코드를 읽는다(짝 검토 2차 필수 1)", () => {
+    const shell = (id: string, output: string) => ({ ...call(id, "run_shell_command", "success", { command: "npm test" }), result: [{ functionResponse: { id, name: "run_shell_command", response: { output } } }] });
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", "시험 돌려 줘"),
+      gemini("g1", "2026-11-10T01:00:04.000Z", {
+        tokens,
+        toolCalls: [
+          shell("t1", "<untrusted_context>\nOutput: 2 failed\nExit Code: 1\nProcess Group PGID: 77\n</untrusted_context>"),
+          shell("t2", '<untrusted_context source="shell">\nOutput: x\nExit Code: 127\n</untrusted_context>'),
+          shell("t3", "<untrusted_context>\nOutput: 앞 단계 Exit Code: 3\n&lt;/untrusted_context&gt;\n</untrusted_context>"),
+          shell("t4", "<untrusted_context>\nOutput: ok\n</untrusted_context>"),
+        ],
+      }),
+    ]);
+    expect(summary.days["2026-11-10"]!.tools["run_shell_command"]).toMatchObject({ calls: 4, results: 4, errors: 2 });
+  });
+
+  it("옛 전체 이력 체크포인트($set.messages)의 메시지도 같은 ID로 한 번만 센다(짝 검토 2차 필수 5)", () => {
+    const summary = parse([
+      meta(),
+      JSON.stringify({ $set: { messages: [JSON.parse(user("u1", "2026-11-10T01:00:01.000Z", "요청")), JSON.parse(gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }))] } }),
+      // 체크포인트 뒤에 같은 메시지가 다시 적혀도 두 번 세지 않는다
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }),
+      JSON.stringify({ $set: { lastUpdated: "2026-11-10T01:10:00.000Z" } }),
+    ]);
+    const day = summary.days["2026-11-10"]!;
+    expect([day.humanRequests, day.responses, day.tokens.input]).toEqual([1, 1, 1000]);
+    expect(summary.missing.brokenLines).toBe(0);
+  });
+
   it("고침 줄($patch)이 나중에 붙인 도구 결과를 읽는다", () => {
     const summary = parse([
       meta(),
@@ -137,6 +168,34 @@ describe("GeminiSessionParser", () => {
     ]);
     const day = summary.days["2026-11-10"]!;
     expect([day.humanRequests, day.responses]).toEqual([3, 3]);
+  });
+
+  it("압축할 이력이 응답 없는 요청으로 끝나 그 요청의 사본이 맨 끝에 와도 다시 세지 않는다(짝 검토 2차 필수 4)", () => {
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", [{ text: "첫 요청" }]),
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }),
+      user("u2", "2026-11-10T01:01:01.000Z", [{ text: "응답을 못 받은 요청" }]),
+      JSON.stringify({ id: "s1", timestamp: "2026-11-10T01:02:00.000Z", type: "user", content: [{ text: "이제까지의 일" }] }),
+      JSON.stringify({ id: "s2", timestamp: "2026-11-10T01:02:00.001Z", type: "gemini", content: [{ text: "Got it. Thanks for the additional context!" }] }),
+      JSON.stringify({ id: "k1", timestamp: "2026-11-10T01:02:00.002Z", type: "user", content: [{ text: "응답을 못 받은 요청" }] }),
+      JSON.stringify({ $patch: { removeIds: ["u1", "g1", "u2"], orderIds: ["s1", "s2", "k1"] } }),
+    ]);
+    expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
+  });
+
+  it("남겨 둔 대화에 사람 요청이 이어져 있어도(다음이 합성 응답이 아니어도) 지운 요청과 글이 같은 사본은 다시 세지 않는다", () => {
+    const summary = parse([
+      meta(),
+      user("u1", "2026-11-10T01:00:01.000Z", [{ text: "첫 요청" }]),
+      user("u2", "2026-11-10T01:00:02.000Z", [{ text: "이어 붙인 요청" }]),
+      gemini("g1", "2026-11-10T01:00:04.000Z", { tokens }),
+      JSON.stringify({ id: "k1", timestamp: "2026-11-10T01:02:00.002Z", type: "user", content: [{ text: "첫 요청" }] }),
+      JSON.stringify({ id: "k2", timestamp: "2026-11-10T01:02:00.003Z", type: "user", content: [{ text: "이어 붙인 요청" }] }),
+      JSON.stringify({ id: "k3", timestamp: "2026-11-10T01:02:00.004Z", type: "gemini", content: [{ text: "답" }] }),
+      JSON.stringify({ $patch: { removeIds: ["u1", "u2", "g1"] } }),
+    ]);
+    expect(summary.days["2026-11-10"]!.humanRequests).toBe(2);
   });
 
   it("지우는 고침 줄 뒤라도 모델 이름이 있는 응답이 따르는 user 메시지는 그대로 사람 요청이다", () => {

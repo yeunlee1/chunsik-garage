@@ -1,10 +1,10 @@
 // 제미나이 CLI의 지금 셋팅을 읽어 셋팅 사실로 낸다. 시스템 기본값·사용자 설정·신뢰한 프로젝트 층(.gemini/settings.json)·시스템 설정, 승인 방식·샌드박스·셸 자동 허용, 지침(GEMINI.md), MCP 서버를 프로젝트 목록과 함께 본다. 값과 글은 메모리에서 쓰고 버린다(설계 10, 「0.4.0에서 정한 것」)
-import { join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { geminiHome } from "../adapters/gemini/locate.ts";
 import { entryInfo } from "./fs.ts";
-import { contextFileNames, folderTrustOn, geminiSafetyOf, geminiSystemPaths, geminiTrustOf, mcpFilterOf, readGeminiSettings, serversOfLayer, trustRulesValid, unknownGeminiSafety } from "./gemini-settings.ts";
-import { emptyInstructionSet, readInstructionSet, realPaths } from "./instructions.ts";
+import { boundaryMarkersOf, contextFileNames, folderTrustOn, geminiSafetyOf, geminiSystemPaths, geminiTrustOf, mcpFilterOf, readGeminiSettings, serversOfLayer, trustRuleBases, trustRulesValid, unknownGeminiSafety } from "./gemini-settings.ts";
+import { emptyInstructionSet, reachesNetwork, readInstructionSet, realPaths } from "./instructions.ts";
 import { isObject } from "./json.ts";
 import { definitionHash } from "./mcp.ts";
 import { projectNamesOf } from "./claude.ts";
@@ -39,6 +39,30 @@ export function geminiServerRecordName(name: string): string {
   const valid = name.replace(/[^a-zA-Z0-9_\-.:]/g, "_");
   const cut = valid.indexOf("_");
   return cut === -1 ? valid : valid.slice(0, cut);
+}
+
+/** 연결을 푼 실제 경로. 네트워크를 가리키는 경로는 조회만으로 네트워크에 닿을 수 있어 풀지 않는다. 없는 경로는 그대로다 */
+async function realOrSelf(path: string): Promise<string> {
+  if (await reachesNetwork(path)) return path;
+  return (await entryInfo(path)).realPath ?? path;
+}
+
+/**
+ * 제미나이 지침의 가져오기 경계. 그 폴더부터 위로 경계 표지(기본 .git)가 있는 폴더를 찾고, 없으면 그 폴더다. 표지 목록이 비면 그 폴더다
+ * (공개 소스 utils/memoryImportProcessor.ts의 findProjectRoot)
+ */
+async function importBoundary(dir: string, markers: readonly string[]): Promise<string> {
+  const start = resolve(dir);
+  if (markers.length === 0 || (await reachesNetwork(start))) return start;
+  for (let current = start; ; ) {
+    for (const marker of markers) {
+      if (marker === "" || isAbsolute(marker) || marker.includes("..")) continue;
+      if ((await entryInfo(join(current, marker))).exists) return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) return start;
+    current = parent;
+  }
 }
 
 /** 그 맥락의 거르개로 서버가 켜져 있는지. allowed가 있으면 그 목록에 든 이름만, excluded에 든 이름은 꺼진다 */
@@ -76,7 +100,11 @@ export async function scanGeminiSetup(input: GeminiScanInput): Promise<GeminiSet
   const trustRead = await readGeminiSettings(trustFile);
   const trustStatus: FileStatus = trustRead.status === "ok" && !trustRulesValid(trustRead.value) ? "unparsable" : trustRead.status;
   if (folderTrust && trustStatus === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: trustFile, place: trustFile === defaultTrustFile ? geminiPlace(trustFile) : "$GEMINI_CLI_TRUSTED_FOLDERS_PATH" });
-  const trustedRoot = (root: string): boolean => !folderTrust || (trustStatus === "ok" && geminiTrustOf(trustRead.value, root, input.platform) === "trusted");
+  // 규칙의 폴더와 프로젝트 폴더는 연결을 푼 실제 경로로 견준다(공개 소스 utils/trust.ts의 getRealPath, isPathTrusted)
+  const realBases = new Map<string, string>();
+  if (folderTrust && trustStatus === "ok") for (const base of trustRuleBases(trustRead.value)) if (!realBases.has(base)) realBases.set(base, await realOrSelf(base));
+  const trustedRoot = async (root: string): Promise<boolean> =>
+    !folderTrust || (trustStatus === "ok" && geminiTrustOf(trustRead.value, await realOrSelf(root), input.platform, (base) => realBases.get(base) ?? base) === "trusted");
 
   const refs = await groupProjects(input.cwds, { homedir: input.homedir, tmpdir: input.tmpdir, platform: input.platform });
   const active = refs.filter((ref) => ref.exists && !ref.excluded);
@@ -84,19 +112,20 @@ export async function scanGeminiSetup(input: GeminiScanInput): Promise<GeminiSet
   const projectPlace = (ref: ProjectRef, path: string): string => `${projectNames.get(ref.normRoot)!}/${slashed(relative(ref.root, path))}`;
   const homeReal = (await entryInfo(home)).realPath ?? normalizePath(home);
 
-  // 전역 지침(<홈>/.gemini/<지침 파일 이름>). 가져오기(@경로)는 어디든 따른다
+  // 전역 지침(<홈>/.gemini/<지침 파일 이름>). 가져오기(@경로)는 제미나이처럼 경계(위로 .git이 있는 폴더, 없으면 지침의 폴더) 안만 따른다
+  const markers = boundaryMarkersOf(layersWith(null));
   const globalRead = await readInstructionSet(
     contextFileNames(layersWith(null)).map((name) => join(home, name)),
     active,
     new Set(),
-    { homedir: input.homedir, within: null },
+    { homedir: input.homedir, within: await importBoundary(home, markers), style: "gemini" },
   );
 
   // 신뢰한 프로젝트마다 .gemini/settings.json(프로젝트 층)과 뿌리의 지침. 신뢰하지 않는 폴더의 것은 제미나이가 쓰지 않아 읽지 않는다
   const projects: GeminiProjectFact[] = [];
   const projectLayers: { normRoot: string; layer: Json }[] = [];
   for (const ref of refs) {
-    const trusted = ref.exists && !ref.excluded && trustedRoot(ref.root);
+    const trusted = ref.exists && !ref.excluded && (await trustedRoot(ref.root));
     if (!ref.exists || ref.excluded || !trusted) {
       projects.push({ normRoot: ref.normRoot, scanned: ref.exists && !ref.excluded, trusted, settingsStatus: null, instructions: emptyInstructionSet(), safety: null });
       continue;
@@ -108,7 +137,8 @@ export async function scanGeminiSetup(input: GeminiScanInput): Promise<GeminiSet
     const read = sameAsHome ? { status: "missing" as const, value: {} } : await readGeminiSettings(file);
     if (read.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
     const layers = layersWith(read.value);
-    const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within: ref.root })).set;
+    const within = await importBoundary(ref.root, boundaryMarkersOf(layers));
+    const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
     projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers) : null });
     if (read.status === "ok") projectLayers.push({ normRoot: ref.normRoot, layer: read.value });
   }

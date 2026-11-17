@@ -37,6 +37,16 @@ export function geminiHome(env: Record<string, string | undefined>, homedir: str
   return join(fromEnv ? resolve(fromEnv) : homedir, ".gemini");
 }
 
+/**
+ * 제미나이 기록이 놓이는 곳들. 보통은 전역 폴더(<홈>/.gemini)이고, macOS의 sandbox-exec 샌드박스에서 돌린 세션은 <홈>/.cache/.gemini에 기록이 남는다(설정은 그대로 <홈>/.gemini다).
+ * 점검하는 프로세스는 그 세션의 SANDBOX 값을 모르므로 둘 다 본다. 홈은 GEMINI_CLI_HOME이 있으면 그것이다(공개 소스 config/storage.ts의 getGlobalRuntimeDir, utils/paths.ts의 homedir)
+ */
+export function geminiRecordHomes(env: Record<string, string | undefined>, homedir: string): string[] {
+  const fromEnv = env.GEMINI_CLI_HOME?.trim();
+  const base = fromEnv ? resolve(fromEnv) : homedir;
+  return [join(base, ".gemini"), join(base, ".cache", ".gemini")];
+}
+
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
 const MAIN_FILE = /^session-.*\.(jsonl|json)$/;
 const PROJECT_ROOT_FILE = ".project_root";
@@ -129,4 +139,26 @@ export async function listGeminiFiles(home: string, minMtimeMs: number | null): 
   unreadableDirs.sort();
   unreadableFiles.sort();
   return { tmpFound: true, files, olderThanWindow, unreadableDirs, unreadableFiles };
+}
+
+/** 여러 기록 자리(geminiRecordHomes)의 목록을 합친다. 같은 파일(정규화한 경로)은 한 번만 넣고, 결과는 정규화한 경로 차례다 */
+export async function listGeminiRecordFiles(homes: readonly string[], minMtimeMs: number | null): Promise<GeminiFileList> {
+  const merged: GeminiFileList = { tmpFound: false, files: [], olderThanWindow: 0, unreadableDirs: [], unreadableFiles: [] };
+  const seen = new Set<string>();
+  for (const home of homes) {
+    const list = await listGeminiFiles(home, minMtimeMs);
+    merged.tmpFound ||= list.tmpFound;
+    merged.olderThanWindow += list.olderThanWindow;
+    merged.unreadableDirs.push(...list.unreadableDirs);
+    merged.unreadableFiles.push(...list.unreadableFiles);
+    for (const file of list.files) {
+      if (seen.has(file.normPath)) continue;
+      seen.add(file.normPath);
+      merged.files.push(file);
+    }
+  }
+  merged.files.sort((a, b) => (a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0));
+  merged.unreadableDirs.sort();
+  merged.unreadableFiles.sort();
+  return merged;
 }

@@ -1,5 +1,7 @@
 # 춘식이 정비소
 
+![큰 렌치를 함께 든 해달 춘식이와 우파루파 춘삼이](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/hero.png)
+
 Claude Code와 Codex의 AQ 점검입니다. 내 PC에서 도는 프로그램이 Claude Code와 Codex의 기록을 읽어, AI 코딩 도구를 얼마나 잘 갖추고 쓰는지 점수를 매기고 한 장짜리 결과 화면을 만듭니다.
 
 ![합성 기록으로 만든 AQ 결과 화면](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-ko.png)

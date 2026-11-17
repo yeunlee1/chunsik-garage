@@ -33,6 +33,7 @@ const EXPECTED = [
   "LICENSE",
   "README.ko.md",
   "README.md",
+  "SECURITY.md",
   "hooks/hooks.json",
   "hooks/run-hook.cmd",
   "hooks/session-start",
@@ -45,8 +46,29 @@ const EXPECTED = [
 ].sort();
 
 describe("플러그인 산출물", () => {
-  it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스, README 두 벌이다(「5단계 5부 계획 전 결정」 5번, 「0.2.1에서 정한 것」)", () => {
-    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE", "README.md", "README.ko.md"]);
+  it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스, README 두 벌, 보안 정책이다(「5단계 5부 계획 전 결정」 5번, 「0.2.1에서 정한 것」, 「0.3.1에서 정한 것」)", () => {
+    expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE", "README.md", "README.ko.md", "SECURITY.md"]);
+  });
+
+  it("보안 정책은 비공개로 알리는 길(깃허브 Security 탭의 Report a vulnerability)과 지원하는 버전을 두 언어로 적는다(0.3.1)", async () => {
+    const text = await readFile("SECURITY.md", "utf8");
+    expect(text).toContain("Report a vulnerability");
+    expect(text).toContain("비공개");
+    expect(text).toMatch(/latest release/i);
+    expect(text).toContain("최신 배포");
+  });
+
+  it("README 첫 그림은 링크 미리보기에도 쓰는 대표 그림(2:1 PNG, 1280×640, 1MB 미만)이고 그림 이용 조건에 적혀 있다(0.3.1)", async () => {
+    const hero = "https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/hero.png";
+    for (const readme of ["README.md", "README.ko.md"]) {
+      const first = [...(await readFile(readme, "utf8")).matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)].map((match) => match[1])[0];
+      expect(first, readme).toBe(hero);
+    }
+    const png = await readFile("docs/images/hero.png");
+    expect(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1280, 640]);
+    expect(png.length).toBeLessThan(1024 * 1024);
+    expect(await readFile("skills/aq/assets/ART-LICENSE.md", "utf8")).toContain("`docs/images/hero.png`");
   });
 
   it("plugin.json의 아이콘은 산출물 안의 정사각 PNG(512~2048px, 2MB 미만)이고 그림 이용 조건에 적혀 있다(공식 목록 요건, 「0.2.1에서 정한 것」)", async () => {

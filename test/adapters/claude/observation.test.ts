@@ -41,8 +41,6 @@ describe("claudeObservation", () => {
     expect(CLAUDE_USAGE_MARKERS.map((marker) => [marker.name, marker.bytes.toString()])).toEqual([
       ["skill", '"Skill"'],
       ["skill", "<command-name>"],
-      ["skill", "\\u003ccommand-name>"],
-      ["skill", "\\u003Ccommand-name>"],
       ["skill", '"attributionSkill"'],
       ["skill", '"invoked_skills"'],
       ["mcp", '"mcp__'],

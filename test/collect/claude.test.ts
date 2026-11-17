@@ -790,4 +790,30 @@ describe("너무 긴 줄의 사용 흔적 표지(0.3.0, 다른 PC 피드백 7번
     expect(day.skillSignals["live-skill"]?.tool).toBe(1);
     expect(day.mcpCalls["live-db"]).toBe(1);
   });
+  it("영문자를 유니코드 이스케이프로 적은 긴 줄의 스킬·MCP 사용 흔적도 찾는다. 짧은 줄로 읽으면 같은 줄을 사용으로 센다(0.3.0 짝 4차 필수 1번)", async () => {
+    // 역빗금 u와 16진 네 자리로 적은 글자. 시험 글에 이스케이프를 그대로 적지 않으려고 실행 중에 만든다
+    const u = (ch: string): string => `${String.fromCharCode(92)}u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`;
+    const pad = "p".repeat(200);
+    const skill = JSON.stringify({ type: "assistant", timestamp: "2026-11-11T01:02:00Z", message: { id: "m-2", role: "assistant", content: [{ type: "tool_use", id: "t-2", name: "Skill", input: { skill: "live-skill", note: pad } }] } }).replace('"Skill"', `"${u("S")}kill"`);
+    const mcp = JSON.stringify({ type: "assistant", timestamp: "2026-11-11T01:03:00Z", message: { id: "m-3", role: "assistant", content: [{ type: "tool_use", id: "t-3", name: "mcp__live-db__query", input: { q: pad } }] } }).replace('"mcp__', `"${u("m")}cp__`);
+    expect([JSON.parse(skill).message.content[0].name, JSON.parse(mcp).message.content[0].name]).toEqual(["Skill", "mcp__live-db__query"]);
+    expect([skill.includes('"Skill"'), mcp.includes('"mcp__')]).toEqual([false, false]);
+    await session("p-escaped", "s1", [...sampleLines("a"), skill, mcp]);
+    const realReadLines = linesModule.readLines;
+    const spy = vi.spyOn(linesModule, "readLines").mockImplementation((file, nowMs, sink, readOptions) => realReadLines(file, nowMs, sink, { ...readOptions, maxLineBytes: 150 }));
+    let result: Awaited<ReturnType<typeof collectClaude>>;
+    try {
+      result = await collectClaude(options());
+    } finally {
+      spy.mockRestore();
+    }
+    const summary = result.summaries.find((s) => s.sessionId === "s1")!;
+    expect([summary.missing.tooLongSkillLines, summary.missing.tooLongMcpLines]).toEqual([1, 1]);
+    expect(claudeObservation(result.summaries, 0, "skill")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    expect(claudeObservation(result.summaries, 0, "mcp")).toEqual({ complete: false, reasons: ["too-long-lines"] });
+    const plain = (await collectClaude(options())).summaries.find((s) => s.sessionId === "s1")!;
+    const day = plain.days["2026-11-11"]!;
+    expect(day.skillSignals["live-skill"]?.tool).toBe(1);
+    expect(day.mcpCalls["live-db"]).toBe(1);
+  });
 });

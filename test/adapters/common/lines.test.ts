@@ -63,6 +63,34 @@ describe("readLines", () => {
     expect(lines).toEqual(["ok"]);
     expect(hits).toEqual([["skill"], ["mcp"], [], []]);
   });
+  it("상한을 넘는 줄은 JSON 이스케이프(\\uXXXX)를 풀어 표지와 견준다. 짧은 줄로 풀면 같은 글이 되는 모든 이스케이프 꼴을 찾고, 조각 경계가 이스케이프를 갈라도 찾는다(짝 4차 필수 1번)", async () => {
+    const markers = [
+      { name: "skill", bytes: Buffer.from('"Skill"') },
+      { name: "command", bytes: Buffer.from("<command-name>") },
+      { name: "mcp", bytes: Buffer.from('"mcp__') },
+    ];
+    const pad = "p".repeat(40);
+    const cases: [string, string[]][] = [
+      [`{"name":"\\u0053kill","pad":"${pad}"}`, ["skill"]],
+      [`{"name":"\\u0053\\u006b\\u0069\\u006C\\u006c","pad":"${pad}"}`, ["skill"]],
+      [`{"name":"\\u006dcp__live-db__query","pad":"${pad}"}`, ["mcp"]],
+      [`{"content":"\\u003ccommand-name\\u003e/live-skill\\u003c/command-name\\u003e","pad":"${pad}"}`, ["command"]],
+      [`{"content":"\\u003Ccommand-name\\u003E/live-skill\\u003C/command-name\\u003E","pad":"${pad}"}`, ["command"]],
+      // 글 안의 따옴표(\\u0022)는 풀어도 이스케이프한 따옴표로 남아 구조의 "Skill"과 맞지 않는다
+      [`{"text":"say \\u0022Skill\\u0022 now","pad":"${pad}"}`, []],
+      // 역빗금을 이스케이프한 \\\\ 뒤의 u0053은 이스케이프가 아니다(글자 그대로 \\u0053kill이라고 적힌 글)
+      [`{"text":"\\\\u0053kill\\"","pad":"${pad}"}`, []],
+    ];
+    for (const [line] of cases) expect(() => JSON.parse(line)).not.toThrow();
+    expect(JSON.parse(cases[0]![0]).name).toBe("Skill");
+    expect(JSON.parse(cases[6]![0]).text).toBe('\\u0053kill"');
+    for (const chunkBytes of [3, 5, 7, 64]) {
+      const path = await fileWith(`esc-${chunkBytes}.jsonl`, `${cases.map(([line]) => line).join("\n")}\n`);
+      const hits: string[][] = [];
+      await readLines(path, Date.now(), { line: () => {}, tooLong: (found) => hits.push([...(found ?? [])].sort()) }, { maxLineBytes: 20, chunkBytes, markers });
+      expect(hits, `조각 ${chunkBytes}바이트`).toEqual(cases.map(([, found]) => found));
+    }
+  });
   it("줄은 LF로만 가른다. 본문 안의 U+2028, U+2029, 홀로 있는 \\r에서는 가르지 않는다", async () => {
     const one = '{"type":"user","message":{"content":"a\u2028b\u2029c\rd"}}';
     const r = await read(await fileWith("u.jsonl", `${one}\nnext\n`), Date.now(), { chunkBytes: 8 });

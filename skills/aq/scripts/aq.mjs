@@ -5293,8 +5293,6 @@ var marker = (name, text) => ({ name, bytes: Buffer.from(text, "utf8") });
 var CLAUDE_USAGE_MARKERS = [
   marker("skill", '"Skill"'),
   marker("skill", "<command-name>"),
-  marker("skill", "\\u003ccommand-name>"),
-  marker("skill", "\\u003Ccommand-name>"),
   marker("skill", '"attributionSkill"'),
   marker("skill", '"invoked_skills"'),
   marker("mcp", '"mcp__'),
@@ -6497,15 +6495,77 @@ var IN_PROGRESS_WINDOW_MS = 2e3;
 function decode(buffer, start, end) {
   return buffer.toString("utf8", start, end > start && buffer[end - 1] === 13 ? end - 1 : end);
 }
+var BACKSLASH = 92;
+var LOWER_U = 117;
+function hexValue(byte) {
+  if (byte >= 48 && byte <= 57) return byte - 48;
+  if (byte >= 65 && byte <= 70) return byte - 55;
+  if (byte >= 97 && byte <= 102) return byte - 87;
+  return -1;
+}
+function escapeDecoder() {
+  let held = Buffer.alloc(0);
+  return {
+    push(piece) {
+      const input = held.length > 0 ? Buffer.concat([held, piece]) : piece;
+      held = Buffer.alloc(0);
+      if (input.indexOf(BACKSLASH) === -1) return input;
+      const out = Buffer.allocUnsafe(input.length);
+      let written = 0;
+      let index = 0;
+      while (index < input.length) {
+        const slash = input.indexOf(BACKSLASH, index);
+        written += input.copy(out, written, index, slash === -1 ? input.length : slash);
+        if (slash === -1) break;
+        if (slash + 1 >= input.length || input[slash + 1] === LOWER_U && slash + 6 > input.length) {
+          held = Buffer.from(input.subarray(slash));
+          break;
+        }
+        if (input[slash + 1] !== LOWER_U) {
+          out[written++] = BACKSLASH;
+          out[written++] = input[slash + 1];
+          index = slash + 2;
+          continue;
+        }
+        let code = 0;
+        for (let at = slash + 2; at < slash + 6; at++) {
+          const digit = hexValue(input[at]);
+          code = digit < 0 || code < 0 ? -1 : code * 16 + digit;
+        }
+        if (code < 0) {
+          out[written++] = BACKSLASH;
+          out[written++] = LOWER_U;
+          index = slash + 2;
+          continue;
+        }
+        if (code === 34 || code === BACKSLASH) {
+          out[written++] = BACKSLASH;
+          out[written++] = code;
+        } else if (code < 128) {
+          out[written++] = code;
+        } else {
+          written += input.copy(out, written, slash, slash + 6);
+        }
+        index = slash + 6;
+      }
+      return out.subarray(0, written);
+    },
+    reset() {
+      held = Buffer.alloc(0);
+    }
+  };
+}
 function lineSplitter(sink, maxLine = MAX_LINE_BYTES, markers = []) {
   let carry = Buffer.allocUnsafe(Math.min(maxLine, 64 * 1024));
   let carryBytes = 0;
   let skipping = false;
   const longest = markers.reduce((most, marker2) => Math.max(most, marker2.bytes.length), 0);
+  const decoder = escapeDecoder();
   let found = /* @__PURE__ */ new Set();
   let edge = Buffer.alloc(0);
-  const scan = (piece) => {
-    if (markers.length === 0 || piece.length === 0) return;
+  const scan = (raw) => {
+    if (markers.length === 0 || raw.length === 0) return;
+    const piece = decoder.push(raw);
     const joined = edge.length > 0 ? Buffer.concat([edge, piece]) : piece;
     for (const marker2 of markers) if (!found.has(marker2.name) && joined.indexOf(marker2.bytes) !== -1) found.add(marker2.name);
     edge = Buffer.from(joined.subarray(Math.max(0, joined.length - (longest - 1))));
@@ -6514,6 +6574,7 @@ function lineSplitter(sink, maxLine = MAX_LINE_BYTES, markers = []) {
     sink.tooLong(found);
     found = /* @__PURE__ */ new Set();
     edge = Buffer.alloc(0);
+    decoder.reset();
   };
   return {
     push(view) {

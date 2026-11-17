@@ -194,8 +194,8 @@ describe("reportHtml", () => {
     const withServers: ReportView = { ...view, failedServers: [{ tool: "claude-code", name: "gone<x>", sessions: 4 }, { tool: "claude-code", name: "auth", sessions: 1 }] };
     const s5 = between(reportHtml(withServers, art), '<div class="it" id="it-S5">', '<div class="it" id="it-');
     expect(s5).toContain(`aria-label="${REPORT_COPY.failedServers.ko}" data-en-aria-label="${REPORT_COPY.failedServers.en}"`);
-    expect(s5).toContain(`<li>gone&lt;x&gt;<small><span lang="en" data-l="en">4 sessions</span><span lang="ko" data-l="ko">세션 4곳</span></small></li>`);
-    expect(s5).toContain(`<li>auth<small><span lang="en" data-l="en">1 session</span><span lang="ko" data-l="ko">세션 1곳</span></small></li>`);
+    expect(s5).toContain(`<li>gone&lt;x&gt;<small><span lang="en" data-l="en">4 sessions</span><span lang="ko" data-l="ko">세션 4개</span></small></li>`);
+    expect(s5).toContain(`<li>auth<small><span lang="en" data-l="en">1 session</span><span lang="ko" data-l="ko">세션 1개</span></small></li>`);
     expect(reportHtml({ ...view, failedServers: [] }, art)).not.toContain(`aria-label="${REPORT_COPY.failedServers.ko}"`);
   });
 

@@ -71,7 +71,7 @@ export const REPORT_COPY = {
   thWeight: { en: "Weight", ko: "무게" },
   thZero: { en: "Zero mark", ko: "0점 기준" },
   thFull: { en: "Full mark", ko: "만점 기준" },
-  failedSessions: { en: "{n} {n:session|sessions}", ko: "세션 {n}곳" },
+  failedSessions: { en: "{n} {n:session|sessions}", ko: "세션 {n}개" },
   overlapProject: { en: "Project with the most overlap", ko: "가장 많이 겹치는 프로젝트" },
   serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "판정에서 뺀 서버 {n}개" },
   judgeFrom: { en: "If nothing else changes, it can be judged from the check-up {n} {n:day|days} from now.", ko: "다른 조건이 같으면 {n}일 뒤의 점검부터 판정할 수 있습니다." },

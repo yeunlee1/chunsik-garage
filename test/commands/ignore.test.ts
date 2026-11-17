@@ -24,14 +24,14 @@ describe("aq ignore", () => {
     expect((await runIgnore("list", null, { stateDir, lang: "ko" })).ignored).toEqual([]);
     const added = await runIgnore("add", "F1", { stateDir, lang: "ko" });
     expect(added.ignored).toEqual(["F1"]);
-    expect(added.run.text).toBe("「가장 높은 추론 강도의 몫」 항목은 정한 대로 두고, 고칠 목록과 다음 등급 차례에서 뺐습니다. 점수에는 그대로 들어갑니다.");
+    expect(added.run.text).toBe("「가장 높은 추론 강도의 몫」 항목은 정한 대로 두고, 먼저 고칠 것과 다음 등급 차례에서 뺐습니다. 점수에는 그대로 들어갑니다.");
     await runIgnore("add", "e4", { stateDir, lang: "ko" });
     await runIgnore("add", "F1", { stateDir, lang: "ko" });
     expect(await kept()).toEqual(["E4", "F1"]);
     const listed = await runIgnore("list", null, { stateDir, lang: "en" });
     expect(listed.run.text).toBe('Kept as you chose: "Always-loaded instructions", "Highest effort share".');
     const removed = await runIgnore("remove", "F1", { stateDir, lang: "ko" });
-    expect([removed.ignored, removed.run.text]).toEqual([["E4"], "「가장 높은 추론 강도의 몫」 항목을 다시 고칠 목록에 넣었습니다."]);
+    expect([removed.ignored, removed.run.text]).toEqual([["E4"], "「가장 높은 추론 강도의 몫」 항목의 「그대로 두기로 함」을 풀었습니다."]);
     expect(await kept()).toEqual(["E4"]);
   });
 

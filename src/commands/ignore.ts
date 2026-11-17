@@ -19,14 +19,14 @@ export interface IgnoreOutcome {
 const COPY = {
   en: {
     added: '"{name}" is now kept as you chose. It is left out of what to fix first and the next-grade steps, and it still counts in the score.',
-    removed: '"{name}" is back on the list of what to fix.',
+    removed: '"{name}" is no longer kept as you chose.',
     list: "Kept as you chose: {names}.",
     none: "Nothing is kept as you chose.",
     quote: (name: string): string => `"${name}"`,
   },
   ko: {
-    added: "「{name}」 항목은 정한 대로 두고, 고칠 목록과 다음 등급 차례에서 뺐습니다. 점수에는 그대로 들어갑니다.",
-    removed: "「{name}」 항목을 다시 고칠 목록에 넣었습니다.",
+    added: "「{name}」 항목은 정한 대로 두고, 먼저 고칠 것과 다음 등급 차례에서 뺐습니다. 점수에는 그대로 들어갑니다.",
+    removed: "「{name}」 항목의 「그대로 두기로 함」을 풀었습니다.",
     list: "그대로 두기로 한 항목은 {names}입니다.",
     none: "그대로 두기로 한 항목이 없습니다.",
     quote: (name: string): string => `「${name}」`,

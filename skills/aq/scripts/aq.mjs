@@ -3239,7 +3239,7 @@ var REPORT_COPY = {
   thWeight: { en: "Weight", ko: "\uBB34\uAC8C" },
   thZero: { en: "Zero mark", ko: "0\uC810 \uAE30\uC900" },
   thFull: { en: "Full mark", ko: "\uB9CC\uC810 \uAE30\uC900" },
-  failedSessions: { en: "{n} {n:session|sessions}", ko: "\uC138\uC158 {n}\uACF3" },
+  failedSessions: { en: "{n} {n:session|sessions}", ko: "\uC138\uC158 {n}\uAC1C" },
   overlapProject: { en: "Project with the most overlap", ko: "\uAC00\uC7A5 \uB9CE\uC774 \uACB9\uCE58\uB294 \uD504\uB85C\uC81D\uD2B8" },
   serversOut: { en: "{n} {n:server|servers} left out of the judgment", ko: "\uD310\uC815\uC5D0\uC11C \uBE80 \uC11C\uBC84 {n}\uAC1C" },
   judgeFrom: { en: "If nothing else changes, it can be judged from the check-up {n} {n:day|days} from now.", ko: "\uB2E4\uB978 \uC870\uAC74\uC774 \uAC19\uC73C\uBA74 {n}\uC77C \uB4A4\uC758 \uC810\uAC80\uBD80\uD130 \uD310\uC815\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4." },
@@ -3839,7 +3839,7 @@ table.tv td.n{font-family:var(--mono);text-align:right}
 .partial svg{margin-top:2px}
 .partial p{margin:0;font-size:14px;color:var(--ink)}
 .partial p+p{margin-top:4px}
-.next{border-top:1px dashed var(--mute);padding:22px 0 14px}.next .lead{margin:6px 0 0;font-size:14px;color:var(--ink2)}.steps{margin:10px 0 0;padding:0;list-style:none;counter-reset:step}.step{counter-increment:step;position:relative;padding:12px 0 12px 36px;border-top:1px solid var(--hair)}.step:first-child{border-top:0}.step::before{content:counter(step);position:absolute;left:0;top:13px;width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font:700 12px/24px var(--mono);text-align:center}.step .sh{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;align-items:baseline}.step .sh b{font-size:16px;line-height:1.35;letter-spacing:-.01em;flex:1 1 12em;min-width:0}.step .aq{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--up);white-space:nowrap}.step p{margin:4px 0 0;font-size:14px;color:var(--ink2)}.step p.fix{color:var(--ink)}.step .now{font-variant-numeric:tabular-nums}.how-score{border-top:1px dashed var(--mute);padding:22px 0 18px}.rulesum{margin:10px 0 0;padding:0 0 0 18px;display:grid;gap:4px;font-size:14px;color:var(--ink);line-height:1.5}.ruletable{margin-top:12px}.ruletable>summary{font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}.ruletable .tvwrap{max-height:none;margin-top:8px}table.rules tr.grp th{background:var(--wash);font-weight:800;color:var(--ink)}table.tv th.n{text-align:right;white-space:nowrap}table.rules td{white-space:nowrap}.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
+.next{border-top:1px dashed var(--mute);padding:22px 0 14px}.next .lead{margin:6px 0 0;font-size:14px;color:var(--ink2)}.steps{margin:10px 0 0;padding:0;list-style:none;counter-reset:step}.step{counter-increment:step;position:relative;padding:12px 0 12px 36px;border-top:1px solid var(--hair)}.step:first-child{border-top:0}.step::before{content:counter(step);position:absolute;left:0;top:13px;width:24px;height:24px;border-radius:50%;background:var(--teal);color:#fff;font:700 12px/24px var(--mono);text-align:center}.step .sh{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;align-items:baseline}.step .sh b{font-size:16px;line-height:1.35;letter-spacing:-.01em;flex:1 1 12em;min-width:0}.step .aq{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--up);white-space:nowrap}.step p{margin:4px 0 0;font-size:14px;color:var(--ink2)}.step p.fix{color:var(--ink)}.step .now{font-variant-numeric:tabular-nums}.how-score{border-top:1px dashed var(--mute);padding:22px 0 18px}.rulesum{margin:10px 0 0;padding:0 0 0 18px;display:grid;gap:4px;font-size:14px;color:var(--ink);line-height:1.5}.ruletable{margin-top:12px}.ruletable>summary{font-size:13px;font-weight:700;color:var(--ink2);cursor:pointer}.ruletable .tvwrap{max-height:none;margin-top:8px}table.rules tr.grp th{background:var(--wash);font-weight:800;color:var(--ink)}table.tv th.n{text-align:right;white-space:nowrap}table.rules td{white-space:nowrap}table.rules th[scope=row]{min-width:9em}.notices{border-top:1px dashed var(--mute);padding:18px 0 16px}
 .notices ul{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
 .notices li{display:grid;grid-template-columns:20px 1fr;gap:8px;font-size:14px;color:var(--ink)}
 .notices .spots{grid-column:2;margin:2px 0 0;gap:2px}
@@ -11284,14 +11284,14 @@ async function runNotify(action, options) {
 var COPY4 = {
   en: {
     added: '"{name}" is now kept as you chose. It is left out of what to fix first and the next-grade steps, and it still counts in the score.',
-    removed: '"{name}" is back on the list of what to fix.',
+    removed: '"{name}" is no longer kept as you chose.',
     list: "Kept as you chose: {names}.",
     none: "Nothing is kept as you chose.",
     quote: (name) => `"${name}"`
   },
   ko: {
-    added: "\u300C{name}\u300D \uD56D\uBAA9\uC740 \uC815\uD55C \uB300\uB85C \uB450\uACE0, \uACE0\uCE60 \uBAA9\uB85D\uACFC \uB2E4\uC74C \uB4F1\uAE09 \uCC28\uB840\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uC810\uC218\uC5D0\uB294 \uADF8\uB300\uB85C \uB4E4\uC5B4\uAC11\uB2C8\uB2E4.",
-    removed: "\u300C{name}\u300D \uD56D\uBAA9\uC744 \uB2E4\uC2DC \uACE0\uCE60 \uBAA9\uB85D\uC5D0 \uB123\uC5C8\uC2B5\uB2C8\uB2E4.",
+    added: "\u300C{name}\u300D \uD56D\uBAA9\uC740 \uC815\uD55C \uB300\uB85C \uB450\uACE0, \uBA3C\uC800 \uACE0\uCE60 \uAC83\uACFC \uB2E4\uC74C \uB4F1\uAE09 \uCC28\uB840\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uC810\uC218\uC5D0\uB294 \uADF8\uB300\uB85C \uB4E4\uC5B4\uAC11\uB2C8\uB2E4.",
+    removed: "\u300C{name}\u300D \uD56D\uBAA9\uC758 \u300C\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD568\u300D\uC744 \uD480\uC5C8\uC2B5\uB2C8\uB2E4.",
     list: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC740 {names}\uC785\uB2C8\uB2E4.",
     none: "\uADF8\uB300\uB85C \uB450\uAE30\uB85C \uD55C \uD56D\uBAA9\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.",
     quote: (name) => `\u300C${name}\u300D`

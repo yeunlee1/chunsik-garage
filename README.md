@@ -25,7 +25,7 @@ To update, run `claude plugin marketplace update chunsik-garage`, then `claude p
 
 ## Privacy
 
-The program and the report page send nothing out. The AI receives the scores, the counts, and the names of what to tune up. It does not receive your conversations or the text of your instructions. If you ask for a deep checkup, the AI reads the instruction files you pick.
+The program and the report page make no network requests. What the program prints goes to the AI in your current session. For a checkup, that is the scores, the counts, and the paths of the report and result files. For a tune-up, it is also the names of what to tune up, the paths of the settings files, and the keys and values it proposes to change. Your conversations and the text of your instructions are not sent. If you ask for a deep checkup, the AI reads only the instruction files you pick.
 
 The checkup looks for API keys or tokens written as they are in your MCP settings and in the `env` of your Claude Code settings. It looks at a value only to tell its shape, and never shows or saves it. The report page lists where they are, and the AI receives only how many there are.
 

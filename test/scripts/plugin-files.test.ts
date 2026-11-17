@@ -39,6 +39,7 @@ const EXPECTED = [
   "hooks/session-start.mjs",
   "skills/aq/SKILL.md",
   "skills/aq/assets/ART-LICENSE.md",
+  "skills/aq/assets/icon.png",
   ...Object.values(ART_FILES).map((file) => `skills/aq/assets/${file}`),
   "skills/aq/scripts/aq.mjs",
 ].sort();
@@ -46,6 +47,22 @@ const EXPECTED = [
 describe("플러그인 산출물", () => {
   it("담는 곳은 두 도구의 매니페스트와 마켓 목록, 스킬 본문, 묶은 실행 파일, 그림 폴더, 라이선스, README 두 벌이다(「5단계 5부 계획 전 결정」 5번, 「0.2.1에서 정한 것」)", () => {
     expect([...PLUGIN_PATHS]).toEqual([".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", ".codex-plugin/plugin.json", ".agents/plugins/marketplace.json", "skills/aq/SKILL.md", "skills/aq/scripts/aq.mjs", "skills/aq/assets", "hooks", "LICENSE", "README.md", "README.ko.md"]);
+  });
+
+  it("plugin.json의 아이콘은 산출물 안의 정사각 PNG(512~2048px, 2MB 미만)이고 그림 이용 조건에 적혀 있다(공식 목록 요건, 「0.2.1에서 정한 것」)", async () => {
+    const manifest = JSON.parse(await readFile(".claude-plugin/plugin.json", "utf8")) as { icon?: string };
+    expect(manifest.icon).toBe("skills/aq/assets/icon.png");
+    expect(EXPECTED).toContain(manifest.icon);
+    const png = await readFile(manifest.icon!);
+    // PNG 표식과 IHDR의 너비·높이
+    expect(png.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+    expect(png.toString("ascii", 12, 16)).toBe("IHDR");
+    const [width, height] = [png.readUInt32BE(16), png.readUInt32BE(20)];
+    expect(width).toBe(height);
+    expect(width).toBeGreaterThanOrEqual(512);
+    expect(width).toBeLessThanOrEqual(2048);
+    expect(png.length).toBeLessThan(2 * 1024 * 1024);
+    expect(await readFile("skills/aq/assets/ART-LICENSE.md", "utf8")).toContain("`icon.png`");
   });
 
   it("산출물에 담는 README의 상대 링크는 산출물 안을 가리키고, 그림은 develop의 docs/images를 바깥 주소로 가리킨다(「0.2.1에서 정한 것」)", async () => {

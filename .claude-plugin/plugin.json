@@ -9,6 +9,7 @@
   "homepage": "https://github.com/yeunlee1/chunsik-garage",
   "repository": "https://github.com/yeunlee1/chunsik-garage",
   "license": "MIT",
+  "icon": "skills/aq/assets/icon.png",
   "keywords": [
     "aq",
     "checkup",

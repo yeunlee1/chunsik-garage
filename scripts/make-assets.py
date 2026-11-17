@@ -31,3 +31,8 @@ for name, source, size in PLAN:
         sys.exit(f"정사각형이 아니다: {source}")
     image.resize((size, size), Image.LANCZOS).save(out / name, "WEBP", quality=82, method=6)
     print(name, size, (out / name).stat().st_size)
+
+# 플러그인 아이콘. Claude 공식 목록은 정사각 PNG나 JPEG(한 변 512~2048px, 2MB 미만)만 받고 WebP는 받지 않는다(설계 「0.2.1에서 정한 것」)
+icon = Image.open(second / "1-춘식이-얼굴.png").convert("RGB")
+icon.resize((512, 512), Image.LANCZOS).save(out / "icon.png", "PNG", optimize=True)
+print("icon.png", 512, (out / "icon.png").stat().st_size)

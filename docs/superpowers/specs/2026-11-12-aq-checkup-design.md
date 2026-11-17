@@ -4760,9 +4760,10 @@ core(`src/core/`)는 경로를 풀지 않고 파일을 읽지 않는다(7.2절).
 
 사용자 지시(2026-11-17 「그래 이렇게 해봐」)로 다른 사람이 써 보게 알리는 준비를 하며 고친 버전이다. 프로그램은 바뀌지 않았다.
 
-- **README를 산출물에 담는다.** Claude 공식 목록(claude.ai 개발자 포털 `claude.ai/directory/manage`)은 따라갈 브랜치나 태그와 플러그인 폴더를 고르게 하고, 그 폴더의 README를 목록의 설명으로 보여 준다. README가 없거나 40낱말보다 짧으면 막는다(공식 문서 `claude.com/docs/directory/publish`, 2026-11-17에 읽음). 따라갈 브랜치인 `main`에 README가 있어야 하므로 README 두 벌을 `PLUGIN_PATHS`에 더했다(25개).
+- **README를 산출물에 담는다.** Claude 공식 목록(claude.ai 개발자 포털 `claude.ai/directory/manage`)은 따라갈 브랜치나 태그와 플러그인 폴더를 고르게 하고, 그 폴더의 README를 목록의 설명으로 보여 준다. README가 없거나 40낱말보다 짧으면 막는다(공식 문서 `claude.com/docs/directory/publish`와 제출 전 점검표 `claude.com/docs/plugins/pre-submission-checklist.md`, 2026-11-17에 읽음). 따라갈 브랜치인 `main`에 README가 있어야 하므로 README 두 벌을 `PLUGIN_PATHS`에 더했다(25개).
 - **README의 그림은 바깥 주소로 가리킨다.** 그림(`docs/images/`)은 산출물에 넣지 않고, README의 그림을 `develop`의 원본 주소(`https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/…`)로 바꿨다. 설치본에 그림 두 장(약 350KB)이 딸려 가지 않게 하려는 것이다. 산출물에 담는 README의 상대 링크는 산출물 안을 가리켜야 한다(시험).
 - **README에 더한 것.** 내 PC에서 도는 것(스킬이 돌리는 `aq.mjs`, 세션을 시작할 때 도는 훅)과 둘 다 네트워크로 요청을 보내지 않는다는 문장, claude.ai 채팅이나 Cowork용이 아니라는 문장이다. 공식 목록의 보안 검사는 플러그인이 돌리고 보내고 가져오는 것을 README에 적으라고 한다. 목록은 구성에 따라 채팅, Cowork, Claude Code에 함께 실리고, Claude Code로만 좁히는 칸은 문서에 없다.
-- **공식 목록에 낼 때 알아 둘 것(문서 기준이고 직접 내 보지는 않았다).** 유료 Claude 요금제에서 낸다. 따라갈 브랜치는 `main`, 플러그인 폴더는 비워 둔다(저장소 뿌리). 묶은 실행 파일(`aq.mjs`, 256KiB 넘음)과 다른 파일을 부르는 훅 스크립트는 거절되지 않고 사람의 검토로 넘어갈 수 있다. 개인정보 질문에는 PC의 기록을 읽고 결과를 `~/.chunsik-garage/`에 남기며 바깥으로 보내지 않는다고 답한다.
+- **공식 목록에 낼 때 알아 둘 것(문서 기준이고 직접 내 보지는 않았다).** 유료 Claude 요금제에서 낸다. 따라갈 브랜치는 `main`, 플러그인 폴더는 비워 둔다(저장소 뿌리). 묶은 실행 파일(`aq.mjs`, 256KiB 넘음), 다른 파일을 부르는 훅 스크립트, 프로그램이 읽는 동봉 그림은 거절되지 않고 사람의 검토로 넘어갈 수 있다(짝 검토의 참고). 개인정보 질문에는 PC의 기록을 읽고 결과를 `~/.chunsik-garage/`에 남기며 바깥으로 보내지 않는다고 답한다.
 - **Codex(OpenAI) 목록은 미룬다.** 본인 인증과 웹사이트·지원·개인정보 처리방침·이용약관 주소가 필요하고, 훅이 든 꾸러미는 지금 받지 않으며, PC의 프로그램을 부르는 플러그인은 데스크톱 전용으로만 실린다(`developers.openai.com/codex/submit-plugins`, 2026-11-17에 읽음). Codex 사용자는 지금처럼 깃허브 저장소를 마켓으로 더해 설치한다.
+- **아이콘.** 공식 목록은 정사각 PNG나 JPEG(한 변 512~2048px, 2MB 미만)를 아이콘으로 받고 WebP와 SVG는 받지 않는다. 아이콘은 포털에 처음 저장하거나 낼 때 한 번만 읽고, 나중에 바꿔도 목록의 아이콘은 그대로다(`claude plugin validate`의 안내). 그래서 결과 화면의 춘식이 얼굴 원본(2차 그림 1번)을 512px PNG로 줄여 `skills/aq/assets/icon.png`(약 243KiB)에 두고 `plugin.json`의 `icon`으로 가리킨다. `scripts/make-assets.py`가 만들고, 그림 이용 조건의 표에 더했다(그림 폴더라 MIT가 아니다).
 - **버전.** 0.2.1로 올렸다.

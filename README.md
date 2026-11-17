@@ -2,7 +2,7 @@
 
 ![Chunsik the otter and Chunsam the axolotl holding a big wrench together](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/hero.png)
 
-AQ checkup for Claude Code and Codex. A program on your own PC reads your local Claude Code and Codex records, scores how well you set up and use these AI coding tools, and writes a one-page report.
+AQ checkup for Claude Code and Codex, with Gemini CLI records counted too. A program on your own PC reads your local Claude Code, Codex, and Gemini CLI records, scores how well you set up and use these AI coding tools, and writes a one-page report.
 
 ![AQ report page made from synthetic records](https://raw.githubusercontent.com/yeunlee1/chunsik-garage/develop/docs/images/report-en.png)
 
@@ -42,6 +42,7 @@ What runs on your PC: the skill runs `skills/aq/scripts/aq.mjs` with Node.js, an
 - Built and tested on Windows 11. macOS and Linux are covered only by tests with temporary home folders.
 - Made for Claude Code and Codex on your own PC. The checkup reads the records these tools keep on your PC, so it is not made for claude.ai chat or Cowork.
 - Claude Code record formats checked on 2.1.220 to 2.1.322, and the settings a tune-up changes on 2.1.220 to 2.1.325. Codex record formats checked on records of 0.166.0 (and the older format of 0.140 to 0.142), and up to 0.169.0 by comparing the public source of the record shapes the checkup reads.
+- Gemini CLI records and settings are read when they are on your PC. Run the checkup from Claude Code or Codex; there is no Gemini CLI extension. The record formats were checked only against the public source of Gemini CLI 0.68.0, not yet on real records, and the records do not say which version wrote them. For Gemini CLI the checkup does not measure skills, unused MCP servers, MCP connection failures and hooks, reasoning effort, or compaction, and it does not tune anything up. Settings of folders you have not trusted in Gemini CLI are left out, as Gemini CLI does.
 
 ## What it leaves and how to remove it
 

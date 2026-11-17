@@ -17,5 +17,6 @@ You may share the art as it appears in the cards, result pages, and screenshots 
 | `sticker-good.webp` | 128×128 | Chunsam's sticker next to "Doing well" |
 | `sticker-fix.webp` | 128×128 | Chunsik's sticker next to "To fix" when there is something to fix |
 | `sticker-done.webp` | 128×128 | Chunsik's sticker next to "To fix" when there is nothing to fix |
+| `icon.png` | 512×512 | The plugin icon in plugin directories (PNG, because the Claude plugin directory does not take WebP) |
 
 `scripts/make-assets.py` makes these files from the original drawings, which are not in this repository.

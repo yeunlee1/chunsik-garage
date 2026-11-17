@@ -81,6 +81,8 @@ export interface DayCell {
   interruptedTurns: number;
   subagentCalls: number;
   mcpConnectionFailure: boolean;
+  /** 연결에 실패한 MCP 서버의 이름과 그날 실패가 적힌 횟수(0.3.0). 오류 글은 남기지 않는다 */
+  mcpFailedServers: Record<string, number>;
   skillSignals: Record<string, SkillSignalCounts>;
   mcpCalls: Record<string, number>;
   mcpAttributions: Record<string, number>;
@@ -98,6 +100,12 @@ export interface MissingCounts {
   brokenLines: number;
   tailFragments: number;
   tooLongLines: number;
+  /**
+   * 너무 긴 줄 가운데 스킬 사용과 MCP 호출의 표지가 든 줄의 수(0.3.0, 다른 PC 피드백 7번). 이 칸이 없는 옛 요약은
+   * 긴 줄마다 표지가 있다고 본다(판정을 막는 쪽으로만 틀린다)
+   */
+  tooLongSkillLines?: number;
+  tooLongMcpLines?: number;
   unconfirmedTypes: Record<string, number>;
 }
 
@@ -159,6 +167,7 @@ export function emptyDay(): DayCell {
     interruptedTurns: 0,
     subagentCalls: 0,
     mcpConnectionFailure: false,
+    mcpFailedServers: nameRecord(),
     skillSignals: nameRecord(),
     mcpCalls: nameRecord(),
     mcpAttributions: nameRecord(),
@@ -180,6 +189,7 @@ export function canonicalDay(day: DayCell): DayCell {
     efforts: sortedRecord(day.efforts),
     tools: sortedRecord(day.tools),
     unknownDenialKinds: sortedRecord(day.unknownDenialKinds),
+    mcpFailedServers: sortedRecord(day.mcpFailedServers),
     skillSignals: sortedRecord(day.skillSignals),
     mcpCalls: sortedRecord(day.mcpCalls),
     mcpAttributions: sortedRecord(day.mcpAttributions),
@@ -211,6 +221,7 @@ const DAY_SHAPE: Record<keyof DayCell, Shape> = {
   interruptedTurns: "number",
   subagentCalls: "number",
   mcpConnectionFailure: "boolean",
+  mcpFailedServers: "numbers",
   skillSignals: "skills",
   mcpCalls: "numbers",
   mcpAttributions: "numbers",
@@ -388,6 +399,8 @@ export function reviveSummary(value: unknown): SessionSummary | null {
       brokenLines: missing.brokenLines!,
       tailFragments: missing.tailFragments!,
       tooLongLines: missing.tooLongLines!,
+      ...(isObject(v.missing) && isNumber(v.missing.tooLongSkillLines) ? { tooLongSkillLines: v.missing.tooLongSkillLines } : {}),
+      ...(isObject(v.missing) && isNumber(v.missing.tooLongMcpLines) ? { tooLongMcpLines: v.missing.tooLongMcpLines } : {}),
       unconfirmedTypes,
     },
     firstResponseIdHashes: hashes,

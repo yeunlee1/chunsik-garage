@@ -1,7 +1,7 @@
 // 지침 파일을 읽어 크기, 글자 종류별 글자 수, 줄마다의 지문만 남기고 글은 버린다. 전역 지침에 프로젝트의 경로나 이름이 몇 번 나오는지도 센다(설계 10 「지침 파일의 범위」, 11.3 S1·F3·F4, 17)
 import { createHash } from "node:crypto";
-import { lstat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { lstat, readlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { entryInfo, listDir, readText } from "./fs.ts";
 
@@ -31,6 +31,16 @@ export interface InstructionSet {
 
 export const MIN_LINE_CHARS = 20;
 const RULES_MAX_DEPTH = 8;
+/** Claude Code가 가져오기(@경로)를 따르는 깊이. 문서의 「maximum depth of four hops」다(설계 「0.3.0에서 정한 것」) */
+export const MAX_IMPORT_HOPS = 4;
+
+/** 가져오기를 따르는 법. 주지 않으면 따르지 않는다 */
+export interface ImportOptions {
+  /** `@~/`를 풀 홈 폴더 */
+  homedir: string;
+  /** 가져온 파일이 이 폴더 안일 때만 따른다(프로젝트 지침). null이면 어디든 따른다(전역 지침) */
+  within: string | null;
+}
 
 export function emptyInstructionSet(): InstructionSet {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
@@ -121,6 +131,99 @@ export function countMentions(text: string, targets: readonly MentionTarget[]): 
 }
 
 /**
+ * 지침 글의 가져오기(@경로). 줄 어디서나 찾고, 코드 블록과 코드 칸 안, 따옴표로 감싼 경로, 앞이 빈칸이 아닌 @(메일 주소 같은 것)는 뺀다.
+ * 역빗금 뒤의 빈칸은 경로의 빈칸으로 푼다(Claude Code 문서의 「Import additional files」)
+ */
+export function importsOf(text: string): string[] {
+  // 코드 블록을 지운다. 줄 앞의 들여쓰기, 목록 표시(-, *, +, 1. 같은 것), 인용 표시(>)를 걷어 낸 뒤 ```나 ~~~로 열고, 같은 글자의 같거나 긴 울타리만 있는 줄에서 닫는다(짝 검토 1차 필수 1)
+  const prose: string[] = [];
+  let fence: string | null = null;
+  for (const raw of text.split("\n")) {
+    const body = raw.replace(/^(?:[ \t]*(?:[-*+]|\d{1,9}[.)]|>)(?=[ \t]|$))*[ \t]*/, "");
+    const marker = /^(`{3,}|~{3,})/.exec(body)?.[1] ?? null;
+    if (fence !== null) {
+      if (marker !== null && marker[0] === fence[0] && marker.length >= fence.length && body.slice(marker.length).trim() === "") fence = null;
+      prose.push("");
+      continue;
+    }
+    if (marker !== null) {
+      fence = marker;
+      prose.push("");
+      continue;
+    }
+    prose.push(raw);
+  }
+  // 코드 칸을 지운다. 같은 길이의 역따옴표 사이이고, 여러 줄에 걸칠 수 있지만 빈 줄(문단의 끝)은 넘지 않는다
+  const cleaned = prose.join("\n").replace(/(`+)(?:(?!\n[ \t]*\n)[\s\S])*?\1/g, " ");
+  const out: string[] = [];
+  for (const match of cleaned.matchAll(/(?<!\S)@((?:\\ |\S)+)/g)) {
+    const token = match[1]!.replace(/\\ /g, " ");
+    if (token.startsWith('"') || token.startsWith("'")) continue;
+    out.push(token);
+  }
+  return out;
+}
+
+const NETWORK_PATH = /^(\\\\|\/\/)/;
+
+/**
+ * 가져오기 경로를 푼다. ~/는 홈, 상대 경로는 가져오는 파일의 폴더 기준이다.
+ * 네트워크 경로(\\서버, //서버)는 파일 조회만으로도 네트워크에 닿을 수 있어 null로 두고 따르지 않는다(짝 검토 1차 필수 3)
+ */
+export function importTarget(token: string, from: string, homedir: string): string | null {
+  if (NETWORK_PATH.test(token)) return null;
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join(homedir, token.slice(2)) : isAbsolute(token) ? token : resolve(dirname(from), token);
+  return NETWORK_PATH.test(target) ? null : target;
+}
+
+/** 경로를 살피는 데 쓰는 파일 계층. 둘 다 연결을 따라가지 않는다(시험이 가짜로 바꾼다) */
+export interface LinkOps {
+  lstat(path: string): Promise<{ isSymbolicLink(): boolean }>;
+  readlink(path: string): Promise<string>;
+}
+
+const MAX_LINK_HOPS = 40;
+
+/**
+ * 경로를 뿌리부터 한 칸씩, 연결을 따라가지 않고(lstat, readlink) 살펴서 어느 칸이 네트워크 경로(\\서버, //서버)를 가리키는 연결이면 참이다.
+ * 연결을 따라가는 조회(stat, realpath)는 그것만으로 네트워크에 닿을 수 있어 그 전에 거른다. 그 뒤의 칸은 조회하지 않는다(짝 검토 2차 필수 1).
+ * 없는 칸에 이르면 거짓이다(읽을 것도 없다). 연결이 너무 깊으면 참으로 보고 따르지 않는다. 연결된 네트워크 드라이브(Z: 같은 것)는 알아볼 수 없다
+ */
+export async function reachesNetwork(path: string, ops: LinkOps = { lstat, readlink }): Promise<boolean> {
+  let pending = resolve(path);
+  for (let hops = 0; hops <= MAX_LINK_HOPS; hops++) {
+    if (NETWORK_PATH.test(pending)) return true;
+    const { root } = parse(pending);
+    const parts = pending.slice(root.length).split(/[\\/]+/).filter((part) => part !== "");
+    let current = root;
+    let followed = false;
+    for (let index = 0; index < parts.length && !followed; index++) {
+      current = join(current, parts[index]!);
+      let info: { isSymbolicLink(): boolean };
+      try {
+        info = await ops.lstat(current);
+      } catch {
+        return false;
+      }
+      if (!info.isSymbolicLink()) continue;
+      let target: string;
+      try {
+        target = await ops.readlink(current);
+      } catch {
+        return false;
+      }
+      if (NETWORK_PATH.test(target)) return true;
+      pending = join(resolve(dirname(current), target), ...parts.slice(index + 1));
+      followed = true;
+    }
+    if (!followed) return false;
+  }
+  return true;
+}
+
+const insideOf = (path: string, folder: string): boolean => normalizePath(path).startsWith(`${normalizePath(folder).replace(/\/$/, "")}/`);
+
+/**
  * 파일 목록을 읽어 지침 묶음을 만든다. 없는 파일은 건너뛴다. 글은 메모리에서 세고 버린다.
  * mentionTargets가 있으면 그 횟수도 센다. 실제 경로가 sameAsGlobal에 든 파일은 목록과 크기에는 넣고 줄 지문에서만 뺀다.
  */
@@ -128,11 +231,27 @@ export async function readInstructionSet(
   paths: readonly string[],
   mentionTargets: readonly MentionTarget[] = [],
   sameAsGlobal: ReadonlySet<string> = new Set(),
+  imports: ImportOptions | null = null,
 ): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
   const set = emptyInstructionSet();
   const hashes = new Set<string>();
   const mentions: Record<string, number> = Object.create(null) as Record<string, number>;
-  for (const path of [...new Set(paths)].sort()) {
+  // 처음 받은 파일은 0단계다. 가져온 파일은 가져온 파일의 단계에 하나를 더하고, 같은 파일(경로나 실제 경로)은 한 번만 읽는다
+  const queue = [...new Set(paths)].sort().map((path) => ({ path, hops: 0 }));
+  const seen = new Set(queue.map((item) => normalizePath(item.path)));
+  const readReal = new Set<string>();
+  // 프로젝트 지침이면 연결을 푼 프로젝트 뿌리의 실제 경로. 가져올 파일의 실제 경로도 이 안이어야 한다(짝 검토 1차 필수 2)
+  const rootReal = imports?.within ? ((await entryInfo(imports.within)).realPath ?? normalizePath(imports.within)).replace(/\/$/, "") : null;
+  for (let index = 0; index < queue.length; index++) {
+    const { path, hops } = queue[index]!;
+    if (hops > 0) {
+      // 네트워크를 가리키는 연결을 거치는 대상은 연결을 따라가는 조회 전에 거른다(짝 검토 2차 필수 1)
+      if (await reachesNetwork(path)) continue;
+      // 가져오기의 대상이 파일이 아니면(없는 경로, 폴더, 경로가 아닌 낱말) 건너뛰고, 프로젝트 지침은 연결 폴더를 거쳐 밖으로 나가는 대상을 읽기 전에 거른다
+      const target = await entryInfo(path);
+      if (!target.isFile) continue;
+      if (rootReal !== null && (target.realPath === null || !target.realPath.startsWith(`${rootReal}/`))) continue;
+    }
     const read = await readText(path);
     if (read.status === "missing") continue;
     if (read.status === "unreadable") {
@@ -140,6 +259,19 @@ export async function readInstructionSet(
       continue;
     }
     const info = await entryInfo(path);
+    if (hops > 0 && info.realPath !== null && readReal.has(info.realPath)) continue;
+    if (info.realPath !== null) readReal.add(info.realPath);
+    if (imports !== null && hops < MAX_IMPORT_HOPS) {
+      for (const token of importsOf(read.text)) {
+        const target = importTarget(token, path, imports.homedir);
+        if (target === null) continue;
+        if (imports.within !== null && !insideOf(target, imports.within)) continue;
+        const key = normalizePath(target);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        queue.push({ path: target, hops: hops + 1 });
+      }
+    }
     const same = info.realPath !== null && sameAsGlobal.has(info.realPath);
     const bytes = Buffer.byteLength(read.text, "utf8");
     set.files.push({ path, realPath: info.realPath, bytes, hasContent: /\S/u.test(read.text), sameAsGlobal: same });
@@ -151,6 +283,8 @@ export async function readInstructionSet(
     for (const [key, count] of Object.entries(countMentions(read.text, mentionTargets))) mentions[key] = (mentions[key] ?? 0) + count;
   }
   set.lineHashes = [...hashes].sort();
+  set.files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  set.unreadable.sort();
   return { set, mentions };
 }
 
@@ -173,18 +307,22 @@ export async function projectInstructionPaths(root: string): Promise<FoundFiles>
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 
-/** 전역 지침을 읽는다. 전역 지침에 목록의 프로젝트가 나온 횟수도 센다. */
-export async function readGlobalInstructions(claudeHome: string, mentionTargets: readonly MentionTarget[]): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
+/** 전역 지침을 읽는다. 홈을 주면 가져오기를 어디든 따른다(사용자 범위의 가져오기는 승인 없이 실린다). 전역 지침에 목록의 프로젝트가 나온 횟수도 센다. */
+export async function readGlobalInstructions(
+  claudeHome: string,
+  mentionTargets: readonly MentionTarget[],
+  options: { homedir: string } | null = null,
+): Promise<{ set: InstructionSet; mentions: Record<string, number> }> {
   const found = await globalInstructionPaths(claudeHome);
-  const read = await readInstructionSet(found.paths, mentionTargets);
+  const read = await readInstructionSet(found.paths, mentionTargets, new Set(), options === null ? null : { homedir: options.homedir, within: null });
   read.set.unreadableDirs = found.unreadableDirs;
   return read;
 }
 
-/** 프로젝트 지침을 읽는다. 전역 지침과 같은 파일은 표시하고 줄 지문에서만 뺀다. */
-export async function readProjectInstructions(root: string, global: InstructionSet): Promise<InstructionSet> {
+/** 프로젝트 지침을 읽는다. 홈을 주면 프로젝트 폴더 안의 가져오기만 따른다(바깥 가져오기는 승인을 받아야 실려 실렸는지 알 수 없다). 전역 지침과 같은 파일은 표시하고 줄 지문에서만 뺀다. */
+export async function readProjectInstructions(root: string, global: InstructionSet, options: { homedir: string } | null = null): Promise<InstructionSet> {
   const found = await projectInstructionPaths(root);
-  const { set } = await readInstructionSet(found.paths, [], realPaths(global));
+  const { set } = await readInstructionSet(found.paths, [], realPaths(global), options === null ? null : { homedir: options.homedir, within: root });
   set.unreadableDirs = found.unreadableDirs;
   return set;
 }

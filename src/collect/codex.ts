@@ -1,4 +1,5 @@
 // Codex 기록을 모아 논리 세션마다의 요약과 읽은 양을 낸다. 같은 기록 파일의 사본 가운데 정본 하나를 읽고(읽지 못하면 다음 사본), 압축 기록은 그 Node.js가 풀 수 있을 때만 읽는다. 하위 세션은 부모 기록의 지문으로, 같은 세션의 뒤 기록은 앞 기록의 지문으로 이어받은 앞부분을 빼고, 같은 세션의 기록 파일은 합친다. 바뀐 파일만 다시 읽고, 결과는 세션마다 가장 앞선 정본의 정규화한 경로 차례다(설계 8, 9.1~9.4, 9.8, 20.1, 「5단계 계획 전 결정」 2·3·7번)
+import { CODEX_USAGE_MARKERS } from "../adapters/codex/observation.ts";
 import { join } from "node:path";
 import { nameRecord, sortedRecord } from "../adapters/common/canonical.ts";
 import { makeWindows, type LocalDate } from "../adapters/common/dates.ts";
@@ -128,9 +129,10 @@ const recentlyChanged = (file: CodexLogFile, options: CodexCollectOptions): bool
 /** 사본 하나를 해석한다. 열거나 읽지 못하거나, 압축 기록에서 아무것도 풀지 못하면 던진다 */
 async function parseCopy(file: CodexLogFile, inherited: CodexFingerprints | null, options: CodexCollectOptions): Promise<Parsed> {
   const parser = new CodexSessionParser({ recordId: file.recordId, timeZone: options.clock.timeZone, inherited });
-  const sink = { line: (text: string) => parser.line(text), tooLong: () => parser.tooLong() };
+  // 너무 긴 줄은 풀지 않지만 MCP 호출의 표지가 있는지만 훑는다(0.3.0, 다른 PC 피드백 7번)
+  const sink = { line: (text: string) => parser.line(text), tooLong: (found?: ReadonlySet<string>) => parser.tooLong(found) };
   if (!file.compressed) {
-    const outcome = await readLines(file.path, options.clock.nowMs, sink);
+    const outcome = await readLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
     // 목록을 본 뒤 크기나 수정 시각이 바뀌었으면 이번 실행 중에 쓰인 것이라 쓰는 중이다(쓰는 동안 수정 시각이 머무는 기록은 크기로만 드러난다)
     const stable = outcome.sizeAtOpen === file.size && outcome.mtimeMsAtOpen === file.mtimeMs;
     const inProgress = outcome.inProgress || !stable || recentlyChanged(file, options);
@@ -138,7 +140,7 @@ async function parseCopy(file: CodexLogFile, inherited: CodexFingerprints | null
     // 연 크기까지 다 읽기 전에 파일이 끝났으면(읽는 동안 줄었으면) 앞부분만 읽은 것이라 일부만 읽은 파일이다
     return { summary, prints: parser.fingerprints(), bytesRead: outcome.bytesRead, inProgress, partial: outcome.endedEarly, storable: !inProgress };
   }
-  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink);
+  const outcome = await readZstdLines(file.path, options.clock.nowMs, sink, { markers: CODEX_USAGE_MARKERS });
   // 프레임이 잘렸거나 깨졌거나 풀다가 오류가 났거나, 연 크기에 닿기 전에 파일이 끝났으면(완결 프레임으로 끝났어도) 일부만 읽은 것이다
   const incomplete = outcome.frames.status !== "complete" || outcome.decodeError !== null || outcome.endedEarly;
   if (incomplete && outcome.decodedBytes === 0) throw new Error(outcome.decodeError ?? outcome.frames.status);

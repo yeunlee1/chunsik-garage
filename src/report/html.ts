@@ -3,10 +3,14 @@ import { createHash } from "node:crypto";
 import type { LocalDate } from "../adapters/common/dates.ts";
 import type { ToolId } from "../adapters/types.ts";
 import { AXIS_NAMES, SUMMARY_COPY, TOOL_NAMES, UNJUDGED_COPY } from "../core/copy/common.ts";
-import { joinValue } from "../core/copy/findings.ts";
+import { joinValue, RULE_COPY, ruleValueText } from "../core/copy/findings.ts";
 import { fill, groupDigits } from "../core/copy/format.ts";
 import { LANGS, type Lang, type Texts } from "../core/copy/lang.ts";
-import { fixDetail } from "../core/result/summary.ts";
+import { beyondZeroMark, fixDetail } from "../core/result/summary.ts";
+import { SCORE_WINDOW_DAYS } from "../adapters/common/dates.ts";
+import { AXES, MIN_DAYS_FOR_AQ, MIN_REQUESTS_FOR_AQ } from "../core/scoreboard.ts";
+import { RULES, ruleSpec } from "../core/rules.ts";
+import { settleScore } from "../core/score.ts";
 import type { CalendarCell } from "../core/result/usage.ts";
 import { sceneFor, type ReportArt } from "./assets.ts";
 import { PROBLEM_KIND_COPY, REPORT_COPY, SCENE_ALT, STATUS_COPY, WEEKDAYS, type CopyKey } from "./copy.ts";
@@ -45,8 +49,11 @@ const swap = (lang: Lang, attrs: Partial<Record<SwapAttr, Texts<string>>>): stri
   ` data-tr${Object.entries(attrs)
     .map(([name, texts]) => ` ${name}="${esc(texts[lang])}" data-en-${name}="${esc(texts.en)}" data-ko-${name}="${esc(texts.ko)}"`)
     .join("")}`;
+/** 다음 등급 문장의 「(→ 92)」를 한 덩어리로 묶어 줄이 바뀌어도 화살표와 숫자가 떨어지지 않게 한다(0.3.0. 문장에는 보통 빈칸을 쓴다) */
+const keepArrows = (html: string): string => html.replace(/\(→ (\d+)\)/g, '<span class="nw">(→ $1)</span>');
+
 /** 문구 틀을 바꾼 뒤 자리에 HTML 조각을 끼운다 */
-const fillHtml = (template: string, values: Readonly<Record<string, string>>): string => fill(esc(template), values);
+const fillHtml =(template: string, values: Readonly<Record<string, string>>): string => fill(esc(template), values);
 
 const dayNumber = (date: LocalDate): number => {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
@@ -113,6 +120,66 @@ function serversBlock(finding: ViewFinding, view: ReportView): string {
   return `<details class="how"><summary>${both(copy("serversOut", { n: view.servers.length }))}</summary>${notes}<ul class="names">${items}${deny}</ul></details>`;
 }
 
+/** 규칙이 가리키는 이름의 칩. 정리할 것(withTargets일 때), S3의 고칠 곳, S5의 연결에 실패한 서버, F3·F4의 프로젝트다. 항목과 다음 등급으로 가는 셋팅 방법이 같이 쓴다 */
+function ruleChips(finding: ViewFinding, view: ReportView, lang: Lang, withTargets: boolean): string {
+  const targets = withTargets ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
+  const failed = finding.ruleId === "S5" ? chips(lang, REPORT_COPY.failedServers, view.failedServers.map((server) => `<li>${esc(server.name)}<small>${both(copy("failedSessions", { n: server.sessions }))}</small></li>`)) : "";
+  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
+  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  return `${targets}${places}${failed}${missing}${overlap}`;
+}
+
+/**
+ * 다음 등급으로 가는 셋팅 방법(0.3.0). 다음 등급까지의 차례마다 할 일, 지금 값과 목표(만점 기준), 거기까지 고친 AQ, 처방, 가리키는 이름을 보인다.
+ * 규칙 점수가 0이고 지금 값이 0점 기준보다 나쁘면 점수가 오르기 시작하는 값(0점 기준)도 적는다. 도구마다 재는 규칙을 두 도구 넘게 쟀으면
+ * 만점이 아닌 도구마다 따로 적는다. 평균값은 만점 기준과 견줄 수 없다(짝 3차 필수 2번). AQ가 없거나 다음 등급이 없으면(S등급) 그리지 않는다
+ */
+function nextPath(view: ReportView, lang: Lang): string {
+  const plan = view.nextPlan;
+  if (view.score.aq === null || plan === null) return "";
+  const lead = textsOf((l) => fill(REPORT_COPY.nextLead[l], { need: plan.need, grade: plan.grade }) + (plan.reaches ? "" : ` ${fill(REPORT_COPY.nextShort[l], { last: plan.steps.at(-1)!.aq })}`));
+  const steps = plan.steps
+    .map((step) => {
+      const finding = view.findings.find((candidate) => candidate.ruleId === step.ruleId);
+      if (finding === undefined) return "";
+      const spec = ruleSpec(step.ruleId);
+      // 지금 값과 목표 한 줄. 점수가 오르기 시작하는 값은 가운뎃점 뒤에 붙여 숫자 둘이 붙지 않게 한다
+      const nowLine = (l: Lang, now: string, value: number, score: number, tool: ToolId | null): string => {
+        const target = ruleValueText(step.ruleId, spec.fullAt, l);
+        const line = tool === null ? fill(REPORT_COPY.nextNow[l], { now, target }) : fill(REPORT_COPY.nextNowTool[l], { tool: TOOL_NAMES[tool][l], now, target });
+        if (settleScore(score) !== 0 || !beyondZeroMark(step.ruleId, value)) return line;
+        return `${line} · ${fill((spec.zeroAt > spec.fullAt ? REPORT_COPY.nextBelow : REPORT_COPY.nextAbove)[l], { start: ruleValueText(step.ruleId, spec.zeroAt, l) })}`;
+      };
+      const short = finding.tools.length >= 2 ? finding.tools.filter((tool) => settleScore(tool.score) < 1) : [];
+      const lines =
+        short.length > 0
+          ? short.map((tool) => textsOf((l) => nowLine(l, ruleValueText(step.ruleId, tool.value, l), tool.value, tool.score, tool.tool)))
+          : finding.value === null || finding.score === null || finding.text.en.value === null
+            ? []
+            : [textsOf((l) => nowLine(l, joinValue(finding.text[l].value!, finding.text[l].unit!, l), finding.value!, finding.score!, null))];
+      const fix = finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
+      return `<li class="step"><div class="sh"><b>${both(textsOf((l) => finding.text[l].title))}</b><span class="aq">${both(copy("nextAfter", { aq: step.aq }))}</span></div>${lines.map((line) => `<p class="now">${both(line)}</p>`).join("")}${fix}${ruleChips(finding, view, lang, true)}</li>`;
+    })
+    .join("");
+  return `<section class="next" aria-labelledby="h-next"><h2 id="h-next">${both(copy("nextTitle", { grade: plan.grade }))}</h2><p class="lead">${both(lead)}</p><ol class="steps">${steps}</ol></section>`;
+}
+
+/** 점수 매기는 법(0.3.0). AQ·기준 점수·규칙 점수를 어떻게 내는지, 등급의 경계, AQ를 내지 않는 조건과 규칙마다의 무게와 기준이다. 숫자는 규칙 표와 상수에서 가져온다 */
+function howScore(): string {
+  const lines = [REPORT_COPY.howAq, REPORT_COPY.howAxis, REPORT_COPY.howRule, REPORT_COPY.howGrades, copy("howWithheld", { days: SCORE_WINDOW_DAYS, requests: MIN_REQUESTS_FOR_AQ, active: MIN_DAYS_FOR_AQ })];
+  const mark = (ruleId: (typeof RULES)[number]["id"], value: number): string => both(textsOf((l) => ruleValueText(ruleId, value, l)));
+  const rows = AXES.map(
+    (axis) =>
+      `<tr class="grp"><th colspan="4" scope="colgroup">${both(AXIS_NAMES[axis])}</th></tr>` +
+      RULES.filter((spec) => spec.axis === axis)
+        .map((spec) => `<tr class="rule"><th scope="row">${both(textsOf((l) => RULE_COPY[spec.id][l].name))}</th><td class="n">${spec.weight}</td><td>${mark(spec.id, spec.zeroAt)}</td><td>${mark(spec.id, spec.fullAt)}</td></tr>`)
+        .join(""),
+  ).join("");
+  const table = `<table class="tv rules"><thead><tr><th scope="col">${both(REPORT_COPY.thRule)}</th><th scope="col" class="n">${both(REPORT_COPY.thWeight)}</th><th scope="col">${both(REPORT_COPY.thZero)}</th><th scope="col">${both(REPORT_COPY.thFull)}</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<section class="how-score" aria-labelledby="h-how"><h2 id="h-how"><span class="no">04</span>${both(REPORT_COPY.howTitle)}</h2><ul class="rulesum">${lines.map((line) => `<li>${both(line)}</li>`).join("")}</ul><details class="ruletable"><summary>${both(copy("howTable", { n: RULES.length }))}</summary><div class="tvwrap">${table}</div></details></section>`;
+}
+
 /** 항목 하나. 큰 숫자와 상태, 제목, 설명, 처방, 정리할 것, 위치와 이름, 단추, 어떻게 쟀나다(설계 13.1) */
 function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
   const status = statusOf(finding);
@@ -122,19 +189,17 @@ function item(finding: ViewFinding, view: ReportView, lang: Lang): string {
     gain === null
       ? `<span class="tag">${both(AXIS_NAMES[finding.axis])}</span>`
       : `<span class="tag up">${both(textsOf((l) => fill(SUMMARY_COPY[l].gain, { axis: AXIS_NAMES[finding.axis][l], gain })))}</span>`;
+  const kept = view.ignored.includes(finding.ruleId) ? `<span class="tag kept">${both(REPORT_COPY.kept)}</span>` : "";
   const description = finding.text.en.description || finding.text.ko.description ? `<p>${both(textsOf((l) => finding.text[l].description))}</p>` : "";
   const prescription = finding.category !== "strength" && finding.text.en.prescription !== null ? `<p class="fix">→ ${both(textsOf((l) => finding.text[l].prescription ?? ""))}</p>` : "";
-  const targets = repair ? chips(lang, REPORT_COPY.targets, finding.targets.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const places = finding.ruleId === "S3" ? chips(lang, REPORT_COPY.places, view.setupProblems.map((problem) => `<li>${esc(problem.place)}<small>${both(PROBLEM_KIND_COPY[problem.kind])}</small></li>`)) : "";
-  const missing = finding.ruleId === "F3" ? chips(lang, REPORT_COPY.missingProjects, view.missingInstructions.map((name) => `<li>${esc(name)}</li>`)) : "";
-  const overlap = finding.ruleId === "F4" && view.worstOverlap !== null ? chips(lang, REPORT_COPY.overlapProject, [`<li>${esc(view.worstOverlap)}</li>`]) : "";
+  const named = ruleChips(finding, view, lang, repair);
   const phrase = textsOf((l) => fill(REPORT_COPY.phrase[l], { name: finding.text[l].name }));
   const button = repair && finding.targets.length > 0 ? `<button type="button" class="act" data-act="copy" data-phrase-en="${esc(phrase.en)}" data-phrase-ko="${esc(phrase.ko)}">${both(REPORT_COPY.clean)}</button>` : "";
   const how =
     finding.text.en.method.length + finding.text.ko.method.length === 0
       ? ""
       : `<details class="how"><summary>${both(REPORT_COPY.how)}</summary>${perLang((l) => `<div>${finding.text[l].method.map((line, index) => `<p${index > 0 ? ' class="ln"' : ""}>${esc(line)}</p>`).join("")}</div>`)}</details>`;
-  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${tag}</span></div>${description}${prescription}${targets}${places}${missing}${overlap}${button}${how}${serversBlock(finding, view)}</div></div>`;
+  return `<div class="it" id="it-${finding.ruleId}"><div>${figure(finding)}<span class="sev">${ICONS[status]}${both(STATUS_COPY[status])}</span></div><div><div class="top"><h3>${both(textsOf((l) => finding.text[l].title))}</h3><span class="tags">${kept}${tag}</span></div>${description}${prescription}${named}${button}${how}${serversBlock(finding, view)}</div></div>`;
 }
 
 function header(view: ReportView, art: ReportArt, lang: Lang): string {
@@ -171,7 +236,8 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
   const rows = view.axes.map((axis) => `<tr><th scope="row">${both(AXIS_NAMES[axis.axis])}</th><td>${axis.score === null ? both(REPORT_COPY.unmeasured) : axis.score}</td><td>${axis.strengths}</td><td>${axis.repairs}</td></tr>`).join("");
   const table = `<table class="sr"><caption>${both(REPORT_COPY.axesTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thAxis)}</th><th scope="col">${both(REPORT_COPY.thScore)}</th><th scope="col">${both(REPORT_COPY.thGood)}</th><th scope="col">${both(REPORT_COPY.thFix)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   const best = view.findings.find((finding) => finding.category === "strength") ?? null;
-  const first = scored ? (view.findings.find((finding) => finding.category === "repair") ?? null) : null;
+  // 사용자가 그대로 두기로 한 규칙은 먼저 고칠 것에서 뺀다(0.3.0)
+  const first = scored ? (view.findings.find((finding) => finding.category === "repair" && !view.ignored.includes(finding.ruleId)) ?? null) : null;
   const bestLine =
     best === null
       ? "<div></div>"
@@ -183,14 +249,14 @@ function hero(view: ReportView, art: ReportArt, lang: Lang): string {
           }),
         )}</span></div>`;
   // 다음 등급까지 할 일은 먼저 고칠 것 아래에 한 줄로 둔다. 먼저 고칠 것이 없으면 그 칸에 따로 둔다(0.2.0)
-  const next = scored && view.nextGrade !== null ? `<span class="nx">${both(view.nextGrade)}</span>` : "";
+  const next = scored && view.nextGrade !== null ? `<span class="nx">${pairHtml(textsOf((l) => keepArrows(esc(view.nextGrade![l]))))}</span>` : "";
   const fixLine =
     first === null
       ? next === ""
         ? ""
         : `<div class="pt">${ICONS.info}<span><b>${both(REPORT_COPY.nextGrade)}</b>${next}</span></div>`
       : `<div class="pt">${ICONS[statusOf(first)]}<span><b>${both(REPORT_COPY.fixFirst)}</b>${both(
-          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools }, l)}`),
+          textsOf((l) => `${first.text[l].title} · ${fixDetail({ ruleId: first.ruleId, axis: first.axis, gain: first.gain, measured: first.measured, candidates: first.targets.length, unmeasuredTools: first.unmeasuredTools, value: first.value, score: first.score, tools: first.tools }, l)}`),
         )}${next}</span></div>`;
   return `<section class="hero"${swap(lang, { "aria-label": REPORT_COPY.scoreAria })}><figure class="scene"><div class="pic">${picture}</div>${caption}</figure>${score}<div class="axes">${axes}${table}</div><div class="verdict"><div><h2>${both(REPORT_COPY.verdict)}</h2><p>${both(textsOf((l) => view.text[l].diagnosis))}</p></div>${bestLine}${fixLine}</div></section>`;
 }
@@ -302,7 +368,7 @@ function partialBand(view: ReportView): string {
 
 const SPOT_FIELDS = { env: REPORT_COPY.spotEnv, headers: REPORT_COPY.spotHeaders, field: REPORT_COPY.spotField, args: REPORT_COPY.spotArgs, url: REPORT_COPY.spotUrl } as const;
 /** 비밀값의 자리 한 줄. 「서버(프로젝트) · 칸 항목」이고, 설정의 env는 서버 자리에 「설정」이다. 값은 없다(0.2.0) */
-const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}`;
+const spotLabel = (place: ReportView["credentialPlaces"][number], lang: Lang): string => `${place.server ?? REPORT_COPY.spotSettings[lang]}${place.projectName === null ? "" : ` (${place.projectName})`} · ${SPOT_FIELDS[place.field][lang]} ${place.key}${place.copy === "default" ? ` · ${REPORT_COPY.spotDefaultCopy[lang]}` : ""}`;
 
 function notices(view: ReportView): string {
   if (view.notices.length === 0) return "";
@@ -372,7 +438,7 @@ export function reportHtml(view: ReportView, art: ReportArt): string {
 </head>
 <body>
 <div class="sr" id="${SCRIPT_IDS.live}" role="status" aria-live="polite"></div>
-<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${notices(view)}${footer(client.card !== null)}</article></main>
+<main><article class="sheet" aria-labelledby="h-title">${header(view, art, lang)}${partialBand(view)}${hero(view, art, lang)}${nextPath(view, lang)}${columns(view, art, lang)}${lists(view, lang)}${usage(view, lang)}${howScore()}${notices(view)}${footer(client.card !== null)}</article></main>
 ${cardDialog(client.card !== null)}
 <div class="toast" id="${SCRIPT_IDS.toast}" aria-hidden="true"></div>
 <script type="application/json" id="${SCRIPT_IDS.data}">${data}</script>

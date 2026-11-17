@@ -11,6 +11,7 @@ import type { CollectedTool } from "../../src/core/result/tools.ts";
 import type { SetupProblem } from "../../src/scan/types.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
 import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import type { SummaryInput } from "../helpers/summaries.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -26,6 +27,37 @@ const resultInput = (tool: ClaudeToolInput, extra: Partial<ResultInput> = {}): R
   const input = evaluationInput([claudeTool({ sessions: enough, ...tool })]);
   return { input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ...extra };
 };
+
+describe("그대로 두기로 한 규칙(0.3.0, 다른 PC 피드백 5번)", () => {
+  it("결과에 목록을 싣고, 다음 등급의 차례에서 빼되 점수는 그대로 둔다", () => {
+    const plain = checkupResult(resultInput({}));
+    expect(plain.ignored).toEqual([]);
+    expect(plain.nextGrade).not.toBeNull();
+    const first = plain.nextGrade!.steps[0]!.ruleId;
+    const kept = checkupResult({ ...resultInput({}), ignored: [first] });
+    expect(kept.ignored).toEqual([first]);
+    expect(kept.score).toEqual(plain.score);
+    expect(kept.findings.map((f) => [f.ruleId, f.score])).toEqual(plain.findings.map((f) => [f.ruleId, f.score]));
+    expect(kept.nextGrade?.steps.map((step) => step.ruleId) ?? []).not.toContain(first);
+  });
+});
+
+describe("연결에 실패한 MCP 서버(0.3.0, 다른 PC 피드백 2번)", () => {
+  it("점수 구간에 응답이 있는 주 세션마다 실패한 서버를 세어, 세션 수가 많은 차례로 싣는다. 점수 구간 밖의 실패와 하위 세션은 세지 않는다", () => {
+    const sessions: SummaryInput[] = [
+      ...enough,
+      { days: { "2026-11-12": { responses: 1, mcpConnectionFailure: true, mcpFailedServers: { gone: 3, auth: 1 } } } },
+      { days: { "2026-11-13": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { gone: 1 } } } },
+      { days: { "2026-09-01": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { old: 9 } } } },
+      { kind: "sub", days: { "2026-11-13": { responses: 2, mcpConnectionFailure: true, mcpFailedServers: { sub: 1 } } } },
+    ];
+    const result = checkupResult(resultInput({ sessions }));
+    expect(result.details.failedMcpServers).toEqual([
+      { tool: "claude-code", name: "gone", sessions: 2 },
+      { tool: "claude-code", name: "auth", sessions: 1 },
+    ]);
+  });
+});
 
 describe("설정 속 비밀값의 자리(0.2.0)", () => {
   it("결과 화면이 그릴 자리 목록은 도구 차례로 두고, 프로젝트 범위에는 프로젝트 폴더 이름을 붙인다. 값은 없다", () => {
@@ -57,9 +89,10 @@ describe("다음 등급까지 할 일(0.2.0)", () => {
     for (const lang of ["en", "ko"] as const) {
       for (const step of expected.steps) {
         const name = result.findings.find((f) => f.ruleId === step.ruleId)!.text[lang].name;
-        // 화살표와 숫자 사이는 줄바꿈 없는 빈칸이라 화면에서 둘이 떨어지지 않는다
-        expect(text[lang]).toContain(lang === "ko" ? `${name}(→ ${step.aq})` : `${name} (→ ${step.aq})`);
+        // 화살표와 숫자 사이는 보통 빈칸이다. 모델이 그대로 옮기기 쉽게 하고, 화면에서는 결과 화면이 둘을 묶는다(0.3.0, 다른 PC 피드백 6번)
+        expect(text[lang]).toContain(lang === "ko" ? `${name}(→ ${step.aq})` : `${name} (→ ${step.aq})`);
       }
+      expect(text[lang]).not.toContain(String.fromCharCode(0xa0));
       expect(text[lang]).toContain(String(expected.need));
     }
   });
@@ -96,7 +129,7 @@ describe("평가 결과의 조립", () => {
   it("필드를 정해진 차례로 싣고 형식 버전, 규칙 버전, 프로그램 버전, 평가 시계, 시간대, 구간을 담는다", () => {
     const input = resultInput({});
     const result = checkupResult(input);
-    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details", "nextGrade"]);
+    expect(Object.keys(result)).toEqual(["schema", "rulesVersion", "appVersion", "evaluatedAt", "timezone", "lang", "window", "tools", "coverage", "score", "text", "axes", "findings", "candidates", "usage", "deepHints", "notices", "details", "nextGrade", "ignored"]);
     expect(RESULT_SCHEMA).toBe(1);
     expect(result).toMatchObject({ schema: 1, rulesVersion: "1.0.0", appVersion: "0.1.0", evaluatedAt: "2026-11-13T03:00:00.000Z", timezone: "Asia/Seoul", lang: "ko", window: input.evaluation.windows });
     expect(result.score).toEqual(input.evaluation.score);
@@ -128,7 +161,7 @@ describe("평가 결과의 조립", () => {
     const sessions = [...enough, { days: { "2026-11-12": { responses: 1, mcpCalls: { called: 2 } } } }];
     const input = resultInput({ sessions, setup: { mcpServers: servers } });
     const result = checkupResult(input);
-    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems", "credentialPlaces"]);
+    expect(Object.keys(result.details)).toEqual(["safeguards", "missingInstructions", "worstOverlap", "unjudgedServers", "setupProblems", "credentialPlaces", "failedMcpServers"]);
     expect(result.details.safeguards).toEqual(input.evaluation.safeguards);
     expect(result.details.unjudgedServers).toEqual([
       { tool: "claude-code", name: "alpha", scope: "user", projectRoot: null, projectName: null, pluginId: null, why: "not_established", judgeFrom: "2026-11-28" },

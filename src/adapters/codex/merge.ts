@@ -29,6 +29,8 @@ export function mergeRecords(records: readonly SessionSummary[], outside: readon
   const unknownHookKinds = nameRecord<number>();
   const unknownItemTypes = nameRecord<number>();
   const missing = { lines: 0, brokenLines: 0, tailFragments: 0, tooLongLines: 0 };
+  let longMcp = 0;
+  let mcpCounted = true;
   const notes = { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: 0 };
   const inheritedSkipped = { items: 0, totals: 0, responses: 0 };
   let firstDate: LocalDate | null = null;
@@ -45,6 +47,8 @@ export function mergeRecords(records: readonly SessionSummary[], outside: readon
     missing.brokenLines += summary.missing.brokenLines;
     missing.tailFragments += summary.missing.tailFragments;
     missing.tooLongLines += summary.missing.tooLongLines;
+    if (summary.missing.tooLongMcpLines === undefined) mcpCounted = false;
+    else longMcp += summary.missing.tooLongMcpLines;
     addNumbers(unconfirmedTypes, summary.missing.unconfirmedTypes);
     notes.syntheticResponses += summary.notes.syntheticResponses;
     notes.responsesWithoutId += summary.notes.responsesWithoutId;
@@ -76,7 +80,7 @@ export function mergeRecords(records: readonly SessionSummary[], outside: readon
     instructionChars: instructionChars === null ? null : { ascii: instructionChars.ascii, other: instructionChars.other },
     initialSkills: base.initialSkills === null ? null : [...base.initialSkills],
     initialMcpServers: base.initialMcpServers === null ? null : [...base.initialMcpServers],
-    missing: { ...missing, unconfirmedTypes: sortedRecord(unconfirmedTypes) },
+    missing: { ...missing, ...(mcpCounted ? { tooLongMcpLines: longMcp } : {}), unconfirmedTypes: sortedRecord(unconfirmedTypes) },
     firstResponseIdHashes: [...base.firstResponseIdHashes],
     notes: { ...notes, unknownHookKinds: sortedRecord(unknownHookKinds) },
     ...(codex === undefined

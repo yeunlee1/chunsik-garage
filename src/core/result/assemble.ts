@@ -13,6 +13,7 @@ import { anyIn, calledMcpNames } from "../installs/signals.ts";
 import { nextGrade, type NextGrade } from "../next-grade.ts";
 import type { MissingInstructions, WorstOverlap } from "../metrics/fit.ts";
 import type { CountedProblem, ToolSafeguard } from "../metrics/setup.ts";
+import type { RuleId } from "../rules.ts";
 import type { AxisScore, Finding, Overall, ToolRuleId, ToolValue } from "../scoreboard.ts";
 import { resultCoverage, type ResultCoverage } from "./coverage.ts";
 import { deepHints, type DeepHint } from "./hints.ts";
@@ -32,6 +33,8 @@ export interface ResultInput {
   appVersion: string;
   lang: Lang;
   run: { stateBroken: boolean };
+  /** 사용자가 그대로 두기로 한 규칙(0.3.0). 다음 등급의 차례에서 빼고 결과에 싣는다. 점수는 그대로다 */
+  ignored?: readonly RuleId[];
 }
 
 export type ResultToolValue = ToolValue & { observed: Coverage };
@@ -86,9 +89,13 @@ export interface CheckupResult {
     setupProblems: CountedProblem[];
     /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 결과 화면이 그 알림 아래에 보인다. 값은 없다 */
     credentialPlaces: SecretPlace[];
+    /** 점수 구간에 연결에 실패한 MCP 서버와 실패가 있었던 주 세션의 수(0.3.0). 결과 화면이 S5 항목에 보인다. 오류 글은 없다 */
+    failedMcpServers: FailedServer[];
   };
-  /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다 */
+  /** 다음 등급까지 할 일과 그 문장(0.2.0). AQ가 없거나 S등급이면 null이다. 그대로 두기로 한 규칙은 차례에 없다(0.3.0) */
   nextGrade: (NextGrade & { text: Texts<string> }) | null;
+  /** 사용자가 그대로 두기로 한 규칙(규칙 차례, 0.3.0). 고칠 목록과 다음 등급 차례에서 빠지고 점수에는 그대로 든다 */
+  ignored: RuleId[];
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -122,19 +129,40 @@ export interface SecretPlace {
   projectName: string | null;
   field: SecretFact["field"];
   key: string;
+  /** 옮긴 설정 폴더를 쓰는 동안 기본 위치의 사본에서 찾았다. 지금 쓰는 곳이면 없다(0.3.0) */
+  copy?: "default";
+}
+
+export interface FailedServer {
+  tool: ToolId;
+  name: string;
+  /** 점수 구간에 그 서버의 연결 실패가 있었던 주 세션의 수 */
+  sessions: number;
+}
+
+/** 점수에 넣는 도구마다 연결에 실패한 서버를 모은다. 세션 수가 많은 차례, 같으면 도구와 이름의 차례다(0.3.0) */
+function failedMcpServers(evaluation: Evaluation): FailedServer[] {
+  return evaluation.tools
+    .filter((tool) => tool.scored)
+    .flatMap((tool) => {
+      const sessions = new Map<string, number>();
+      for (const session of tool.totals.mainSessions) for (const name of session.mcpFailedServers) sessions.set(name, (sessions.get(name) ?? 0) + 1);
+      return [...sessions].map(([name, count]): FailedServer => ({ tool: tool.tool, name, sessions: count }));
+    })
+    .sort((a, b) => b.sessions - a.sessions || byText(a.tool, b.tool) || byText(a.name, b.name));
 }
 
 function credentialPlaces(input: EvaluationInput): SecretPlace[] {
   const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
   return [...input.tools]
     .sort((a, b) => byText(a.tool, b.tool))
-    .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key })));
+    .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key, ...(secret.copy === undefined ? {} : { copy: secret.copy }) })));
 }
 
 export function checkupResult(source: ResultInput): CheckupResult {
   const { input, evaluation, collected } = source;
   const coverageByTool = new Map(input.tools.map((tool) => [tool.tool, tool.coverage]));
-  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input) };
+  const details = { safeguards: evaluation.safeguards, missingInstructions: evaluation.missingInstructions, worstOverlap: evaluation.worstOverlap, unjudgedServers: unjudgedServers(input, evaluation), setupProblems: evaluation.setupProblems, credentialPlaces: credentialPlaces(input), failedMcpServers: failedMcpServers(evaluation) };
   // 합침 규칙에는 도구별 값이 없어, 그 규칙을 잰 도구와 관측 범위를 문장을 지을 때만 넘긴다. 결과의 details에는 싣지 않는다(설계 「5단계 4부 계획 전 결정」 7번)
   const scoredTools = evaluation.tools.filter((tool) => tool.scored).map((tool) => ({ tool: tool.tool, coverage: coverageByTool.get(tool.tool)! }));
   const textDetails = { ...details, mergedTools: Object.fromEntries(evaluation.findings.map((finding) => [finding.ruleId, mergedObserved(finding.ruleId, scoredTools)])) };
@@ -145,7 +173,8 @@ export function checkupResult(source: ResultInput): CheckupResult {
   const notices = sortNotices([...recordNotices(input, evaluation, collected), ...setupNotices(input, evaluation, source.run)]);
   const categories = findings.map((finding) => finding.category);
   // 점수판의 규칙 점수(맞추지 않은 값)로 다시 계산한다. 문장의 규칙 이름은 결과 항목의 것이다
-  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score);
+  const ignored = [...(source.ignored ?? [])];
+  const next = nextGrade(evaluation.findings.map((finding) => ({ ruleId: finding.ruleId, axis: finding.axis, weight: finding.weight, score: finding.score, gain: finding.gain })), evaluation.score, new Set(ignored));
   const nameOf = (lang: Lang) => (ruleId: Finding["ruleId"]): string => findings.find((finding) => finding.ruleId === ruleId)!.text[lang].name;
   return {
     schema: RESULT_SCHEMA,
@@ -167,5 +196,6 @@ export function checkupResult(source: ResultInput): CheckupResult {
     notices: notices.map((notice): ResultNotice => ({ ...notice, text: textsOf((lang) => noticeText(notice, lang)) })),
     details,
     nextGrade: next === null ? null : { ...next, text: textsOf((lang) => nextGradeText(next, nameOf(lang), lang)) },
+    ignored,
   };
 }

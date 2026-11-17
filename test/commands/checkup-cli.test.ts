@@ -157,3 +157,18 @@ describe("aq tune apply·undo·verify의 인자(6단계 2부 계획 전 결정 1
     ] as const) expect(tuneRunArgs(command, args)).toBeNull();
   });
 });
+
+describe("aq ignore(0.3.0)", () => {
+  it("add·remove는 규칙 하나와 --lang을 받고, list는 --lang만 받는다. 규칙이 없거나 모르는 하위 명령은 64다. 모르는 규칙은 unknown-rule 오류다", async () => {
+    for (const args of [["ignore"], ["ignore", "add"], ["ignore", "add", "--lang", "ko"], ["ignore", "drop", "F1"], ["ignore", "list", "F1"], ["ignore", "add", "F1", "--no-save"]]) expect(await main(args, context)).toBe(64);
+    expect(printed).toBe("");
+    expect(await main(["ignore", "add", "Z9"], context)).toBe(1);
+    expect(JSON.parse(printed).error.code).toBe("unknown-rule");
+    printed = "";
+    expect(await main(["ignore", "add", "F1", "--lang", "ko"], context)).toBe(0);
+    expect(JSON.parse(printed)).toMatchObject({ ignored: ["F1"] });
+    printed = "";
+    expect(await main(["ignore", "list"], context)).toBe(0);
+    expect(JSON.parse(printed).ignored).toEqual(["F1"]);
+  });
+});

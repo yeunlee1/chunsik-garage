@@ -6,7 +6,7 @@ import type { ResultText } from "../core/copy/grades.ts";
 import type { Lang, Texts } from "../core/copy/lang.ts";
 import { daysBefore } from "../core/installs/age.ts";
 import type { CountedProblem } from "../core/metrics/setup.ts";
-import type { CheckupResult, ResultFinding, SecretPlace, UnjudgedServer } from "../core/result/assemble.ts";
+import type { CheckupResult, FailedServer, ResultFinding, SecretPlace, UnjudgedServer } from "../core/result/assemble.ts";
 import type { ResultUsage } from "../core/result/usage.ts";
 import type { AxisScore, Withheld } from "../core/scoreboard.ts";
 
@@ -20,6 +20,11 @@ export interface ViewFinding {
   measured: boolean;
   /** 예상 효과. 없으면 null이다 */
   gain: number | null;
+  /** 잰 값과 규칙 점수(0~1). 못 쟀으면 null이다(0.3.0. 덧붙이는 말과 다음 등급으로 가는 법에 쓴다). 도구마다 재는 규칙이면 응답 수로 평균한 것이다 */
+  value: number | null;
+  score: number | null;
+  /** 도구마다 재는 규칙에서 잰 도구마다의 값과 점수(0.3.0 짝 3차 필수 2번). 만점 기준은 도구마다 맞춰야 한다. 합쳐 재는 규칙이면 비었다 */
+  tools: { tool: ToolId; value: number; score: number }[];
   /** 정리할 것의 이름(정비 후보의 대상). 후보의 차례 그대로다 */
   targets: string[];
   /** 규칙은 쟀지만 비율을 못 잰 도구 가운데 후보가 나온 도구(먼저 고칠 것의 덧붙이는 말) */
@@ -66,6 +71,8 @@ export interface ReportView {
   notices: { kind: string; tool: ToolId | null; text: Texts<string> }[];
   /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 그 도구의 알림 아래에 보인다 */
   credentialPlaces: SecretPlace[];
+  /** 점수 구간에 연결에 실패한 MCP 서버와 세션 수(0.3.0). S5 항목에 보인다 */
+  failedServers: FailedServer[];
   servers: ViewServer[];
   setupProblems: CountedProblem[];
   /** F3에서 지침이 없다고 센 프로젝트의 폴더 이름 */
@@ -74,6 +81,10 @@ export interface ReportView {
   worstOverlap: string | null;
   /** 다음 등급까지 할 일의 문장(0.2.0). 없으면 null이다 */
   nextGrade: Texts<string> | null;
+  /** 사용자가 그대로 두기로 한 규칙(0.3.0). 정비할 것에 꼬리표를 붙이고 진단 칸의 먼저 고칠 것에서 뺀다 */
+  ignored: ResultFinding["ruleId"][];
+  /** 다음 등급까지 할 일의 차례(0.3.0, 다음 등급으로 가는 셋팅 방법). 없으면 null이다 */
+  nextPlan: { grade: string; need: number; reaches: boolean; steps: { ruleId: ResultFinding["ruleId"]; aq: number }[] } | null;
   /** 「일부만 읽었다」 띠를 띄울 도구마다 읽지 못한 비율(낼 수 없으면 null)과 그 비율이 아래 경계인지다(설계 9.8, 20.1) */
   partialReads: { tool: ToolId; share: number | null; lowerBound: boolean }[];
 }
@@ -110,6 +121,9 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
       severity: finding.severity,
       measured: finding.status === "scored",
       gain: finding.gain,
+      value: finding.value,
+      score: finding.score,
+      tools: finding.tools.flatMap((value) => (value.status === "scored" ? [{ tool: value.tool, value: value.value!, score: value.score! }] : [])),
       targets: targetsOf(finding),
       unmeasuredTools: finding.tools.filter((value) => value.status === "unmeasured" && value.candidates.length > 0).map((value) => value.tool),
       text: finding.text,
@@ -117,6 +131,7 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     usage: result.usage,
     notices: result.notices.filter((notice) => !(notice.kind === "score_withheld" && result.score.aq === null)).map((notice) => ({ kind: notice.kind, tool: "tool" in notice ? notice.tool : null, text: notice.text })),
     credentialPlaces: result.details.credentialPlaces,
+    failedServers: result.details.failedMcpServers.map((server) => ({ ...server })),
     servers: result.details.unjudgedServers.map((server) => ({
       tool: server.tool,
       name: server.name,
@@ -129,6 +144,8 @@ export function reportView(result: CheckupResult, run: ReportRun): ReportView {
     missingInstructions: result.details.missingInstructions.map((project) => project.name),
     worstOverlap: result.details.worstOverlap?.name ?? null,
     nextGrade: result.nextGrade?.text ?? null,
+    ignored: [...result.ignored],
+    nextPlan: result.nextGrade === null ? null : { grade: result.nextGrade.grade, need: result.nextGrade.need, reaches: result.nextGrade.reaches, steps: result.nextGrade.steps.map((step) => ({ ruleId: step.ruleId, aq: step.aq })) },
     partialReads: result.coverage.filter((coverage) => coverage.partial).map((coverage) => ({ tool: coverage.tool, share: coverage.unreadableShare, lowerBound: coverage.lowerBound })),
   };
 }

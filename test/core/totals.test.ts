@@ -104,19 +104,20 @@ describe("toolTotals", () => {
     expect(totals.denied).toBe(3);
   });
 
-  it("주 세션의 줄은 점수 구간에 응답이 있는 주 세션마다 하나다. 압축과 하위 에이전트 호출은 점수 구간의 칸만 더하고, 연결 실패는 그 구간에 하루라도 있었는지다", () => {
+  it("주 세션의 줄은 점수 구간에 응답이 있는 주 세션마다 하나다. 압축과 하위 에이전트 호출은 점수 구간의 칸만 더하고, 연결 실패는 그 구간에 하루라도 있었는지다. 실패한 서버는 그 구간의 이름을 모은다(0.3.0)", () => {
     const totals = toolTotals(
       [
         summary({
           sessionId: "b",
           cwd: "/work/b",
           days: {
-            "2026-10-12": { responses: 1, autoCompactions: 5, subagentCalls: 5, mcpConnectionFailure: true },
+            "2026-10-12": { responses: 1, autoCompactions: 5, subagentCalls: 5, mcpConnectionFailure: true, mcpFailedServers: { old: 1 } },
+            "2026-10-22": { responses: 1, mcpFailedServers: { z: 2, b: 1 } },
             "2026-10-20": { responses: 2, autoCompactions: 1 },
             "2026-10-21": { responses: 1, autoCompactions: 2, subagentCalls: 1 },
           },
         }),
-        summary({ sessionId: "a", cwd: null, days: { "2026-11-12": { responses: 1, mcpConnectionFailure: true } } }),
+        summary({ sessionId: "a", cwd: null, days: { "2026-11-12": { responses: 1, mcpConnectionFailure: true, mcpFailedServers: { gone: 3 } } } }),
         // 점수 구간에 응답이 없는 주 세션과, 응답 없이 요청만 있는 주 세션은 들지 않는다
         summary({ sessionId: "old", days: { "2026-10-11": { responses: 9 } } }),
         summary({ sessionId: "quiet", days: { "2026-11-12": { humanRequests: 1 } } }),
@@ -125,8 +126,8 @@ describe("toolTotals", () => {
       SHELL,
     );
     expect(totals.mainSessions).toEqual([
-      { sessionId: "a", cwd: null, autoCompactions: 0, subagentCalls: 0, mcpConnectionFailure: true, instructionTokens: null },
-      { sessionId: "b", cwd: "/work/b", autoCompactions: 3, subagentCalls: 1, mcpConnectionFailure: false, instructionTokens: null },
+      { sessionId: "a", cwd: null, autoCompactions: 0, subagentCalls: 0, mcpConnectionFailure: true, mcpFailedServers: ["gone"], instructionTokens: null },
+      { sessionId: "b", cwd: "/work/b", autoCompactions: 3, subagentCalls: 1, mcpConnectionFailure: false, mcpFailedServers: ["b", "z"], instructionTokens: null },
     ]);
     // 응답이 없는 세션의 사람 요청도 점수 구간의 것이면 센다
     expect(totals.humanRequests).toBe(1);

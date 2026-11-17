@@ -132,6 +132,24 @@ type ProblemDraft = SetupProblem extends infer P ? (P extends SetupProblem ? Omi
 /** 경로의 나눔표를 /로 바꾼다 */
 const slashed = (path: string): string => path.replace(/\\/g, "/");
 
+/**
+ * 설정 폴더를 옮겨 쓰면(CLAUDE_CONFIG_DIR) 기본 위치(~/.claude.json, ~/.claude/settings.json)의 사본에도 같은 키가 남아 있을 수 있다.
+ * 그 사본은 점수에 넣지 않고 비밀값의 자리만 본다. 값은 여기서 버린다(0.3.0, 설계 「0.3.0에서 정한 것」)
+ */
+async function defaultCopySecrets(input: ScanInput): Promise<SecretFact[]> {
+  const defaultHome = join(input.homedir, ".claude");
+  if (!input.env.CLAUDE_CONFIG_DIR?.trim() || normalizePath(claudeHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
+  const found: SecretFact[] = [];
+  const settings = await readJson(join(defaultHome, "settings.json"));
+  if (settings.status === "ok" && typeof settings.value === "object" && settings.value !== null) {
+    for (const key of envSecretKeys((settings.value as Record<string, unknown>).env)) found.push({ scope: "settings", server: null, projectRoot: null, field: "env", key });
+  }
+  const claudeJson = await readClaudeJson(join(input.homedir, ".claude.json"));
+  for (const entry of claudeJson.userMcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "user", server: entry.name, projectRoot: null, ...spot });
+  for (const project of claudeJson.projects) for (const entry of project.mcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "local", server: entry.name, projectRoot: project.normKey, ...spot });
+  return sortSecrets(found).map((secret) => ({ ...secret, copy: "default" as const }));
+}
+
 export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFacts> {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
@@ -183,7 +201,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
   const everyContext = [global, ...contexts.values()];
 
   // 전역 지침과 프로젝트가 나온 횟수
-  const globalRead = await readGlobalInstructions(home, active);
+  const globalRead = await readGlobalInstructions(home, active, { homedir: input.homedir });
 
   // 사용자·프로젝트 스킬 폴더를 먼저 훑는다. 그 안에 둔 플러그인(@skills-dir)의 훅 명령까지 모은 뒤에 스킬마다 훅을 견주기 위해서다
   const userSkillScan = await scanSkillRoot(join(home, "skills"), { pluginDirs: true });
@@ -436,7 +454,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
       mcpJsonStatus: mcpJsonStatus.get(ref.normRoot) ?? null,
       hasSettings,
       hasLocalSettings,
-      instructions: layers === undefined ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set),
+      instructions: layers === undefined ? emptyInstructionSet() : await readProjectInstructions(ref.root, globalRead.set, { homedir: input.homedir }),
       bypassInProject: projectView.bypass,
       bypassInLocal: localView.bypass,
       permissionConflicts: layers === undefined ? 0 : conflictPairs(userView, settingsStatus === "ok" ? projectView : null, localSettingsStatus === "ok" ? localView : null),
@@ -503,7 +521,7 @@ export async function scanClaudeSetup(input: ScanInput): Promise<ClaudeSetupFact
     mcpServers: mcpServers.map((server) => ({ ...server, installKey: mcpInstallKey(server) })),
     projects,
     problems: uniqueProblems,
-    secrets: sortSecrets(secrets),
+    secrets: [...sortSecrets(secrets), ...(await defaultCopySecrets(input))],
     unreadableDirs: [...new Set(unreadableDirs)].sort(),
     unreadableSkillPlaces: { user: unreadableSkillPlaces.user, projects: [...new Set(unreadableSkillPlaces.projects)].sort(), plugins: [...new Set(unreadableSkillPlaces.plugins)].sort() },
   };

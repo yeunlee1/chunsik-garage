@@ -193,3 +193,24 @@ describe("그 밖의 지표", () => {
     expect(summary.instructionChars).toEqual({ ascii: 2, other: 1 });
   });
 });
+
+describe("Codex 0.166.0~0.169.0의 나머지 실행 항목 종류(0.3.0, 다른 PC 피드백 8번)", () => {
+  it("도구 호출인 넷(DynamicToolCall, CollabAgentToolCall, ImageGeneration, FunctionCallOutput)은 호출만 세고, 도구가 아닌 다섯(Plan, HookPrompt, SubAgentActivity, EnteredReviewMode, ExitedReviewMode)은 세지 않으며 모르는 종류로도 두지 않는다", () => {
+    const summary = run([
+      meta(),
+      item({ type: "DynamicToolCall", id: "1", tool: "x", status: "failed" }),
+      item({ type: "CollabAgentToolCall", id: "2", tool: "spawn", status: "completed" }),
+      item({ type: "ImageGeneration", id: "3", status: "completed", result: "" }),
+      item({ type: "FunctionCallOutput", id: "4", name: "f", output: {} }),
+      item({ type: "Plan", id: "5", text: "p" }),
+      item({ type: "HookPrompt", id: "6", fragments: [] }),
+      item({ type: "SubAgentActivity", id: "7", kind: "started" }),
+      item({ type: "EnteredReviewMode", id: "8" }),
+      item({ type: "ExitedReviewMode", id: "9" }),
+    ]);
+    const tools = summary.days["2026-11-10"]!.tools;
+    expect(Object.keys(tools).sort()).toEqual(["collab_agent", "dynamic_tool", "function", "image_generation"]);
+    for (const name of ["collab_agent", "dynamic_tool", "function", "image_generation"]) expect(tools[name], name).toMatchObject({ calls: 1, results: 0, errors: 0 });
+    expect(summary.codex?.unknownItemTypes ?? {}).toEqual({});
+  });
+});

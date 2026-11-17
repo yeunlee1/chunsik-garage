@@ -12,6 +12,8 @@ export interface MainSessionTotals {
   subagentCalls: number;
   /** 점수 구간에 연결 실패가 있었던 날이 하루라도 있다 */
   mcpConnectionFailure: boolean;
+  /** 점수 구간에 연결에 실패한 MCP 서버의 이름(이름 차례, 0.3.0) */
+  mcpFailedServers: string[];
   /** 세션에서 처음 실린 지침의 어림 토큰. 지침 첨부가 남지 않았거나 글자가 없으면 null(E4의 표본이 아니다) */
   instructionTokens: number | null;
 }
@@ -92,8 +94,10 @@ export function toolTotals(summaries: readonly SessionSummary[], windows: Window
       autoCompactions: 0,
       subagentCalls: 0,
       mcpConnectionFailure: false,
+      mcpFailedServers: [],
       instructionTokens: instructionTokens(summary.instructionChars),
     };
+    const failedServers = new Set<string>();
     let sessionResponses = 0;
     for (const [date, cell] of Object.entries(summary.days)) {
       if (collect.has(date)) totals.collectResponses += cell.responses;
@@ -126,7 +130,9 @@ export function toolTotals(summaries: readonly SessionSummary[], windows: Window
       session.autoCompactions += cell.autoCompactions;
       session.subagentCalls += cell.subagentCalls;
       if (cell.mcpConnectionFailure) session.mcpConnectionFailure = true;
+      for (const name of Object.keys(cell.mcpFailedServers)) failedServers.add(name);
     }
+    session.mcpFailedServers = [...failedServers].sort();
     if (summary.kind === "main" && sessionResponses > 0) totals.mainSessions.push(session);
   }
 

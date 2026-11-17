@@ -1,4 +1,5 @@
 // Claude Code가 지표마다 무엇을 기록하는지(설계 9.7)와, 스킬 사용·MCP 호출의 관측이 빠짐없는지(설계 9.8), 절반 넘게 깨진 파일인지(설계 20.1)를 가른다. 관측의 까닭과 기록에서 까닭을 찾는 observeRecords는 Codex도 쓴다(순수 함수)
+import type { LineMarker } from "../common/lines.ts";
 import type { SessionSummary, ToolCoverage } from "../types.ts";
 
 /** 설계 9.7의 Claude Code 열. Claude Code는 모든 지표를 기록한다. */
@@ -50,12 +51,15 @@ export function mostlyBroken(summary: SessionSummary): boolean {
   return summary.missing.brokenLines * 2 > summary.missing.lines;
 }
 
-/** 기록에서 관측을 막는 것을 찾는다. 읽지 못한 것, 너무 긴 줄, 사용 신호가 될 수 없는 종류(harmless)로 확인되지 않은 깨진 줄과 끝 조각이다(설계 9.8) */
-export function observeRecords(summaries: readonly SessionSummary[], unreadableCount: number, harmless: ReadonlySet<string>): Observation {
+/**
+ * 기록에서 관측을 막는 것을 찾는다. 읽지 못한 것, 그 지표의 사용 흔적 표지가 든 너무 긴 줄(longLines), 사용 신호가 될 수 없는 종류(harmless)로 확인되지 않은
+ * 깨진 줄과 끝 조각이다(설계 9.8, 0.3.0). longLines를 주지 않으면 너무 긴 줄은 모두 막는다
+ */
+export function observeRecords(summaries: readonly SessionSummary[], unreadableCount: number, harmless: ReadonlySet<string>, longLines: (summary: SessionSummary) => number = (summary) => summary.missing.tooLongLines): Observation {
   const found = new Set<ObservationReason>();
   if (unreadableCount > 0) found.add("unreadable-files");
   for (const summary of summaries) {
-    if (summary.missing.tooLongLines > 0) found.add("too-long-lines");
+    if (longLines(summary) > 0) found.add("too-long-lines");
     for (const [type, count] of Object.entries(summary.missing.unconfirmedTypes)) {
       if (count > 0 && !harmless.has(type)) found.add("unconfirmed-pieces");
     }
@@ -65,5 +69,25 @@ export function observeRecords(summaries: readonly SessionSummary[], unreadableC
 }
 
 export function claudeObservation(summaries: readonly SessionSummary[], unreadableCount: number, metric: "skill" | "mcp"): Observation {
-  return observeRecords(summaries, unreadableCount, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES);
+  // 지표의 표지를 센 요약은 그 수로, 세지 않은 옛 요약은 너무 긴 줄 모두로 본다
+  const longLines = (summary: SessionSummary): number => (metric === "skill" ? summary.missing.tooLongSkillLines : summary.missing.tooLongMcpLines) ?? summary.missing.tooLongLines;
+  return observeRecords(summaries, unreadableCount, metric === "skill" ? SKILL_NON_SIGNAL_TYPES : MCP_NON_SIGNAL_TYPES, longLines);
 }
+
+const marker = (name: string, text: string): LineMarker => ({ name, bytes: Buffer.from(text, "utf8") });
+
+/**
+ * 너무 긴 줄에서 찾는 Claude Code의 사용 흔적 표지(0.3.0, 다른 PC 피드백 7번). 파서가 스킬과 MCP의 사용 신호로 세는 자리를 모두 덮는다
+ * (Skill 도구 호출, 슬래시 명령, 응답의 attributionSkill, invoked_skills 첨부, mcp__ 도구 호출, 응답의 attributionMcpServer).
+ * 열쇠와 값을 붙여 찾지 않고 값(또는 열쇠) 하나만 찾아, 콜론 앞뒤에 빈칸이 있는 JSON도 찾는다(짝 3차 필수 1번). 줄을 훑을 때 JSON의 유니코드
+ * 이스케이프(역빗금 u와 16진 네 자리)를 풀고 견주므로(lines.ts) 영문자나 꺾쇠를 이스케이프로 적은 기록도 찾는다(짝 4차 필수 1번).
+ * 글 안에 같은 바이트가 있으면 사용이 아니어도 맞는데, 그때는 판정을 막는 쪽으로만 틀린다
+ */
+export const CLAUDE_USAGE_MARKERS: readonly LineMarker[] = [
+  marker("skill", '"Skill"'),
+  marker("skill", "<command-name>"),
+  marker("skill", '"attributionSkill"'),
+  marker("skill", '"invoked_skills"'),
+  marker("mcp", '"mcp__'),
+  marker("mcp", '"attributionMcpServer"'),
+];

@@ -132,6 +132,21 @@ describe("scanCodexSetup의 비밀값(0.2.0)", () => {
   });
 });
 
+describe("scanCodexSetup의 기본 위치 사본(0.3.0, 다른 PC 피드백 3번)", () => {
+  it("CODEX_HOME으로 옮겨 쓰면 기본 위치(~/.codex/config.toml)의 서버 정의도 비밀값만 보고 사본이라고 적는다", async () => {
+    const moved = join(root, "accounts", "a1", "home");
+    await put(join(moved, "config.toml"), '[mcp_servers.here]\ncommand = "h"\nenv = { HERE_TOKEN = "here-token-value-1" }\n');
+    const facts = await scanCodexSetup({ ...input, env: { CODEX_HOME: moved } });
+    expect(facts.secrets).toEqual([
+      { scope: "user", server: "here", projectRoot: null, field: "env", key: "HERE_TOKEN" },
+      { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN", copy: "default" },
+      { scope: "user", server: "off", projectRoot: null, field: "url", key: "key", copy: "default" },
+    ]);
+    expect(JSON.stringify(facts)).not.toContain("here-token-value-1");
+    expect((await scan()).secrets.filter((secret) => "copy" in secret)).toEqual([]);
+  });
+});
+
 describe("scanCodexSetup", () => {
   it("사용자 설정, 전역 지침, 전역 맥락의 승인과 샌드박스를 낸다", async () => {
     const facts = await scan();

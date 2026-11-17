@@ -6,7 +6,7 @@ import type { Reason } from "../reasons.ts";
 import type { ResultFinding, ResultToolValue, UnjudgedServer } from "../result/assemble.ts";
 import { ruleSpec, type RuleId, type ValueKind } from "../rules.ts";
 import { OTHER_TOOL_COPY, PROXY_LINE, REASON_COPY, SAFEGUARD_COPY, TOOL_CALL_GRAIN, TOOL_LINE, TOOL_NAMES, UNJUDGED_COPY } from "./common.ts";
-import { fill, formatValue, slots } from "./format.ts";
+import { fill, formatValue, rulePlaces, slots } from "./format.ts";
 import type { Lang, Texts } from "./lang.ts";
 import { EFFICIENCY_COPY } from "./rules-efficiency.ts";
 import { FIT_COPY } from "./rules-fit.ts";
@@ -65,17 +65,17 @@ function reasonOf(copy: RuleCopy, reason: Reason, lang: Lang): ReasonCopy {
   return { word: own?.word ?? common.word, text: own?.text ?? common.text };
 }
 
-/** 잰 값과 단위. 영어 단위의 단수와 복수는 보이는 수로 가른다 */
-function measured(kind: ValueKind, value: number, copy: RuleCopy): { value: string; unit: string } {
-  const shown = formatValue(kind, value);
+/** 잰 값과 단위. 소수 자리는 규칙마다 정한 것이고(rulePlaces), 영어 단위의 단수와 복수는 보이는 수로 가른다 */
+function measured(kind: ValueKind, value: number, copy: RuleCopy, places: number): { value: string; unit: string } {
+  const shown = formatValue(kind, value, places);
   return { value: shown, unit: fill(copy.unit, { value: shown === "1" ? 1 : 0 }) };
 }
 
-function toolLine(kind: ValueKind, value: ResultToolValue, copy: RuleCopy, lang: Lang): string {
+function toolLine(kind: ValueKind, places: number, value: ResultToolValue, copy: RuleCopy, lang: Lang): string {
   const tool = TOOL_NAMES[value.tool][lang];
   const evidence = fillEvidence(copy.evidence, value.evidence);
   if (value.status === "scored") {
-    const shown = measured(kind, value.value!, copy);
+    const shown = measured(kind, value.value!, copy, places);
     return fill(TOOL_LINE[lang].measured, { tool, value: joinValue(shown.value, shown.unit, lang), evidence });
   }
   return fill(TOOL_LINE[lang].unmeasured, { tool, reason: reasonOf(copy, value.reason!, lang).word, evidence });
@@ -171,12 +171,20 @@ function unjudgedNotes(servers: readonly UnjudgedServer[], lang: Lang): string[]
   return lines;
 }
 
+/** 규칙의 값 하나를 잰 값과 같은 꼴로 단위까지 붙인 글(0.3.0. 기준값을 보일 때 쓴다) */
+export function ruleValueText(ruleId: RuleId, value: number, lang: Lang): string {
+  const spec = ruleSpec(ruleId);
+  const shown = measured(spec.kind, value, RULE_COPY[ruleId][lang], rulePlaces(spec));
+  return joinValue(shown.value, shown.unit, lang);
+}
+
 export function findingText(finding: FindingInput, details: FindingDetails, lang: Lang): FindingText {
   const copy = RULE_COPY[finding.ruleId][lang];
-  const shown = finding.status === "scored" ? measured(finding.kind, finding.value!, copy) : null;
+  const places = rulePlaces(ruleSpec(finding.ruleId));
+  const shown = finding.status === "scored" ? measured(finding.kind, finding.value!, copy, places) : null;
   const method = [copy.method];
   if (ruleSpec(finding.ruleId).unit === "merged") method.push(fillEvidence(copy.evidence, finding.evidence));
-  for (const value of finding.tools) method.push(toolLine(finding.kind, value, copy, lang));
+  for (const value of finding.tools) method.push(toolLine(finding.kind, places, value, copy, lang));
   if (finding.ruleId === "S2") for (const safeguard of details.safeguards) method.push(safeguardLine(safeguard, lang));
   method.push(...measurementNotes(finding, details, lang));
   return {

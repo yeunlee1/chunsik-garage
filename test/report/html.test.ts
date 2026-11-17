@@ -1,7 +1,12 @@
 // 결과 화면 HTML을 시험한다. 두 언어를 함께 그리는지, 바깥으로 나가는 요청을 CSP로 막는지, 스크립트가 찾는 요소가 있는지, 경로와 이름을 어떻게 그리는지, AQ가 없을 때 무엇을 숨기는지 본다(설계 13, 14, 19.1, 「3단계 계획 전 결정」의 1·2·5·6·10·12번)
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { RULE_COPY, ruleValueText } from "../../src/core/copy/findings.ts";
 import type { Lang } from "../../src/core/copy/lang.ts";
+import { SCORE_WINDOW_DAYS } from "../../src/adapters/common/dates.ts";
+import { RULES, ruleSpec } from "../../src/core/rules.ts";
+import { gradeOf } from "../../src/core/score.ts";
+import { MIN_DAYS_FOR_AQ, MIN_REQUESTS_FOR_AQ } from "../../src/core/scoreboard.ts";
 import { evaluate } from "../../src/core/evaluate.ts";
 import { checkupResult, type CheckupResult } from "../../src/core/result/assemble.ts";
 import type { CollectedTool } from "../../src/core/result/tools.ts";
@@ -11,7 +16,7 @@ import { reportHtml } from "../../src/report/html.ts";
 import { REPORT_SCRIPT, SCRIPT_IDS, type ClientData } from "../../src/report/script.ts";
 import { reportView, type ReportRun, type ReportView } from "../../src/report/view.ts";
 import { mcpServer, project } from "../helpers/facts.ts";
-import { claudeTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
+import { claudeTool, codexTool, evaluationInput, type ClaudeToolInput } from "../helpers/evaluation.ts";
 
 const collected = (input: Partial<CollectedTool> = {}): CollectedTool => ({
   tool: "claude-code",
@@ -184,12 +189,33 @@ describe("reportHtml", () => {
     expect(reportHtml(viewOf(result()), art)).not.toContain('class="spots"');
   });
 
+  it("S5 항목에 연결에 실패한 서버를 실패한 세션 수와 함께 늘어놓는다. 없으면 그리지 않는다(0.3.0, 다른 PC 피드백 2번)", () => {
+    const view = viewOf(result());
+    const withServers: ReportView = { ...view, failedServers: [{ tool: "claude-code", name: "gone<x>", sessions: 4 }, { tool: "claude-code", name: "auth", sessions: 1 }] };
+    const s5 = between(reportHtml(withServers, art), '<div class="it" id="it-S5">', '<div class="it" id="it-');
+    expect(s5).toContain(`aria-label="${REPORT_COPY.failedServers.ko}" data-en-aria-label="${REPORT_COPY.failedServers.en}"`);
+    expect(s5).toContain(`<li>gone&lt;x&gt;<small><span lang="en" data-l="en">4 sessions</span><span lang="ko" data-l="ko">세션 4개</span></small></li>`);
+    expect(s5).toContain(`<li>auth<small><span lang="en" data-l="en">1 session</span><span lang="ko" data-l="ko">세션 1개</span></small></li>`);
+    expect(reportHtml({ ...view, failedServers: [] }, art)).not.toContain(`aria-label="${REPORT_COPY.failedServers.ko}"`);
+  });
+
+  it("옮긴 설정 폴더를 쓰는 동안 기본 위치의 사본에서 찾은 자리는 사본이라고 붙인다(0.3.0, 다른 PC 피드백 3번)", () => {
+    const checked = result({ setup: { secrets: [{ scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN" }, { scope: "user", server: "ctx", projectRoot: null, field: "env", key: "API_TOKEN", copy: "default" }] } });
+    expect(checked.details.credentialPlaces.map((place) => place.copy ?? null)).toEqual([null, "default"]);
+    const notices = between(reportHtml(viewOf(checked), art), '<section class="notices"', "</section>");
+    expect(notices).toContain('<li><span lang="en" data-l="en">ctx · env API_TOKEN</span><span lang="ko" data-l="ko">ctx · env API_TOKEN</span></li>');
+    expect(notices).toContain('<li><span lang="en" data-l="en">ctx · env API_TOKEN · copy in the default location</span><span lang="ko" data-l="ko">ctx · env API_TOKEN · 기본 위치의 사본</span></li>');
+  });
+
   it("다음 등급까지의 문장을 진단 칸의 먼저 고칠 것 아래에 두 언어로 그리고, 없으면 그리지 않는다(0.2.0)", () => {
     const checked = result();
     expect(checked.nextGrade).not.toBeNull();
     const html = reportHtml(viewOf(checked), art);
     const verdict = between(html, '<div class="verdict">', "</section>");
-    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${esc(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${esc(checked.nextGrade!.text.ko)}</span></span>`);
+    // 화살표와 숫자는 줄이 바뀌어도 떨어지지 않게 묶는다(0.3.0. 문장 자체에는 보통 빈칸을 쓴다)
+    const nowrap = (text: string): string => esc(text).replace(/\(→ (\d+)\)/g, '<span class="nw">(→ $1)</span>');
+    expect(verdict).toContain(`<span class="nx"><span lang="en" data-l="en">${nowrap(checked.nextGrade!.text.en)}</span><span lang="ko" data-l="ko">${nowrap(checked.nextGrade!.text.ko)}</span></span>`);
+    expect(count(verdict, '<span class="nw">(→ ')).toBe(checked.nextGrade!.steps.length * 2);
     expect(count(html, 'class="nx"')).toBe(1);
     // 정비할 것이 없어도 다음 등급이 있으면 그 칸에 따로 보인다
     const view = viewOf(checked);
@@ -308,5 +334,111 @@ describe("점검 이력 그래프(7단계)", () => {
   it("점이 하나뿐이거나 저장하지 않은 점검이면 그리지 않는다", () => {
     expect(count(reportHtml(viewOf(result(), { saved: true, round: 1, history: history.slice(0, 1) }), art), "<svg class=\"histsvg\"")).toBe(0);
     expect(count(reportHtml(viewOf(result(), { saved: false, round: null, history }), art), "<svg class=\"histsvg\"")).toBe(0);
+  });
+});
+
+describe("다음 등급으로 가는 셋팅 방법(0.3.0, 사용자 추가 요청)", () => {
+  it("다음 등급까지의 차례마다 할 일, 지금 값과 목표 값, 거기까지 고친 AQ, 처방을 두 언어로 그린다. 다음 등급이 없으면 그리지 않는다", () => {
+    const checked = result();
+    expect(checked.nextGrade).not.toBeNull();
+    const view = viewOf(checked);
+    const section = between(reportHtml(view, art), '<section class="next"', "</section>");
+    expect(section).toContain(`${REPORT_COPY.nextTitle.ko.replace("{grade}", checked.nextGrade!.grade)}`);
+    expect(count(section, '<li class="step">')).toBe(checked.nextGrade!.steps.length);
+    for (const step of checked.nextGrade!.steps) {
+      const finding = checked.findings.find((f) => f.ruleId === step.ruleId)!;
+      expect(section).toContain(esc(finding.text.ko.title));
+      expect(section).toContain(esc(`여기까지 고치면 AQ ${step.aq}`));
+      expect(section).toContain(esc(`지금 ${finding.text.ko.value}${finding.text.ko.unit} → 목표 ${ruleValueText(step.ruleId, ruleSpec(step.ruleId).fullAt, "ko")}`));
+      if (finding.text.ko.prescription !== null) expect(section).toContain(esc(finding.text.ko.prescription));
+    }
+    expect(reportHtml({ ...view, nextPlan: null }, art)).not.toContain('<section class="next"');
+  });
+
+  it("도구마다 재는 규칙을 두 도구로 쟀으면 만점이 아닌 도구마다 지금 값과 목표를 적고, 평균값에 목표를 붙이지 않는다(짝 3차 필수 2번)", () => {
+    // F1(높은 추론 강도의 몫)을 Claude Code는 30%(만점), Codex는 90%(만점 아님)로 잰다. 다른 규칙은 그대로 두기로 해 F1만 차례에 남긴다
+    const sessions = (xhigh: number) => [0, 1, 2].map((index) => ({ days: { [`2026-11-1${index}`]: { responses: 50, humanRequests: 10, efforts: { xhigh, high: 50 - xhigh } } } }));
+    const twoTools = (codexXhigh: number): CheckupResult => {
+      const input = evaluationInput([claudeTool({ sessions: sessions(15) }), codexTool({ sessions: sessions(codexXhigh) })]);
+      return checkupResult({ input, evaluation: evaluate(input), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: RULES.map((spec) => spec.id).filter((id) => id !== "F1") });
+    };
+    const checked = twoTools(45);
+    const f1 = checked.findings.find((f) => f.ruleId === "F1")!;
+    expect(checked.nextGrade!.steps.map((step) => step.ruleId)).toEqual(["F1"]);
+    expect(f1.tools.map((tool) => [tool.tool, tool.value])).toEqual([["claude-code", 0.3], ["codex", 0.9]]);
+    expect(f1.value).toBeCloseTo(0.6, 9);
+    const section = between(reportHtml(viewOf(checked), art), '<section class="next"', "</section>");
+    expect(section).toContain(esc("Codex 지금 90% → 목표 60%"));
+    expect(section).toContain(esc("Codex: now 90% → aim for 60%"));
+    expect(section).not.toContain(esc("지금 60% → 목표 60%"));
+    expect(section).not.toContain("Claude Code 지금");
+    // 점수가 0이고 0점 기준보다 나쁜 도구는 그 줄에 점수가 오르기 시작하는 값을 붙인다
+    const zero = between(reportHtml(viewOf(twoTools(49)), art), '<section class="next"', "</section>");
+    expect(zero).toContain(esc("Codex 지금 98% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+  });
+
+  it("두 도구가 모두 0점인 도구별 규칙은 진단 칸의 먼저 고칠 것에도 평균값 대신 도구마다의 값을 적는다(짝 4차 필수 2번)", () => {
+    // F1을 Claude Code 98%, Codex 100%로 잰다. 평균 99%를 95%와 견주면, Claude Code만 95% 아래로 내려도 오르는 것과 어긋난다
+    const sessions = (xhigh: number) => [0, 1, 2].map((index) => ({ days: { [`2026-11-1${index}`]: { responses: 50, humanRequests: 10, efforts: { xhigh, high: 50 - xhigh } } } }));
+    const input = evaluationInput([claudeTool({ sessions: sessions(49) }), codexTool({ sessions: sessions(50) })]);
+    const checked = checkupResult({ input, evaluation: evaluate(input), collected: [collected(), collected({ tool: "codex" })], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: RULES.map((spec) => spec.id).filter((id) => id !== "F1") });
+    const f1 = checked.findings.find((f) => f.ruleId === "F1")!;
+    expect([f1.score, f1.tools.map((tool) => tool.score)]).toEqual([0, [0, 0]]);
+    const html = reportHtml(viewOf(checked), art);
+    const band = between(html, REPORT_COPY.fixFirst.ko, "</div>");
+    expect(band).toContain(esc("지금 Claude Code 98%·Codex 100%, 도구마다 95% 아래로 줄여야 오르기 시작"));
+    expect(band).toContain(esc("now Claude Code 98% and Codex 100%, each rises only below 95%"));
+    expect(band).not.toContain("99%");
+    const section = between(html, '<section class="next"', "</section>");
+    expect(section).toContain(esc("Claude Code 지금 98% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+    expect(section).toContain(esc("Codex 지금 100% → 목표 60% · 95%보다 줄여야 점수가 오르기 시작합니다."));
+  });
+
+  it("지금 값과 목표 뒤에 점수가 오르기 시작하는 값을 붙일 때 가운뎃점으로 나눠 숫자 둘이 붙지 않는다", () => {
+    // I3(요청 하나에 도구 호출)이 0회로 0점 기준(1회)보다 나쁘다. 다른 차례 후보는 그대로 두기로 해 I3만 남긴다
+    const input = evaluationInput([claudeTool({ sessions: enough })]);
+    const checked = checkupResult({ input, evaluation: evaluate(input), collected: [collected()], appVersion: "0.1.0", lang: "ko", run: { stateBroken: false }, ignored: ["S1", "I1", "I2"] });
+    expect(checked.nextGrade!.steps.map((step) => step.ruleId)).toEqual(["I3"]);
+    const section = between(reportHtml(viewOf(checked), art), '<section class="next"', "</section>");
+    expect(section).toContain(esc("지금 0회/요청 → 목표 8회/요청 · 1회/요청보다 늘려야 점수가 오르기 시작합니다."));
+    expect(section).toContain(esc("Now 0 calls per request → aim for 8 calls per request · The score starts to rise above 1 call per request."));
+  });
+});
+
+describe("점수 매기는 법(0.3.0, 사용자 추가 요청)", () => {
+  it("AQ·기준 점수·규칙 점수의 계산과 등급의 경계, AQ를 내지 않는 조건을 적고, 규칙 스물둘의 무게와 0점·만점 기준을 표로 보인다", () => {
+    const html = reportHtml(viewOf(result()), art);
+    const section = between(html, '<section class="how-score"', "</section>");
+    expect(section).toContain("S 90 이상, A 80~89, B 65~79, C 50~64, D 49 이하");
+    expect([gradeOf(90).grade, gradeOf(89).grade, gradeOf(80).grade, gradeOf(79).grade, gradeOf(65).grade, gradeOf(64).grade, gradeOf(50).grade, gradeOf(49).grade]).toEqual(["S", "A", "A", "B", "B", "C", "C", "D"]);
+    expect(section).toContain(`최근 ${SCORE_WINDOW_DAYS}일 동안 사람 요청이 ${MIN_REQUESTS_FOR_AQ}개보다 적거나 쓴 날이 ${MIN_DAYS_FOR_AQ}일보다 적으면`);
+    expect(count(section, '<tr class="rule">')).toBe(RULES.length);
+    for (const spec of RULES) {
+      const name = RULE_COPY[spec.id].ko.name;
+      const pair = (en: string, ko: string): string => `<span lang="en" data-l="en">${esc(en)}</span><span lang="ko" data-l="ko">${esc(ko)}</span>`;
+      const mark = (value: number): string => pair(ruleValueText(spec.id, value, "en"), ruleValueText(spec.id, value, "ko"));
+      expect(section).toContain(`<tr class="rule"><th scope="row">${pair(RULE_COPY[spec.id].en.name, name)}</th><td class="n">${spec.weight}</td><td>${mark(spec.zeroAt)}</td><td>${mark(spec.fullAt)}</td></tr>`);
+    }
+    // 위 비교는 같은 함수의 출력과 견주므로, 반올림으로 바뀌기 쉬운 E7의 두 기준은 글자 그대로 본다(짝 3차 필수 3번)
+    expect(section).toContain('<td><span lang="en" data-l="en">0.15 stops per request</span><span lang="ko" data-l="ko">0.15회/요청</span></td><td><span lang="en" data-l="en">0.02 stops per request</span><span lang="ko" data-l="ko">0.02회/요청</span></td>');
+    // AQ를 내지 않은 화면에도 같은 설명이 있다
+    const withheld = reportHtml({ ...viewOf(result()), score: { aq: null, grade: null, tier: null, withheld: ["too_few_requests"] } }, art);
+    expect(withheld).toContain('<section class="how-score"');
+  });
+});
+
+describe("그대로 두기로 한 규칙(0.3.0, 다른 PC 피드백 5번)", () => {
+  it("정비할 것의 항목에 꼬리표를 붙이고, 진단 칸의 먼저 고칠 것에서는 뺀다", () => {
+    const view = viewOf(result());
+    const repairs = view.findings.filter((finding) => finding.category === "repair");
+    expect(repairs.length).toBeGreaterThan(0);
+    const first = repairs[0]!;
+    const kept: ReportView = { ...view, ignored: [first.ruleId] };
+    const html = reportHtml(kept, art);
+    const card = between(html, `<div class="it" id="it-${first.ruleId}">`, '<div class="it" id="it-');
+    expect(card).toContain(REPORT_COPY.kept.ko);
+    const verdict = between(html, '<div class="verdict">', "</section>");
+    expect(verdict).not.toContain(esc(first.text.ko.title));
+    expect(reportHtml(view, art)).not.toContain(REPORT_COPY.kept.ko);
   });
 });

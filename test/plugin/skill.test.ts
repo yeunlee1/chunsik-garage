@@ -89,6 +89,13 @@ describe("실행 명령", () => {
         expect(checkupArgs(args.slice(1), new Set())).toEqual({ flags: new Set(), lang: "ko" });
       }
       else if (sub === "tune" && args[0] === "plan") expect(checkupArgs(args.slice(1), new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
+      else if (sub === "ignore") {
+        // 그대로 둘 항목(0.3.0). 자리 표시 <rule ID>는 규칙 ID 하나다
+        const [action, rule, ...rest] = command.slice(`${COMMAND} `.length).replace("<lang>", "ko").replace("<rule ID>", "F1").split(" ").slice(1);
+        expect(action).toBe("add");
+        expect(rule).toBe("F1");
+        expect(checkupArgs(rest, new Set())).toEqual({ flags: new Set(), lang: "ko" });
+      }
       else {
         expect([sub, ["apply", "undo", "verify"].includes(args[0]!)]).toEqual(["tune", true]);
         expect(tuneRunArgs(args[0] as "apply" | "undo" | "verify", args.slice(1))?.lang).toBe("ko");

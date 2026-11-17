@@ -159,6 +159,16 @@ describe("MCP 연결 실패와 훅", () => {
     expect(s.days[D1]!.mcpConnectionFailure).toBe(false);
     expect(s.days[D2]!.mcpConnectionFailure).toBe(true);
   });
+  it("연결에 실패한 서버의 이름을 날짜마다 센다. 항목은 {name, error} 꼴과 옛 문자열 꼴을 모두 받고, 이름이 없는 항목은 세지 않는다(0.3.0, 다른 PC 피드백 2번)", () => {
+    const s = parseLines([
+      attachment(t(D1), { type: "deferred_tools_delta", failedMcpServers: [{ name: "gone", error: "spawn ENOENT" }, { name: "auth", error: "x" }] }),
+      attachment(t(D1), { type: "deferred_tools_delta", failedMcpServers: [{ name: "gone", error: "spawn ENOENT" }, { error: "no name" }, 5] }),
+      attachment(t(D2), { type: "deferred_tools_delta", failedMcpServers: ["srv"] }),
+    ]);
+    expect(s.days[D1]!.mcpFailedServers).toEqual({ auth: 1, gone: 2 });
+    expect(s.days[D2]!.mcpFailedServers).toEqual({ srv: 1 });
+    expect(JSON.stringify(s)).not.toContain("ENOENT");
+  });
   it("훅은 실행과 실패를 사건별로 세고, 실패 표지가 없는 막음은 따로 세며, 딸린 첨부와 stop_hook_summary는 세지 않는다", () => {
     const s = parseLines([
       attachment(t(D1), { type: "hook_success", hookEvent: "PreToolUse", exitCode: 0 }),

@@ -16,15 +16,20 @@ export const EXEC_TOOLS: ReadonlyMap<string, { name: string; status: boolean }> 
   ["ImageView", { name: "image_view", status: false }],
   ["Extension", { name: "extension", status: false }],
   ["WebSearch", { name: "web_search", status: false }],
+  // 0.3.0. Codex 0.166.0~0.169.0의 TurnItem(공개 소스 codex-rs/protocol/src/items.rs)에서 도구 호출인 나머지 넷. 상태의 값을 기록으로 확인하지 못해 호출만 센다(다른 PC 피드백 8번)
+  ["DynamicToolCall", { name: "dynamic_tool", status: false }],
+  ["CollabAgentToolCall", { name: "collab_agent", status: false }],
+  ["ImageGeneration", { name: "image_generation", status: false }],
+  ["FunctionCallOutput", { name: "function", status: false }],
 ]);
 /** Codex의 셸 명령 이름. 평가 입력의 shellTools로 넘긴다 */
 export const CODEX_SHELL_TOOLS: readonly string[] = ["shell"];
 /** 도구가 아닌 실행 층 종류(설계 9.6) */
-const NON_TOOL_ITEMS: ReadonlySet<string> = new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction"]);
+const NON_TOOL_ITEMS: ReadonlySet<string> = new Set(["UserMessage", "AgentMessage", "Reasoning", "ContextCompaction", "Plan", "HookPrompt", "SubAgentActivity", "EnteredReviewMode", "ExitedReviewMode"]);
 /** 호출 층(response_item)의 도구 호출 종류 */
 const CALL_TYPES: ReadonlySet<string> = new Set(["function_call", "custom_tool_call", "web_search_call"]);
 
-export const CODEX_PARSER_VERSION = 1;
+export const CODEX_PARSER_VERSION = 2;
 
 /** 기록 하나의 지문. 항목의 item.id, 호출 층의 call_id, 옛 구간의 누적값, 새 구간의 response_id를 해시로 둔다(원문은 되살릴 수 없다) */
 export interface CodexFingerprints {
@@ -104,6 +109,7 @@ export class CodexSessionParser {
   private brokenLines = 0;
   private tailFragments = 0;
   private tooLongLines = 0;
+  private tooLongMcpLines = 0;
   private undatedLines = 0;
   /** 깨진 줄과 끝 조각의 맨 바깥 종류(온전히 읽히지 않으면 ?)별 수. MCP 호출의 관측이 빠짐없는지 가른다(설계 9.8) */
   private readonly unconfirmedTypes = nameRecord<number>();
@@ -206,10 +212,11 @@ export class CodexSessionParser {
     else this.identityPending = true;
   }
 
-  /** 상한을 넘은 줄 하나를 받는다 */
-  tooLong(): void {
+  /** 상한을 넘은 줄 하나를 받는다. found는 줄의 바이트에서 찾은 MCP 호출의 표지다(0.3.0) */
+  tooLong(found?: ReadonlySet<string>): void {
     this.lines++;
     this.tooLongLines++;
+    if (found?.has("mcp")) this.tooLongMcpLines++;
     this.firstLine(null);
   }
 
@@ -448,7 +455,7 @@ export class CodexSessionParser {
       instructionChars: this.instructionChars,
       initialSkills: null,
       initialMcpServers: null,
-      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
+      missing: { lines: this.lines, brokenLines: this.brokenLines, tailFragments: this.tailFragments, tooLongLines: this.tooLongLines, tooLongMcpLines: this.tooLongMcpLines, unconfirmedTypes: sortedRecord(this.unconfirmedTypes) },
       firstResponseIdHashes: [],
       notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: this.undatedLines, unknownHookKinds: nameRecord<number>() },
       codex: { recordId: this.ctx.recordId, unknownThreadSource: this.unknownThreadSource, idFallback: this.idFallback, unknownItemTypes: sortedRecord(this.unknownItemTypes), inheritedSkipped: { ...this.inheritedSkipped }, baselineMissing: this.firstCountedOldLine >= 0 && this.firstCountedOldLine < this.lastInheritedLine },

@@ -5,6 +5,7 @@ import { runBadge } from "./commands/badge.ts";
 import { runCheckup } from "./commands/checkup.ts";
 import { runDeepHints } from "./commands/deep-hints.ts";
 import { runNotify } from "./commands/notify.ts";
+import { runIgnore } from "./commands/ignore.ts";
 import { runTunePlan } from "./commands/tune-plan.ts";
 import { runTuneApply, runTuneUndo, runTuneVerify, type TuneRunOptions } from "./commands/tune-run.ts";
 import { openInBrowser } from "./commands/open.ts";
@@ -133,6 +134,14 @@ async function run(command: string | undefined, rest: string[], context: CliCont
     const args = checkupArgs(rest.slice(1), new Set());
     if (args === null) return null;
     printJson(await runNotify(rest[0], { env: context.env, homedir: context.homedir, stateDir: stateDir(context.homedir), lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "ignore" && (rest[0] === "add" || rest[0] === "remove" || rest[0] === "list")) {
+    const action = rest[0];
+    const rule = action === "list" ? null : (rest[1] ?? null);
+    const args = checkupArgs(rest.slice(action === "list" ? 1 : 2), new Set());
+    if (args === null || (action !== "list" && (rule === null || rule.startsWith("--")))) return null;
+    printJson(await runIgnore(action, rule, { stateDir: stateDir(context.homedir), lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
     return 0;
   }
   if (command === "deep-hints") {

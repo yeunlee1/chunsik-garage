@@ -7,7 +7,7 @@ import type { LocalDate } from "../common/dates.ts";
 import type { SessionSummary } from "../types.ts";
 import { chatgptConversation, looksLikeChatgpt } from "./chatgpt.ts";
 import { claudeConversation, looksLikeClaude } from "./claude-ai.ts";
-import { webSummary, type WebConversation, type WebToolId } from "./conversation.ts";
+import { conversationKey, webSummary, type WebConversation, type WebToolId } from "./conversation.ts";
 import { JsonArraySplitter } from "./json-array.ts";
 import { storedSource, wholeFile, ZipError, zipEntries, zipEntryChunks, type ZipEntry, type ZipErrorCode, type ZipSource } from "./zip.ts";
 
@@ -46,6 +46,8 @@ export interface ExportRead {
 interface Collector {
   tool: WebToolId | null;
   summaries: SessionSummary[];
+  /** 이미 센 대화의 지문. 같은 대화가 zip과 푼 파일로 함께 있으면 처음 것만 센다(짝 검토 5 필수 3) */
+  seen: Set<string>;
   skipped: { tooLong: number; broken: number; unrecognized: number };
   totals: ExportRead["totals"];
   files: string[];
@@ -71,6 +73,9 @@ function consume(collector: Collector, text: string, timeZone: string, keepFrom:
     collector.skipped.unrecognized++;
     return;
   }
+  const key = conversationKey(collector.tool, conversation.id);
+  if (collector.seen.has(key)) return;
+  collector.seen.add(key);
   for (const event of conversation.events) {
     if (event.kind === "request") collector.totals.requests++;
     else collector.totals.responses++;
@@ -140,19 +145,24 @@ export interface FolderFile {
 
 /** 폴더를 훑는 깊이(폴더 자체가 0)와 훑는 항목의 상한. 내보내기가 아닌 큰 폴더를 넣어도 오래 돌지 않게 한다 */
 const FOLDER_DEPTH = 2;
-const FOLDER_ENTRY_LIMIT = 20_000;
+export const FOLDER_ENTRY_LIMIT = 20_000;
 
 /**
  * 압축을 푼 내보내기 폴더에서 대화 파일(conversations.json, conversations-<숫자>.json)과 대화를 담은 안쪽 zip을 찾는다. 자리 차례다.
- * 두 겹 아래까지만 보고 링크는 따라가지 않는다(짝 검토 3 필수 1)
+ * 두 겹 아래까지만 보고 링크는 따라가지 않는다(짝 검토 3 필수 1). 항목 상한에 걸리면 limited가 참이고, 부르는 쪽은 끝까지 읽지 못한 것으로 알린다(짝 검토 5 필수 5)
  */
-export async function exportFolderFiles(dir: string): Promise<FolderFile[]> {
+export async function exportFolderFiles(dir: string, limit: number = FOLDER_ENTRY_LIMIT): Promise<{ files: FolderFile[]; limited: boolean }> {
   const found: FolderFile[] = [];
   let seen = 0;
+  let limited = false;
   const walk = async (path: string, rel: string, depth: number): Promise<void> => {
     const entries = await readdir(path, { withFileTypes: true });
     for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
-      if (++seen > FOLDER_ENTRY_LIMIT) return;
+      if (limited) return;
+      if (++seen > limit) {
+        limited = true;
+        return;
+      }
       const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
       const child = join(path, entry.name);
       if (entry.isDirectory()) {
@@ -167,7 +177,7 @@ export async function exportFolderFiles(dir: string): Promise<FolderFile[]> {
     }
   };
   await walk(dir, "", 0);
-  return found.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+  return { files: found.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0)), limited };
 }
 
 const isZip = async (path: string): Promise<boolean> => {
@@ -185,14 +195,15 @@ const isZip = async (path: string): Promise<boolean> => {
  * 내보내기 파일을 읽는다. keepFrom보다 이른 날의 칸은 요약에서 버린다. 읽을 수 없으면 ExportError다.
  * zip이면 안의 conversations.json(나뉘었으면 conversations-NNN.json 모두, 바깥에 없으면 대화를 담은 안쪽 zip의 것)을, 폴더면 그 안의 대화 파일과 안쪽 zip을, 아니면 그 파일 자체를 대화 배열로 읽는다
  */
-export async function readExport(path: string, timeZone: string, keepFrom: LocalDate | null): Promise<ExportRead> {
+export async function readExport(path: string, timeZone: string, keepFrom: LocalDate | null, folderLimit: number = FOLDER_ENTRY_LIMIT): Promise<ExportRead> {
   const info = await stat(path);
   if (!info.isFile() && !info.isDirectory()) throw new ExportError("not-file");
-  const collector: Collector = { tool: null, summaries: [], skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
+  const collector: Collector = { tool: null, summaries: [], seen: new Set(), skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
   try {
     if (info.isDirectory()) {
-      const files = await exportFolderFiles(path);
+      const { files, limited } = await exportFolderFiles(path, folderLimit);
       if (files.length === 0) throw new ExportError("no-conversations");
+      if (limited) collector.complete = false;
       for (const file of files) {
         if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
         else await readArray(file.rel, createReadStream(file.path) as AsyncIterable<Buffer>, collector, timeZone, keepFrom);

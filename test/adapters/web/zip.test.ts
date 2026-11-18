@@ -75,6 +75,40 @@ describe("zipEntries와 zipEntryChunks", () => {
     expect(await text(await wholeFile(path), "conversations.json")).toBe("[1]");
   });
 
+  it("끝 주석의 가짜 ZIP64 위치 기록과 가짜 끝 기록, 산술만 맞는 가짜 끝 기록이 있어도 진짜 끝 기록을 쓴다(짝 검토 5 필수 7)", async () => {
+    for (const zip64 of [false, true]) {
+      const normal = makeZip([{ name: "conversations.json", data: "[1]" }], { zip64 });
+      const fakeEnd = Buffer.alloc(22);
+      fakeEnd.writeUInt32LE(0x06054b50);
+      const locator = Buffer.alloc(20);
+      locator.writeUInt32LE(0x07064b50);
+      locator.writeUInt32LE(1, 4);
+      const comment = Buffer.concat([locator, fakeEnd]);
+      const head = Buffer.from(normal);
+      head.writeUInt16LE(comment.length, head.length - 2);
+      const path = await put(`fake-locator-${zip64}.zip`, Buffer.concat([head, comment]));
+      expect(await text(await wholeFile(path), "conversations.json")).toBe("[1]");
+    }
+    const normal = makeZip([{ name: "conversations.json", data: "[2]" }]);
+    const fake = Buffer.alloc(22);
+    fake.writeUInt32LE(0x06054b50);
+    fake.writeUInt16LE(1, 8);
+    fake.writeUInt16LE(1, 10);
+    // 가짜 끝 기록의 자리(파일에서)는 진짜 끝 기록 뒤 22바이트다. 중앙 목록이 0에서 시작해 그 자리에서 끝난다는 산술만 맞춘다
+    fake.writeUInt32LE(normal.length, 12);
+    fake.writeUInt32LE(0, 16);
+    const head = Buffer.from(normal);
+    head.writeUInt16LE(fake.length, head.length - 2);
+    const path = await put("fake-arithmetic.zip", Buffer.concat([head, fake]));
+    expect(await text(await wholeFile(path), "conversations.json")).toBe("[2]");
+  });
+
+  it("진짜 끝 기록이 여러 디스크를 가리키면 여러 디스크로 멈춘다", async () => {
+    const zip = makeZip([{ name: "conversations.json", data: "[]" }]);
+    zip.writeUInt16LE(1, zip.length - 22 + 4);
+    expect(await codeOf(async () => zipEntries(await wholeFile(await put("multi.zip", zip))))).toBe("multi-disk");
+  });
+
   it("바깥 zip 안에 저장만 한 안쪽 zip은 그 자리를 구간으로 읽는다. 압축한 안쪽 zip은 구간으로 보지 않는다", async () => {
     const inner = makeZip([{ name: "conversations-001.json", data: '[{"a":1}]' }]);
     const path = await put("outer.zip", makeZip([{ name: "Conversations__part-001.zip", data: inner, method: 0 }, { name: "Files__part-001.zip", data: inner, method: 8 }]));

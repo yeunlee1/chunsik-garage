@@ -116,20 +116,25 @@ export function chatgptConversation(value: unknown): WebConversation | null {
     return depthCache.get(start.key)!;
   };
 
-  /** 위로 올라가며 숨은 노드를 건너뛰고 처음 만나는 보이는 노드의 역할. 뿌리까지 없으면 root, 부모가 mapping에 없거나 고리면 missing이다 */
-  const visibleAbove = (start: string | null): "user" | "assistant" | "tool" | "root" | "missing" => {
+  /**
+   * 위로 올라가며 숨은 노드와 도구 결과를 건너뛰고 처음 만나는 보이는 사람 요청이나 어시스턴트 메시지. 뿌리까지 없으면 root, 부모가 mapping에 없거나 고리면 missing이다.
+   * 도구 결과를 건너뛰므로, 도구를 부른 메시지가 숨겨졌거나 빠져도 최종 답변을 버리지 않는다(짝 검토 5 필수 1)
+   */
+  const visibleAbove = (start: string | null): "user" | "assistant" | "root" | "missing" => {
     const seen = new Set<string>();
     for (let key = start; key !== null; ) {
       if (seen.has(key)) return "missing";
       seen.add(key);
       const node = nodes.get(key);
       if (node === undefined) return "missing";
-      if (node.role !== null) return node.role;
+      if (node.role === "user" || node.role === "assistant") return node.role;
       key = node.parent;
     }
     return "root";
   };
 
+  // 깊이는 노드 ID 차례로 미리 정해 둔다. 고리가 있으면 어느 노드에서 걷기 시작하느냐에 따라 깊이가 달라지므로 mapping에 적힌 차례와 상관없게 한다(짝 검토 5 참고 1)
+  for (const key of [...nodes.keys()].sort()) depthOf(nodes.get(key)!);
   // 보이는 사람 요청과 어시스턴트 메시지를 시각, 깊이, 노드 ID 차례로 세운다(시각을 모르면 맨 뒤)
   const order = (a: Node, b: Node): number => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY) || depthOf(a) - depthOf(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   const visible = [...nodes.values()].filter((node) => node.role === "user" || node.role === "assistant").sort(order);

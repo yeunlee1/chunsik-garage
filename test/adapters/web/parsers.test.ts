@@ -106,6 +106,51 @@ describe("chatgptConversation", () => {
     expect(backward.sort()).toEqual(["request", "response"]);
   });
 
+  it("도구를 부른 메시지가 숨겨졌거나 빠져도 도구 결과 뒤의 최종 답변을 응답 하나로 센다(짝 검토 5 필수 1)", () => {
+    const hiddenCall = chatgptConversation(
+      gpt([
+        { id: "u", parent: null, role: "user", at: T0 },
+        { id: "call", parent: "u", role: "assistant", hidden: true, at: T0 + 1 },
+        { id: "tool", parent: "call", role: "tool", type: "execution_output", at: T0 + 2 },
+        { id: "final", parent: "tool", role: "assistant", at: T0 + 3 },
+      ]),
+    )!;
+    expect(hiddenCall.events.map((event) => event.kind)).toEqual(["request", "response"]);
+    const missingCall = chatgptConversation(
+      gpt([
+        { id: "u", parent: null, role: "user", at: T0 },
+        { id: "tool", parent: "gone-call", role: "tool", type: "execution_output", at: T0 + 1 },
+        { id: "final", parent: "tool", role: "assistant", at: T0 + 2 },
+      ]),
+    )!;
+    expect(missingCall.events.map((event) => event.kind)).toEqual(["request", "response"]);
+    // 보이는 호출이 있으면 최종 답변은 같은 응답의 이어 쓰기다
+    const shownCall = chatgptConversation(
+      gpt([
+        { id: "u", parent: null, role: "user", at: T0 },
+        { id: "call", parent: "u", role: "assistant", type: "code", at: T0 + 1 },
+        { id: "tool", parent: "call", role: "tool", type: "execution_output", at: T0 + 2 },
+        { id: "final", parent: "tool", role: "assistant", at: T0 + 3 },
+      ]),
+    )!;
+    expect(shownCall.events.map((event) => event.kind)).toEqual(["request", "response"]);
+  });
+
+  it("사슬에 고리가 있어도 mapping에 적힌 차례와 상관없이 같은 수다(짝 검토 5 참고 1)", () => {
+    const nodes: GptNode[] = [
+      // 빈 노드 둘이 서로를 부모로 삼는 고리에 사람 요청과 응답이 각각 붙고, 부모가 빠진 응답이 하나 있다(짝 보고 5의 cyclePermutation)
+      { id: "c1", parent: "c2" },
+      { id: "c2", parent: "c1" },
+      { id: "u", parent: "c1", role: "user", at: T0 },
+      { id: "a", parent: "c2", role: "assistant", at: T0 },
+      { id: "b", parent: "gone", role: "assistant", at: T0 },
+    ];
+    const counts = new Set<string>();
+    const permute = (items: GptNode[]): GptNode[][] => (items.length <= 1 ? [items] : items.flatMap((item, index) => permute([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [item, ...rest])));
+    for (const order of permute(nodes)) counts.add(chatgptConversation(gpt(order))!.events.map((event) => event.kind).sort().join(","));
+    expect(counts.size).toBe(1);
+  });
+
   it("질문을 고쳐 생긴 가지는 사람 요청과 응답을 새로 센다", () => {
     const conversation = chatgptConversation(
       gpt([

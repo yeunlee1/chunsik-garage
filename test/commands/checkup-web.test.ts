@@ -112,6 +112,22 @@ describe("웹 채팅을 넣은 aq checkup", () => {
     expect(result.coverage.find((coverage) => coverage.tool === "web-chatgpt")).toMatchObject({ partial: false, unreadableFiles: 0 });
   });
 
+  it("수집 구간보다 오래된 내보내기는 볼 수 있는 범위가 없다(짝 검토 5 필수 8)", async () => {
+    const old = join(root, "downloads", "old.zip");
+    await put(old, makeZip([{ name: "conversations.json", data: JSON.stringify([gpt("o1", Date.parse("2026-01-01T01:00:00Z") / 1000)]) }]));
+    await runImportAdd(old, { stateDir, clock, lang: "ko", cache: true });
+    const { result } = await runCheckup(options());
+    expect(result.tools.find((tool) => tool.tool === "web-chatgpt")).toMatchObject({ detected: true, scored: false, visible: null });
+  });
+
+  it("웹 채팅만 있으면 내보낸 날 뒤는 기록이 없는 날이다(짝 검토 5 참고 2)", async () => {
+    await rm(join(home, ".claude"), { recursive: true, force: true });
+    await runImportAdd(exportPath, { stateDir, clock, lang: "ko", cache: true });
+    const { result } = await runCheckup(options());
+    const state = (date: string) => result.usage.calendar.find((cell) => cell.date === date)?.state;
+    expect([state("2026-11-08"), state("2026-11-09"), state("2026-11-10"), state("2026-11-12")]).toEqual(["used", "used", "unseen", "unseen"]);
+  });
+
   it("넣은 목록이 깨졌으면 웹 채팅 없이 세고 알린다", async () => {
     await mkdir(stateDir, { recursive: true });
     await writeFile(join(stateDir, "web-exports.json"), "{broken");

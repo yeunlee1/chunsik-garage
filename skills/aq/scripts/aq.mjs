@@ -1042,9 +1042,9 @@ function codexSafeguard(setup) {
 function geminiSafeguard(setup) {
   if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
   const contexts = [setup.safety, ...setup.projects.flatMap((project) => project.scanned && project.trusted && project.safety !== null ? [project.safety] : [])];
-  const open8 = contexts.filter((context) => context.shellAutoApproved === true);
-  if (open8.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
-  if (open8.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  const open9 = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open9.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open9.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
   return { tool: "gemini", guardHook: false, permissionChecks: true };
 }
 function safeguardOf(tool) {
@@ -2420,7 +2420,7 @@ var LINES = {
     web_export_missing: "{tool}: the export file you added is no longer there, so it was left out. Add the export file again to count it.",
     web_export_unreadable: "{tool}: the export file could not be read ({why}), so it was left out.",
     web_export_partial: "{tool}: {count} {count:conversation in the export was|conversations in the export were} left out (too large, broken, or of an unknown shape). Only what was read is counted.",
-    webTruncated: "{tool}: the export file ended early. Only the conversations before the break are counted.",
+    webTruncated: "{tool}: the export could not be read to the end (the file ended early or the folder has too many items). Only what was read is counted.",
     web_export_until: "{tool}: the export has conversations up to {date}. Later days count as days without use. Export again and add the file to count them.",
     credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
@@ -2452,7 +2452,7 @@ var LINES = {
     web_export_missing: "{tool} \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC774 \uB123\uC740 \uC790\uB9AC\uC5D0 \uC5C6\uC5B4 \uC774\uBC88 \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC744 \uB2E4\uC2DC \uB123\uC73C\uBA74 \uC149\uB2C8\uB2E4.",
     web_export_unreadable: "{tool} \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574({why}) \uC774\uBC88 \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4.",
     web_export_partial: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uC5D0\uC11C \uB300\uD654 {count}\uAC1C\uB97C \uBE7C\uACE0 \uC14C\uC2B5\uB2C8\uB2E4(\uB108\uBB34 \uD06C\uAC70\uB098 \uAE68\uC84C\uAC70\uB098 \uAF34\uC744 \uBAA8\uB984). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
-    webTruncated: "{tool} \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACBC\uC2B5\uB2C8\uB2E4. \uB04A\uAE30\uAE30 \uC804\uC758 \uB300\uD654\uB9CC \uC14C\uC2B5\uB2C8\uB2E4.",
+    webTruncated: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB05D\uAE4C\uC9C0 \uC77D\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4(\uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACBC\uAC70\uB098 \uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC74C). \uC77D\uC740 \uB300\uD654\uB9CC \uC14C\uC2B5\uB2C8\uB2E4.",
     web_export_until: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uC5D0\uB294 {date}\uAE4C\uC9C0\uC758 \uB300\uD654\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uADF8 \uB4A4\uC758 \uB0A0\uC740 \uC4F0\uC9C0 \uC54A\uC740 \uB0A0\uB85C \uC149\uB2C8\uB2E4. \uB2E4\uC2DC \uB0B4\uBCF4\uB0B4 \uB123\uC73C\uBA74 \uADF8 \uB4A4\uB3C4 \uC149\uB2C8\uB2E4.",
     credentials_in_config: "{tool} \uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694. \uAC12\uC740 \uBCF4\uC5EC \uC8FC\uAC70\uB098 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
@@ -2982,7 +2982,8 @@ function resultTools(input, evaluation, collected) {
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom2 === null ? null : { from: visibleFrom2, to: visibleTo }
+      // 내보내기가 모두 수집 구간보다 오래되면 볼 수 있는 날이 없다(짝 검토 5 필수 8)
+      visible: visibleFrom2 === null || visibleTo < visibleFrom2 ? null : { from: visibleFrom2, to: visibleTo }
     };
   });
 }
@@ -3027,10 +3028,15 @@ function resultUsage(input, evaluation, collected) {
       for (const [date, day] of Object.entries(summary.days)) responsesByDate.set(date, (responsesByDate.get(date) ?? 0) + day.responses);
     }
   }
-  const visibleFroms = collected.map((tool) => tool.visibleFrom).filter((date) => date !== null);
+  const today = evaluation.windows.today;
+  const ranges = collected.flatMap((tool) => {
+    if (tool.visibleFrom === null) return [];
+    const last = tool.web?.lastDate ?? null;
+    return [{ from: tool.visibleFrom, to: last !== null && last < today ? last : today }];
+  });
   const calendar2 = makeWindows(input.clock.nowMs, input.clock.timeZone).collectDates.map((date) => {
     const responses = responsesByDate.get(date) ?? 0;
-    const state = responses > 0 ? "used" : visibleFroms.some((from) => from <= date) ? "unused" : "unseen";
+    const state = responses > 0 ? "used" : ranges.some((range) => range.from <= date && date <= range.to) ? "unused" : "unseen";
     return { date, responses, state };
   });
   return {
@@ -8159,7 +8165,7 @@ async function collectGeminiFromList(home, list, options) {
 
 // src/collect/web.ts
 import { createHash as createHash4 } from "node:crypto";
-import { mkdir as mkdir7, readFile as readFile8, rename as rename6, stat as stat7, writeFile as writeFile6 } from "node:fs/promises";
+import { mkdir as mkdir7, open as open7, readFile as readFile8, rename as rename6, stat as stat7, writeFile as writeFile6 } from "node:fs/promises";
 import { join as join18 } from "node:path";
 
 // src/adapters/web/source.ts
@@ -8261,11 +8267,12 @@ function chatgptConversation(value) {
       seen.add(key);
       const node = nodes.get(key);
       if (node === void 0) return "missing";
-      if (node.role !== null) return node.role;
+      if (node.role === "user" || node.role === "assistant") return node.role;
       key = node.parent;
     }
     return "root";
   };
+  for (const key of [...nodes.keys()].sort()) depthOf(nodes.get(key));
   const order = (a, b) => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY) || depthOf(a) - depthOf(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
   const visible = [...nodes.values()].filter((node) => node.role === "user" || node.role === "assistant").sort(order);
   const events = [];
@@ -8524,6 +8531,7 @@ var u64 = (buffer, offset) => {
 async function candidateDirectory(handle, source, eocdAt, record) {
   const disk = record.readUInt16LE(4);
   const directoryDisk = record.readUInt16LE(6);
+  if (disk !== 0 || directoryDisk !== 0) return "multi-disk";
   let entries = record.readUInt16LE(10);
   let size = record.readUInt32LE(12);
   let offset = record.readUInt32LE(16);
@@ -8531,32 +8539,36 @@ async function candidateDirectory(handle, source, eocdAt, record) {
   let directoryEnd = eocdAt;
   const locator = eocdAt >= 20 ? await readAt(handle, source.start + eocdAt - 20, 20) : Buffer.alloc(0);
   if (locator.length === 20 && locator.readUInt32LE(0) === ZIP64_LOCATOR) {
-    if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) throw new ZipError("multi-disk");
+    if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) return "multi-disk";
     const recordAt = u64(locator, 8);
     if (recordAt + 56 > eocdAt - 20) return null;
     const zip64 = await readAt(handle, source.start + recordAt, 56);
     if (zip64.length < 56 || zip64.readUInt32LE(0) !== ZIP64_EOCD) return null;
-    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
+    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) return "multi-disk";
     entries = u64(zip64, 32);
     size = u64(zip64, 40);
     offset = u64(zip64, 48);
     directoryEnd = recordAt;
   } else if (needs64) return null;
   if (offset + size !== directoryEnd) return null;
-  if (disk !== 0 || directoryDisk !== 0) throw new ZipError("multi-disk");
+  if (entries === 0) return size === 0 ? { offset, size, entries } : null;
+  const head = await readAt(handle, source.start + offset, 4);
+  if (head.length < 4 || head.readUInt32LE(0) !== CENTRAL) return null;
   return { offset, size, entries };
 }
 async function directoryOf(handle, source) {
   const from = Math.max(0, source.size - TAIL_SEARCH);
   const tail = await readAt(handle, source.start + from, source.size - from);
   let found = false;
+  let multiDisk = false;
   for (let index = tail.length - 22; index >= 0; index--) {
     if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
     found = true;
     const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
-    if (directory !== null) return directory;
+    if (directory === "multi-disk") multiDisk = true;
+    else if (directory !== null) return directory;
   }
-  throw new ZipError(found ? "broken-directory" : "not-zip");
+  throw new ZipError(multiDisk ? "multi-disk" : found ? "broken-directory" : "not-zip");
 }
 function zip64Values(extra, wanted) {
   if (!wanted.size && !wanted.compressed && !wanted.offset) return {};
@@ -8702,6 +8714,9 @@ function consume(collector, text, timeZone, keepFrom) {
     collector.skipped.unrecognized++;
     return;
   }
+  const key = conversationKey(collector.tool, conversation.id);
+  if (collector.seen.has(key)) return;
+  collector.seen.add(key);
   for (const event of conversation.events) {
     if (event.kind === "request") collector.totals.requests++;
     else collector.totals.responses++;
@@ -8754,13 +8769,18 @@ async function readZip(source, prefix, collector, timeZone, keepFrom) {
 }
 var FOLDER_DEPTH = 2;
 var FOLDER_ENTRY_LIMIT = 2e4;
-async function exportFolderFiles(dir) {
+async function exportFolderFiles(dir, limit = FOLDER_ENTRY_LIMIT) {
   const found = [];
   let seen = 0;
+  let limited = false;
   const walk = async (path, rel, depth) => {
     const entries = await readdir7(path, { withFileTypes: true });
     for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
-      if (++seen > FOLDER_ENTRY_LIMIT) return;
+      if (limited) return;
+      if (++seen > limit) {
+        limited = true;
+        return;
+      }
       const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
       const child = join17(path, entry.name);
       if (entry.isDirectory()) {
@@ -8775,7 +8795,7 @@ async function exportFolderFiles(dir) {
     }
   };
   await walk(dir, "", 0);
-  return found.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+  return { files: found.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0), limited };
 }
 var isZip = async (path) => {
   const handle = await open6(path, "r");
@@ -8787,14 +8807,15 @@ var isZip = async (path) => {
     await handle.close();
   }
 };
-async function readExport(path, timeZone, keepFrom) {
+async function readExport(path, timeZone, keepFrom, folderLimit = FOLDER_ENTRY_LIMIT) {
   const info = await stat6(path);
   if (!info.isFile() && !info.isDirectory()) throw new ExportError("not-file");
-  const collector = { tool: null, summaries: [], skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
+  const collector = { tool: null, summaries: [], seen: /* @__PURE__ */ new Set(), skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
   try {
     if (info.isDirectory()) {
-      const files = await exportFolderFiles(path);
+      const { files, limited } = await exportFolderFiles(path, folderLimit);
       if (files.length === 0) throw new ExportError("no-conversations");
+      if (limited) collector.complete = false;
       for (const file of files) {
         if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
         else await readArray(file.rel, createReadStream3(file.path), collector, timeZone, keepFrom);
@@ -8811,7 +8832,7 @@ async function readExport(path, timeZone, keepFrom) {
 }
 
 // src/collect/web.ts
-var WEB_PARSER_VERSION = 1;
+var WEB_PARSER_VERSION = 2;
 var WEB_PARSER_ID = `web@${WEB_PARSER_VERSION}`;
 var emptyRead = () => ({ files: 0, listedBytes: 0, bytes: 0, fromCache: 0, inProgress: 0, olderThanWindow: 0, unreadableFiles: [], unreadableFileBytes: 0, unknownSizeFiles: 0, unreadableDirs: [] });
 var DATE3 = /^\d{4}-\d{2}-\d{2}$/;
@@ -8840,12 +8861,28 @@ async function storeWebCached(dir, entry) {
   await rename6(temporary, target);
 }
 var sha2562 = (text) => createHash4("sha256").update(text).digest("hex");
+async function edges(path, size) {
+  const handle = await open7(path, "r");
+  try {
+    const length = Math.min(4096, size);
+    const head = Buffer.alloc(length);
+    const tail = Buffer.alloc(length);
+    await handle.read(head, 0, length, 0);
+    await handle.read(tail, 0, length, size - length);
+    return createHash4("sha256").update(head).update(tail).digest("hex");
+  } finally {
+    await handle.close();
+  }
+}
 async function exportKey(path, timeZone) {
   const info = await stat7(path);
   if (info.isFile()) return cacheKeyFor({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs }, WEB_PARSER_ID, timeZone);
   if (!info.isDirectory()) return null;
-  const files = await exportFolderFiles(path);
-  const list = files.map((file) => `${file.rel}|${file.size}|${file.mtimeMs}`).join("\n");
+  const { files, limited } = await exportFolderFiles(path);
+  const lines = [];
+  for (const file of files) lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${await edges(file.path, file.size)}`);
+  const list = `${limited ? "limited" : "all"}
+${lines.join("\n")}`;
   return {
     normPath: normalizePath(path),
     size: files.reduce((sum2, file) => sum2 + file.size, 0),
@@ -13348,7 +13385,7 @@ var COPY5 = {
     range: " from {first} to {last}",
     replaced: " It replaces the export added before.",
     skipped: " {count} {count:conversation|conversations} could not be read and {count:is|are} left out.",
-    truncated: " The file ended early, so only the conversations before the break are counted.",
+    truncated: " The export could not be read to the end (the file ended early or the folder has too many items), so only what was read is counted.",
     listReset: " The list of added exports was broken, so it was started again. Add any other export again.",
     removedReset: "The list of added exports was broken, so it was emptied. Add the exports you want again.",
     removed: "Removed the {tool} export from the checkup. The export file itself was not touched.",
@@ -13361,7 +13398,7 @@ var COPY5 = {
     range: ", {first}\uBD80\uD130 {last}\uAE4C\uC9C0\uC785\uB2C8\uB2E4",
     replaced: " \uC55E\uC11C \uB123\uC740 \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uBC14\uAFE8\uC2B5\uB2C8\uB2E4.",
     skipped: " \uC77D\uC9C0 \uBABB\uD55C \uB300\uD654 {count}\uAC1C\uB294 \uBE90\uC2B5\uB2C8\uB2E4.",
-    truncated: " \uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACA8 \uB04A\uAE30\uAE30 \uC804\uC758 \uB300\uD654\uB9CC \uC149\uB2C8\uB2E4.",
+    truncated: " \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB05D\uAE4C\uC9C0 \uC77D\uC9C0 \uBABB\uD574(\uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACBC\uAC70\uB098 \uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC74C) \uC77D\uC740 \uB300\uD654\uB9CC \uC149\uB2C8\uB2E4.",
     listReset: " \uB123\uC740 \uBAA9\uB85D\uC774 \uAE68\uC838 \uC0C8\uB85C \uB9CC\uB4E4\uC5C8\uC2B5\uB2C8\uB2E4. \uB2E4\uB978 \uB0B4\uBCF4\uB0B4\uAE30\uB294 \uB2E4\uC2DC \uB123\uC5B4 \uC8FC\uC138\uC694.",
     removedReset: "\uB123\uC740 \uBAA9\uB85D\uC774 \uAE68\uC838 \uBE44\uC6E0\uC2B5\uB2C8\uB2E4. \uC140 \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB2E4\uC2DC \uB123\uC5B4 \uC8FC\uC138\uC694.",
     removed: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC740 \uADF8\uB300\uB85C \uB450\uC5C8\uC2B5\uB2C8\uB2E4.",
@@ -13970,7 +14007,7 @@ async function writePlan(stateDir2, plan) {
 }
 
 // src/tune/work.ts
-import { chmod, mkdir as mkdir9, open as open7, readdir as readdir10, readFile as readFile13, rename as rename7, rm as rm6, unlink as unlink2 } from "node:fs/promises";
+import { chmod, mkdir as mkdir9, open as open8, readdir as readdir10, readFile as readFile13, rename as rename7, rm as rm6, unlink as unlink2 } from "node:fs/promises";
 import { join as join36 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
@@ -13978,7 +14015,7 @@ var LOCK_FILE = join36(TUNE_DIR, "lock");
 async function writeDurable(path, data, mode) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    const handle = await open7(temporary, "w");
+    const handle = await open8(temporary, "w");
     try {
       await handle.writeFile(data);
       await handle.sync();
@@ -14040,7 +14077,7 @@ async function takeLock(stateDir2, alive = isAlive) {
   await mkdir9(join36(stateDir2, TUNE_DIR), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const handle = await open7(path, "wx");
+      const handle = await open8(path, "wx");
       try {
         await handle.writeFile(JSON.stringify({ pid: process.pid, at: (/* @__PURE__ */ new Date()).toISOString() }));
       } finally {
@@ -14237,10 +14274,10 @@ function unitOf(text) {
   return unit ?? "  ";
 }
 var indentAt = (text, pos) => /^[ \t]*/.exec(text.slice(text.lastIndexOf("\n", pos - 1) + 1))[0];
-var containerText = (open8, close, entries, indent, style) => {
-  if (indent === null) return `${open8}${entries.map((entry) => entry(null)).join(", ")}${close}`;
+var containerText = (open9, close, entries, indent, style) => {
+  if (indent === null) return `${open9}${entries.map((entry) => entry(null)).join(", ")}${close}`;
   const inner = indent + style.unit;
-  return `${open8}${style.eol}${entries.map((entry) => inner + entry(inner)).join(`,${style.eol}`)}${style.eol}${indent}${close}`;
+  return `${open9}${style.eol}${entries.map((entry) => inner + entry(inner)).join(`,${style.eol}`)}${style.eol}${indent}${close}`;
 };
 var member = (key, value) => (indent) => `${JSON.stringify(key)}: ${value(indent)}`;
 var scalar = (value) => () => JSON.stringify(value);
@@ -14249,9 +14286,9 @@ var spansOf = (node) => node.type === "object" ? node.members.map((m) => ({ star
 var bracketsOf = (node) => node.type === "object" ? ["{", "}"] : ["[", "]"];
 function insertInto(text, node, entry, style, multiline) {
   const spans = spansOf(node);
-  const [open8, close] = bracketsOf(node);
+  const [open9, close] = bracketsOf(node);
   const last = spans[spans.length - 1];
-  if (last === void 0) return { start: node.start, end: node.end, text: containerText(open8, close, [entry], multiline ? indentAt(text, node.start) : null, style) };
+  if (last === void 0) return { start: node.start, end: node.end, text: containerText(open9, close, [entry], multiline ? indentAt(text, node.start) : null, style) };
   if (text.slice(node.start, spans[0].start).includes("\n")) {
     const indent = indentAt(text, last.start);
     return { start: last.end, end: last.end, text: `,${style.eol}${indent}${entry(indent)}` };
@@ -14260,8 +14297,8 @@ function insertInto(text, node, entry, style, multiline) {
 }
 function removeAt(node, index) {
   const spans = spansOf(node);
-  const [open8, close] = bracketsOf(node);
-  if (spans.length === 1) return { start: node.start, end: node.end, text: open8 + close };
+  const [open9, close] = bracketsOf(node);
+  if (spans.length === 1) return { start: node.start, end: node.end, text: open9 + close };
   if (index > 0) return { start: spans[index - 1].end, end: spans[index].end, text: "" };
   return { start: spans[0].start, end: spans[1].start, text: "" };
 }
@@ -14279,9 +14316,9 @@ function editOne(text, op) {
   if (parentAt < 0) {
     if (op.op === "delete" || op.op === "remove") return null;
     const child = op.op === "append" ? serverEntry(op.entry.serverName) : member(op.name, scalar(op.value));
-    const open8 = op.op === "append" ? "[" : "{";
+    const open9 = op.op === "append" ? "[" : "{";
     const close = op.op === "append" ? "]" : "}";
-    edit = insertInto(text, root, member(op.parent, (indent) => containerText(open8, close, [child], indent, style)), style, multiline);
+    edit = insertInto(text, root, member(op.parent, (indent) => containerText(open9, close, [child], indent, style)), style, multiline);
   } else {
     const node = root.members[parentAt].value;
     if (op.op === "append" || op.op === "remove") {
@@ -14815,7 +14852,7 @@ async function doctor(input) {
     web.entries.map(async (entry) => {
       try {
         const info = await stat11(entry.path);
-        return { tool: entry.tool, path: entry.path, exists: info.isFile(), bytes: info.isFile() ? info.size : null };
+        return { tool: entry.tool, path: entry.path, exists: info.isFile() || info.isDirectory(), bytes: info.isFile() ? info.size : null };
       } catch {
         return { tool: entry.tool, path: entry.path, exists: false, bytes: null };
       }
@@ -15057,7 +15094,7 @@ async function run(command, rest, context) {
   const args = command === "checkup" ? checkupArgs(rest) : null;
   if (args !== null) {
     const platform = context.platform ?? process.platform;
-    const open8 = context.open ?? ((path) => openInBrowser(path, platform));
+    const open9 = context.open ?? ((path) => openInBrowser(path, platform));
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
@@ -15070,7 +15107,7 @@ async function run(command, rest, context) {
       rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir },
-      ...args.flags.has("--no-open") ? {} : { open: open8 }
+      ...args.flags.has("--no-open") ? {} : { open: open9 }
     });
     printJson({ summary: outcome.summary, run: outcome.run });
     return 0;

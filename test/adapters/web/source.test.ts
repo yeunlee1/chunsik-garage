@@ -3,7 +3,7 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ExportError, readExport } from "../../../src/adapters/web/source.ts";
+import { ExportError, exportFolderFiles, readExport } from "../../../src/adapters/web/source.ts";
 import { makeZip } from "../../helpers/zip-writer.ts";
 
 let root: string;
@@ -114,6 +114,35 @@ describe("readExport", () => {
     expect(result.summaries).toHaveLength(3);
     await mkdir(join(root, "empty-folder"));
     expect(await problemOf(join(root, "empty-folder"))).toBe("no-conversations");
+  });
+
+  it("같은 대화가 zip과 푼 파일로 함께 있으면 한 번만 센다(짝 검토 5 필수 3). 다른 대화는 그대로 함께 읽는다", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    const folder = join(root, "mixed");
+    await mkdir(folder, { recursive: true });
+    const text = JSON.stringify([gptConversation("same"), gptConversation("only-json")]);
+    await writeFile(join(folder, "conversations.json"), text);
+    await writeFile(join(folder, "Conversations__part-001.zip"), makeZip([{ name: "conversations.json", data: JSON.stringify([gptConversation("same"), gptConversation("only-zip")]) }]));
+    const result = await read(folder);
+    expect(result.summaries.map((summary) => summary.sessionId).length).toBe(3);
+    expect(new Set(result.summaries.map((summary) => summary.sessionId)).size).toBe(3);
+    expect(result.totals).toMatchObject({ requests: 3, responses: 3 });
+  });
+
+  it("폴더를 훑는 항목 상한에 걸리면 끝까지 읽지 못한 것으로 알린다(짝 검토 5 필수 5)", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    const folder = join(root, "limited");
+    await mkdir(join(folder, "a", "noise"), { recursive: true });
+    await writeFile(join(folder, "a", "conversations-000.json"), JSON.stringify([gptConversation("first")]));
+    for (let index = 0; index < 5; index++) await writeFile(join(folder, "a", "noise", `f${index}`), "");
+    await writeFile(join(folder, "z-conversations-001.json"), "[]");
+    await writeFile(join(folder, "conversations-001.json"), JSON.stringify([gptConversation("second")]));
+    const limited = await exportFolderFiles(folder, 4);
+    expect(limited.limited).toBe(true);
+    const all = await exportFolderFiles(folder);
+    expect([all.limited, all.files.map((file) => file.rel)]).toEqual([false, ["a/conversations-000.json", "conversations-001.json"]]);
+    const result = await readExport(folder, "Asia/Seoul", null, 4);
+    expect(result.complete).toBe(false);
   });
 
   it("깨진 원소, 다른 서비스의 꼴, 상한을 넘는 원소는 버린 수로 센다", async () => {

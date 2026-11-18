@@ -112,6 +112,10 @@ describe("doctor", () => {
     await writeFile(join(state, "web-exports.json"), JSON.stringify({ schema: 1, exports: [{ tool: "web-chatgpt", path: there, addedAt: "2026-11-18T00:00:00Z" }, { tool: "web-claude", path: join(root, "gone.zip"), addedAt: "2026-11-18T00:00:00Z" }] }));
     const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state });
     expect(report.web).toEqual({ list: "ok", exports: [{ tool: "web-chatgpt", path: there, exists: true, bytes: 5 }, { tool: "web-claude", path: join(root, "gone.zip"), exists: false, bytes: null }] });
+    // 폴더로 넣은 내보내기도 있는 것이다(짝 검토 5 필수 6). 폴더의 크기는 재지 않는다
+    await mkdir(join(root, "extracted"));
+    await writeFile(join(state, "web-exports.json"), JSON.stringify({ schema: 1, exports: [{ tool: "web-chatgpt", path: join(root, "extracted"), addedAt: "2026-11-18T00:00:00Z" }] }));
+    expect((await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state })).web.exports).toEqual([{ tool: "web-chatgpt", path: join(root, "extracted"), exists: true, bytes: null }]);
     await writeFile(join(state, "web-exports.json"), "{");
     expect((await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state })).web).toEqual({ list: "broken", exports: [] });
   });

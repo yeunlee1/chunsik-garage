@@ -1,6 +1,6 @@
 // 가져온 웹 채팅 내보내기 파일을 읽어 도구(ChatGPT, Claude.ai)마다 세션 요약 목록과 읽은 양을 낸다. 바뀌지 않은 파일은 캐시의 요약을 쓴다(설계 9.4, 「0.5.0에서 정한 것」)
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
 import { localDateOf, makeWindows, type LocalDate } from "../adapters/common/dates.ts";
@@ -13,7 +13,7 @@ import type { WebExportEntry } from "../state/web-exports.ts";
 import { visibleFrom, type ClaudeReadStats, type CollectOptions } from "./claude.ts";
 
 /** 해석이 바뀌면 올린다. 캐시의 열쇠에 든다 */
-export const WEB_PARSER_VERSION = 1;
+export const WEB_PARSER_VERSION = 2;
 export const WEB_PARSER_ID = `web@${WEB_PARSER_VERSION}`;
 
 /** 내보내기 파일의 상태. 평가 결과의 알림이 쓴다 */
@@ -84,16 +84,34 @@ async function storeWebCached(dir: string, entry: WebCacheEntry): Promise<void> 
 
 const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
 
+/** 파일의 앞뒤 4KB 지문. 캐시 열쇠의 앞뒤 지문과 같은 범위다 */
+async function edges(path: string, size: number): Promise<string> {
+  const handle = await open(path, "r");
+  try {
+    const length = Math.min(4096, size);
+    const head = Buffer.alloc(length);
+    const tail = Buffer.alloc(length);
+    await handle.read(head, 0, length, 0);
+    await handle.read(tail, 0, length, size - length);
+    return createHash("sha256").update(head).update(tail).digest("hex");
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
- * 내보내기의 캐시 열쇠. 파일이면 다른 기록처럼 경로·크기·수정 시각·앞뒤 지문이고, 폴더면 안의 대화 파일과 안쪽 zip의 자리·크기·수정 시각 목록의 지문이다(크기는 합, 수정 시각은 가장 늦은 것).
+ * 내보내기의 캐시 열쇠. 파일이면 다른 기록처럼 경로·크기·수정 시각·앞뒤 지문이고, 폴더면 안의 대화 파일과 안쪽 zip마다의 자리·크기·수정 시각·앞뒤 4KB 지문과 상한에 걸렸는지의 지문이다(크기는 합, 수정 시각은 가장 늦은 것).
+ * 크기와 수정 시각을 그대로 둔 채 내용만 바뀐 파일도 앞뒤 지문으로 알아본다(짝 검토 5 필수 4).
  * 읽는 동안 바뀌었거나 파일도 폴더도 아니면 null이다
  */
 export async function exportKey(path: string, timeZone: string): Promise<CacheKey | null> {
   const info = await stat(path);
   if (info.isFile()) return cacheKeyFor({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs }, WEB_PARSER_ID, timeZone);
   if (!info.isDirectory()) return null;
-  const files = await exportFolderFiles(path);
-  const list = files.map((file) => `${file.rel}|${file.size}|${file.mtimeMs}`).join("\n");
+  const { files, limited } = await exportFolderFiles(path);
+  const lines: string[] = [];
+  for (const file of files) lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${await edges(file.path, file.size)}`);
+  const list = `${limited ? "limited" : "all"}\n${lines.join("\n")}`;
   return {
     normPath: normalizePath(path),
     size: files.reduce((sum, file) => sum + file.size, 0),

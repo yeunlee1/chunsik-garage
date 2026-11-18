@@ -86,10 +86,16 @@ export function resultUsage(input: EvaluationInput, evaluation: Evaluation, coll
       for (const [date, day] of Object.entries(summary.days)) responsesByDate.set(date, (responsesByDate.get(date) ?? 0) + day.responses);
     }
   }
-  const visibleFroms = collected.map((tool) => tool.visibleFrom).filter((date): date is LocalDate => date !== null);
+  // 도구마다 볼 수 있는 범위. 웹 채팅은 내보내기의 마지막 날에서 끝나고 그 뒤는 모른다(짝 검토 5 참고 2)
+  const today = evaluation.windows.today;
+  const ranges = collected.flatMap((tool) => {
+    if (tool.visibleFrom === null) return [];
+    const last = tool.web?.lastDate ?? null;
+    return [{ from: tool.visibleFrom, to: last !== null && last < today ? last : today }];
+  });
   const calendar = makeWindows(input.clock.nowMs, input.clock.timeZone).collectDates.map((date): CalendarCell => {
     const responses = responsesByDate.get(date) ?? 0;
-    const state: CalendarState = responses > 0 ? "used" : visibleFroms.some((from) => from <= date) ? "unused" : "unseen";
+    const state: CalendarState = responses > 0 ? "used" : ranges.some((range) => range.from <= date && date <= range.to) ? "unused" : "unseen";
     return { date, responses, state };
   });
 

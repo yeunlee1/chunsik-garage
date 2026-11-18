@@ -80,7 +80,7 @@ describe("runImportAdd", () => {
     const outcome = await runImportAdd(path, { ...options(), cache: false });
     expect(outcome).toMatchObject({ added: { conversations: 2, skipped: 1, truncated: true } });
     expect(outcome.run.text).toContain("읽지 못한 대화 1개는 뺐습니다.");
-    expect(outcome.run.text).toContain("끊기기 전의 대화만 셉니다.");
+    expect(outcome.run.text).toContain("끝까지 읽지 못해");
     await expect(readdir(join(state, "cache"))).rejects.toThrow();
   });
 

@@ -3,7 +3,7 @@ import { readdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readExport } from "../../src/adapters/web/source.ts";
-import { collectWeb, exportKey, primeWebCache } from "../../src/collect/web.ts";
+import { collectWeb, exportKey, primeWebCache, WEB_PARSER_ID } from "../../src/collect/web.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 import { makeZip } from "../helpers/zip-writer.ts";
 
@@ -101,6 +101,31 @@ describe("collectWeb", () => {
     expect([changed.read.fromCache, changed.summaries.length]).toEqual([0, 2]);
     await mkdir(join(dir, "empty"));
     expect((await collectWeb([entry(join(dir, "empty"))], options()))[0]).toMatchObject({ state: { problem: "no-conversations" }, summaries: [] });
+  });
+
+  it("응답을 세는 법을 바꾼 해석기 버전이다. 앞 버전의 캐시는 쓰지 않는다(짝 검토 5 필수 2)", () => {
+    expect(WEB_PARSER_ID).toBe("web@2");
+  });
+
+  it("폴더 안 파일의 크기와 수정 시각이 같아도 내용이 바뀌면 다시 읽는다(짝 검토 5 필수 4)", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    const folder = join(dir, "same-size");
+    await mkdir(folder, { recursive: true });
+    const file = join(folder, "conversations.json");
+    const claude = (sender: string) => JSON.stringify([{ uuid: "c1", created_at: "2026-11-10T01:00:00Z", chat_messages: [{ uuid: "1", sender, created_at: "2026-11-10T01:00:00Z" }, { uuid: "2", sender: "assistant", created_at: "2026-11-10T01:00:01Z" }] }]).padEnd(4096, " ");
+    const fixed = new Date(NOW - 86_400_000);
+    await writeFile(file, claude("human"));
+    await utimes(file, fixed, fixed);
+    const claudeOf = async () => (await collectWeb([entry(folder, "web-claude")], options())).find((result) => result.tool === "web-claude")!;
+    const first = await claudeOf();
+    await writeFile(file, claude("assistant"));
+    await utimes(file, fixed, fixed);
+    const second = await claudeOf();
+    const sum = (summaries: typeof first.summaries) => summaries.flatMap((summary) => Object.values(summary.days)).reduce((total, day) => [total[0]! + day.humanRequests, total[1]! + day.responses], [0, 0]);
+    expect(sum(first.summaries)).toEqual([1, 1]);
+    expect(second.read.fromCache).toBe(0);
+    // 두 메시지가 모두 응답이 되었다(Claude.ai는 어시스턴트 메시지마다 응답 하나)
+    expect(sum(second.summaries)).toEqual([0, 2]);
   });
 
   it("넣을 때 만든 캐시를 첫 점검이 쓴다", async () => {

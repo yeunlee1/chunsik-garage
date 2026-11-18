@@ -62,10 +62,14 @@ interface Directory {
   entries: number;
 }
 
-/** 끝 기록 후보 하나를 읽는다. 중앙 목록이 끝 기록(ZIP64면 ZIP64 끝 기록) 바로 앞에서 끝나지 않으면 이어지지 않는 후보라 null이다 */
-async function candidateDirectory(handle: FileHandle, source: ZipSource, eocdAt: number, record: Buffer): Promise<Directory | null> {
+/**
+ * 끝 기록 후보 하나를 읽는다. 중앙 목록이 끝 기록(ZIP64면 ZIP64 끝 기록) 바로 앞에서 끝나고, 항목이 있으면 그 자리가 중앙 목록 서명으로 시작해야 이어지는 후보다.
+ * 이어지지 않으면 null, 여러 디스크를 가리키면 multi-disk다. 끝 주석 속의 가짜 후보일 수 있어 던지지 않고 부르는 쪽이 다음 후보를 본다(짝 검토 5 필수 7)
+ */
+async function candidateDirectory(handle: FileHandle, source: ZipSource, eocdAt: number, record: Buffer): Promise<Directory | "multi-disk" | null> {
   const disk = record.readUInt16LE(4);
   const directoryDisk = record.readUInt16LE(6);
+  if (disk !== 0 || directoryDisk !== 0) return "multi-disk";
   let entries = record.readUInt16LE(10);
   let size = record.readUInt32LE(12);
   let offset = record.readUInt32LE(16);
@@ -74,37 +78,42 @@ async function candidateDirectory(handle: FileHandle, source: ZipSource, eocdAt:
   let directoryEnd = eocdAt;
   const locator = eocdAt >= 20 ? await readAt(handle, source.start + eocdAt - 20, 20) : Buffer.alloc(0);
   if (locator.length === 20 && locator.readUInt32LE(0) === ZIP64_LOCATOR) {
-    if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) throw new ZipError("multi-disk");
+    if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) return "multi-disk";
     const recordAt = u64(locator, 8);
     if (recordAt + 56 > eocdAt - 20) return null;
     const zip64 = await readAt(handle, source.start + recordAt, 56);
     if (zip64.length < 56 || zip64.readUInt32LE(0) !== ZIP64_EOCD) return null;
-    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
+    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) return "multi-disk";
     entries = u64(zip64, 32);
     size = u64(zip64, 40);
     offset = u64(zip64, 48);
     directoryEnd = recordAt;
   } else if (needs64) return null;
   if (offset + size !== directoryEnd) return null;
-  if (disk !== 0 || directoryDisk !== 0) throw new ZipError("multi-disk");
+  if (entries === 0) return size === 0 ? { offset, size, entries } : null;
+  const head = await readAt(handle, source.start + offset, 4);
+  if (head.length < 4 || head.readUInt32LE(0) !== CENTRAL) return null;
   return { offset, size, entries };
 }
 
 /**
  * 끝 기록을 찾아 중앙 목록의 자리와 크기를 낸다(구간 안의 자리). ZIP64면 ZIP64 끝 기록의 값을 쓴다.
- * 끝 주석에 끝 기록과 같은 바이트가 있을 수 있어, 뒤에서부터 후보를 보며 중앙 목록과 이어지는 첫 후보를 쓴다(짝 검토 3 필수 3)
+ * 끝 주석에 끝 기록과 같은 바이트가 있을 수 있어, 뒤에서부터 후보를 보며 중앙 목록과 이어지는 첫 후보를 쓴다(짝 검토 3 필수 3, 짝 검토 5 필수 7).
+ * 이어지는 후보가 없을 때만, 여러 디스크를 가리킨 후보가 있었으면 multi-disk로 멈춘다
  */
 async function directoryOf(handle: FileHandle, source: ZipSource): Promise<Directory> {
   const from = Math.max(0, source.size - TAIL_SEARCH);
   const tail = await readAt(handle, source.start + from, source.size - from);
   let found = false;
+  let multiDisk = false;
   for (let index = tail.length - 22; index >= 0; index--) {
     if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
     found = true;
     const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
-    if (directory !== null) return directory;
+    if (directory === "multi-disk") multiDisk = true;
+    else if (directory !== null) return directory;
   }
-  throw new ZipError(found ? "broken-directory" : "not-zip");
+  throw new ZipError(multiDisk ? "multi-disk" : found ? "broken-directory" : "not-zip");
 }
 
 /** ZIP64 덧붙임 칸(0x0001)에서 0xffffffff로 적힌 값만 차례대로 꺼낸다 */

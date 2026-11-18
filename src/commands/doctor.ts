@@ -15,7 +15,7 @@ export interface DoctorReport {
   codex: { home: string; sessionsFound: boolean; recordFiles: number; compressedOnly: number; unreadable: number };
   /** 기록 파일은 주 세션과 하위 에이전트 세션의 파일이다(macOS 샌드박스의 <홈>/.cache/.gemini 것도 든다). 같은 이름의 .jsonl로 옮겨 적은 옛 .json은 세지 않는다 */
   gemini: { home: string; tmpFound: boolean; sessionFiles: number; unreadable: number };
-  /** 넣은 웹 채팅 내보내기 파일(0.5.0). 목록이 깨졌으면 list가 broken이다. 파일은 열지 않고 있는지와 크기만 본다 */
+  /** 넣은 웹 채팅 내보내기 파일이나 폴더(0.5.0). 목록이 깨졌으면 list가 broken이다. 열지 않고 있는지와 파일의 크기만 본다 */
   web: { list: "missing" | "ok" | "broken"; exports: { tool: string; path: string; exists: boolean; bytes: number | null }[] };
   state: { dir: string; writable: boolean };
 }
@@ -55,7 +55,8 @@ export async function doctor(input: {
     web.entries.map(async (entry) => {
       try {
         const info = await stat(entry.path);
-        return { tool: entry.tool, path: entry.path, exists: info.isFile(), bytes: info.isFile() ? info.size : null };
+        // 폴더로 넣은 것도 있는 것이다(짝 검토 5 필수 6). 폴더의 크기는 재지 않는다
+        return { tool: entry.tool, path: entry.path, exists: info.isFile() || info.isDirectory(), bytes: info.isFile() ? info.size : null };
       } catch {
         return { tool: entry.tool, path: entry.path, exists: false, bytes: null };
       }

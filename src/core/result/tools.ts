@@ -92,7 +92,8 @@ export function resultTools(input: EvaluationInput, evaluation: Evaluation, coll
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom === null ? null : { from: visibleFrom, to: visibleTo },
+      // 내보내기가 모두 수집 구간보다 오래되면 볼 수 있는 날이 없다(짝 검토 5 필수 8)
+      visible: visibleFrom === null || visibleTo < visibleFrom ? null : { from: visibleFrom, to: visibleTo },
     };
   });
 }

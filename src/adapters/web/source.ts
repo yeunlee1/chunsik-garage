@@ -19,7 +19,7 @@ const CONVERSATION_FILE = /^conversations(?:-\d+)?\.json$/i;
 /** 바깥 zip 안에 대화를 담은 안쪽 zip(Conversations__…part-001.zip 같은 것) */
 const CONVERSATION_ZIP = /^conversations.*\.zip$/i;
 
-export type ExportProblem = "not-file" | "no-conversations" | "not-array" | "unknown-service" | `zip-${ZipErrorCode}`;
+export type ExportProblem = "not-file" | "no-conversations" | "folder-too-large" | "not-array" | "unknown-service" | `zip-${ZipErrorCode}`;
 
 export class ExportError extends Error {
   constructor(readonly problem: ExportProblem) {
@@ -202,7 +202,8 @@ export async function readExport(path: string, timeZone: string, keepFrom: Local
   try {
     if (info.isDirectory()) {
       const { files, limited } = await exportFolderFiles(path, folderLimit);
-      if (files.length === 0) throw new ExportError("no-conversations");
+      // 대화 파일을 하나도 찾기 전에 상한에 걸렸으면 없다가 아니라 다 보지 못한 것이다(짝 검토 6 참고 1)
+      if (files.length === 0) throw new ExportError(limited ? "folder-too-large" : "no-conversations");
       if (limited) collector.complete = false;
       for (const file of files) {
         if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);

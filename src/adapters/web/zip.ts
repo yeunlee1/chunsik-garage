@@ -97,23 +97,17 @@ async function candidateDirectory(handle: FileHandle, source: ZipSource, eocdAt:
 }
 
 /**
- * 끝 기록을 찾아 중앙 목록의 자리와 크기를 낸다(구간 안의 자리). ZIP64면 ZIP64 끝 기록의 값을 쓴다.
- * 끝 주석에 끝 기록과 같은 바이트가 있을 수 있어, 뒤에서부터 후보를 보며 중앙 목록과 이어지는 첫 후보를 쓴다(짝 검토 3 필수 3, 짝 검토 5 필수 7).
- * 이어지는 후보가 없을 때만, 여러 디스크를 가리킨 후보가 있었으면 multi-disk로 멈춘다
+ * 끝 기록 후보들을 뒤에서부터 낸다. 이어지는 후보는 중앙 목록의 자리와 크기, 여러 디스크를 가리키는 후보는 multi-disk다.
+ * 끝 주석에 끝 기록과 같은 바이트가 있을 수 있어 부르는 쪽이 중앙 목록을 끝까지 읽어 보고 맞는 첫 후보를 쓴다(짝 검토 3 필수 3, 짝 검토 5 필수 7, 짝 검토 6 필수 1)
  */
-async function directoryOf(handle: FileHandle, source: ZipSource): Promise<Directory> {
+async function* directoryCandidates(handle: FileHandle, source: ZipSource): AsyncGenerator<Directory | "multi-disk"> {
   const from = Math.max(0, source.size - TAIL_SEARCH);
   const tail = await readAt(handle, source.start + from, source.size - from);
-  let found = false;
-  let multiDisk = false;
   for (let index = tail.length - 22; index >= 0; index--) {
     if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
-    found = true;
     const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
-    if (directory === "multi-disk") multiDisk = true;
-    else if (directory !== null) return directory;
+    if (directory !== null) yield directory;
   }
-  throw new ZipError(multiDisk ? "multi-disk" : found ? "broken-directory" : "not-zip");
 }
 
 /** ZIP64 덧붙임 칸(0x0001)에서 0xffffffff로 적힌 값만 차례대로 꺼낸다 */
@@ -152,42 +146,73 @@ export async function wholeFile(path: string): Promise<ZipSource> {
   }
 }
 
-/** 중앙 목록의 항목들. 폴더 항목(이름이 /로 끝남)도 낸다 */
+/** 중앙 목록 하나를 읽는다. 적힌 항목 수만큼 읽어 목록이 꼭 끝나야 하고, 아니면 broken-directory다 */
+async function readDirectory(handle: FileHandle, source: ZipSource, directory: Directory): Promise<ZipEntry[]> {
+  const data = await readAt(handle, source.start + directory.offset, directory.size);
+  if (data.length !== directory.size) throw new ZipError("truncated");
+  const entries: ZipEntry[] = [];
+  let at = 0;
+  for (let count = 0; count < directory.entries; count++) {
+    if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new ZipError("broken-directory");
+    const flags = data.readUInt16LE(at + 8);
+    const method = data.readUInt16LE(at + 10);
+    const crc32 = data.readUInt32LE(at + 16);
+    let compressedSize = data.readUInt32LE(at + 20);
+    let size = data.readUInt32LE(at + 24);
+    const nameLength = data.readUInt16LE(at + 28);
+    const extraLength = data.readUInt16LE(at + 30);
+    const commentLength = data.readUInt16LE(at + 32);
+    let localOffset = data.readUInt32LE(at + 42);
+    const nameStart = at + 46;
+    const extraStart = nameStart + nameLength;
+    const next = extraStart + extraLength + commentLength;
+    if (next > data.length) throw new ZipError("broken-directory");
+    const name = data.subarray(nameStart, extraStart).toString((flags & 0x0800) !== 0 ? "utf8" : "latin1");
+    const big = zip64Values(data.subarray(extraStart, extraStart + extraLength), { size: size === 0xffffffff, compressed: compressedSize === 0xffffffff, offset: localOffset === 0xffffffff });
+    if (big.size !== undefined) size = big.size;
+    if (big.compressed !== undefined) compressedSize = big.compressed;
+    if (big.offset !== undefined) localOffset = big.offset;
+    entries.push({ name, method, compressedSize, size, crc32, localOffset, encrypted: (flags & 0x0001) !== 0 });
+    at = next;
+  }
+  if (at !== data.length) throw new ZipError("broken-directory");
+  return entries;
+}
+
+/** 중앙 목록의 항목들. 폴더 항목(이름이 /로 끝남)도 낸다. 읽히는 후보가 없을 때만, 여러 디스크를 가리킨 후보가 있었으면 multi-disk로 멈춘다 */
 export async function zipEntries(source: ZipSource): Promise<ZipEntry[]> {
   const handle = await open(source.path, "r");
   try {
-    const directory = await directoryOf(handle, source);
-    const data = await readAt(handle, source.start + directory.offset, directory.size);
-    if (data.length !== directory.size) throw new ZipError("truncated");
-    const entries: ZipEntry[] = [];
-    let at = 0;
-    for (let count = 0; count < directory.entries; count++) {
-      if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new ZipError("broken-directory");
-      const flags = data.readUInt16LE(at + 8);
-      const method = data.readUInt16LE(at + 10);
-      const crc32 = data.readUInt32LE(at + 16);
-      let compressedSize = data.readUInt32LE(at + 20);
-      let size = data.readUInt32LE(at + 24);
-      const nameLength = data.readUInt16LE(at + 28);
-      const extraLength = data.readUInt16LE(at + 30);
-      const commentLength = data.readUInt16LE(at + 32);
-      let localOffset = data.readUInt32LE(at + 42);
-      const nameStart = at + 46;
-      const extraStart = nameStart + nameLength;
-      const next = extraStart + extraLength + commentLength;
-      if (next > data.length) throw new ZipError("broken-directory");
-      const name = data.subarray(nameStart, extraStart).toString((flags & 0x0800) !== 0 ? "utf8" : "latin1");
-      const big = zip64Values(data.subarray(extraStart, extraStart + extraLength), { size: size === 0xffffffff, compressed: compressedSize === 0xffffffff, offset: localOffset === 0xffffffff });
-      if (big.size !== undefined) size = big.size;
-      if (big.compressed !== undefined) compressedSize = big.compressed;
-      if (big.offset !== undefined) localOffset = big.offset;
-      entries.push({ name, method, compressedSize, size, crc32, localOffset, encrypted: (flags & 0x0001) !== 0 });
-      at = next;
+    let found = false;
+    let multiDisk = false;
+    let failure: ZipError | null = null;
+    for await (const directory of directoryCandidates(handle, source)) {
+      found = true;
+      if (directory === "multi-disk") {
+        multiDisk = true;
+        continue;
+      }
+      try {
+        return await readDirectory(handle, source, directory);
+      } catch (error) {
+        if (!(error instanceof ZipError)) throw error;
+        failure ??= error;
+      }
     }
-    return entries;
+    if (multiDisk) throw new ZipError("multi-disk");
+    if (failure !== null) throw failure;
+    throw new ZipError(found ? "broken-directory" : await hasEndRecord(handle, source) ? "broken-directory" : "not-zip");
   } finally {
     await handle.close();
   }
+}
+
+/** 이어지지 않는 후보뿐일 때 끝 기록의 꼴이 하나라도 있었는지(있으면 망가진 목록, 없으면 zip이 아니다) */
+async function hasEndRecord(handle: FileHandle, source: ZipSource): Promise<boolean> {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  for (let index = tail.length - 22; index >= 0; index--) if (tail.readUInt32LE(index) === EOCD && index + 22 + tail.readUInt16LE(index + 20) <= tail.length) return true;
+  return false;
 }
 
 /** 항목의 압축된 바이트가 시작하는 자리(파일 안의 자리) */

@@ -2405,6 +2405,7 @@ var UNCLASSIFIED = {
 var WEB_PROBLEM = {
   "not-file": { en: "not a file", ko: "\uD30C\uC77C\uC774 \uC544\uB2D8" },
   "no-conversations": { en: "no conversation file inside", ko: "\uC548\uC5D0 \uB300\uD654 \uD30C\uC77C\uC774 \uC5C6\uC74C" },
+  "folder-too-large": { en: "the folder has too many items to look through", ko: "\uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC544 \uB2E4 \uBCF4\uC9C0 \uBABB\uD568" },
   "not-array": { en: "the conversation file is not a list", ko: "\uB300\uD654 \uD30C\uC77C\uC774 \uBAA9\uB85D\uC774 \uC544\uB2D8" },
   "unknown-service": { en: "not an export of this service", ko: "\uC774 \uC11C\uBE44\uC2A4\uC758 \uB0B4\uBCF4\uB0B4\uAE30\uAC00 \uC544\uB2D8" },
   zip: { en: "the zip could not be unpacked", ko: "zip\uC744 \uD480\uC9C0 \uBABB\uD568" },
@@ -8556,19 +8557,14 @@ async function candidateDirectory(handle, source, eocdAt, record) {
   if (head.length < 4 || head.readUInt32LE(0) !== CENTRAL) return null;
   return { offset, size, entries };
 }
-async function directoryOf(handle, source) {
+async function* directoryCandidates(handle, source) {
   const from = Math.max(0, source.size - TAIL_SEARCH);
   const tail = await readAt(handle, source.start + from, source.size - from);
-  let found = false;
-  let multiDisk = false;
   for (let index = tail.length - 22; index >= 0; index--) {
     if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
-    found = true;
     const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
-    if (directory === "multi-disk") multiDisk = true;
-    else if (directory !== null) return directory;
+    if (directory !== null) yield directory;
   }
-  throw new ZipError(multiDisk ? "multi-disk" : found ? "broken-directory" : "not-zip");
 }
 function zip64Values(extra, wanted) {
   if (!wanted.size && !wanted.compressed && !wanted.offset) return {};
@@ -8602,41 +8598,68 @@ async function wholeFile(path) {
     await handle.close();
   }
 }
+async function readDirectory(handle, source, directory) {
+  const data = await readAt(handle, source.start + directory.offset, directory.size);
+  if (data.length !== directory.size) throw new ZipError("truncated");
+  const entries = [];
+  let at = 0;
+  for (let count = 0; count < directory.entries; count++) {
+    if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new ZipError("broken-directory");
+    const flags = data.readUInt16LE(at + 8);
+    const method = data.readUInt16LE(at + 10);
+    const crc322 = data.readUInt32LE(at + 16);
+    let compressedSize = data.readUInt32LE(at + 20);
+    let size = data.readUInt32LE(at + 24);
+    const nameLength = data.readUInt16LE(at + 28);
+    const extraLength = data.readUInt16LE(at + 30);
+    const commentLength = data.readUInt16LE(at + 32);
+    let localOffset = data.readUInt32LE(at + 42);
+    const nameStart = at + 46;
+    const extraStart = nameStart + nameLength;
+    const next = extraStart + extraLength + commentLength;
+    if (next > data.length) throw new ZipError("broken-directory");
+    const name = data.subarray(nameStart, extraStart).toString((flags & 2048) !== 0 ? "utf8" : "latin1");
+    const big = zip64Values(data.subarray(extraStart, extraStart + extraLength), { size: size === 4294967295, compressed: compressedSize === 4294967295, offset: localOffset === 4294967295 });
+    if (big.size !== void 0) size = big.size;
+    if (big.compressed !== void 0) compressedSize = big.compressed;
+    if (big.offset !== void 0) localOffset = big.offset;
+    entries.push({ name, method, compressedSize, size, crc32: crc322, localOffset, encrypted: (flags & 1) !== 0 });
+    at = next;
+  }
+  if (at !== data.length) throw new ZipError("broken-directory");
+  return entries;
+}
 async function zipEntries(source) {
   const handle = await open5(source.path, "r");
   try {
-    const directory = await directoryOf(handle, source);
-    const data = await readAt(handle, source.start + directory.offset, directory.size);
-    if (data.length !== directory.size) throw new ZipError("truncated");
-    const entries = [];
-    let at = 0;
-    for (let count = 0; count < directory.entries; count++) {
-      if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new ZipError("broken-directory");
-      const flags = data.readUInt16LE(at + 8);
-      const method = data.readUInt16LE(at + 10);
-      const crc322 = data.readUInt32LE(at + 16);
-      let compressedSize = data.readUInt32LE(at + 20);
-      let size = data.readUInt32LE(at + 24);
-      const nameLength = data.readUInt16LE(at + 28);
-      const extraLength = data.readUInt16LE(at + 30);
-      const commentLength = data.readUInt16LE(at + 32);
-      let localOffset = data.readUInt32LE(at + 42);
-      const nameStart = at + 46;
-      const extraStart = nameStart + nameLength;
-      const next = extraStart + extraLength + commentLength;
-      if (next > data.length) throw new ZipError("broken-directory");
-      const name = data.subarray(nameStart, extraStart).toString((flags & 2048) !== 0 ? "utf8" : "latin1");
-      const big = zip64Values(data.subarray(extraStart, extraStart + extraLength), { size: size === 4294967295, compressed: compressedSize === 4294967295, offset: localOffset === 4294967295 });
-      if (big.size !== void 0) size = big.size;
-      if (big.compressed !== void 0) compressedSize = big.compressed;
-      if (big.offset !== void 0) localOffset = big.offset;
-      entries.push({ name, method, compressedSize, size, crc32: crc322, localOffset, encrypted: (flags & 1) !== 0 });
-      at = next;
+    let found = false;
+    let multiDisk = false;
+    let failure6 = null;
+    for await (const directory of directoryCandidates(handle, source)) {
+      found = true;
+      if (directory === "multi-disk") {
+        multiDisk = true;
+        continue;
+      }
+      try {
+        return await readDirectory(handle, source, directory);
+      } catch (error) {
+        if (!(error instanceof ZipError)) throw error;
+        failure6 ??= error;
+      }
     }
-    return entries;
+    if (multiDisk) throw new ZipError("multi-disk");
+    if (failure6 !== null) throw failure6;
+    throw new ZipError(found ? "broken-directory" : await hasEndRecord(handle, source) ? "broken-directory" : "not-zip");
   } finally {
     await handle.close();
   }
+}
+async function hasEndRecord(handle, source) {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  for (let index = tail.length - 22; index >= 0; index--) if (tail.readUInt32LE(index) === EOCD && index + 22 + tail.readUInt16LE(index + 20) <= tail.length) return true;
+  return false;
 }
 async function dataStartOf(source, entry) {
   const handle = await open5(source.path, "r");
@@ -8814,7 +8837,7 @@ async function readExport(path, timeZone, keepFrom, folderLimit = FOLDER_ENTRY_L
   try {
     if (info.isDirectory()) {
       const { files, limited } = await exportFolderFiles(path, folderLimit);
-      if (files.length === 0) throw new ExportError("no-conversations");
+      if (files.length === 0) throw new ExportError(limited ? "folder-too-large" : "no-conversations");
       if (limited) collector.complete = false;
       for (const file of files) {
         if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
@@ -8861,14 +8884,21 @@ async function storeWebCached(dir, entry) {
   await rename6(temporary, target);
 }
 var sha2562 = (text) => createHash4("sha256").update(text).digest("hex");
+async function readFull(handle, buffer, position) {
+  for (let offset = 0; offset < buffer.length; ) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, position + offset);
+    if (bytesRead === 0) return false;
+    offset += bytesRead;
+  }
+  return true;
+}
 async function edges(path, size) {
   const handle = await open7(path, "r");
   try {
     const length = Math.min(4096, size);
     const head = Buffer.alloc(length);
     const tail = Buffer.alloc(length);
-    await handle.read(head, 0, length, 0);
-    await handle.read(tail, 0, length, size - length);
+    if (!await readFull(handle, head, 0) || !await readFull(handle, tail, size - length)) return null;
     return createHash4("sha256").update(head).update(tail).digest("hex");
   } finally {
     await handle.close();
@@ -8880,7 +8910,11 @@ async function exportKey(path, timeZone) {
   if (!info.isDirectory()) return null;
   const { files, limited } = await exportFolderFiles(path);
   const lines = [];
-  for (const file of files) lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${await edges(file.path, file.size)}`);
+  for (const file of files) {
+    const fingerprint = await edges(file.path, file.size);
+    if (fingerprint === null) return null;
+    lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${fingerprint}`);
+  }
   const list = `${limited ? "limited" : "all"}
 ${lines.join("\n")}`;
   return {

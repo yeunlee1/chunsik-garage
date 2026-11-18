@@ -64,9 +64,10 @@ const UNCLASSIFIED: Record<(typeof UNCLASSIFIED_GROUPS)[number], Texts<string>> 
 };
 
 /** 웹 채팅 내보내기 파일을 읽지 못한 까닭(0.5.0). zip-로 시작하는 것은 zip을 풀지 못한 것이다 */
-const WEB_PROBLEM: Record<"not-file" | "no-conversations" | "not-array" | "unknown-service" | "zip" | "unreadable", Texts<string>> = {
+const WEB_PROBLEM: Record<"not-file" | "no-conversations" | "folder-too-large" | "not-array" | "unknown-service" | "zip" | "unreadable", Texts<string>> = {
   "not-file": { en: "not a file", ko: "파일이 아님" },
   "no-conversations": { en: "no conversation file inside", ko: "안에 대화 파일이 없음" },
+  "folder-too-large": { en: "the folder has too many items to look through", ko: "폴더의 항목이 너무 많아 다 보지 못함" },
   "not-array": { en: "the conversation file is not a list", ko: "대화 파일이 목록이 아님" },
   "unknown-service": { en: "not an export of this service", ko: "이 서비스의 내보내기가 아님" },
   zip: { en: "the zip could not be unpacked", ko: "zip을 풀지 못함" },

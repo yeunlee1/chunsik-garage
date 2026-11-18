@@ -103,6 +103,23 @@ describe("zipEntries와 zipEntryChunks", () => {
     expect(await text(await wholeFile(path), "conversations.json")).toBe("[2]");
   });
 
+  it("끝 주석의 가짜 끝 기록이 진짜 중앙 목록의 시작을 가리키고 항목 수만 다르면, 목록을 끝까지 읽어 보고 버린 뒤 진짜를 쓴다(짝 검토 6 필수 1)", async () => {
+    const normal = makeZip([{ name: "conversations.json", data: "[3]" }]);
+    const realEnd = normal.length - 22;
+    const directoryOffset = normal.readUInt32LE(realEnd + 16);
+    const fake = Buffer.alloc(22);
+    fake.writeUInt32LE(0x06054b50);
+    fake.writeUInt16LE(2, 8);
+    fake.writeUInt16LE(2, 10);
+    // 가짜 기록의 자리(진짜 끝 기록 뒤 22바이트)까지가 중앙 목록이라고 적는다. 첫 서명은 진짜 중앙 목록의 것이다
+    fake.writeUInt32LE(normal.length - directoryOffset, 12);
+    fake.writeUInt32LE(directoryOffset, 16);
+    const head = Buffer.from(normal);
+    head.writeUInt16LE(fake.length, head.length - 2);
+    const path = await put("fake-entries.zip", Buffer.concat([head, fake]));
+    expect(await text(await wholeFile(path), "conversations.json")).toBe("[3]");
+  });
+
   it("진짜 끝 기록이 여러 디스크를 가리키면 여러 디스크로 멈춘다", async () => {
     const zip = makeZip([{ name: "conversations.json", data: "[]" }]);
     zip.writeUInt16LE(1, zip.length - 22 + 4);

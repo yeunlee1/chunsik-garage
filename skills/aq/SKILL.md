@@ -230,5 +230,5 @@ The checkup can also count the user's web chats from the data export file the us
    node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" import remove chatgpt --lang <lang>
    ```
 
-5. If the program stops with `{"error": {...}}`: `not-found` means there is no file at that path. `not-file`, `no-conversations`, `not-array`, and `unknown-service` mean it is not a ChatGPT or Claude.ai export file. A code starting with `zip-` means the zip could not be unpacked, so suggest downloading it again. Say only that, in one line as Chunsik with `(;_;)`.
+5. If the program stops with `{"error": {...}}`: `not-found` means there is no file at that path. `not-file`, `no-conversations`, `not-array`, and `unknown-service` mean it is not a ChatGPT or Claude.ai export file. `folder-too-large` means the folder has too many items, so suggest giving the zip or the folder that holds the conversation files. A code starting with `zip-` means the zip could not be unpacked, so suggest downloading it again. Say only that, in one line as Chunsik with `(;_;)`.
 6. Web chats have no settings, so they count only toward the days of use and the requests per day. If the latest checkup had only web chats, the program gives no AQ and says why.

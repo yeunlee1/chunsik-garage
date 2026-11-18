@@ -84,15 +84,24 @@ async function storeWebCached(dir: string, entry: WebCacheEntry): Promise<void> 
 
 const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
 
-/** 파일의 앞뒤 4KB 지문. 캐시 열쇠의 앞뒤 지문과 같은 범위다 */
-async function edges(path: string, size: number): Promise<string> {
+/** 버퍼를 다 채울 때까지 position부터 읽는다. 한 번의 읽기는 요청보다 짧게 끝날 수 있다. 채우기 전에 파일이 끝나면 거짓이다(짝 검토 6 필수 2) */
+export async function readFull(handle: { read: (buffer: Buffer, offset: number, length: number, position: number) => Promise<{ bytesRead: number }> }, buffer: Buffer, position: number): Promise<boolean> {
+  for (let offset = 0; offset < buffer.length; ) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, position + offset);
+    if (bytesRead === 0) return false;
+    offset += bytesRead;
+  }
+  return true;
+}
+
+/** 파일의 앞뒤 4KB 지문. 캐시 열쇠의 앞뒤 지문과 같은 범위다. 다 읽지 못하면(읽는 동안 줄었으면) null이다 */
+async function edges(path: string, size: number): Promise<string | null> {
   const handle = await open(path, "r");
   try {
     const length = Math.min(4096, size);
     const head = Buffer.alloc(length);
     const tail = Buffer.alloc(length);
-    await handle.read(head, 0, length, 0);
-    await handle.read(tail, 0, length, size - length);
+    if (!(await readFull(handle, head, 0)) || !(await readFull(handle, tail, size - length))) return null;
     return createHash("sha256").update(head).update(tail).digest("hex");
   } finally {
     await handle.close();
@@ -110,7 +119,12 @@ export async function exportKey(path: string, timeZone: string): Promise<CacheKe
   if (!info.isDirectory()) return null;
   const { files, limited } = await exportFolderFiles(path);
   const lines: string[] = [];
-  for (const file of files) lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${await edges(file.path, file.size)}`);
+  for (const file of files) {
+    const fingerprint = await edges(file.path, file.size);
+    // 지문을 다 읽지 못한 폴더는 열쇠를 만들지 않는다. 캐시를 쓰지도 넣지도 않는다
+    if (fingerprint === null) return null;
+    lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${fingerprint}`);
+  }
   const list = `${limited ? "limited" : "all"}\n${lines.join("\n")}`;
   return {
     normPath: normalizePath(path),

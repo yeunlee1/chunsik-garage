@@ -43,9 +43,9 @@ const claudeConversation = (id: string) => ({
   ],
 });
 const read = (path: string) => readExport(path, "Asia/Seoul", null);
-const problemOf = async (path: string): Promise<string> => {
+const problemOf = async (path: string, folderLimit?: number): Promise<string> => {
   try {
-    await read(path);
+    await readExport(path, "Asia/Seoul", null, folderLimit);
     return "ok";
   } catch (error) {
     return error instanceof ExportError ? error.problem : `other:${(error as Error).message}`;
@@ -143,6 +143,9 @@ describe("readExport", () => {
     expect([all.limited, all.files.map((file) => file.rel)]).toEqual([false, ["a/conversations-000.json", "conversations-001.json"]]);
     const result = await readExport(folder, "Asia/Seoul", null, 4);
     expect(result.complete).toBe(false);
+    // 대화 파일을 하나도 찾기 전에 상한에 걸리면 대화 파일이 없다가 아니라 항목이 너무 많다고 알린다(짝 검토 6 참고 1)
+    // 상한 1이면 맨 앞의 폴더 a만 보고 멈춰 대화 파일을 하나도 찾지 못한다
+    expect(await problemOf(folder, 1)).toBe("folder-too-large");
   });
 
   it("깨진 원소, 다른 서비스의 꼴, 상한을 넘는 원소는 버린 수로 센다", async () => {

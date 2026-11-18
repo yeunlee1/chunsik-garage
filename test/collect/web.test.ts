@@ -3,7 +3,7 @@ import { readdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readExport } from "../../src/adapters/web/source.ts";
-import { collectWeb, exportKey, primeWebCache, WEB_PARSER_ID } from "../../src/collect/web.ts";
+import { collectWeb, exportKey, primeWebCache, readFull, WEB_PARSER_ID } from "../../src/collect/web.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 import { makeZip } from "../helpers/zip-writer.ts";
 
@@ -126,6 +126,25 @@ describe("collectWeb", () => {
     expect(second.read.fromCache).toBe(0);
     // 두 메시지가 모두 응답이 되었다(Claude.ai는 어시스턴트 메시지마다 응답 하나)
     expect(sum(second.summaries)).toEqual([0, 2]);
+  });
+
+  it("앞뒤 지문은 한 번에 덜 읽혀도 다 채울 때까지 읽고, 파일이 먼저 끝나면 실패로 알린다(짝 검토 6 필수 2)", async () => {
+    const data = Buffer.from(Array.from({ length: 10_000 }, (_, index) => index % 251));
+    let calls = 0;
+    // 한 번에 최대 7바이트만 주는 가짜 핸들
+    const handle = {
+      read: async (buffer: Buffer, offset: number, length: number, position: number) => {
+        calls++;
+        const take = Math.max(0, Math.min(7, length, data.length - position));
+        data.copy(buffer, offset, position, position + take);
+        return { bytesRead: take, buffer };
+      },
+    };
+    const head = Buffer.alloc(100);
+    expect(await readFull(handle, head, 50)).toBe(true);
+    expect(head.equals(data.subarray(50, 150))).toBe(true);
+    expect(calls).toBeGreaterThan(10);
+    expect(await readFull(handle, Buffer.alloc(100), 9_950)).toBe(false);
   });
 
   it("넣을 때 만든 캐시를 첫 점검이 쓴다", async () => {

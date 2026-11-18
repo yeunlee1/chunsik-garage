@@ -211,7 +211,7 @@ node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" ignore add <rule ID> --lang <lang>
 
 The checkup can also count the user's web chats from the data export file the user downloads from ChatGPT or Claude.ai. It counts when and how much the user asked and got replies. The program never puts conversation text, titles, or attachment names in its output.
 
-1. When the user gives the path of an export file (the downloaded zip, or a `conversations.json` taken out of it), run:
+1. When the user gives the path of an export file (the downloaded zip, the folder it was unzipped to, or a `conversations.json` taken out of it), run:
 
    ```bash
    node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" import add "<path>" --lang <lang>
@@ -219,7 +219,7 @@ The checkup can also count the user's web chats from the data export file the us
 
    Relay `run.text`, then offer a checkup. Never open, read, unzip, or summarize the export file yourself.
 2. If the user asks how to get the file: in ChatGPT it is Settings, then Data controls, then Export data. In Claude.ai it is Settings, then Privacy, then Export data. The service sends a download link by email. Menu names can change, so suggest looking for Export in the settings if these are not there.
-3. The program keeps only where the file is, not a copy. If the user deletes or moves the file, it drops out of the next checkup with a notice. An export covers chats up to the day it was made, so a new export counts later days.
+3. The program keeps only where the file is and does not keep the export itself. If the user deletes or moves the file, it drops out of the next checkup with a notice. An export covers chats up to the day it was made, so a new export counts later days.
 4. To see or take out what was added, run one of these. `remove` takes `chatgpt` or `claude`, and it does not touch the export file.
 
    ```bash

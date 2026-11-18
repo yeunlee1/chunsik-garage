@@ -901,7 +901,7 @@
         "title": "웹 채팅(ChatGPT·Claude 웹) 내보내기 파일 읽기",
         "description": "웹 채팅(ChatGPT·Claude 웹) 내보내기 파일 읽기",
         "testStrategy": "형식 사실을 짝과 따로 확인, 시험을 먼저 써 실패를 보고 구현, npm run check, 짝 검토, 실제 내보내기 파일과 대조",
-        "details": "사용자 지시(2026-11-18) 「6번에 나,다도 진행해보자」. 설계 「구조만 준비하고 다음 버전에 넣는 것」과 25절의 웹 채팅 내보내기를 넣는다. 사용자가 ChatGPT·Claude 웹에서 내보내기를 신청해 받은 파일로 실제 대조한다. 대화 글은 사람도 모델도 읽지 않고 프로그램이 개수와 구조만 본다."
+        "details": "사용자 지시(2026-11-18) 「6번에 나,다도 진행해보자」. 설계 「구조만 준비하고 다음 버전에 넣는 것」과 25절의 웹 채팅 내보내기를 넣는다. 사용자가 ChatGPT·Claude 웹에서 내보내기를 신청해 받은 파일로 실제 대조한다. 대화 글은 사람도 모델도 읽지 않고 프로그램이 개수와 구조만 본다.\n2026-11-18 진행: 브랜치 웹채팅-읽기에 71f9499(기능), d9b9362(설계), 5437b9e(0.5.0) 커밋. aq import add|remove|list, zip·폴더·대화 JSON, ChatGPT·Claude.ai 해석, 웹 채팅은 I1·I2에만, 웹 채팅만이면 AQ를 내지 않음(no_setup_tools), 셋팅 도구가 없으면 S3 no_data. 짝 Codex 2 리뷰 필수 3건(폴더 거부, mapping 차례에 따른 응답 수, zip 끝 주석)을 e1a5370·5aaa85e로 고침, 되돌림 24개 모두 잡음, 시험 2118 통과·1 건너뜀. 짝 Codex 1 회귀: 웹 채팅 없는 점검은 0.4.0과 결과가 같음(버전·빈 웹 칸 넷만 다름). 실제 내보내기 대조는 사용자가 파일을 받으면 한다."
       },
       {
         "priority": "high",
@@ -912,7 +912,7 @@
         "title": "awesome-codex-plugins 목록 등록 준비",
         "description": "awesome-codex-plugins 목록 등록 준비",
         "testStrategy": "그쪽 규칙과 점수 검사를 직접 읽고 돌려 봄, 내기 직전에 사용자 확인",
-        "details": "사용자 지시(2026-11-18) 「6번에 나,다도 진행해보자」. 막던 조건(SECURITY.md)은 0.3.1에서 풀렸다. 그쪽 기여 규칙, 점수 검사(75점), 가져가는 브랜치를 확인하고 넣을 한 줄을 준비한다. 남의 저장소에 요청을 내는 일이라 내기 직전에 사용자에게 확인받는다."
+        "details": "사용자 지시(2026-11-18) 「6번에 나,다도 진행해보자」. 막던 조건(SECURITY.md)은 0.3.1에서 풀렸다. 그쪽 기여 규칙, 점수 검사(75점), 가져가는 브랜치를 확인하고 넣을 한 줄을 준비한다. 남의 저장소에 요청을 내는 일이라 내기 직전에 사용자에게 확인받는다.\n2026-11-18 진행: 대상은 hashgraph-online/awesome-codex-plugins. 0.4.0 main은 Codex 한정 70점·verify 4 실패. 공식 문서의 Codex 필수 칸(author·homepage·repository·license, interface의 longDescription·category·capabilities·composerIcon·logo)과 마켓 목록의 source 객체·policy·category를 1232fbe로 채움. 짝 Codex 1 확인: 자동 감지 96점, Codex 한정 93점, verify 16개 통과, Codex·Claude 임시 설치 통과. 등록 요청은 배포 뒤 사용자 확인을 받고 낸다."
       }
     ],
     "metadata": {

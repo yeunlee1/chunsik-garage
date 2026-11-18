@@ -18,7 +18,8 @@ export interface ToolUsageShare {
   tool: ToolId;
   mainSessions: number;
   activeDays: number;
-  outputTokens: number;
+  /** 출력 토큰. 토큰을 기록하지 않는 도구(웹 채팅)는 0이 아니라 null이다(0.5.0) */
+  outputTokens: number | null;
   cacheHit: number | null;
   shellNonZero: number | null;
 }
@@ -27,7 +28,8 @@ export interface ResultUsage {
   /** 점수 구간. 점수에 넣는 도구를 합친다 */
   mainSessions: number;
   activeDays: number;
-  outputTokens: number;
+  /** 출력 토큰. 점수에 넣는 도구 가운데 토큰을 기록하는 것이 없으면(웹 채팅만 있으면) null이다(0.5.0) */
+  outputTokens: number | null;
   /** 캐시 적중. E1의 잰 값이다(도구마다 식이 달라 토큰을 더하지 않는다). 못 쟀으면 null */
   cacheHit: number | null;
   /** 셸 명령이 0이 아닌 값으로 끝난 몫. 점수에 넣지 않고 정보로만 보인다. 셸 결과가 없거나 못 보는 형식이면 null */
@@ -71,7 +73,7 @@ export function resultUsage(input: EvaluationInput, evaluation: Evaluation, coll
     tool: tool.tool,
     mainSessions: tool.totals.mainSessions.length,
     activeDays: tool.totals.activeDates.length,
-    outputTokens: tool.totals.tokens.output,
+    outputTokens: inputs.get(tool.tool)!.coverage.responsesAndTokens === "unsupported" ? null : tool.totals.tokens.output,
     cacheHit: e1?.tools.find((value) => value.tool === tool.tool)?.value ?? null,
     shellNonZero: share(shellCounts(inputs.get(tool.tool)!, score)),
   }));
@@ -94,7 +96,7 @@ export function resultUsage(input: EvaluationInput, evaluation: Evaluation, coll
   return {
     mainSessions: byTool.reduce((sum, tool) => sum + tool.mainSessions, 0),
     activeDays: new Set(scored.flatMap((tool) => tool.totals.activeDates)).size,
-    outputTokens: byTool.reduce((sum, tool) => sum + tool.outputTokens, 0),
+    outputTokens: byTool.length > 0 && byTool.every((tool) => tool.outputTokens === null) ? null : byTool.reduce((sum, tool) => sum + (tool.outputTokens ?? 0), 0),
     cacheHit: e1?.value ?? null,
     shellNonZero: shells.length === 0 ? null : share({ results: shells.reduce((sum, counts) => sum + counts.results, 0), errors: shells.reduce((sum, counts) => sum + counts.errors, 0) }),
     calendar,

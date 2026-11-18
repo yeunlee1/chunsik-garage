@@ -4,6 +4,7 @@ import type { SessionSummary, ToolCoverage, ToolId } from "../adapters/types.ts"
 import type { ClaudeSetupFacts, CodexSetupFacts, GeminiSetupFacts, ProjectFact } from "../scan/types.ts";
 import type { InstallRecord } from "../state/state.ts";
 import { candidatesOf, type Candidate, type SelfIdentity } from "./installs/candidates.ts";
+import { BLANK_INSTALL_EVIDENCE } from "./installs/gate.ts";
 import { sessionListings } from "./installs/listing.ts";
 import { judgeServers, type JudgedServer } from "./installs/servers.ts";
 import { calledMcpNames, usedSkillNames } from "./installs/signals.ts";
@@ -14,9 +15,10 @@ import { intensityRules } from "./metrics/intensity.ts";
 import { highestMainVersion, mergedSetupRules, setupToolRules, type CountedProblem, type ToolSafeguard, type ToolSetup } from "./metrics/setup.ts";
 import { usageRules } from "./metrics/usage.ts";
 import { projectLookup, projectUsage, type NormalizedCwds, type ProjectUsage } from "./projects.ts";
+import { blank, unmeasured } from "./measure.ts";
 import { RULES_VERSION } from "./rules.ts";
 import { overall, scoreboard, type AxisScore, type Finding, type Overall, type ToolMeasured } from "./scoreboard.ts";
-import { toolTotals, type ToolTotals } from "./totals.ts";
+import { toolTotals, type ToolTotals, type ToolUsage } from "./totals.ts";
 
 interface ToolInputCommon {
   /** 날짜별 세션 요약(주 세션과 하위 세션) */
@@ -29,8 +31,14 @@ interface ToolInputCommon {
   complete: { skills: boolean; mcp: boolean };
 }
 
-/** 도구 하나의 입력. 어댑터와 스캐너가 낸 것이다. 셋팅 사실의 꼴은 도구마다 다르다(설계 「5단계 3부 계획 전 결정」 4번) */
-export type ToolInput = ToolInputCommon & ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts } | { tool: "gemini"; setup: GeminiSetupFacts });
+/** 도구 하나의 입력. 어댑터와 스캐너가 낸 것이다. 셋팅 사실의 꼴은 도구마다 다르고, 웹 채팅은 내보내기 파일에 셋팅이 없어 null이다(설계 「5단계 3부 계획 전 결정」 4번, 「0.5.0에서 정한 것」) */
+export type ToolInput = ToolInputCommon &
+  ({ tool: "claude-code"; setup: ClaudeSetupFacts } | { tool: "codex"; setup: CodexSetupFacts } | { tool: "gemini"; setup: GeminiSetupFacts } | { tool: "web-chatgpt"; setup: null } | { tool: "web-claude"; setup: null });
+/** 셋팅 사실이 있는 도구의 입력 */
+export type SetupToolInput = Exclude<ToolInput, { setup: null }>;
+
+/** 셋팅 사실이 있는 도구만(차례는 그대로) */
+export const setupTools = (tools: readonly ToolInput[]): SetupToolInput[] => tools.filter((tool): tool is SetupToolInput => tool.setup !== null);
 
 /** 입력 묶음(설계 12.1). 평가 시계와 경로의 정규화처럼 순수하지 않은 것은 조립하는 쪽이 미리 해서 넣는다 */
 export interface EvaluationInput {
@@ -82,6 +90,21 @@ export interface Evaluation {
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * 웹 채팅의 도구별 규칙. 기록으로 재는 규칙은 관측 범위대로(모두 못 봄이다), 셋팅으로 재는 규칙(S5, F5)과 설치 판정(E5, E6)은 셋팅 사실이 없어 못 봄이다.
+ * 근거 숫자의 열쇠는 다른 도구와 같고 값은 비운다
+ */
+function webToolRules(tool: ToolUsage): ToolMeasured["rules"] {
+  const install = unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE));
+  return {
+    ...usageRules(tool.totals, tool.coverage, tool.tool),
+    S5: unmeasured("unsupported", { enabledServers: null, failedSessions: null, mainSessions: null }),
+    F5: unmeasured("unsupported", { differingCopies: null, identicalCopies: null, skillKinds: null }),
+    E5: install,
+    E6: install,
+  };
+}
 const span = (dates: readonly LocalDate[]): { from: LocalDate; to: LocalDate } => ({ from: dates[0]!, to: dates[dates.length - 1]! });
 
 export function evaluate(input: EvaluationInput): Evaluation {
@@ -93,7 +116,9 @@ export function evaluate(input: EvaluationInput): Evaluation {
   const all = [...input.tools].sort((a, b) => byText(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   // 점수에 넣는 도구에서만 규칙을 재고 설치를 판정한다. 관측 기록은 이것과 상관없이 부르는 쪽이 적는다
   const scored = all.filter((tool) => tool.totals.responses > 0);
-  const setups = scored.map(({ input: tool, totals }): ToolSetup => {
+  // 셋팅으로 재는 규칙(S1~S3, F3·F4·F6, 설치 판정)과 프로젝트는 셋팅 사실이 있는 도구만 본다. 웹 채팅은 기록으로 재는 규칙에만 들고 도구별 규칙은 못 봄이다(설계 「0.5.0에서 정한 것」)
+  const withSetup = scored.filter((tool): tool is { input: SetupToolInput; totals: ToolTotals } => tool.input.setup !== null);
+  const setups = withSetup.map(({ input: tool, totals }): ToolSetup => {
     const common = { totals, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
     if (tool.tool === "codex") return { ...common, tool: "codex", setup: tool.setup };
     if (tool.tool === "gemini") return { ...common, tool: "gemini", setup: tool.setup };
@@ -101,7 +126,7 @@ export function evaluate(input: EvaluationInput): Evaluation {
   });
   const usage = projectUsage(setups, lookup);
 
-  const judged = scored.map((tool, index) => {
+  const judged = withSetup.map((tool, index) => {
     const setup = setups[index]!;
     const { summaries } = tool.input;
     const base = { day, windows, records };
@@ -117,13 +142,18 @@ export function evaluate(input: EvaluationInput): Evaluation {
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured };
   });
 
+  const web = scored.filter((tool) => tool.input.setup === null).map(({ input: tool, totals }): ToolMeasured => ({ tool: tool.tool, responses: totals.responses, rules: webToolRules({ tool: tool.tool, totals, coverage: tool.coverage }), candidates: [] }));
+  // 강도 규칙은 웹 채팅까지 합쳐 잰다. 프로젝트 수(I4)는 셋팅 사실이 있는 도구의 것이다
+  const usages = scored.map(({ input: tool, totals }): ToolUsage => ({ tool: tool.tool, totals, coverage: tool.coverage }));
+
   const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
   const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage, input.projects);
-  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage) }, tools: judged.map((tool) => tool.measured) });
+  const measuredTools = [...judged.map((tool) => tool.measured), ...web].sort((a, b) => byText(a.tool, b.tool));
+  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(usages, usage) }, tools: measuredTools });
 
   const humanRequests = scored.reduce((sum, tool) => sum + tool.totals.humanRequests, 0);
   const activeDays = new Set(scored.flatMap((tool) => tool.totals.activeDates)).size;
-  const judgedByTool = new Map(judged.map((tool) => [tool.tool, tool]));
+  const judgedByTool = new Map<ToolId, (typeof judged)[number]>(judged.map((tool) => [tool.tool, tool]));
 
   return {
     rulesVersion: RULES_VERSION,
@@ -132,7 +162,7 @@ export function evaluate(input: EvaluationInput): Evaluation {
       const own = judgedByTool.get(tool.input.tool);
       return { tool: tool.input.tool, scored: tool.totals.responses > 0, inCalendar: tool.totals.collectResponses > 0, totals: tool.totals, skills: own?.skills ?? [], servers: own?.servers ?? [] };
     }),
-    score: overall(board.axes, humanRequests, activeDays),
+    score: overall(board.axes, humanRequests, activeDays, scored.length > 0 && withSetup.length === 0),
     axes: board.axes,
     findings: board.findings,
     candidates: judged.flatMap((tool) => tool.candidates),

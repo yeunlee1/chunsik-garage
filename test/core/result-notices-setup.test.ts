@@ -23,7 +23,9 @@ describe("설정 속 비밀값 알림(0.2.0)", () => {
   });
 
   it("알림 차례에서 상태 파일을 새로 만들었다는 알림 바로 다음이다", () => {
-    expect(NOTICE_KINDS.indexOf("credentials_in_config")).toBe(NOTICE_KINDS.indexOf("state_reset") + 1);
+    // 0.5.0에서 그 사이에 웹 채팅 내보내기 목록이 깨졌다는 알림이 들었다
+    expect(NOTICE_KINDS.indexOf("credentials_in_config")).toBe(NOTICE_KINDS.indexOf("web_exports_reset") + 1);
+    expect(NOTICE_KINDS.indexOf("web_exports_reset")).toBe(NOTICE_KINDS.indexOf("state_reset") + 1);
   });
 });
 
@@ -189,15 +191,20 @@ describe("실행 입력 알림과 차례", () => {
     expect(NOTICE_KINDS).toEqual([
       "score_withheld",
       "state_reset",
+      "web_exports_reset",
       "credentials_in_config",
       "record_unreadable",
       "record_skipped",
       "record_partial",
+      "web_export_missing",
+      "web_export_unreadable",
+      "web_export_partial",
       "observation_incomplete",
       "setup_unreadable",
       "plugins_uncounted",
       "setup_problems_unscored",
       "projects_gone",
+      "web_export_until",
       "version_unverified",
       "weak_human_requests",
       "overlapping_responses",

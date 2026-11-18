@@ -40,7 +40,7 @@ describe("aq where", () => {
     const report = await where(dir);
     expect(report.exists).toBe(false);
     expect(report.entries.every((e) => !e.exists && e.files === 0 && e.bytes === 0)).toBe(true);
-    expect(report.entries.map((e) => e.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune", "badge.svg"]);
+    expect(report.entries.map((e) => e.name)).toEqual(["cache", "reports", "history.jsonl", "state.json", "notified", "tune", "badge.svg", "web-exports.json"]);
     expect(report.noSaveResultsInOsTemp).toBe(true);
   });
 

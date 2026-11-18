@@ -3,16 +3,19 @@ import type { ObservationReason } from "../../adapters/claude/observation.ts";
 import { compareVersions, parseVersion } from "../../adapters/common/version.ts";
 import type { ToolId } from "../../adapters/types.ts";
 import type { CodexSetupFacts, FileStatus, GeminiSetupFacts, ProjectFact, SetupProblem, SecretFact } from "../../scan/types.ts";
-import type { Evaluation, EvaluationInput } from "../evaluate.ts";
+import { setupTools, type Evaluation, type EvaluationInput } from "../evaluate.ts";
 import type { Withheld } from "../scoreboard.ts";
+import type { WebExportState } from "../../collect/web.ts";
 import type { CollectedCodex, CollectedTool } from "./tools.ts";
 
-/** 도구마다 기록의 해석 규약을 확인한 버전의 범위(설계 9.5). 새 버전의 기록을 확인하면 넓힌다. 이 밖의 버전은 읽을 수 있는 필드로 계산하고 알린다(설계 20.1) */
-export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string }> = {
+/** 도구마다 기록의 해석 규약을 확인한 버전의 범위(설계 9.5). 새 버전의 기록을 확인하면 넓힌다. 이 밖의 버전은 읽을 수 있는 필드로 계산하고 알린다(설계 20.1). 웹 채팅의 내보내기 파일에는 버전이 없어 null이다 */
+export const VERIFIED_VERSIONS: Record<ToolId, { from: string; to: string } | null> = {
   "claude-code": { from: "2.1.220", to: "2.1.322" },
   codex: { from: "0.140.0", to: "0.169.0" },
   // 제미나이 CLI는 세션 기록에 버전을 적지 않아 이 범위로 견줄 버전이 없다. 해석 규약은 공개 소스 v0.68.0으로 확인했다(설계 「0.4.0에서 정한 것」)
   gemini: { from: "0.68.0", to: "0.68.0" },
+  "web-chatgpt": null,
+  "web-claude": null,
 };
 /** 점수 구간의 사람 요청 가운데 근거가 약한 것의 몫이 이것을 넘으면 알린다(설계 9.5). 정확히 이 값은 넘지 않은 것이다 */
 export const WEAK_REQUEST_SHARE = 0.1;
@@ -42,16 +45,24 @@ export type UncountedPlugin = "composition_unknown" | "not_installed" | "skills_
 export type Notice =
   | { kind: "score_withheld"; reasons: Withheld[] }
   | { kind: "state_reset" }
+  /** 넣은 웹 채팅 내보내기의 목록(web-exports.json)이 깨져 웹 채팅 없이 셌다(0.5.0) */
+  | { kind: "web_exports_reset" }
   /** 설정에 그대로 적힌 비밀값의 자리(0.2.0). 문장에는 수만 넣는다 */
   | { kind: "credentials_in_config"; tool: ToolId; places: SecretFact[] }
   | { kind: "record_unreadable"; tool: ToolId; files: string[]; dirs: string[] }
   | { kind: "record_skipped"; tool: ToolId; files: string[] }
   | { kind: "record_partial"; tool: ToolId; files: string[] }
+  /** 웹 채팅 내보내기 파일의 상태(0.5.0). 넣은 파일이 없음, 읽지 못함, 일부 대화를 버림 */
+  | { kind: "web_export_missing"; tool: ToolId; path: string }
+  | { kind: "web_export_unreadable"; tool: ToolId; path: string; problem: string }
+  | { kind: "web_export_partial"; tool: ToolId; skipped: number; truncated: boolean }
   | { kind: "observation_incomplete"; tool: ToolId; metric: "skills" | "mcp"; reasons: ObservationReason[] }
   | { kind: "setup_unreadable"; tool: ToolId; what: UnreadableSetup; targets: string[] }
   | { kind: "plugins_uncounted"; tool: ToolId; why: UncountedPlugin; plugins: string[] }
   | { kind: "setup_problems_unscored"; tool: ToolId; problems: { kind: SetupProblem["kind"]; path: string }[] }
   | { kind: "projects_gone"; projects: string[] }
+  /** 웹 채팅 내보내기에 그 날 뒤의 대화가 없다(0.5.0) */
+  | { kind: "web_export_until"; tool: ToolId; lastDate: string }
   | { kind: "version_unverified"; tool: ToolId; versions: string[]; verified: { from: string; to: string } }
   | { kind: "weak_human_requests"; tool: ToolId; weak: number; total: number }
   | { kind: "overlapping_responses"; tool: ToolId; sessions: number }
@@ -72,15 +83,20 @@ export type Notice =
 export const NOTICE_KINDS: readonly Notice["kind"][] = [
   "score_withheld",
   "state_reset",
+  "web_exports_reset",
   "credentials_in_config",
   "record_unreadable",
   "record_skipped",
   "record_partial",
+  "web_export_missing",
+  "web_export_unreadable",
+  "web_export_partial",
   "observation_incomplete",
   "setup_unreadable",
   "plugins_uncounted",
   "setup_problems_unscored",
   "projects_gone",
+  "web_export_until",
   "version_unverified",
   "weak_human_requests",
   "overlapping_responses",
@@ -169,12 +185,13 @@ function geminiSetupNotices(setup: GeminiSetupFacts, projects: readonly ProjectF
  * 셋팅 쪽 알림과 실행 입력 알림. 있는데 읽지 못한 셋팅, 켜져 있는데 세지 않은 플러그인, 점수에 세지 않는 플러그인 안의 문제,
  * 지금 PC에 없는 프로젝트, 상태 파일이 깨져 새로 시작한 것, AQ를 내지 않은 것이다
  */
-export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run: { stateBroken: boolean }): Notice[] {
+export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run: { stateBroken: boolean; webExportsBroken?: boolean }): Notice[] {
   const notices: Notice[] = [];
   if (evaluation.score.withheld.length > 0) notices.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run.stateBroken) notices.push({ kind: "state_reset" });
+  if (run.webExportsBroken === true) notices.push({ kind: "web_exports_reset" });
 
-  for (const tool of input.tools) {
+  for (const tool of setupTools(input.tools)) {
     if (tool.setup.secrets.length > 0) notices.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices.push(...codexSetupNotices(tool.setup, input.projects));
@@ -227,6 +244,17 @@ export function setupNotices(input: EvaluationInput, evaluation: Evaluation, run
   return sortNotices(notices);
 }
 
+/** 웹 채팅 내보내기 파일의 알림. 없거나 읽지 못했으면 그것만, 읽었으면 버린 대화와 내보낸 날 뒤가 비는 것을 알린다(설계 「0.5.0에서 정한 것」) */
+function webRecordNotices(tool: ToolId, state: WebExportState, today: string): Notice[] {
+  if (state.path === null) return [];
+  if (state.missing) return [{ kind: "web_export_missing", tool, path: state.path }];
+  if (state.problem !== null) return [{ kind: "web_export_unreadable", tool, path: state.path, problem: state.problem }];
+  const notices: Notice[] = [];
+  if (state.skipped > 0 || state.truncated) notices.push({ kind: "web_export_partial", tool, skipped: state.skipped, truncated: state.truncated });
+  if (state.lastDate !== null && state.lastDate < today) notices.push({ kind: "web_export_until", tool, lastDate: state.lastDate });
+  return notices;
+}
+
 /** Codex만 내는 기록 쪽 알림. 건너뛴 압축 파일과 일부만 읽은 파일, 기록을 묶으며 센 것이다. 종류의 차례는 sortNotices가 맞춘다(설계 「5단계 4부 계획 전 결정」 3번) */
 function codexRecordNotices(tool: ToolId, codex: CollectedCodex): Notice[] {
   const notices: Notice[] = [];
@@ -262,16 +290,19 @@ export function recordNotices(input: EvaluationInput, evaluation: Evaluation, co
       }
       if (found.overlappingSessions > 0) notices.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
       if (found.codex !== undefined) notices.push(...codexRecordNotices(id, found.codex));
+      if (found.web !== undefined) notices.push(...webRecordNotices(id, found.web, evaluation.windows.today));
     }
 
     const verified = VERIFIED_VERSIONS[id];
-    const [from, to] = [parseVersion(verified.from)!, parseVersion(verified.to)!];
-    const outside = new Map<string, readonly [number, number, number]>();
-    for (const summary of tool.summaries) {
-      const version = parseVersion(summary.version);
-      if (version !== null && (compareVersions(version, from) < 0 || compareVersions(version, to) > 0)) outside.set(summary.version!, version);
+    if (verified !== null) {
+      const [from, to] = [parseVersion(verified.from)!, parseVersion(verified.to)!];
+      const outside = new Map<string, readonly [number, number, number]>();
+      for (const summary of tool.summaries) {
+        const version = parseVersion(summary.version);
+        if (version !== null && (compareVersions(version, from) < 0 || compareVersions(version, to) > 0)) outside.set(summary.version!, version);
+      }
+      if (outside.size > 0) notices.push({ kind: "version_unverified", tool: id, versions: [...outside].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
     }
-    if (outside.size > 0) notices.push({ kind: "version_unverified", tool: id, versions: [...outside].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
 
     let total = 0;
     let weak = 0;
@@ -294,6 +325,8 @@ export function recordNotices(input: EvaluationInput, evaluation: Evaluation, co
       if (summary.codex?.unknownThreadSource != null) add(`thread_source:${summary.codex.unknownThreadSource}`, 1);
       for (const [kind, count] of Object.entries(summary.codex?.unknownItemTypes ?? {})) add(`item:${kind}`, count);
       for (const [kind, count] of Object.entries(summary.notes.unknownHookKinds)) add(`hook:${kind}`, count);
+      // 웹 채팅 내보내기에서 알아보지 못한 메시지 꼴(형식이 바뀌었을 수 있다)
+      if (tool.setup === null) for (const [kind, count] of Object.entries(summary.missing.unconfirmedTypes)) add(`content:${kind}`, count);
       for (const day of Object.values(summary.days)) {
         for (const [kind, count] of Object.entries(day.unknownDenialKinds)) add(`denial:${kind}`, count);
         add("compaction", day.unknownCompactions);

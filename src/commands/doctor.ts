@@ -1,10 +1,11 @@
-// aq doctor. Node.js 버전, 압축 기록을 풀 수 있는지, Claude Code와 Codex와 Gemini CLI의 기록 폴더, 상태 폴더에 쓸 수 있는지를 JSON으로 알린다(설계 6.3, 7.4, 9.1, 9.2, 「0.4.0에서 정한 것」)
-import { mkdir, rm, writeFile } from "node:fs/promises";
+// aq doctor. Node.js 버전, 압축 기록을 풀 수 있는지, Claude Code와 Codex와 Gemini CLI의 기록 폴더, 넣은 웹 채팅 내보내기 파일, 상태 폴더에 쓸 수 있는지를 JSON으로 알린다(설계 6.3, 7.4, 9.1, 9.2, 「0.4.0에서 정한 것」, 「0.5.0에서 정한 것」)
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as zlib from "node:zlib";
 import { claudeHome, listClaudeFiles } from "../adapters/claude/locate.ts";
 import { codexHome, groupCopies, listCodexFiles } from "../adapters/codex/locate.ts";
 import { geminiHome, geminiRecordHomes, listGeminiRecordFiles } from "../adapters/gemini/locate.ts";
+import { readWebExports } from "../state/web-exports.ts";
 
 export interface DoctorReport {
   node: { version: string; ok: boolean };
@@ -14,6 +15,8 @@ export interface DoctorReport {
   codex: { home: string; sessionsFound: boolean; recordFiles: number; compressedOnly: number; unreadable: number };
   /** 기록 파일은 주 세션과 하위 에이전트 세션의 파일이다(macOS 샌드박스의 <홈>/.cache/.gemini 것도 든다). 같은 이름의 .jsonl로 옮겨 적은 옛 .json은 세지 않는다 */
   gemini: { home: string; tmpFound: boolean; sessionFiles: number; unreadable: number };
+  /** 넣은 웹 채팅 내보내기 파일(0.5.0). 목록이 깨졌으면 list가 broken이다. 파일은 열지 않고 있는지와 크기만 본다 */
+  web: { list: "missing" | "ok" | "broken"; exports: { tool: string; path: string; exists: boolean; bytes: number | null }[] };
   state: { dir: string; writable: boolean };
 }
 
@@ -47,6 +50,17 @@ export async function doctor(input: {
   const groups = groupCopies(records.files);
   const gemini = geminiHome(input.env, input.homedir);
   const geminiList = await listGeminiRecordFiles(geminiRecordHomes(input.env, input.homedir), null);
+  const web = await readWebExports(input.stateDir);
+  const exports = await Promise.all(
+    web.entries.map(async (entry) => {
+      try {
+        const info = await stat(entry.path);
+        return { tool: entry.tool, path: entry.path, exists: info.isFile(), bytes: info.isFile() ? info.size : null };
+      } catch {
+        return { tool: entry.tool, path: entry.path, exists: false, bytes: null };
+      }
+    }),
+  );
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),
@@ -59,6 +73,7 @@ export async function doctor(input: {
       unreadable: records.unreadableDirs.length + records.files.filter((file) => file.size === null).length,
     },
     gemini: { home: gemini, tmpFound: geminiList.tmpFound, sessionFiles: geminiList.files.length, unreadable: geminiList.unreadableDirs.length + geminiList.unreadableFiles.length },
+    web: { list: web.status, exports },
     state: { dir: input.stateDir, writable: await canWrite(input.stateDir) },
   };
 }

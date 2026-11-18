@@ -1,4 +1,4 @@
-// 평가 결과의 알림 스물두 종류의 문장. 종류, 정해진 값, 수만 넣고 이름과 경로는 넣지 않아 터미널 요약에도 같은 문장이 간다(순수 함수, 설계 12.2, 19.1, 20.1, 「2단계 3부 계획에서 보완」의 알림 표)
+// 평가 결과의 알림 스물여덟 종류의 문장. 종류, 정해진 값, 수만 넣고 이름과 경로는 넣지 않아 터미널 요약에도 같은 문장이 간다(순수 함수, 설계 12.2, 19.1, 20.1, 「2단계 3부 계획에서 보완」의 알림 표)
 import type { ObservationReason } from "../../adapters/claude/observation.ts";
 import type { Notice, UncountedPlugin, UnreadableSetup } from "../result/notices.ts";
 import type { Withheld } from "../scoreboard.ts";
@@ -11,6 +11,7 @@ export const WITHHELD_COPY: Record<Withheld, Texts<string>> = {
   too_few_requests: { en: "There were fewer than 20 requests from you in the scoring window.", ko: "점수 구간의 사람 요청이 20개에 못 미칩니다." },
   too_few_days: { en: "The tools were used on fewer than 3 days in the scoring window.", ko: "점수 구간에 쓴 날이 3일에 못 미칩니다." },
   no_axes: { en: "None of the four criteria could be measured.", ko: "잴 수 있는 기준이 하나도 없습니다." },
+  no_setup_tools: { en: "Only web chats were used in the scoring window. The AQ needs use of Claude Code, Codex, or Gemini CLI, whose setup can be checked.", ko: "점수 구간에 웹 채팅만 썼습니다. AQ는 셋팅을 볼 수 있는 Claude Code, Codex, Gemini CLI를 쓴 기록이 있어야 냅니다." },
 };
 
 const METRIC: Record<"skills" | "mcp", Texts<string>> = {
@@ -51,23 +52,42 @@ const UNCOUNTED: Record<UncountedPlugin, Texts<string>> = {
 };
 
 /** 분류하지 못한 기록의 묶음. 알림의 what은 compaction, denial:<종류>, hook:<종류>, Codex의 thread_source:<값>과 item:<종류>다. 종류와 값은 문장에 넣지 않는다 */
-const UNCLASSIFIED_GROUPS = ["compaction", "denial", "hook", "thread_source", "item"] as const;
+const UNCLASSIFIED_GROUPS = ["compaction", "denial", "hook", "thread_source", "item", "content"] as const;
 const UNCLASSIFIED: Record<(typeof UNCLASSIFIED_GROUPS)[number], Texts<string>> = {
   compaction: { en: "{count} {count:compaction|compactions}", ko: "압축 {count}개" },
   denial: { en: "{count} {count:denial marker|denial markers}", ko: "거절 표시 {count}개" },
   hook: { en: "{count} {count:hook attachment|hook attachments}", ko: "훅 첨부 {count}개" },
   thread_source: { en: "{count} {count:session|sessions} of unknown origin counted as main", ko: "주 세션으로 센 출처 모를 세션 {count}개" },
   item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "종류를 모르는 실행 항목 {count}개" },
+  // 웹 채팅 내보내기에서 꼴을 모르는 메시지(0.5.0). 꼴의 이름은 문장에 넣지 않는다
+  content: { en: "{count} {count:message|messages} of an unknown shape", ko: "꼴을 모르는 메시지 {count}개" },
 };
+
+/** 웹 채팅 내보내기 파일을 읽지 못한 까닭(0.5.0). zip-로 시작하는 것은 zip을 풀지 못한 것이다 */
+const WEB_PROBLEM: Record<"not-file" | "no-conversations" | "not-array" | "unknown-service" | "zip" | "unreadable", Texts<string>> = {
+  "not-file": { en: "not a file", ko: "파일이 아님" },
+  "no-conversations": { en: "no conversation file inside", ko: "안에 대화 파일이 없음" },
+  "not-array": { en: "the conversation file is not a list", ko: "대화 파일이 목록이 아님" },
+  "unknown-service": { en: "not an export of this service", ko: "이 서비스의 내보내기가 아님" },
+  zip: { en: "the zip could not be unpacked", ko: "zip을 풀지 못함" },
+  unreadable: { en: "the file could not be opened", ko: "파일을 열지 못함" },
+};
+const webProblem = (problem: string, lang: Lang): string => (problem.startsWith("zip-") ? WEB_PROBLEM.zip : (WEB_PROBLEM[problem as keyof typeof WEB_PROBLEM] ?? WEB_PROBLEM.unreadable))[lang];
 
 /** 종류 이름을 붙이는 실행 항목의 수(많은 차례, 0.3.0). 이름은 Codex가 정한 항목 종류라 사용자 자료가 아니다 */
 const TOP_ITEM_KINDS = 3;
 
 /** 알림마다의 틀 */
-const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & { withheld: string; setupCounted: string }> = {
+const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & { withheld: string; setupCounted: string; webTruncated: string }> = {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    web_exports_reset: "The list of added web chat exports was broken, so web chats were left out. Add the export files again to count them.",
+    web_export_missing: "{tool}: the export file you added is no longer there, so it was left out. Add the export file again to count it.",
+    web_export_unreadable: "{tool}: the export file could not be read ({why}), so it was left out.",
+    web_export_partial: "{tool}: {count} {count:conversation in the export was|conversations in the export were} left out (too large, broken, or of an unknown shape). Only what was read is counted.",
+    webTruncated: "{tool}: the export file ended early. Only the conversations before the break are counted.",
+    web_export_until: "{tool}: the export has conversations up to {date}. Later days count as days without use. Export again and add the file to count them.",
     credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
     record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
@@ -94,6 +114,12 @@ const LINES: Texts<Record<Exclude<Notice["kind"], "score_withheld">, string> & {
   ko: {
     withheld: "AQ를 내지 않았습니다. {reasons}",
     state_reset: "상태 파일이 깨져 새로 시작했습니다. 설치를 지켜본 기록이 처음부터 다시 쌓입니다.",
+    web_exports_reset: "넣은 웹 채팅 내보내기의 목록이 깨져 웹 채팅을 빼고 셌습니다. 내보내기 파일을 다시 넣으면 셉니다.",
+    web_export_missing: "{tool} 내보내기 파일이 넣은 자리에 없어 이번 점검에서 뺐습니다. 내보내기 파일을 다시 넣으면 셉니다.",
+    web_export_unreadable: "{tool} 내보내기 파일을 읽지 못해({why}) 이번 점검에서 뺐습니다.",
+    web_export_partial: "{tool} 내보내기에서 대화 {count}개를 빼고 셌습니다(너무 크거나 깨졌거나 꼴을 모름). 읽은 것만으로 계산했습니다.",
+    webTruncated: "{tool} 내보내기 파일이 중간에 끊겼습니다. 끊기기 전의 대화만 셌습니다.",
+    web_export_until: "{tool} 내보내기에는 {date}까지의 대화가 있습니다. 그 뒤의 날은 쓰지 않은 날로 셉니다. 다시 내보내 넣으면 그 뒤도 셉니다.",
     credentials_in_config: "{tool} 설정 {count}곳에 API 키나 토큰이 그대로 적혀 있습니다. 환경 변수로 옮기세요. 값은 보여 주거나 저장하지 않았습니다.",
     record_unreadable: "{tool} 기록 가운데 읽지 못한 파일 {files}개와 폴더 {dirs}개가 있습니다. 읽은 것만으로 계산했습니다.",
     record_skipped: "{tool} 기록 가운데 이 Node.js가 zstd 압축을 풀지 못해 건너뛴 파일이 {files}개 있습니다. Node.js 22는 22.15.0 이상, 23은 23.8.0 이상, 24부터는 모든 버전에서 읽힙니다.",
@@ -146,6 +172,18 @@ export function noticeText(notice: Notice, lang: Lang): string {
       return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY[reason][lang]).join(" ") });
     case "state_reset":
       return lines.state_reset;
+    case "web_exports_reset":
+      return lines.web_exports_reset;
+    case "web_export_missing":
+      return fill(lines.web_export_missing, { tool });
+    case "web_export_unreadable":
+      return fill(lines.web_export_unreadable, { tool, why: webProblem(notice.problem, lang) });
+    case "web_export_partial": {
+      const parts = [notice.skipped > 0 ? fill(lines.web_export_partial, { tool, count: notice.skipped }) : null, notice.truncated ? fill(lines.webTruncated, { tool }) : null];
+      return parts.filter((part): part is string => part !== null).join(" ");
+    }
+    case "web_export_until":
+      return fill(lines.web_export_until, { tool, date: notice.lastDate });
     case "credentials_in_config":
       return fill(lines.credentials_in_config, { tool, count: notice.places.length });
     case "record_unreadable":

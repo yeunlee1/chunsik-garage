@@ -184,7 +184,8 @@ export const MIN_REQUESTS_FOR_AQ = 20;
 export const MIN_DAYS_FOR_AQ = 3;
 
 /** AQ를 내지 않은 까닭. 기록이 적거나(사람 요청, 사용한 날) 잰 기준이 하나도 없다 */
-export type Withheld = "too_few_requests" | "too_few_days" | "no_axes";
+/** no_setup_tools는 점수에 넣는 도구가 웹 채팅뿐이라 셋팅을 볼 수 있는 도구가 없는 것이다(0.5.0) */
+export type Withheld = "too_few_requests" | "too_few_days" | "no_axes" | "no_setup_tools";
 
 export interface Overall {
   aq: number | null;
@@ -200,14 +201,18 @@ export function aqOfAxes(scores: readonly number[]): number {
   return roundHalfUp(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 }
 
-/** 화면에 보이는 기준 점수(정수)의 평균을 정수로 반올림한다. 사용자가 화면의 숫자로 검산할 수 있다. */
-export function overall(axes: readonly AxisScore[], humanRequests: number, activeDays: number): Overall {
+/**
+ * 화면에 보이는 기준 점수(정수)의 평균을 정수로 반올림한다. 사용자가 화면의 숫자로 검산할 수 있다.
+ * webOnly는 점수에 넣는 도구가 있는데 모두 웹 채팅인 것이다. 그러면 셋팅을 볼 도구가 없어 AQ를 내지 않는다(0.5.0)
+ */
+export function overall(axes: readonly AxisScore[], humanRequests: number, activeDays: number, webOnly = false): Overall {
   const measured = axes.flatMap((axis) => (axis.score === null ? [] : [axis.score]));
   const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
   const withheld: Withheld[] = [];
   if (humanRequests < MIN_REQUESTS_FOR_AQ) withheld.push("too_few_requests");
   if (activeDays < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
   if (measured.length === 0) withheld.push("no_axes");
+  if (webOnly) withheld.push("no_setup_tools");
   if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
   const aq = aqOfAxes(measured);
   return { aq, ...gradeOf(aq), withheld, missingAxes };

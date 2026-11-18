@@ -29,7 +29,8 @@ const RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"] as const;
 // 도구 색. Codex의 주황은 종이 바탕(#fcfcfb)과의 대비가 3.82:1로 비문자 대비 3:1을 넘고, Claude Code의 파랑과는 색각 이상에서도 갈리는 짝이다.
 // 두 색의 밝기가 비슷해 흑백으로는 갈리지 않으므로 도구별 띠에는 도구 이름과 값을 글로 함께 둔다(설계 「5단계 4부 계획 전 결정」 9번).
 // Gemini CLI의 청록은 세 색의 모든 짝을 색 검증기로 잰 값이다. 종이 바탕과 3:1을 넘고, 색각 이상에서 가장 가까운 짝(Codex의 주황)도 ΔE 10.1이다(설계 「0.4.0에서 정한 것」)
-const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70" };
+// 웹 채팅 둘은 참고 팔레트의 분홍(#e87ba4)과 짙은 보라(#4a3aa7)다. 다섯 색의 모든 짝이 색각 이상 ΔE 8.3 이상, 보통 눈 ΔE 16.3 이상, 종이 바탕과 3:1 이상이다(설계 「0.5.0에서 정한 것」)
+const TOOL_COLORS: Record<ToolId, string> = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70", "web-chatgpt": "#e87ba4", "web-claude": "#4a3aa7" };
 const REPO = "chunsik-garage";
 
 /** 글과 속성 값을 HTML에 그대로 넣을 수 있게 바꾼다 */
@@ -320,15 +321,19 @@ function tools(view: ReportView): { chart: string; table: string } {
   const list = view.usage.byTool;
   if (list.length === 0) return { chart: `<p class="empty">${both(REPORT_COPY.noTools)}</p>`, table: `<p class="empty">${both(REPORT_COPY.noTools)}</p>` };
   const width = (part: number, total: number): number => Math.round((part / (total || 1)) * 10_000) / 100;
-  const row = (label: Texts<string>, value: (tool: (typeof list)[number]) => number, format: (count: number, lang: Lang) => string): string => {
-    const total = list.reduce((sum, tool) => sum + value(tool), 0);
+  // 그 값을 기록하지 않는 도구(웹 채팅의 출력 토큰)는 그 띠에서 뺀다. 0으로 그리지 않는다(0.5.0)
+  const row = (label: Texts<string>, pick: (tool: (typeof list)[number]) => number | null, format: (count: number, lang: Lang) => string): string => {
+    const shown = list.filter((tool) => pick(tool) !== null);
+    const value = (tool: (typeof list)[number]): number => pick(tool) ?? 0;
+    const total = shown.reduce((sum, tool) => sum + value(tool), 0);
+    if (shown.length === 0) return "";
     return perLang(
       (lang) =>
-        `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`,
+        `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(shown.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${shown.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${shown.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`,
     );
   };
   const chart = `<div class="tools">${row(REPORT_COPY.kMain, (tool) => tool.mainSessions, (count) => groupDigits(count))}${row(REPORT_COPY.kOut, (tool) => tool.outputTokens, shortTokens)}</div>`;
-  const rows = list.map((tool) => `<tr><th scope="row">${both(TOOL_NAMES[tool.tool])}</th><td class="n">${groupDigits(tool.mainSessions)}</td><td class="n">${groupDigits(tool.outputTokens)}</td></tr>`).join("");
+  const rows = list.map((tool) => `<tr><th scope="row">${both(TOOL_NAMES[tool.tool])}</th><td class="n">${groupDigits(tool.mainSessions)}</td><td class="n">${tool.outputTokens === null ? "—" : groupDigits(tool.outputTokens)}</td></tr>`).join("");
   const table = `<table class="tv"><caption class="sr">${both(REPORT_COPY.toolsTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thTool)}</th><th scope="col">${both(REPORT_COPY.kMain)}</th><th scope="col">${both(REPORT_COPY.kOut)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   return { chart, table };
 }
@@ -354,7 +359,7 @@ function usage(view: ReportView, lang: Lang): string {
   const kpis = [
     kpi(groupDigits(view.usage.mainSessions), REPORT_COPY.kMain),
     kpi(`${view.usage.activeDays}/${days}`, REPORT_COPY.kDays),
-    kpi(both(textsOf((l) => shortTokens(view.usage.outputTokens, l))), REPORT_COPY.kOut),
+    kpi(view.usage.outputTokens === null ? "—" : both(textsOf((l) => shortTokens(view.usage.outputTokens!, l))), REPORT_COPY.kOut),
     kpi(view.usage.cacheHit === null ? "—" : percent(view.usage.cacheHit), REPORT_COPY.kCache),
   ].join("");
   const cal = calendar(view, lang);

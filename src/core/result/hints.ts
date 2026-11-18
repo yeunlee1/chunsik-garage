@@ -1,7 +1,7 @@
 // 정밀 점검 단서를 만든다. 규칙으로 찾을 수 있는 약한 신호이고 점수에 넣지 않는다. 도구마다의 단서 셋과 두 도구의 전역 지침을 견주는 단서다(순수 함수, 설계 17, 「5단계 4부 계획 전 결정」 8번)
 import type { ToolId } from "../../adapters/types.ts";
 import type { InstructionSet } from "../../scan/instructions.ts";
-import type { EvaluationInput, ToolInput } from "../evaluate.ts";
+import { setupTools, type EvaluationInput, type SetupToolInput } from "../evaluate.ts";
 import { ruleSpec } from "../rules.ts";
 
 /** 전역 지침에 한 프로젝트의 경로나 이름이 이만큼 이상 나오면 단서다 */
@@ -28,7 +28,7 @@ interface HintSetup {
   rootOf: Map<string, string>;
 }
 
-function hintSetup(tool: ToolInput, input: EvaluationInput): HintSetup {
+function hintSetup(tool: SetupToolInput, input: EvaluationInput): HintSetup {
   if (tool.tool === "claude-code") {
     const { setup } = tool;
     return {
@@ -91,7 +91,8 @@ function toolsDiffer(claude: InstructionSet, codex: InstructionSet): DeepHint | 
 }
 
 export function deepHints(input: EvaluationInput): DeepHint[] {
-  const tools = [...input.tools].sort((a, b) => byText(a.tool, b.tool));
+  // 웹 채팅에는 지침 파일이 없다
+  const tools = setupTools(input.tools).sort((a, b) => byText(a.tool, b.tool));
   const hints = tools.flatMap((tool) => toolHints(tool.tool, hintSetup(tool, input)));
   const claude = tools.find((tool) => tool.tool === "claude-code");
   const codex = tools.find((tool) => tool.tool === "codex");
@@ -121,7 +122,7 @@ export function deepFiles(input: EvaluationInput): DeepFile[] {
     seen.add(key);
     files.push({ ...entry, path: file.path, bytes: file.bytes });
   };
-  for (const tool of [...input.tools].sort((a, b) => byText(a.tool, b.tool))) {
+  for (const tool of setupTools(input.tools).sort((a, b) => byText(a.tool, b.tool))) {
     const setup = hintSetup(tool, input);
     for (const file of setup.globalInstructions.files) add(file, { tool: tool.tool, scope: "global", project: null, selected: true });
     for (const project of setup.projects) for (const file of project.instructions.files) if (!file.sameAsGlobal) add(file, { tool: tool.tool, scope: "project", project: project.root, selected: false });

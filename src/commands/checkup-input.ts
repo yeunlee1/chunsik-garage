@@ -11,6 +11,9 @@ import type { ToolCoverage } from "../adapters/types.ts";
 import { collectClaude, unreadableCount, type ClaudeCollectResult, type ClaudeReadStats, type EvalClock } from "../collect/claude.ts";
 import { codexUnreadableCount, collectCodex, type CodexCollectResult, type CodexReadStats } from "../collect/codex.ts";
 import { collectGemini, type GeminiCollectResult } from "../collect/gemini.ts";
+import { collectWeb, type WebCollectResult } from "../collect/web.ts";
+import { WEB_COVERAGE, WEB_OBSERVATION } from "../adapters/web/observation.ts";
+import type { WebExportEntry } from "../state/web-exports.ts";
 import type { EvaluationInput } from "../core/evaluate.ts";
 import type { SelfIdentity } from "../core/installs/candidates.ts";
 import type { CollectedTool } from "../core/result/tools.ts";
@@ -37,12 +40,14 @@ export interface CheckupInputOptions {
   self: SelfIdentity;
   /** 관리 정책 파일의 폴더. 주지 않으면 OS의 자리다 */
   managedDir?: string;
+  /** 가져온 웹 채팅 내보내기 파일의 자리(상태 폴더의 web-exports.json). 주지 않으면 웹 채팅이 없는 점검이다 */
+  webExports?: readonly WebExportEntry[];
 }
 
 export interface CheckupInput {
   input: EvaluationInput;
   /** 도구마다 모은 기록 */
-  collected: { claude: ClaudeCollectResult; codex: CodexCollectResult; gemini: GeminiCollectResult };
+  collected: { claude: ClaudeCollectResult; codex: CodexCollectResult; gemini: GeminiCollectResult; web: WebCollectResult[] };
   /** 도구마다의 셋팅 사실. 관측 기록을 고칠 때 쓴다(제미나이는 관측 기록에 넣는 설치가 없다) */
   facts: { claude: ClaudeSetupFacts; codex: CodexSetupFacts; gemini: GeminiSetupFacts };
   /** 평가 결과에 싣는 수집 결과(도구마다). 캐시를 쓴 파일 수처럼 실행마다 다른 것은 뺐다 */
@@ -88,6 +93,7 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
   const claude = await collectClaude(collectOptions);
   const codex = await collectCodex(collectOptions);
   const gemini = await collectGemini(collectOptions);
+  const web = await collectWeb(options.webExports ?? [], collectOptions);
 
   // 프로젝트 목록은 세 도구의 주 세션 가운데 수집 구간에 응답이 있는 것의 작업 폴더(세션마다 처음 적힌 것 하나)로 만든다. 하위 세션과 작업 폴더가 없는 세션은 넣지 않는다
   const collectDates = new Set(makeWindows(options.clock.nowMs, options.clock.timeZone).collectDates);
@@ -150,6 +156,8 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
         complete: { skills: geminiObserved.skills.complete, mcp: geminiObserved.mcp.complete },
         setup: geminiFacts,
       },
+      // 웹 채팅은 셋팅이 없고 작업 폴더도 없어 프로젝트 목록에 들지 않는다(설계 「0.5.0에서 정한 것」)
+      ...web.map((item) => ({ tool: item.tool, summaries: item.summaries, coverage: WEB_COVERAGE, shellTools: [], complete: { skills: false, mcp: false }, setup: null })),
     ],
     // Codex와 제미나이의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
     projects: claudeFacts.projects,
@@ -183,6 +191,10 @@ export async function gatherCheckupInput(options: CheckupInputOptions): Promise<
       },
     },
     { tool: "gemini", detected: gemini.detected, visibleFrom: gemini.visibleFrom, overlappingSessions: gemini.overlappingSessions, read: geminiRead, observation: geminiObserved },
+    ...web.map((item): CollectedTool => {
+      const { fromCache: _webFromCache, ...read } = item.read;
+      return { tool: item.tool, detected: item.detected, visibleFrom: item.visibleFrom, overlappingSessions: 0, read, observation: { skills: WEB_OBSERVATION, mcp: WEB_OBSERVATION }, web: item.state };
+    }),
   ];
-  return { input, collected: { claude, codex, gemini }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools };
+  return { input, collected: { claude, codex, gemini, web }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools };
 }

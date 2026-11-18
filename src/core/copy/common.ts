@@ -10,6 +10,8 @@ export const TOOL_NAMES: Record<ToolId, Texts<string>> = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
   codex: { en: "Codex", ko: "Codex" },
   gemini: { en: "Gemini CLI", ko: "Gemini CLI" },
+  "web-chatgpt": { en: "ChatGPT", ko: "ChatGPT" },
+  "web-claude": { en: "Claude.ai", ko: "Claude.ai" },
 };
 
 export const AXIS_NAMES: Record<Axis, Texts<string>> = {

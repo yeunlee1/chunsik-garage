@@ -13,6 +13,7 @@ import { appendHistory, historyCount, historyEntry, recentAq } from "../state/hi
 import { nextState, openState } from "../state/next-state.ts";
 import { KEEP_REPORTS, pruneReports, resultStamp, writeReport, writeResult, writeTempReport, writeTempResult } from "../state/reports.ts";
 import { loadState, saveState, type StateFile } from "../state/state.ts";
+import { readWebExports } from "../state/web-exports.ts";
 import { nextNames, notifyNames } from "../hook/notify.ts";
 import { PROGRAM_VERSION } from "../version.ts";
 import { gatherCheckupInput } from "./checkup-input.ts";
@@ -90,6 +91,8 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
   const started = now();
   // 저장하지 않는 실행도 지난 상태는 읽는다. 무작위 값과 관측 기록이 판정에 든다
   const opened = await openState(options.stateDir);
+  // 가져온 웹 채팅 내보내기의 자리. 목록이 깨졌으면 웹 채팅 없이 세고 알린다(0.5.0)
+  const webExports = await readWebExports(options.stateDir);
   const gathered = await gatherCheckupInput({
     env: options.env,
     homedir: options.homedir,
@@ -101,9 +104,10 @@ export async function runCheckup(options: CheckupOptions): Promise<CheckupOutcom
     state: opened.state,
     self: await selfIdentity(options.entryFile),
     ...(options.managedDir === undefined ? {} : { managedDir: options.managedDir }),
+    webExports: webExports.entries,
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken }, ignored: opened.broken ? [] : (opened.state.ignoredRules ?? []) });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken, webExportsBroken: webExports.status === "broken" }, ignored: opened.broken ? [] : (opened.state.ignoredRules ?? []) });
   const stamp = resultStamp(options.clock.nowMs);
 
   const notices: RunNotice[] = [];

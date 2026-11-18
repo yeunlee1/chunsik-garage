@@ -27,9 +27,9 @@ export const GRADE_COPY: Record<1 | 2 | 3 | 4 | 5, Texts<{ name: string; diagnos
 };
 
 /** AQ를 내지 않았을 때의 한 줄. 기록이 모자라면 필요한 기록이 부족하다고 하고(쌓이기만 하면 점수가 나온다고 약속하지 않는다), 잰 기준이 없을 뿐이면 그렇게 말한다 */
-const WITHHELD_COPY: Texts<{ records: string; noAxes: string }> = {
-  en: { records: "There are not enough records for a score yet. Try another checkup after more use has been recorded.", noAxes: "No criterion could be measured, so there is no score." },
-  ko: { records: "점수를 내는 데 필요한 기록이 부족합니다. 사용 기록이 더 쌓인 뒤 다시 점검해 보세요.", noAxes: "잴 수 있는 기준이 없어 점수를 내지 못했습니다." },
+const WITHHELD_COPY: Texts<{ records: string; noAxes: string; webOnly: string }> = {
+  en: { records: "There are not enough records for a score yet. Try another checkup after more use has been recorded.", noAxes: "No criterion could be measured, so there is no score.", webOnly: "Only web chats were used lately, so there is no score. Use Claude Code, Codex, or Gemini CLI and check again." },
+  ko: { records: "점수를 내는 데 필요한 기록이 부족합니다. 사용 기록이 더 쌓인 뒤 다시 점검해 보세요.", noAxes: "잴 수 있는 기준이 없어 점수를 내지 못했습니다.", webOnly: "최근에는 웹 채팅만 써서 점수를 내지 않았습니다. Claude Code, Codex, Gemini CLI를 쓴 뒤 다시 점검해 보세요." },
 };
 
 /** 빈 목록의 문장(설계 11.5 「빈 목록」) */
@@ -54,7 +54,7 @@ export function resultText(score: Overall, categories: readonly Category[], lang
   const fewRecords = score.withheld.includes("too_few_requests") || score.withheld.includes("too_few_days");
   return {
     grade: score.tier === null ? null : GRADE_COPY[score.tier][lang].name,
-    diagnosis: score.tier !== null ? GRADE_COPY[score.tier][lang].diagnosis : fewRecords ? WITHHELD_COPY[lang].records : WITHHELD_COPY[lang].noAxes,
+    diagnosis: score.tier !== null ? GRADE_COPY[score.tier][lang].diagnosis : fewRecords ? WITHHELD_COPY[lang].records : score.withheld.includes("no_setup_tools") ? WITHHELD_COPY[lang].webOnly : WITHHELD_COPY[lang].noAxes,
     noStrengths: categories.includes("strength") ? null : EMPTY_COPY[lang].strengths,
     noRepairs: categories.includes("repair") ? null : EMPTY_COPY[lang].repairs,
   };

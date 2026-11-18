@@ -7,7 +7,7 @@ import type { Lang, Texts } from "../copy/lang.ts";
 import { nextGradeText } from "../copy/next-grade.ts";
 import { noticeText } from "../copy/notices.ts";
 import type { McpFact, SecretFact } from "../../scan/types.ts";
-import type { Evaluation, EvaluationInput } from "../evaluate.ts";
+import { setupTools, type Evaluation, type EvaluationInput } from "../evaluate.ts";
 import type { Candidate } from "../installs/candidates.ts";
 import { anyIn, calledMcpNames } from "../installs/signals.ts";
 import { nextGrade, type NextGrade } from "../next-grade.ts";
@@ -32,7 +32,7 @@ export interface ResultInput {
   collected: readonly CollectedTool[];
   appVersion: string;
   lang: Lang;
-  run: { stateBroken: boolean };
+  run: { stateBroken: boolean; webExportsBroken?: boolean };
   /** 사용자가 그대로 두기로 한 규칙(0.3.0). 다음 등급의 차례에서 빼고 결과에 싣는다. 점수는 그대로다 */
   ignored?: readonly RuleId[];
 }
@@ -154,7 +154,7 @@ function failedMcpServers(evaluation: Evaluation): FailedServer[] {
 
 function credentialPlaces(input: EvaluationInput): SecretPlace[] {
   const names = new Map(input.projects.map((project) => [project.normRoot, project.name]));
-  return [...input.tools]
+  return setupTools(input.tools)
     .sort((a, b) => byText(a.tool, b.tool))
     .flatMap((tool) => tool.setup.secrets.map((secret): SecretPlace => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : (names.get(secret.projectRoot) ?? null), field: secret.field, key: secret.key, ...(secret.copy === undefined ? {} : { copy: secret.copy }) })));
 }

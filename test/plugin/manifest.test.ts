@@ -43,7 +43,8 @@ describe("Claude Code 마켓 목록", () => {
 });
 
 /** Codex 플러그인 정보에 쓰는 열쇠. Codex 매니페스트의 칸만 쓰고 저작자·저장소·라이선스는 넣지 않는다(「5단계 5부 계획 전 결정」 2번) */
-const CODEX_PLUGIN_KEYS = ["description", "hooks", "interface", "keywords", "name", "skills", "version"];
+// 0.5.0에서 공식 문서의 Codex 형식 칸(만든 이, 집 주소, 저장소, 라이선스)을 더했다
+const CODEX_PLUGIN_KEYS = ["author", "description", "homepage", "hooks", "interface", "keywords", "license", "name", "repository", "skills", "version"];
 
 describe("Codex 플러그인 정보(설계 7.1, 「5단계 5부 계획 전 결정」 2번)", () => {
   it("이름·버전·설명·찾기 낱말은 Claude Code 플러그인 정보와 같고, 스킬 자리는 ./skills/, 훅은 빈 묶음이다", () => {
@@ -53,15 +54,22 @@ describe("Codex 플러그인 정보(설계 7.1, 「5단계 5부 계획 전 결�
     expect([codex.name, codex.version, codex.description, codex.keywords]).toEqual([claude.name, claude.version, claude.description, claude.keywords]);
     expect(codex.skills).toBe("./skills/");
     expect(codex.hooks).toEqual({});
+    expect([codex.author, codex.homepage, codex.repository, codex.license]).toEqual([{ ...(claude.author as object), url: "https://github.com/yeunlee1" }, claude.homepage, claude.repository, claude.license]);
   });
 
-  it("화면에 보일 이름, 짧은 설명, 만든 이, 집 주소를 interface에 둔다", () => {
-    expect(json(".codex-plugin/plugin.json").interface).toEqual({
-      displayName: "Chunsik's Garage",
-      shortDescription: "AQ checkup for your AI coding tools",
-      developerName: "yeunlee1",
-      websiteURL: "https://github.com/yeunlee1/chunsik-garage",
-    });
+  it("화면에 보일 이름, 짧은 설명, 만든 이, 집 주소와 Codex 형식의 필수 칸(긴 설명, 분류, 기능, 입력창 아이콘, 대표 그림)을 interface에 둔다(0.5.0)", () => {
+    const ui = json(".codex-plugin/plugin.json").interface as Record<string, unknown>;
+    expect(Object.keys(ui).sort()).toEqual(["capabilities", "category", "composerIcon", "developerName", "displayName", "logo", "longDescription", "shortDescription", "websiteURL"]);
+    expect(ui).toMatchObject({ displayName: "Chunsik's Garage", shortDescription: "AQ checkup for your AI coding tools", developerName: "yeunlee1", websiteURL: "https://github.com/yeunlee1/chunsik-garage", category: "Developer Tools", capabilities: ["Read", "Write"] });
+    expect((ui.longDescription as string).length).toBeLessThanOrEqual(4000);
+    // 아이콘은 플러그인 뿌리 안의 ./로 시작하는 PNG이고, 목록 검사의 한도(50KiB) 안이다
+    for (const key of ["composerIcon", "logo"]) {
+      const path = ui[key] as string;
+      expect(path.startsWith("./skills/aq/assets/") && path.endsWith(".png")).toBe(true);
+      const bytes = readFileSync(path);
+      expect(bytes.subarray(1, 4).toString("latin1")).toBe("PNG");
+      expect(bytes.length).toBeLessThanOrEqual(50 * 1024);
+    }
   });
 });
 
@@ -72,7 +80,8 @@ describe("Codex 마켓 목록(설계 7.1, 「5단계 5부 계획 전 결정」 3
     expect(Object.keys(market).sort()).toEqual(["interface", "name", "plugins"]);
     expect(market.name).toBe("chunsik-garage");
     expect(market.interface).toEqual({ displayName: "Chunsik's Garage" });
-    expect(market.plugins).toEqual([{ name: codex.name, source: "./", version: codex.version, description: codex.description }]);
+    // 0.5.0부터 공식 문서의 꼴대로 source를 객체로 적고 설치 정책과 분류를 넣는다(문서에 「Always include policy.installation, policy.authentication, and category」)
+    expect(market.plugins).toEqual([{ name: codex.name, source: { source: "local", path: "./" }, policy: { installation: "AVAILABLE", authentication: "ON_INSTALL" }, category: "Developer Tools", version: codex.version, description: codex.description }]);
   });
 });
 

@@ -1,13 +1,14 @@
-// 평가 결과의 알림 스물세 종류의 문장을 본다. 두 언어로 만들고, 수와 정해진 값만 넣고 이름과 경로는 넣지 않는다(설계 12.2, 19.1, 20.1)
+// 평가 결과의 알림 스물여덟 종류의 문장을 본다. 두 언어로 만들고, 수와 정해진 값만 넣고 이름과 경로는 넣지 않는다(설계 12.2, 19.1, 20.1)
 import { describe, expect, it } from "vitest";
 import { noticeText } from "../../src/core/copy/notices.ts";
 import { LANGS } from "../../src/core/copy/lang.ts";
 import { NOTICE_KINDS, type Notice } from "../../src/core/result/notices.ts";
 
-/** 알림 스물세 종류. 경로와 이름에는 secret을 넣어 문장에 새지 않는지 본다 */
+/** 알림 스물여덟 종류. 경로와 이름에는 secret을 넣어 문장에 새지 않는지 본다 */
 const ALL: Notice[] = [
   { kind: "score_withheld", reasons: ["too_few_requests", "too_few_days"] },
   { kind: "state_reset" },
+  { kind: "web_exports_reset" },
   {
     kind: "credentials_in_config",
     tool: "claude-code",
@@ -19,11 +20,15 @@ const ALL: Notice[] = [
   { kind: "record_unreadable", tool: "claude-code", files: ["/secret/a.jsonl", "/secret/b.jsonl"], dirs: ["/secret/dir"] },
   { kind: "record_skipped", tool: "codex", files: ["/secret/a.jsonl.zst"] },
   { kind: "record_partial", tool: "codex", files: ["/secret/p.jsonl.zst", "/secret/q.jsonl.zst"] },
+  { kind: "web_export_missing", tool: "web-chatgpt", path: "/secret/chatgpt.zip" },
+  { kind: "web_export_unreadable", tool: "web-claude", path: "/secret/claude.zip", problem: "zip-crc" },
+  { kind: "web_export_partial", tool: "web-chatgpt", skipped: 3, truncated: true },
   { kind: "observation_incomplete", tool: "claude-code", metric: "skills", reasons: ["unreadable-files", "too-long-lines"] },
   { kind: "setup_unreadable", tool: "claude-code", what: "project_settings", targets: ["/secret/p1", "/secret/p2"] },
   { kind: "plugins_uncounted", tool: "claude-code", why: "composition_unknown", plugins: ["secret@market"] },
   { kind: "setup_problems_unscored", tool: "claude-code", problems: [{ kind: "unparsable", path: "/secret/plugin/hooks.json" }, { kind: "danglingLink", path: "/secret/link" }] },
   { kind: "projects_gone", projects: ["/secret/gone"] },
+  { kind: "web_export_until", tool: "web-claude", lastDate: "2026-11-12" },
   { kind: "version_unverified", tool: "claude-code", versions: ["2.1.400"], verified: { from: "2.1.220", to: "2.1.322" } },
   { kind: "weak_human_requests", tool: "claude-code", weak: 5, total: 40 },
   { kind: "overlapping_responses", tool: "claude-code", sessions: 2 },
@@ -41,7 +46,7 @@ const of = (kind: Notice["kind"]): Notice => ALL.find((notice) => notice.kind ==
 const numbers = (text: string): string[] => (text.match(/\d+(?:\.\d+)*/g) ?? []).sort();
 
 describe("알림의 문장", () => {
-  it("스물세 종류를 모두 담았다", () => {
+  it("스물여덟 종류를 모두 담았다", () => {
     expect(ALL.map((notice) => notice.kind)).toEqual(NOTICE_KINDS);
   });
 

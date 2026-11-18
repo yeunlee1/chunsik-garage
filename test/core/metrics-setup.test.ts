@@ -260,9 +260,9 @@ describe("S3 설정이 깨지지 않았다", () => {
     const twoTools = [tool({ problems: [problem("unparsable", "/work/a/.mcp.json")] }), codexTool({ problems: [problem("unparsable", "/work/a/.mcp.json")] })];
     expect(mergedSetupRules(twoTools).S3).toMatchObject({ status: "scored", value: 1 });
   });
-  it("문제가 없어도, 쓰는 도구가 없어도 잰다", () => {
+  it("문제가 없어도 잰다. 셋팅을 읽은 도구가 점수에 없으면 문제가 없다고 말할 수 없어 기록 없음이다(0.5.0, 웹 채팅만 있는 점검)", () => {
     expect(mergedSetupRules([tool()]).S3).toEqual({ status: "scored", value: 0, evidence: { danglingLinks: 0, noFrontmatter: 0, problems: 0, unparsable: 0 } });
-    expect(mergedSetupRules([]).S3).toMatchObject({ status: "scored", value: 0 });
+    expect(mergedSetupRules([]).S3).toEqual({ status: "unmeasured", reason: "no_data", evidence: { danglingLinks: 0, noFrontmatter: 0, problems: 0, unparsable: 0 } });
   });
 });
 

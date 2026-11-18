@@ -2,6 +2,7 @@
 import { CLAUDE_COVERAGE } from "../../src/adapters/claude/observation.ts";
 import { CODEX_COVERAGE } from "../../src/adapters/codex/observation.ts";
 import { CODEX_SHELL_TOOLS } from "../../src/adapters/codex/parser.ts";
+import { WEB_COVERAGE } from "../../src/adapters/web/observation.ts";
 import type { ToolCoverage } from "../../src/adapters/types.ts";
 import type { EvaluationInput, ToolInput } from "../../src/core/evaluate.ts";
 import { NO_SELF } from "../../src/core/installs/candidates.ts";
@@ -49,6 +50,11 @@ export function codexTool(input: CodexToolInput = {}): ToolInput {
     complete: { skills: false, mcp: true, ...input.complete },
     setup: codexFacts(input.setup),
   };
+}
+
+/** 웹 채팅 하나의 입력. 셋팅이 없고, 대화마다 주 세션이며 작업 폴더와 버전이 없다(0.5.0) */
+export function webTool(tool: "web-chatgpt" | "web-claude", sessions: SummaryInput[] = []): ToolInput {
+  return { tool, summaries: sessions.map((session) => summary({ tool, cwd: null, version: null, ...session })), coverage: WEB_COVERAGE, shellTools: [], complete: { skills: false, mcp: false }, setup: null };
 }
 
 /** 같은 정체로 9월 1일부터 지켜본 관측 기록. 정체가 없는 서버는 적지 않는다 */

@@ -6,6 +6,7 @@ import { runCheckup } from "./commands/checkup.ts";
 import { runDeepHints } from "./commands/deep-hints.ts";
 import { runNotify } from "./commands/notify.ts";
 import { runIgnore } from "./commands/ignore.ts";
+import { runImportAdd, runImportList, runImportRemove } from "./commands/import.ts";
 import { runTunePlan } from "./commands/tune-plan.ts";
 import { runTuneApply, runTuneUndo, runTuneVerify, type TuneRunOptions } from "./commands/tune-run.ts";
 import { openInBrowser } from "./commands/open.ts";
@@ -142,6 +143,22 @@ async function run(command: string | undefined, rest: string[], context: CliCont
     const args = checkupArgs(rest.slice(action === "list" ? 1 : 2), new Set());
     if (args === null || (action !== "list" && (rule === null || rule.startsWith("--")))) return null;
     printJson(await runIgnore(action, rule, { stateDir: stateDir(context.homedir), lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
+    return 0;
+  }
+  if (command === "import" && (rest[0] === "add" || rest[0] === "remove" || rest[0] === "list")) {
+    // 웹 채팅 내보내기 파일을 넣고 빼고 본다(0.5.0). add는 파일 경로, remove는 chatgpt나 claude를 받는다
+    const action = rest[0];
+    const target = action === "list" ? null : (rest[1] ?? null);
+    const args = checkupArgs(rest.slice(action === "list" ? 1 : 2), action === "add" ? new Set(["--no-save"]) : new Set());
+    if (args === null || (action !== "list" && (target === null || target.startsWith("--")))) return null;
+    const common = {
+      stateDir: stateDir(context.homedir),
+      clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
+    };
+    if (action === "add") printJson(await runImportAdd(target!, { ...common, cache: !args.flags.has("--no-save") }));
+    else if (action === "remove") printJson(await runImportRemove(target, common));
+    else printJson(await runImportList(common));
     return 0;
   }
   if (command === "deep-hints") {

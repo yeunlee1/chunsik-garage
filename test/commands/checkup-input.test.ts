@@ -113,19 +113,19 @@ describe("gatherCheckupInput", () => {
     const gathered = await gatherCheckupInput(options({ state: { salt: SALT, installs: records }, self }));
     const { input } = gathered;
     expect(input.clock).toEqual({ nowMs: NOW, timeZone: "Asia/Seoul" });
-    expect(input.tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini"]);
+    expect(input.tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini", "web-chatgpt", "web-claude"]);
     const tool = input.tools[0]!;
     expect(tool).toMatchObject({ tool: "claude-code", coverage: CLAUDE_COVERAGE, shellTools: ["Bash", "PowerShell"], complete: { skills: true, mcp: true } });
     expect(tool.summaries.map((summary) => summary.sessionId).sort()).toEqual(["s1", "s2", "s3"]);
     expect(tool.setup).toBe(gathered.facts.claude);
-    expect(tool.setup.skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(tool.setup!.skills.map((skill) => skill.name)).toEqual(["review"]);
     expect(input.installs).toBe(records);
     expect(input.self).toBe(self);
     expect(gathered.collected.claude.summaries).toBe(tool.summaries);
   });
   it("프로젝트 목록은 수집 구간에 응답이 있는 주 세션의 작업 폴더로 만든다. 하위 폴더에서 연 세션은 같은 프로젝트로 묶인다", async () => {
     const { input } = await gatherCheckupInput(options());
-    expect(input.projects).toBe(input.tools[0]!.setup.projects);
+    expect(input.projects).toBe(input.tools[0]!.setup!.projects);
     expect(input.tools[0]!.tool).toBe("claude-code");
     expect(input.projects.map((project) => [project.normRoot, project.kind, project.cwds])).toEqual([[normalizePath(proj), "git", [normalizePath(proj), normalizePath(join(proj, "sub"))]]]);
   });
@@ -146,7 +146,7 @@ describe("gatherCheckupInput", () => {
   it("기록 폴더가 없어도 입력 묶음을 만든다. 평가는 점수 없이 나온다", async () => {
     const { input, collected } = await gatherCheckupInput(options({ homedir: join(root, "nobody") }));
     expect([collected.claude.detected, collected.codex.detected, collected.gemini.detected]).toEqual([false, false, false]);
-    expect(input.tools.map((tool) => tool.summaries)).toEqual([[], [], []]);
+    expect(input.tools.map((tool) => tool.summaries)).toEqual([[], [], [], [], []]);
     expect(evaluate(input).score).toMatchObject({ aq: null, grade: null });
   });
 });
@@ -168,7 +168,7 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
 
   it("결과에 싣는 Codex의 수집 결과는 Claude Code와 같은 칸이다. 겹쳐 세는 응답은 없다", async () => {
     const { tools } = await gatherCheckupInput(options());
-    expect(tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini"]);
+    expect(tools.map((tool) => tool.tool)).toEqual(["claude-code", "codex", "gemini", "web-chatgpt", "web-claude"]);
     expect(tools[1]).toMatchObject({ detected: true, overlappingSessions: 0, observation: { skills: { complete: false, reasons: ["not-recorded"] }, mcp: { complete: true, reasons: [] } } });
     expect(Object.keys(tools[1]!.read).sort()).toEqual(Object.keys(tools[0]!.read).sort());
     expect(tools[1]!.read).toMatchObject({ files: 1, unreadableFiles: [] });
@@ -214,6 +214,8 @@ describe("gatherCheckupInput의 Codex(설계 「5단계 3부 계획 전 결정�
       ["claude-code", true, 2],
       ["codex", true, 1],
       ["gemini", false, 0],
+      ["web-chatgpt", false, 0],
+      ["web-claude", false, 0],
     ]);
     const e1 = result.findings.find((f) => f.ruleId === "E1")!;
     expect(e1.tools.find((value) => value.tool === "codex")).toMatchObject({ status: "scored", value: 0.6 });
@@ -278,6 +280,8 @@ describe("gatherCheckupInput의 Gemini CLI(설계 「0.4.0에서 정한 것」)"
       ["claude-code", true, 2, 3],
       ["codex", false, 0, 0],
       ["gemini", true, 1, 1],
+      ["web-chatgpt", false, 0, 0],
+      ["web-claude", false, 0, 0],
     ]);
     const finding = (id: string) => result.findings.find((f) => f.ruleId === id)!;
     expect(finding("E1").tools.find((value) => value.tool === "gemini")).toMatchObject({ status: "scored", value: 0.4 });
@@ -337,6 +341,8 @@ describe("모은 입력으로 평가한 결과", () => {
       ["claude-code", true, 2, 3],
       ["codex", false, 0, 0],
       ["gemini", false, 0, 0],
+      ["web-chatgpt", false, 0, 0],
+      ["web-claude", false, 0, 0],
     ]);
     expect(finding("E1")).toMatchObject({ status: "scored", value: 0.8 });
     expect(finding("S1")).toMatchObject({ status: "scored", value: 1 });

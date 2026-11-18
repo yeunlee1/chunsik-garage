@@ -100,7 +100,16 @@ function summaryNotice(notice: Notice): SummaryNotice {
   switch (notice.kind) {
     case "score_withheld":
     case "state_reset":
+    case "web_exports_reset":
+    case "web_export_missing":
       return { kind: notice.kind, tool, detail: null, count: null };
+    case "web_export_unreadable":
+      return { kind: notice.kind, tool, detail: notice.problem, count: null };
+    case "web_export_partial":
+      return { kind: notice.kind, tool, detail: notice.truncated ? "truncated" : null, count: notice.skipped };
+    case "web_export_until":
+      // 내보내기의 마지막 날짜를 detail에 싣는다
+      return { kind: notice.kind, tool, detail: notice.lastDate, count: null };
     case "credentials_in_config":
       return { kind: notice.kind, tool, detail: null, count: notice.places.length };
     case "record_unreadable":

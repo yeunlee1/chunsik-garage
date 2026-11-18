@@ -3,6 +3,7 @@ import type { LocalDate } from "../../adapters/common/dates.ts";
 import type { Observation } from "../../adapters/claude/observation.ts";
 import type { ToolId } from "../../adapters/types.ts";
 import type { ClaudeReadStats } from "../../collect/claude.ts";
+import type { WebExportState } from "../../collect/web.ts";
 import type { Evaluation, EvaluationInput } from "../evaluate.ts";
 
 /**
@@ -41,6 +42,8 @@ export interface CollectedTool {
   observation: { skills: Observation; mcp: Observation };
   /** Codex만 내는 것. Claude Code에는 없다 */
   codex?: CollectedCodex;
+  /** 웹 채팅만 내는 것. 넣은 내보내기 파일의 상태다(0.5.0) */
+  web?: WebExportState;
 }
 
 export interface ResultTool {
@@ -66,7 +69,7 @@ export interface ResultTool {
  * 도구마다의 기록 형식. Claude Code는 한 형식이다. Codex는 새 형식과 옛 형식이 한 파일에 이어질 수 있어 하나로 본다(설계 9.6).
  * 제미나이는 줄마다 하나인 JSONL과, 메시지 목록이 든 옛 JSON 파일이 있다(설계 「0.4.0에서 정한 것」)
  */
-const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"] };
+const FORMATS: Record<ToolId, readonly string[]> = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"], "web-chatgpt": ["chatgpt-export"], "web-claude": ["claude-export"] };
 
 const inRange = (date: string, range: { from: LocalDate; to: LocalDate }): boolean => date >= range.from && date <= range.to;
 
@@ -76,6 +79,9 @@ export function resultTools(input: EvaluationInput, evaluation: Evaluation, coll
     const summaries = input.tools.find((item) => item.tool === tool.tool)?.summaries ?? [];
     const subSessions = summaries.filter((summary) => summary.kind === "sub" && Object.entries(summary.days).some(([date, day]) => inRange(date, evaluation.windows.score) && day.responses > 0)).length;
     const visibleFrom = found?.visibleFrom ?? null;
+    // 웹 채팅 내보내기에는 내보낸 날 뒤의 대화가 없다. 볼 수 있는 범위의 끝은 그 마지막 날이다(0.5.0)
+    const lastDate = found?.web?.lastDate ?? null;
+    const visibleTo = lastDate !== null && lastDate < evaluation.windows.today ? lastDate : evaluation.windows.today;
     return {
       tool: tool.tool,
       detected: found?.detected ?? false,
@@ -86,7 +92,8 @@ export function resultTools(input: EvaluationInput, evaluation: Evaluation, coll
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom === null ? null : { from: visibleFrom, to: evaluation.windows.today },
+      // 내보내기가 모두 수집 구간보다 오래되면 볼 수 있는 날이 없다(짝 검토 5 필수 8)
+      visible: visibleFrom === null || visibleTo < visibleFrom ? null : { from: visibleFrom, to: visibleTo },
     };
   });
 }

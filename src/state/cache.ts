@@ -92,7 +92,8 @@ export async function keyStillMatches(path: string, key: CacheKey): Promise<bool
   return now !== null && sameKey(now, key);
 }
 
-function entryPath(dir: string, normPath: string): string {
+/** 캐시 항목 파일의 자리. 이름은 정규화한 원본 경로의 지문 앞 32자다(웹 채팅 캐시도 같은 이름을 써서 정리 대상이 된다) */
+export function entryPath(dir: string, normPath: string): string {
   return join(dir, `${sha256(normPath).slice(0, 32)}.json`);
 }
 

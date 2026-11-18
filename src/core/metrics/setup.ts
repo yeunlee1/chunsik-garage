@@ -163,7 +163,9 @@ function s5(tool: ToolSetup): Measurement {
 export function mergedSetupRules(tools: readonly ToolSetup[]): Record<"S1" | "S2" | "S3", Measurement> & { safeguards: ToolSafeguard[]; setupProblems: CountedProblem[] } {
   const safeguards = tools.map(safeguardOf);
   const setupProblems = countedProblems(tools);
-  return { S1: s1(tools), S2: s2(safeguards), S3: s3(setupProblems), safeguards, setupProblems };
+  // 셋팅을 읽은 도구가 없으면(웹 채팅만 있으면) 문제가 없다고 말할 수 없다. 0개를 만점으로 세지 않는다(설계 「0.5.0에서 정한 것」)
+  const S3 = tools.length === 0 ? unmeasured("no_data", { danglingLinks: 0, noFrontmatter: 0, problems: 0, unparsable: 0 }) : s3(setupProblems);
+  return { S1: s1(tools), S2: s2(safeguards), S3, safeguards, setupProblems };
 }
 
 /** 도구 하나에서 재는 셋팅 규칙 */

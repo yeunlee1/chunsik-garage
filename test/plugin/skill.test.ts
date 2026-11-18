@@ -89,6 +89,16 @@ describe("실행 명령", () => {
         expect(checkupArgs(args.slice(1), new Set())).toEqual({ flags: new Set(), lang: "ko" });
       }
       else if (sub === "tune" && args[0] === "plan") expect(checkupArgs(args.slice(1), new Set(["--no-save", "--rescan"]))).toEqual({ flags: new Set(), lang: "ko" });
+      else if (sub === "import") {
+        // 웹 채팅 내보내기(0.5.0). add는 따옴표 친 경로 자리, remove는 chatgpt나 claude, list는 인자가 없다
+        const [action, ...rest] = args;
+        if (action === "list") expect(checkupArgs(rest, new Set())).toEqual({ flags: new Set(), lang: "ko" });
+        else {
+          expect(["add", "remove"]).toContain(action);
+          expect(action === "add" ? rest[0] === '"<path>"' : ["chatgpt", "claude"].includes(rest[0]!)).toBe(true);
+          expect(checkupArgs(rest.slice(1), new Set())).toEqual({ flags: new Set(), lang: "ko" });
+        }
+      }
       else if (sub === "ignore") {
         // 그대로 둘 항목(0.3.0). 자리 표시 <rule ID>는 규칙 ID 하나다
         const [action, rule, ...rest] = command.slice(`${COMMAND} `.length).replace("<lang>", "ko").replace("<rule ID>", "F1").split(" ").slice(1);

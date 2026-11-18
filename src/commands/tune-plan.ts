@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { EvalClock } from "../collect/claude.ts";
 import type { Lang } from "../core/copy/lang.ts";
-import { evaluate, type Evaluation, type EvaluationInput } from "../core/evaluate.ts";
+import { evaluate, setupTools, type Evaluation, type EvaluationInput } from "../core/evaluate.ts";
 import { highestMainVersion } from "../core/metrics/setup.ts";
 import { openState } from "../state/next-state.ts";
 import { fingerprintOf, readTarget, targetPath, tuneItem, type TargetRead, type TuneItem } from "../tune/items.ts";
@@ -74,7 +74,8 @@ export async function judgeTune(options: JudgeOptions): Promise<Judged> {
   const reads = new Map<string, TargetRead>();
   const items: TuneItem[] = [];
   for (const candidate of evaluation.candidates) {
-    const input = gathered.input.tools.find((tool) => tool.tool === candidate.tool)!;
+    // 정비 후보는 셋팅 사실이 있는 도구에서만 나온다
+    const input = setupTools(gathered.input.tools).find((tool) => tool.tool === candidate.tool)!;
     const judged = evaluation.tools.find((tool) => tool.tool === candidate.tool)!;
     const home = input.setup.home;
     const path = targetPath(candidate, home);

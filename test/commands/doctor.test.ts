@@ -100,6 +100,23 @@ describe("doctor", () => {
     expect(printed.claudeCode.projectsFound).toBe(false);
     expect(printed.codex.sessionsFound).toBe(false);
     expect(printed.gemini.tmpFound).toBe(false);
-    expect(Object.keys(printed)).toEqual(["node", "zstd", "claudeCode", "codex", "gemini", "state"]);
+    expect(Object.keys(printed)).toEqual(["node", "zstd", "claudeCode", "codex", "gemini", "web", "state"]);
+    expect(printed.web).toEqual({ list: "missing", exports: [] });
+  });
+
+  it("넣은 웹 채팅 내보내기 파일마다 있는지와 크기를 낸다. 파일을 열지 않는다. 목록이 깨졌으면 broken이다(0.5.0)", async () => {
+    const state = stateDir(root);
+    await mkdir(state, { recursive: true });
+    const there = join(root, "chatgpt.zip");
+    await writeFile(there, "12345");
+    await writeFile(join(state, "web-exports.json"), JSON.stringify({ schema: 1, exports: [{ tool: "web-chatgpt", path: there, addedAt: "2026-11-18T00:00:00Z" }, { tool: "web-claude", path: join(root, "gone.zip"), addedAt: "2026-11-18T00:00:00Z" }] }));
+    const report = await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state });
+    expect(report.web).toEqual({ list: "ok", exports: [{ tool: "web-chatgpt", path: there, exists: true, bytes: 5 }, { tool: "web-claude", path: join(root, "gone.zip"), exists: false, bytes: null }] });
+    // 폴더로 넣은 내보내기도 있는 것이다(짝 검토 5 필수 6). 폴더의 크기는 재지 않는다
+    await mkdir(join(root, "extracted"));
+    await writeFile(join(state, "web-exports.json"), JSON.stringify({ schema: 1, exports: [{ tool: "web-chatgpt", path: join(root, "extracted"), addedAt: "2026-11-18T00:00:00Z" }] }));
+    expect((await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state })).web.exports).toEqual([{ tool: "web-chatgpt", path: join(root, "extracted"), exists: true, bytes: null }]);
+    await writeFile(join(state, "web-exports.json"), "{");
+    expect((await doctor({ env: {}, homedir: root, nodeVersion: "v24.0.0", nodeOk: true, stateDir: state })).web).toEqual({ list: "broken", exports: [] });
   });
 });

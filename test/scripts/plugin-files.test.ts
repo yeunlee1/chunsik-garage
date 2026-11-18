@@ -40,7 +40,9 @@ const EXPECTED = [
   "hooks/session-start.mjs",
   "skills/aq/SKILL.md",
   "skills/aq/assets/ART-LICENSE.md",
+  "skills/aq/assets/composer-icon.png",
   "skills/aq/assets/icon.png",
+  "skills/aq/assets/logo.png",
   ...Object.values(ART_FILES).map((file) => `skills/aq/assets/${file}`),
   "skills/aq/scripts/aq.mjs",
 ].sort();

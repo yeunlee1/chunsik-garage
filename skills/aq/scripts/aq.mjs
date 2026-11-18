@@ -2970,6 +2970,8 @@ function resultTools(input, evaluation, collected) {
     const summaries = input.tools.find((item2) => item2.tool === tool.tool)?.summaries ?? [];
     const subSessions = summaries.filter((summary) => summary.kind === "sub" && Object.entries(summary.days).some(([date, day]) => inRange2(date, evaluation.windows.score) && day.responses > 0)).length;
     const visibleFrom2 = found?.visibleFrom ?? null;
+    const lastDate = found?.web?.lastDate ?? null;
+    const visibleTo = lastDate !== null && lastDate < evaluation.windows.today ? lastDate : evaluation.windows.today;
     return {
       tool: tool.tool,
       detected: found?.detected ?? false,
@@ -2980,7 +2982,7 @@ function resultTools(input, evaluation, collected) {
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom2 === null ? null : { from: visibleFrom2, to: evaluation.windows.today }
+      visible: visibleFrom2 === null ? null : { from: visibleFrom2, to: visibleTo }
     };
   });
 }
@@ -8156,12 +8158,13 @@ async function collectGeminiFromList(home, list, options) {
 }
 
 // src/collect/web.ts
+import { createHash as createHash4 } from "node:crypto";
 import { mkdir as mkdir7, readFile as readFile8, rename as rename6, stat as stat7, writeFile as writeFile6 } from "node:fs/promises";
 import { join as join18 } from "node:path";
 
 // src/adapters/web/source.ts
 import { createReadStream as createReadStream3 } from "node:fs";
-import { mkdtemp, open as open6, rm as rm5, stat as stat6 } from "node:fs/promises";
+import { mkdtemp, open as open6, readdir as readdir7, rm as rm5, stat as stat6 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename as basename3, join as join17 } from "node:path";
 
@@ -8199,32 +8202,82 @@ function chatgptConversation(value) {
   const note = (kind) => {
     unknownKinds[kind] = (unknownKinds[kind] ?? 0) + 1;
   };
-  const visible = [];
-  for (const raw of Object.values(mapping)) {
+  const nodes = /* @__PURE__ */ new Map();
+  for (const [key, raw] of Object.entries(mapping)) {
     const node = obj4(raw);
     if (node === null) {
       note("(node)");
       continue;
     }
+    const parent = str4(node.parent);
     const message = obj4(node.message);
-    if (message === null) continue;
+    if (message === null) {
+      nodes.set(key, { key, parent, role: null, atMs: null, model: null });
+      continue;
+    }
     const role = str4(obj4(message.author)?.role);
     const metadata = obj4(message.metadata);
     const contentType = str4(obj4(message.content)?.content_type);
     if (contentType !== null && !KNOWN_TYPES.has(contentType)) note(contentType);
     if (role !== null && !KNOWN_ROLES.has(role)) note(`role:${role}`);
     const hidden = metadata?.is_visually_hidden_from_conversation === true || metadata?.is_user_system_message === true || contentType !== null && CONTEXT_TYPES.has(contentType);
-    if (hidden || role !== "user" && role !== "assistant") continue;
-    visible.push({ role, atMs: secondsToMs(message.create_time) ?? fallbackMs, model: role === "assistant" ? str4(metadata?.model_slug) ?? defaultModel : null });
+    const shown = hidden ? null : role === "user" || role === "assistant" ? role : role === "tool" ? "tool" : null;
+    nodes.set(key, { key, parent, role: shown, atMs: secondsToMs(message.create_time) ?? fallbackMs, model: shown === "assistant" ? str4(metadata?.model_slug) ?? defaultModel : null });
   }
-  visible.sort((a, b) => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY));
+  const BROKEN_DEPTH = 1e6;
+  const depthCache = /* @__PURE__ */ new Map();
+  const depthOf = (start) => {
+    const chain = [];
+    const seen = /* @__PURE__ */ new Set();
+    let node = start;
+    let base = 0;
+    while (node !== void 0) {
+      if (seen.has(node.key)) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      const known2 = depthCache.get(node.key);
+      if (known2 !== void 0) {
+        base = known2 + 1;
+        break;
+      }
+      seen.add(node.key);
+      chain.push(node);
+      if (node.parent === null) break;
+      const parent = nodes.get(node.parent);
+      if (parent === void 0) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      node = parent;
+    }
+    for (let index = chain.length - 1; index >= 0; index--) depthCache.set(chain[index].key, base + (chain.length - 1 - index));
+    return depthCache.get(start.key);
+  };
+  const visibleAbove = (start) => {
+    const seen = /* @__PURE__ */ new Set();
+    for (let key = start; key !== null; ) {
+      if (seen.has(key)) return "missing";
+      seen.add(key);
+      const node = nodes.get(key);
+      if (node === void 0) return "missing";
+      if (node.role !== null) return node.role;
+      key = node.parent;
+    }
+    return "root";
+  };
+  const order = (a, b) => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY) || depthOf(a) - depthOf(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const visible = [...nodes.values()].filter((node) => node.role === "user" || node.role === "assistant").sort(order);
   const events = [];
-  let previous = null;
-  for (const message of visible) {
-    if (message.role === "user") events.push({ kind: "request", atMs: message.atMs, model: null });
-    else if (previous !== "assistant") events.push({ kind: "response", atMs: message.atMs, model: message.model });
-    previous = message.role;
-  }
+  visible.forEach((node, index) => {
+    if (node.role === "user") {
+      events.push({ kind: "request", atMs: node.atMs, model: null });
+      return;
+    }
+    const above = visibleAbove(node.parent);
+    const starts = above === "missing" ? index === 0 || visible[index - 1].role === "user" : above === "user" || above === "root";
+    if (starts) events.push({ kind: "response", atMs: node.atMs, model: node.model });
+  });
   return { id, events, unknownKinds };
 }
 var looksLikeChatgpt = (value) => {
@@ -8468,39 +8521,42 @@ var u64 = (buffer, offset) => {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ZipError("broken-directory");
   return Number(value);
 };
-async function directoryOf(handle, source) {
-  const from = Math.max(0, source.size - TAIL_SEARCH);
-  const tail = await readAt(handle, source.start + from, source.size - from);
-  let at = -1;
-  for (let index = tail.length - 22; index >= 0; index--) {
-    if (tail.readUInt32LE(index) === EOCD && index + 22 + tail.readUInt16LE(index + 20) <= tail.length) {
-      at = index;
-      break;
-    }
-  }
-  if (at < 0) throw new ZipError("not-zip");
-  const disk = tail.readUInt16LE(at + 4);
-  const directoryDisk = tail.readUInt16LE(at + 6);
-  let entries = tail.readUInt16LE(at + 10);
-  let size = tail.readUInt32LE(at + 12);
-  let offset = tail.readUInt32LE(at + 16);
-  const locatorAt = from + at - 20;
+async function candidateDirectory(handle, source, eocdAt, record) {
+  const disk = record.readUInt16LE(4);
+  const directoryDisk = record.readUInt16LE(6);
+  let entries = record.readUInt16LE(10);
+  let size = record.readUInt32LE(12);
+  let offset = record.readUInt32LE(16);
   const needs64 = entries === 65535 || size === 4294967295 || offset === 4294967295;
-  const locator = locatorAt >= 0 ? await readAt(handle, source.start + locatorAt, 20) : Buffer.alloc(0);
+  let directoryEnd = eocdAt;
+  const locator = eocdAt >= 20 ? await readAt(handle, source.start + eocdAt - 20, 20) : Buffer.alloc(0);
   if (locator.length === 20 && locator.readUInt32LE(0) === ZIP64_LOCATOR) {
     if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) throw new ZipError("multi-disk");
     const recordAt = u64(locator, 8);
-    if (recordAt + 56 > source.size) throw new ZipError("broken-directory");
-    const record = await readAt(handle, source.start + recordAt, 56);
-    if (record.length < 56 || record.readUInt32LE(0) !== ZIP64_EOCD) throw new ZipError("broken-directory");
-    if (record.readUInt32LE(16) !== 0 || record.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
-    entries = u64(record, 32);
-    size = u64(record, 40);
-    offset = u64(record, 48);
-  } else if (needs64) throw new ZipError("broken-directory");
+    if (recordAt + 56 > eocdAt - 20) return null;
+    const zip64 = await readAt(handle, source.start + recordAt, 56);
+    if (zip64.length < 56 || zip64.readUInt32LE(0) !== ZIP64_EOCD) return null;
+    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
+    entries = u64(zip64, 32);
+    size = u64(zip64, 40);
+    offset = u64(zip64, 48);
+    directoryEnd = recordAt;
+  } else if (needs64) return null;
+  if (offset + size !== directoryEnd) return null;
   if (disk !== 0 || directoryDisk !== 0) throw new ZipError("multi-disk");
-  if (offset + size > source.size) throw new ZipError("broken-directory");
   return { offset, size, entries };
+}
+async function directoryOf(handle, source) {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  let found = false;
+  for (let index = tail.length - 22; index >= 0; index--) {
+    if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
+    found = true;
+    const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
+    if (directory !== null) return directory;
+  }
+  throw new ZipError(found ? "broken-directory" : "not-zip");
 }
 function zip64Values(extra, wanted) {
   if (!wanted.size && !wanted.compressed && !wanted.offset) return {};
@@ -8696,6 +8752,31 @@ async function readZip(source, prefix, collector, timeZone, keepFrom) {
   }
   return count;
 }
+var FOLDER_DEPTH = 2;
+var FOLDER_ENTRY_LIMIT = 2e4;
+async function exportFolderFiles(dir) {
+  const found = [];
+  let seen = 0;
+  const walk = async (path, rel, depth) => {
+    const entries = await readdir7(path, { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+      if (++seen > FOLDER_ENTRY_LIMIT) return;
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      const child = join17(path, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < FOLDER_DEPTH) await walk(child, childRel, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const zip = CONVERSATION_ZIP.test(entry.name);
+      if (!zip && !CONVERSATION_FILE.test(entry.name)) continue;
+      const info = await stat6(child);
+      found.push({ rel: childRel, path: child, size: info.size, mtimeMs: info.mtimeMs, zip });
+    }
+  };
+  await walk(dir, "", 0);
+  return found.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0);
+}
 var isZip = async (path) => {
   const handle = await open6(path, "r");
   try {
@@ -8708,10 +8789,17 @@ var isZip = async (path) => {
 };
 async function readExport(path, timeZone, keepFrom) {
   const info = await stat6(path);
-  if (!info.isFile()) throw new ExportError("not-file");
+  if (!info.isFile() && !info.isDirectory()) throw new ExportError("not-file");
   const collector = { tool: null, summaries: [], skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
   try {
-    if (await isZip(path)) {
+    if (info.isDirectory()) {
+      const files = await exportFolderFiles(path);
+      if (files.length === 0) throw new ExportError("no-conversations");
+      for (const file of files) {
+        if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
+        else await readArray(file.rel, createReadStream3(file.path), collector, timeZone, keepFrom);
+      }
+    } else if (await isZip(path)) {
       if (await readZip(await wholeFile(path), "", collector, timeZone, keepFrom) === 0) throw new ExportError("no-conversations");
     } else await readArray(basename3(path), createReadStream3(path), collector, timeZone, keepFrom);
   } catch (error) {
@@ -8751,6 +8839,24 @@ async function storeWebCached(dir, entry) {
   await writeFile6(temporary, JSON.stringify(entry));
   await rename6(temporary, target);
 }
+var sha2562 = (text) => createHash4("sha256").update(text).digest("hex");
+async function exportKey(path, timeZone) {
+  const info = await stat7(path);
+  if (info.isFile()) return cacheKeyFor({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs }, WEB_PARSER_ID, timeZone);
+  if (!info.isDirectory()) return null;
+  const files = await exportFolderFiles(path);
+  const list = files.map((file) => `${file.rel}|${file.size}|${file.mtimeMs}`).join("\n");
+  return {
+    normPath: normalizePath(path),
+    size: files.reduce((sum2, file) => sum2 + file.size, 0),
+    mtimeMs: files.reduce((latest, file) => Math.max(latest, file.mtimeMs), 0),
+    head: sha2562(list),
+    tail: sha2562(`folder:${files.length}`),
+    cacheFormat: CACHE_FORMAT_VERSION,
+    parser: WEB_PARSER_ID,
+    timeZone
+  };
+}
 async function collectOne(tool, entry, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const keepFrom = windows.collectDates[0];
@@ -8773,22 +8879,23 @@ async function collectOne(tool, entry, options) {
   }
   read.files = 1;
   read.listedBytes = info.isFile() ? info.size : 0;
+  const isFolder = info.isDirectory();
   const fail = (problem) => {
     state.problem = problem;
     read.unreadableFiles = [entry.path];
     read.unreadableFileBytes = read.listedBytes;
     return result([]);
   };
-  if (!info.isFile()) return fail("not-file");
+  if (!info.isFile() && !isFolder) return fail("not-file");
   const cacheDir = options.cacheDir === null ? null : join18(options.cacheDir, "web");
-  const source = { path: entry.path, normPath: normalizePath(entry.path), size: info.size, mtimeMs: info.mtimeMs };
   let key = null;
   try {
+    if (cacheDir !== null || isFolder) key = await exportKey(entry.path, options.clock.timeZone);
+    if (isFolder && key !== null) read.listedBytes = key.size;
     if (cacheDir !== null) {
-      key = await cacheKeyFor(source, WEB_PARSER_ID, options.clock.timeZone);
       const hit = key === null || options.rescan ? null : await loadWebCached(cacheDir, key, keepFrom, tool);
       if (hit !== null) {
-        read.bytes = info.size;
+        read.bytes = read.listedBytes;
         read.fromCache = 1;
         state.skipped = hit.skipped;
         state.truncated = !hit.complete;
@@ -8806,22 +8913,18 @@ async function collectOne(tool, entry, options) {
     return fail(error instanceof ExportError ? error.problem : "unreadable");
   }
   if (exported.tool !== tool) return fail("unknown-service");
-  read.bytes = info.size;
+  read.bytes = read.listedBytes;
   state.skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
   state.truncated = !exported.complete;
   state.lastDate = exported.totals.lastMs === null ? null : localDateOf(exported.totals.lastMs, options.clock.timeZone);
-  if (key !== null && cacheDir !== null) {
-    try {
-      if (await keyStillMatches(entry.path, key)) await storeWebCached(cacheDir, { key, keptFrom: keepFrom, summaries: exported.summaries, skipped: state.skipped, complete: exported.complete, lastMs: exported.totals.lastMs });
-    } catch {
-    }
-  }
+  if (options.cacheDir !== null) await primeWebCache(options.cacheDir, entry.path, key, exported, keepFrom, options.clock.timeZone);
   return result(exported.summaries);
 }
-async function primeWebCache(cacheRoot, file, exported, keepFrom, timeZone) {
+async function primeWebCache(cacheRoot, path, before, exported, keepFrom, timeZone) {
   try {
-    const key = await cacheKeyFor({ path: file.path, normPath: normalizePath(file.path), size: file.size, mtimeMs: file.mtimeMs }, WEB_PARSER_ID, timeZone);
-    if (key === null) return;
+    if (before === null) return;
+    const key = await exportKey(path, timeZone);
+    if (key === null || !sameKey(key, before)) return;
     const skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
     await storeWebCached(join18(cacheRoot, "web"), { key, keptFrom: keepFrom, summaries: exported.summaries, skipped, complete: exported.complete, lastMs: exported.totals.lastMs });
   } catch {
@@ -8840,7 +8943,7 @@ import { basename as basename7, join as join25, relative as relative3 } from "no
 import { join as join20, resolve as resolve5 } from "node:path";
 
 // src/scan/fs.ts
-import { lstat as lstat4, readdir as readdir7, readFile as readFile9, realpath as realpath4, stat as stat8 } from "node:fs/promises";
+import { lstat as lstat4, readdir as readdir8, readFile as readFile9, realpath as realpath4, stat as stat8 } from "node:fs/promises";
 var isMissing6 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -8864,7 +8967,7 @@ async function readJson(path) {
 }
 async function listDir(path) {
   try {
-    return { status: "ok", names: (await readdir7(path)).sort() };
+    return { status: "ok", names: (await readdir8(path)).sort() };
   } catch (error) {
     return isMissing6(error) ? { status: "missing" } : { status: "unreadable" };
   }
@@ -9422,7 +9525,7 @@ async function readClaudeJson(path) {
 }
 
 // src/scan/instructions.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { lstat as lstat5, readlink } from "node:fs/promises";
 import { basename as basename5, dirname as dirname3, isAbsolute, join as join21, parse, resolve as resolve6 } from "node:path";
 var MIN_LINE_CHARS = 20;
@@ -9433,7 +9536,7 @@ function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
 function lineHash(line) {
-  return createHash4("sha256").update(line).digest("hex").slice(0, 32);
+  return createHash5("sha256").update(line).digest("hex").slice(0, 32);
 }
 function countChars(text) {
   let ascii = 0;
@@ -10084,8 +10187,8 @@ function viewOf(value) {
 }
 
 // src/scan/skills.ts
-import { createHash as createHash5 } from "node:crypto";
-import { lstat as lstat6, readdir as readdir8, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
+import { createHash as createHash6 } from "node:crypto";
+import { lstat as lstat6, readdir as readdir9, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
 import { basename as basename6, join as join24, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
@@ -10224,7 +10327,7 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
   const walk = async (current) => {
     let names2;
     try {
-      names2 = (await readdir8(current)).sort();
+      names2 = (await readdir9(current)).sort();
     } catch {
       return false;
     }
@@ -10251,12 +10354,12 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
         return false;
       }
       const rel = relative2(base, path).replace(/\\/g, "/");
-      entries.push(`${rel}\0${createHash5("sha256").update(data).digest("hex")}`);
+      entries.push(`${rel}\0${createHash6("sha256").update(data).digest("hex")}`);
     }
     return true;
   };
   if (!await walk(base)) return null;
-  return createHash5("sha256").update(entries.sort().join("\n")).digest("hex");
+  return createHash6("sha256").update(entries.sort().join("\n")).digest("hex");
 }
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
@@ -13281,15 +13384,15 @@ async function entriesFor(stateDir2) {
 async function runImportAdd(path, options) {
   const copy2 = COPY5[options.lang];
   const absolute = resolve12(path);
-  let info;
   try {
-    info = await stat9(absolute);
+    await stat9(absolute);
   } catch {
     throw failure4("not-found", `no file at ${absolute}`);
   }
   const { entries, broken } = await entriesFor(options.stateDir);
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const keepFrom = windows.collectDates[0];
+  const before = options.cache ? await exportKey(absolute, options.clock.timeZone).catch(() => null) : null;
   let exported;
   try {
     exported = await readExport(absolute, options.clock.timeZone, keepFrom);
@@ -13300,7 +13403,7 @@ async function runImportAdd(path, options) {
   const tool = exported.tool;
   const replaced = entries.find((entry) => entry.tool === tool && entry.path !== absolute)?.path ?? null;
   await writeWebExports(options.stateDir, withExport(entries, { tool, path: absolute, addedAt: new Date(options.clock.nowMs).toISOString() }));
-  if (options.cache) await primeWebCache(join33(options.stateDir, "cache"), { path: absolute, size: info.size, mtimeMs: info.mtimeMs }, exported, keepFrom, options.clock.timeZone);
+  if (options.cache) await primeWebCache(join33(options.stateDir, "cache"), absolute, before, exported, keepFrom, options.clock.timeZone);
   const dateOf = (ms) => ms === null ? null : localDateOf(ms, options.clock.timeZone);
   const added = {
     tool,
@@ -13350,11 +13453,11 @@ import { randomBytes as randomBytes2 } from "node:crypto";
 import { join as join37 } from "node:path";
 
 // src/tune/items.ts
-import { createHash as createHash6 } from "node:crypto";
+import { createHash as createHash7 } from "node:crypto";
 import { lstat as lstat9, readFile as readFile12 } from "node:fs/promises";
 import { dirname as dirname9, join as join34 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
+var fingerprintOf = (bytes) => createHash7("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
   return join34(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
@@ -13867,7 +13970,7 @@ async function writePlan(stateDir2, plan) {
 }
 
 // src/tune/work.ts
-import { chmod, mkdir as mkdir9, open as open7, readdir as readdir9, readFile as readFile13, rename as rename7, rm as rm6, unlink as unlink2 } from "node:fs/promises";
+import { chmod, mkdir as mkdir9, open as open7, readdir as readdir10, readFile as readFile13, rename as rename7, rm as rm6, unlink as unlink2 } from "node:fs/promises";
 import { join as join36 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
@@ -13911,7 +14014,7 @@ async function loadWork(stateDir2, workId) {
 async function listWorks(stateDir2) {
   let names2;
   try {
-    names2 = await readdir9(join36(stateDir2, TUNE_DIR));
+    names2 = await readdir10(join36(stateDir2, TUNE_DIR));
   } catch {
     return [];
   }
@@ -14604,7 +14707,7 @@ function openInBrowser(path, platform = process.platform, start = spawn) {
 }
 
 // src/commands/clean.ts
-import { lstat as lstat10, readdir as readdir10, realpath as realpath7 } from "node:fs/promises";
+import { lstat as lstat10, readdir as readdir11, realpath as realpath7 } from "node:fs/promises";
 import { join as join39 } from "node:path";
 var isMissing7 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
@@ -14616,7 +14719,7 @@ async function lstatOrNull(path) {
   }
 }
 async function cleanReports(path, boundary) {
-  const names2 = (await readdir10(path)).sort();
+  const names2 = (await readdir11(path)).sort();
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
@@ -14736,7 +14839,7 @@ async function doctor(input) {
 }
 
 // src/commands/where.ts
-import { lstat as lstat11, readdir as readdir11 } from "node:fs/promises";
+import { lstat as lstat11, readdir as readdir12 } from "node:fs/promises";
 import { join as join41 } from "node:path";
 var isMissing8 = (error) => error?.code === "ENOENT";
 async function where(dir) {
@@ -14772,7 +14875,7 @@ async function where(dir) {
   }
   if (inside2) {
     const known2 = new Set(STATE_ENTRIES.map((spec) => spec.name));
-    report.others = (await readdir11(dir)).filter((name) => !known2.has(name)).sort();
+    report.others = (await readdir12(dir)).filter((name) => !known2.has(name)).sort();
   }
   return report;
 }

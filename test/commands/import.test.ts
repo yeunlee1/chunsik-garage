@@ -64,6 +64,16 @@ describe("runImportAdd", () => {
     ]);
   });
 
+  it("압축을 푼 폴더도 넣는다(짝 검토 3 필수 1)", async () => {
+    const folder = join(home, "extracted");
+    await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, "conversations-000.json"), JSON.stringify([gpt("a")]));
+    await writeFile(join(folder, "conversations-001.json"), JSON.stringify([gpt("b")]));
+    const outcome = await runImportAdd(folder, options());
+    expect(outcome).toMatchObject({ action: "add", added: { tool: "web-chatgpt", path: folder, conversations: 2 } });
+    expect(await readdir(join(state, "cache", "web"))).toHaveLength(1);
+  });
+
   it("버린 대화와 끊긴 파일을 알린다. 저장 없는 실행(--no-save)은 캐시를 만들지 않는다", async () => {
     const text = `[${JSON.stringify(gpt("a"))}, {"x": 01}, ${JSON.stringify(gpt("b"))}`;
     const path = await put("conversations.json", text);
@@ -78,7 +88,7 @@ describe("runImportAdd", () => {
     await expect(runImportAdd(join(home, "none.zip"), options())).rejects.toMatchObject({ code: "not-found" });
     await expect(runImportAdd(await put("x.json", '{"a":1}'), options())).rejects.toMatchObject({ code: "not-array" });
     await expect(runImportAdd(await put("y.json", "[1,2]"), options())).rejects.toMatchObject({ code: "unknown-service" });
-    await expect(runImportAdd(home, options())).rejects.toMatchObject({ code: "not-file" });
+    await expect(runImportAdd(home, options())).rejects.toMatchObject({ code: "no-conversations" });
     expect((await readWebExports(state)).status).toBe("missing");
   });
 

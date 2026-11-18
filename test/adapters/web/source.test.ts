@@ -100,6 +100,22 @@ describe("readExport", () => {
     expect(file.summaries).toHaveLength(2);
   });
 
+  it("압축을 푼 폴더도 읽는다. 폴더 안(두 겹 아래까지)의 대화 파일과 대화를 담은 안쪽 zip을 자리 차례로 모두 읽는다(짝 검토 3 필수 1)", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    const folder = join(root, "extracted");
+    await mkdir(join(folder, "export-2026", "dalle-generations"), { recursive: true });
+    await writeFile(join(folder, "export-2026", "conversations-000.json"), JSON.stringify([gptConversation("a")]));
+    await writeFile(join(folder, "export-2026", "conversations-001.json"), JSON.stringify([gptConversation("b")]));
+    await writeFile(join(folder, "export-2026", "chat.html"), "<html>");
+    await writeFile(join(folder, "Conversations__part-009.zip"), makeZip([{ name: "conversations.json", data: JSON.stringify([gptConversation("c")]) }]));
+    const result = await read(folder);
+    expect(result.tool).toBe("web-chatgpt");
+    expect(result.files).toEqual(["Conversations__part-009.zip/conversations.json", "export-2026/conversations-000.json", "export-2026/conversations-001.json"]);
+    expect(result.summaries).toHaveLength(3);
+    await mkdir(join(root, "empty-folder"));
+    expect(await problemOf(join(root, "empty-folder"))).toBe("no-conversations");
+  });
+
   it("깨진 원소, 다른 서비스의 꼴, 상한을 넘는 원소는 버린 수로 센다", async () => {
     // 괄호는 맞지만 JSON으로 풀리지 않는 원소(앞에 0이 붙은 수)
     const text = `[${JSON.stringify(gptConversation("a"))}, {"broken": 01}, ${JSON.stringify(claudeConversation("c"))}, 7]`;
@@ -116,8 +132,7 @@ describe("readExport", () => {
     expect(result.complete).toBe(false);
   });
 
-  it("읽을 수 없으면 까닭을 낸다. 폴더, 대화 파일이 없는 zip, 배열이 아닌 파일, 어느 서비스의 꼴도 아닌 배열, 망가진 zip", async () => {
-    expect(await problemOf(root)).toBe("not-file");
+  it("읽을 수 없으면 까닭을 낸다. 대화 파일이 없는 zip, 배열이 아닌 파일, 어느 서비스의 꼴도 아닌 배열, 망가진 zip", async () => {
     expect(await problemOf(await put("empty.zip", makeZip([{ name: "user.json", data: "{}" }])))).toBe("no-conversations");
     expect(await problemOf(await put("object.json", '{"conversations": []}'))).toBe("not-array");
     expect(await problemOf(await put("numbers.json", "[1, 2]"))).toBe("unknown-service");

@@ -15,7 +15,8 @@ const bytes = (text: string): Buffer[] => [...Buffer.from(text, "utf8")].map((by
 
 describe("JsonArraySplitter", () => {
   it("배열의 원소를 차례로 낸다. 문자열 안의 괄호·쉼표·따옴표 이스케이프와 여러 바이트 글자를 건드리지 않는다", () => {
-    const items = [{ a: "}]{[", b: 'say "hi"\\' }, { 한글: "가나다 ]", n: [1, [2, { c: 3 }]] }, [1, 2], {}];
+    // 이스케이프한 따옴표 바로 뒤의 괄호는 문자열 안이다(역빗금을 따르지 않으면 원소 경계를 잘못 잡는다)
+    const items = [{ a: "}]{[", b: 'say "hi"\\' }, { 한글: "가나다 ]", n: [1, [2, { c: 3 }]] }, { tricky: 'x"}],{["' }, [1, 2], {}];
     const text = JSON.stringify(items, null, 2);
     const whole = split([text]);
     expect(whole.elements.map((element) => JSON.parse(element))).toEqual(items);

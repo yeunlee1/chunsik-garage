@@ -62,40 +62,49 @@ interface Directory {
   entries: number;
 }
 
-/** 끝 기록을 찾아 중앙 목록의 자리와 크기를 낸다(구간 안의 자리). ZIP64면 ZIP64 끝 기록의 값을 쓴다 */
-async function directoryOf(handle: FileHandle, source: ZipSource): Promise<Directory> {
-  const from = Math.max(0, source.size - TAIL_SEARCH);
-  const tail = await readAt(handle, source.start + from, source.size - from);
-  let at = -1;
-  for (let index = tail.length - 22; index >= 0; index--) {
-    if (tail.readUInt32LE(index) === EOCD && index + 22 + tail.readUInt16LE(index + 20) <= tail.length) {
-      at = index;
-      break;
-    }
-  }
-  if (at < 0) throw new ZipError("not-zip");
-  const disk = tail.readUInt16LE(at + 4);
-  const directoryDisk = tail.readUInt16LE(at + 6);
-  let entries = tail.readUInt16LE(at + 10);
-  let size = tail.readUInt32LE(at + 12);
-  let offset = tail.readUInt32LE(at + 16);
-  const locatorAt = from + at - 20;
+/** 끝 기록 후보 하나를 읽는다. 중앙 목록이 끝 기록(ZIP64면 ZIP64 끝 기록) 바로 앞에서 끝나지 않으면 이어지지 않는 후보라 null이다 */
+async function candidateDirectory(handle: FileHandle, source: ZipSource, eocdAt: number, record: Buffer): Promise<Directory | null> {
+  const disk = record.readUInt16LE(4);
+  const directoryDisk = record.readUInt16LE(6);
+  let entries = record.readUInt16LE(10);
+  let size = record.readUInt32LE(12);
+  let offset = record.readUInt32LE(16);
   const needs64 = entries === 0xffff || size === 0xffffffff || offset === 0xffffffff;
-  const locator = locatorAt >= 0 ? await readAt(handle, source.start + locatorAt, 20) : Buffer.alloc(0);
+  // 중앙 목록이 끝나는 자리. 보통은 끝 기록의 자리이고, ZIP64면 ZIP64 끝 기록의 자리다
+  let directoryEnd = eocdAt;
+  const locator = eocdAt >= 20 ? await readAt(handle, source.start + eocdAt - 20, 20) : Buffer.alloc(0);
   if (locator.length === 20 && locator.readUInt32LE(0) === ZIP64_LOCATOR) {
     if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) throw new ZipError("multi-disk");
     const recordAt = u64(locator, 8);
-    if (recordAt + 56 > source.size) throw new ZipError("broken-directory");
-    const record = await readAt(handle, source.start + recordAt, 56);
-    if (record.length < 56 || record.readUInt32LE(0) !== ZIP64_EOCD) throw new ZipError("broken-directory");
-    if (record.readUInt32LE(16) !== 0 || record.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
-    entries = u64(record, 32);
-    size = u64(record, 40);
-    offset = u64(record, 48);
-  } else if (needs64) throw new ZipError("broken-directory");
+    if (recordAt + 56 > eocdAt - 20) return null;
+    const zip64 = await readAt(handle, source.start + recordAt, 56);
+    if (zip64.length < 56 || zip64.readUInt32LE(0) !== ZIP64_EOCD) return null;
+    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) throw new ZipError("multi-disk");
+    entries = u64(zip64, 32);
+    size = u64(zip64, 40);
+    offset = u64(zip64, 48);
+    directoryEnd = recordAt;
+  } else if (needs64) return null;
+  if (offset + size !== directoryEnd) return null;
   if (disk !== 0 || directoryDisk !== 0) throw new ZipError("multi-disk");
-  if (offset + size > source.size) throw new ZipError("broken-directory");
   return { offset, size, entries };
+}
+
+/**
+ * 끝 기록을 찾아 중앙 목록의 자리와 크기를 낸다(구간 안의 자리). ZIP64면 ZIP64 끝 기록의 값을 쓴다.
+ * 끝 주석에 끝 기록과 같은 바이트가 있을 수 있어, 뒤에서부터 후보를 보며 중앙 목록과 이어지는 첫 후보를 쓴다(짝 검토 3 필수 3)
+ */
+async function directoryOf(handle: FileHandle, source: ZipSource): Promise<Directory> {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  let found = false;
+  for (let index = tail.length - 22; index >= 0; index--) {
+    if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
+    found = true;
+    const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
+    if (directory !== null) return directory;
+  }
+  throw new ZipError(found ? "broken-directory" : "not-zip");
 }
 
 /** ZIP64 덧붙임 칸(0x0001)에서 0xffffffff로 적힌 값만 차례대로 꺼낸다 */

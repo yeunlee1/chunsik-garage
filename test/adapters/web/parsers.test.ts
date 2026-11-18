@@ -76,6 +76,36 @@ describe("chatgptConversation", () => {
     expect(conversation.events.map((event) => event.kind)).toEqual(["request", "response"]);
   });
 
+  it("시각이 같거나 없어도 mapping에 적힌 차례와 상관없이 같은 수다(짝 검토 3 필수 2). 부모 사슬이 있으면 그것으로 응답의 시작을 가린다", () => {
+    const line = (order: string[], at: number | null) => {
+      const all: GptNode[] = [
+        { id: "u1", parent: null, role: "user", at },
+        { id: "a1", parent: "u1", role: "assistant", at },
+        { id: "u2", parent: "a1", role: "user", at },
+        { id: "a2", parent: "u2", role: "assistant", at },
+      ];
+      return gpt(order.map((id) => all.find((node) => node.id === id)!));
+    };
+    for (const at of [T0, null]) {
+      for (const order of [["u1", "a1", "u2", "a2"], ["u1", "u2", "a1", "a2"], ["a2", "u2", "a1", "u1"]]) {
+        const events = chatgptConversation(line(order, at))!.events;
+        expect({ at, order, kinds: events.map((event) => event.kind).sort() }).toEqual({ at, order, kinds: ["request", "request", "response", "response"] });
+      }
+    }
+  });
+
+  it("부모가 빠진 메시지는 시각 차례로 가리고, 시각이 같으면 깊이와 ID로 정해 mapping 차례와 상관없다", () => {
+    const nodes: GptNode[] = [
+      { id: "u1", parent: null, role: "user", at: T0 },
+      { id: "a1", parent: "u1", role: "assistant", at: T0 + 1 },
+      { id: "a2", parent: "gone-tool", role: "assistant", at: T0 + 1 },
+    ];
+    const forward = chatgptConversation(gpt(nodes))!.events.map((event) => event.kind);
+    const backward = chatgptConversation(gpt([...nodes].reverse()))!.events.map((event) => event.kind);
+    expect(forward.sort()).toEqual(["request", "response"]);
+    expect(backward.sort()).toEqual(["request", "response"]);
+  });
+
   it("질문을 고쳐 생긴 가지는 사람 요청과 응답을 새로 센다", () => {
     const conversation = chatgptConversation(
       gpt([

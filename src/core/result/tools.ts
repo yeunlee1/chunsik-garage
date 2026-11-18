@@ -79,6 +79,9 @@ export function resultTools(input: EvaluationInput, evaluation: Evaluation, coll
     const summaries = input.tools.find((item) => item.tool === tool.tool)?.summaries ?? [];
     const subSessions = summaries.filter((summary) => summary.kind === "sub" && Object.entries(summary.days).some(([date, day]) => inRange(date, evaluation.windows.score) && day.responses > 0)).length;
     const visibleFrom = found?.visibleFrom ?? null;
+    // 웹 채팅 내보내기에는 내보낸 날 뒤의 대화가 없다. 볼 수 있는 범위의 끝은 그 마지막 날이다(0.5.0)
+    const lastDate = found?.web?.lastDate ?? null;
+    const visibleTo = lastDate !== null && lastDate < evaluation.windows.today ? lastDate : evaluation.windows.today;
     return {
       tool: tool.tool,
       detected: found?.detected ?? false,
@@ -89,7 +92,7 @@ export function resultTools(input: EvaluationInput, evaluation: Evaluation, coll
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom === null ? null : { from: visibleFrom, to: evaluation.windows.today },
+      visible: visibleFrom === null ? null : { from: visibleFrom, to: visibleTo },
     };
   });
 }

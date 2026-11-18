@@ -1,6 +1,6 @@
 // 웹 채팅 내보내기 파일(zip이나 대화 JSON 파일 하나)을 열어 대화 파일을 차례로 흘려 읽고, 어느 서비스의 것인지 가려 대화마다 세션 요약을 낸다. 대화 글은 원소를 해석하는 동안에만 메모리에 있다(설계 「0.5.0에서 정한 것」)
 import { createReadStream } from "node:fs";
-import { mkdtemp, open, rm, stat } from "node:fs/promises";
+import { mkdtemp, open, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { LocalDate } from "../common/dates.ts";
@@ -128,6 +128,48 @@ async function readZip(source: ZipSource, prefix: string, collector: Collector, 
   return count;
 }
 
+/** 폴더 안에서 내보내기로 읽는 파일 하나. rel은 폴더에서의 자리(빗금 /)다 */
+export interface FolderFile {
+  rel: string;
+  path: string;
+  size: number;
+  mtimeMs: number;
+  /** 대화를 담은 안쪽 zip이다(아니면 대화 JSON 파일) */
+  zip: boolean;
+}
+
+/** 폴더를 훑는 깊이(폴더 자체가 0)와 훑는 항목의 상한. 내보내기가 아닌 큰 폴더를 넣어도 오래 돌지 않게 한다 */
+const FOLDER_DEPTH = 2;
+const FOLDER_ENTRY_LIMIT = 20_000;
+
+/**
+ * 압축을 푼 내보내기 폴더에서 대화 파일(conversations.json, conversations-<숫자>.json)과 대화를 담은 안쪽 zip을 찾는다. 자리 차례다.
+ * 두 겹 아래까지만 보고 링크는 따라가지 않는다(짝 검토 3 필수 1)
+ */
+export async function exportFolderFiles(dir: string): Promise<FolderFile[]> {
+  const found: FolderFile[] = [];
+  let seen = 0;
+  const walk = async (path: string, rel: string, depth: number): Promise<void> => {
+    const entries = await readdir(path, { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      if (++seen > FOLDER_ENTRY_LIMIT) return;
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      const child = join(path, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < FOLDER_DEPTH) await walk(child, childRel, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const zip = CONVERSATION_ZIP.test(entry.name);
+      if (!zip && !CONVERSATION_FILE.test(entry.name)) continue;
+      const info = await stat(child);
+      found.push({ rel: childRel, path: child, size: info.size, mtimeMs: info.mtimeMs, zip });
+    }
+  };
+  await walk(dir, "", 0);
+  return found.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
+}
+
 const isZip = async (path: string): Promise<boolean> => {
   const handle = await open(path, "r");
   try {
@@ -141,14 +183,21 @@ const isZip = async (path: string): Promise<boolean> => {
 
 /**
  * 내보내기 파일을 읽는다. keepFrom보다 이른 날의 칸은 요약에서 버린다. 읽을 수 없으면 ExportError다.
- * zip이면 안의 conversations.json(나뉘었으면 conversations-NNN.json 모두, 바깥에 없으면 대화를 담은 안쪽 zip의 것)을, 아니면 그 파일 자체를 대화 배열로 읽는다
+ * zip이면 안의 conversations.json(나뉘었으면 conversations-NNN.json 모두, 바깥에 없으면 대화를 담은 안쪽 zip의 것)을, 폴더면 그 안의 대화 파일과 안쪽 zip을, 아니면 그 파일 자체를 대화 배열로 읽는다
  */
 export async function readExport(path: string, timeZone: string, keepFrom: LocalDate | null): Promise<ExportRead> {
   const info = await stat(path);
-  if (!info.isFile()) throw new ExportError("not-file");
+  if (!info.isFile() && !info.isDirectory()) throw new ExportError("not-file");
   const collector: Collector = { tool: null, summaries: [], skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
   try {
-    if (await isZip(path)) {
+    if (info.isDirectory()) {
+      const files = await exportFolderFiles(path);
+      if (files.length === 0) throw new ExportError("no-conversations");
+      for (const file of files) {
+        if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
+        else await readArray(file.rel, createReadStream(file.path) as AsyncIterable<Buffer>, collector, timeZone, keepFrom);
+      }
+    } else if (await isZip(path)) {
       if ((await readZip(await wholeFile(path), "", collector, timeZone, keepFrom)) === 0) throw new ExportError("no-conversations");
     } else await readArray(basename(path), createReadStream(path) as AsyncIterable<Buffer>, collector, timeZone, keepFrom);
   } catch (error) {

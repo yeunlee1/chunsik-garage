@@ -3,7 +3,7 @@ import { readdir, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readExport } from "../../src/adapters/web/source.ts";
-import { collectWeb, primeWebCache } from "../../src/collect/web.ts";
+import { collectWeb, exportKey, primeWebCache } from "../../src/collect/web.ts";
 import { makeTemp, removeTemp } from "../helpers/temp-fs.ts";
 import { makeZip } from "../helpers/zip-writer.ts";
 
@@ -86,13 +86,29 @@ describe("collectWeb", () => {
     expect(await readdir(join(dir, "state", "cache", "web"))).toHaveLength(1);
   });
 
+  it("압축을 푼 폴더도 모으고 캐시를 쓴다. 폴더 안의 대화 파일이 바뀌면 다시 읽는다(짝 검토 3 필수 1)", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    const folder = join(dir, "extracted");
+    await mkdir(join(folder, "export"), { recursive: true });
+    await writeFile(join(folder, "export", "conversations.json"), JSON.stringify([gpt("a")]));
+    const first = (await collectWeb([entry(folder)], options()))[0]!;
+    expect(first).toMatchObject({ detected: true, state: { problem: null, missing: false }, read: { files: 1, fromCache: 0, unreadableFiles: [] } });
+    expect(first.summaries).toHaveLength(1);
+    expect((await collectWeb([entry(folder)], options()))[0]!.read.fromCache).toBe(1);
+    await writeFile(join(folder, "export", "conversations.json"), JSON.stringify([gpt("a"), gpt("b")]));
+    await utimes(join(folder, "export", "conversations.json"), new Date(NOW), new Date(NOW + 5000));
+    const changed = (await collectWeb([entry(folder)], options()))[0]!;
+    expect([changed.read.fromCache, changed.summaries.length]).toEqual([0, 2]);
+    await mkdir(join(dir, "empty"));
+    expect((await collectWeb([entry(join(dir, "empty"))], options()))[0]).toMatchObject({ state: { problem: "no-conversations" }, summaries: [] });
+  });
+
   it("넣을 때 만든 캐시를 첫 점검이 쓴다", async () => {
     const path = join(dir, "chatgpt.zip");
     await writeFile(path, zipOf([gpt("a")]));
-    const { stat } = await import("node:fs/promises");
-    const info = await stat(path);
+    const key = await exportKey(path, clock.timeZone);
     const exported = await readExport(path, clock.timeZone, "2026-10-10");
-    await primeWebCache(join(dir, "state", "cache"), { path, size: info.size, mtimeMs: info.mtimeMs }, exported, "2026-10-10", clock.timeZone);
+    await primeWebCache(join(dir, "state", "cache"), path, key, exported, "2026-10-10", clock.timeZone);
     const [chat] = await collectWeb([entry(path)], options());
     expect(chat!.read.fromCache).toBe(1);
     expect(chat!.summaries.map((summary) => summary.sessionId)).toEqual(exported.summaries.map((summary) => summary.sessionId));

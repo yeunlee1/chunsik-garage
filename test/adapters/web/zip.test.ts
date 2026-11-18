@@ -65,6 +65,16 @@ describe("zipEntries와 zipEntryChunks", () => {
     expect(await text(await wholeFile(path), "conversations.json")).toBe("[]");
   });
 
+  it("끝 주석에 끝 기록과 같은 바이트가 있어도 중앙 목록과 이어지는 진짜 끝 기록을 쓴다(짝 검토 3 필수 3)", async () => {
+    const normal = makeZip([{ name: "conversations.json", data: "[1]" }]);
+    const fake = Buffer.alloc(22);
+    fake.writeUInt32LE(0x06054b50);
+    const head = Buffer.from(normal);
+    head.writeUInt16LE(fake.length, head.length - 2);
+    const path = await put("comment-fake.zip", Buffer.concat([head, fake]));
+    expect(await text(await wholeFile(path), "conversations.json")).toBe("[1]");
+  });
+
   it("바깥 zip 안에 저장만 한 안쪽 zip은 그 자리를 구간으로 읽는다. 압축한 안쪽 zip은 구간으로 보지 않는다", async () => {
     const inner = makeZip([{ name: "conversations-001.json", data: '[{"a":1}]' }]);
     const path = await put("outer.zip", makeZip([{ name: "Conversations__part-001.zip", data: inner, method: 0 }, { name: "Files__part-001.zip", data: inner, method: 8 }]));

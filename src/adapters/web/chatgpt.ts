@@ -31,16 +31,21 @@ const KNOWN_TYPES: ReadonlySet<string> = new Set([
 ]);
 const KNOWN_ROLES: ReadonlySet<string> = new Set(["user", "assistant", "tool", "system"]);
 
-interface Visible {
-  role: "user" | "assistant";
+/** mapping의 노드 하나. 글은 담지 않는다 */
+interface Node {
+  key: string;
+  parent: string | null;
+  /** user와 assistant 가운데 화면에 보이는 것만 이 값이 있다. 도구 결과는 tool, 그 밖(숨김, 시스템, 빈 노드)은 null이다 */
+  role: "user" | "assistant" | "tool" | null;
   atMs: number | null;
   model: string | null;
 }
 
 /**
  * 대화 하나. 대화의 꼴(mapping과 ID)이 아니면 null이다.
- * 사람 요청은 보이는 사용자 메시지다. 응답은 보이는 메시지를 시각 차례로 세웠을 때 사람 요청 뒤에 이어지는 어시스턴트 메시지 한 덩어리다.
- * 도구를 부르고 이어 쓴 메시지와 생각은 같은 응답이고, 내보내기가 도구·시스템 메시지를 빼서 부모 사슬이 끊겨도 같게 센다. 다시 만들기는 앞 응답에 붙어 세지 않는다(적게 센다)
+ * 사람 요청은 보이는 사용자 메시지다. 응답은 사람 요청 뒤의 첫 어시스턴트 메시지다. 도구를 부르고 이어 쓴 메시지와 생각은 같은 응답이고, 질문 고치기로 생긴 가지는 새로 센다.
+ * 응답의 시작은 부모 사슬로 가린다(숨은 메시지는 건너뛴다). 내보내기가 도구·시스템 메시지를 빼서 사슬이 끊긴 메시지만 시각 차례로 가린다.
+ * 차례는 시각, 깊이, 노드 ID로 정해 mapping에 적힌 차례와 상관없다(짝 검토 3 필수 2). 다시 만들기는 앞 응답에 붙지 않고 새 응답이다
  */
 export function chatgptConversation(value: unknown): WebConversation | null {
   const conversation = obj(value);
@@ -54,33 +59,92 @@ export function chatgptConversation(value: unknown): WebConversation | null {
   const note = (kind: string): void => {
     unknownKinds[kind] = (unknownKinds[kind] ?? 0) + 1;
   };
-  const visible: Visible[] = [];
-  for (const raw of Object.values(mapping)) {
+
+  const nodes = new Map<string, Node>();
+  for (const [key, raw] of Object.entries(mapping)) {
     const node = obj(raw);
     if (node === null) {
       note("(node)");
       continue;
     }
+    const parent = str(node.parent);
     const message = obj(node.message);
-    if (message === null) continue;
+    if (message === null) {
+      nodes.set(key, { key, parent, role: null, atMs: null, model: null });
+      continue;
+    }
     const role = str(obj(message.author)?.role);
     const metadata = obj(message.metadata);
     const contentType = str(obj(message.content)?.content_type);
     if (contentType !== null && !KNOWN_TYPES.has(contentType)) note(contentType);
     if (role !== null && !KNOWN_ROLES.has(role)) note(`role:${role}`);
     const hidden = metadata?.is_visually_hidden_from_conversation === true || metadata?.is_user_system_message === true || (contentType !== null && CONTEXT_TYPES.has(contentType));
-    if (hidden || (role !== "user" && role !== "assistant")) continue;
-    visible.push({ role, atMs: secondsToMs(message.create_time) ?? fallbackMs, model: role === "assistant" ? (str(metadata?.model_slug) ?? defaultModel) : null });
+    const shown = hidden ? null : role === "user" || role === "assistant" ? role : role === "tool" ? "tool" : null;
+    nodes.set(key, { key, parent, role: shown, atMs: secondsToMs(message.create_time) ?? fallbackMs, model: shown === "assistant" ? (str(metadata?.model_slug) ?? defaultModel) : null });
   }
-  // 시각이 같으면 mapping의 차례를 지킨다(정렬은 안정하다). 시각을 모르는 메시지는 맨 뒤다
-  visible.sort((a, b) => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY));
+
+  /** 사슬이 끊긴(부모가 mapping에 없거나 고리인) 노드의 깊이 바탕. 끊긴 노드는 빠진 노드 뒤에 왔으므로 같은 시각이면 사슬이 이어진 노드 뒤에 둔다 */
+  const BROKEN_DEPTH = 1_000_000;
+  /** 뿌리까지의 깊이. 부모가 없으면 0에서, 부모가 mapping에 없거나 고리면 BROKEN_DEPTH에서 센다 */
+  const depthCache = new Map<string, number>();
+  const depthOf = (start: Node): number => {
+    const chain: Node[] = [];
+    const seen = new Set<string>();
+    let node: Node | undefined = start;
+    let base = 0;
+    while (node !== undefined) {
+      if (seen.has(node.key)) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      const known = depthCache.get(node.key);
+      if (known !== undefined) {
+        base = known + 1;
+        break;
+      }
+      seen.add(node.key);
+      chain.push(node);
+      if (node.parent === null) break;
+      const parent = nodes.get(node.parent);
+      if (parent === undefined) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      node = parent;
+    }
+    for (let index = chain.length - 1; index >= 0; index--) depthCache.set(chain[index]!.key, base + (chain.length - 1 - index));
+    return depthCache.get(start.key)!;
+  };
+
+  /** 위로 올라가며 숨은 노드를 건너뛰고 처음 만나는 보이는 노드의 역할. 뿌리까지 없으면 root, 부모가 mapping에 없거나 고리면 missing이다 */
+  const visibleAbove = (start: string | null): "user" | "assistant" | "tool" | "root" | "missing" => {
+    const seen = new Set<string>();
+    for (let key = start; key !== null; ) {
+      if (seen.has(key)) return "missing";
+      seen.add(key);
+      const node = nodes.get(key);
+      if (node === undefined) return "missing";
+      if (node.role !== null) return node.role;
+      key = node.parent;
+    }
+    return "root";
+  };
+
+  // 보이는 사람 요청과 어시스턴트 메시지를 시각, 깊이, 노드 ID 차례로 세운다(시각을 모르면 맨 뒤)
+  const order = (a: Node, b: Node): number => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY) || depthOf(a) - depthOf(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const visible = [...nodes.values()].filter((node) => node.role === "user" || node.role === "assistant").sort(order);
+
   const events: WebEvent[] = [];
-  let previous: Visible["role"] | null = null;
-  for (const message of visible) {
-    if (message.role === "user") events.push({ kind: "request", atMs: message.atMs, model: null });
-    else if (previous !== "assistant") events.push({ kind: "response", atMs: message.atMs, model: message.model });
-    previous = message.role;
-  }
+  visible.forEach((node, index) => {
+    if (node.role === "user") {
+      events.push({ kind: "request", atMs: node.atMs, model: null });
+      return;
+    }
+    const above = visibleAbove(node.parent);
+    // 사슬이 끊겼으면 시각 차례에서 바로 앞의 보이는 메시지로 가린다. 앞이 없으면 대화를 연 응답이다
+    const starts = above === "missing" ? index === 0 || visible[index - 1]!.role === "user" : above === "user" || above === "root";
+    if (starts) events.push({ kind: "response", atMs: node.atMs, model: node.model });
+  });
   return { id, events, unknownKinds };
 }
 

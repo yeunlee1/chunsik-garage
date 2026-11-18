@@ -79,6 +79,9 @@ describe("웹 채팅을 넣은 aq checkup", () => {
       ["web-chatgpt", null],
     ]);
     expect(result.usage.outputTokens).toBe(10);
+    // 볼 수 있는 날짜 범위의 끝은 오늘이 아니라 내보내기의 마지막 날이다(짝 검토 3 참고)
+    expect(result.tools.find((tool) => tool.tool === "web-chatgpt")!.visible).toEqual({ from: "2026-11-08", to: "2026-11-09" });
+    expect(result.tools.find((tool) => tool.tool === "claude-code")!.visible!.to).toBe("2026-11-12");
     const until = result.notices.find((notice) => notice.kind === "web_export_until");
     expect(until).toMatchObject({ tool: "web-chatgpt", lastDate: "2026-11-09" });
     expect(until!.text.ko).toContain("2026-11-09까지의 대화");

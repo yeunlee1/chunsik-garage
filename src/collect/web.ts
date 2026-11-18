@@ -1,4 +1,5 @@
 // 가져온 웹 채팅 내보내기 파일을 읽어 도구(ChatGPT, Claude.ai)마다 세션 요약 목록과 읽은 양을 낸다. 바뀌지 않은 파일은 캐시의 요약을 쓴다(설계 9.4, 「0.5.0에서 정한 것」)
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { normalizePath } from "../adapters/claude/locate.ts";
@@ -6,8 +7,8 @@ import { localDateOf, makeWindows, type LocalDate } from "../adapters/common/dat
 import { reviveSummary, type SessionSummary } from "../adapters/types.ts";
 import type { WebToolId } from "../adapters/web/conversation.ts";
 import { WEB_TOOLS } from "../adapters/web/observation.ts";
-import { ExportError, readExport, type ExportProblem, type ExportRead } from "../adapters/web/source.ts";
-import { cacheKeyFor, entryPath, keyStillMatches, sameKey, type CacheKey } from "../state/cache.ts";
+import { ExportError, exportFolderFiles, readExport, type ExportProblem, type ExportRead } from "../adapters/web/source.ts";
+import { CACHE_FORMAT_VERSION, cacheKeyFor, entryPath, sameKey, type CacheKey } from "../state/cache.ts";
 import type { WebExportEntry } from "../state/web-exports.ts";
 import { visibleFrom, type ClaudeReadStats, type CollectOptions } from "./claude.ts";
 
@@ -81,6 +82,30 @@ async function storeWebCached(dir: string, entry: WebCacheEntry): Promise<void> 
   await rename(temporary, target);
 }
 
+const sha256 = (text: string): string => createHash("sha256").update(text).digest("hex");
+
+/**
+ * 내보내기의 캐시 열쇠. 파일이면 다른 기록처럼 경로·크기·수정 시각·앞뒤 지문이고, 폴더면 안의 대화 파일과 안쪽 zip의 자리·크기·수정 시각 목록의 지문이다(크기는 합, 수정 시각은 가장 늦은 것).
+ * 읽는 동안 바뀌었거나 파일도 폴더도 아니면 null이다
+ */
+export async function exportKey(path: string, timeZone: string): Promise<CacheKey | null> {
+  const info = await stat(path);
+  if (info.isFile()) return cacheKeyFor({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs }, WEB_PARSER_ID, timeZone);
+  if (!info.isDirectory()) return null;
+  const files = await exportFolderFiles(path);
+  const list = files.map((file) => `${file.rel}|${file.size}|${file.mtimeMs}`).join("\n");
+  return {
+    normPath: normalizePath(path),
+    size: files.reduce((sum, file) => sum + file.size, 0),
+    mtimeMs: files.reduce((latest, file) => Math.max(latest, file.mtimeMs), 0),
+    head: sha256(list),
+    tail: sha256(`folder:${files.length}`),
+    cacheFormat: CACHE_FORMAT_VERSION,
+    parser: WEB_PARSER_ID,
+    timeZone,
+  };
+}
+
 /** 도구 하나의 내보내기를 모은다. 다른 도구의 내보내기를 넣었으면(파일의 꼴이 다르면) 읽지 못한 것으로 본다 */
 async function collectOne(tool: WebToolId, entry: WebExportEntry | undefined, options: CollectOptions): Promise<WebCollectResult> {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
@@ -105,23 +130,25 @@ async function collectOne(tool: WebToolId, entry: WebExportEntry | undefined, op
   }
   read.files = 1;
   read.listedBytes = info.isFile() ? info.size : 0;
+  const isFolder = info.isDirectory();
   const fail = (problem: WebExportState["problem"]): WebCollectResult => {
     state.problem = problem;
     read.unreadableFiles = [entry.path];
     read.unreadableFileBytes = read.listedBytes;
     return result([]);
   };
-  if (!info.isFile()) return fail("not-file");
+  if (!info.isFile() && !isFolder) return fail("not-file");
 
   const cacheDir = options.cacheDir === null ? null : join(options.cacheDir, "web");
-  const source = { path: entry.path, normPath: normalizePath(entry.path), size: info.size, mtimeMs: info.mtimeMs };
   let key: CacheKey | null = null;
   try {
+    // 폴더는 저장 없는 실행에서도 읽은 양을 알려고 열쇠를 만든다(안의 파일 크기의 합)
+    if (cacheDir !== null || isFolder) key = await exportKey(entry.path, options.clock.timeZone);
+    if (isFolder && key !== null) read.listedBytes = key.size;
     if (cacheDir !== null) {
-      key = await cacheKeyFor(source, WEB_PARSER_ID, options.clock.timeZone);
       const hit = key === null || options.rescan ? null : await loadWebCached(cacheDir, key, keepFrom, tool);
       if (hit !== null) {
-        read.bytes = info.size;
+        read.bytes = read.listedBytes;
         read.fromCache = 1;
         state.skipped = hit.skipped;
         state.truncated = !hit.complete;
@@ -141,25 +168,20 @@ async function collectOne(tool: WebToolId, entry: WebExportEntry | undefined, op
   }
   // 넣을 때 가린 서비스와 지금 파일의 서비스가 다르면(그 자리에 다른 내보내기를 덮어썼으면) 이 도구의 기록이 아니다
   if (exported.tool !== tool) return fail("unknown-service");
-  read.bytes = info.size;
+  read.bytes = read.listedBytes;
   state.skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
   state.truncated = !exported.complete;
   state.lastDate = exported.totals.lastMs === null ? null : localDateOf(exported.totals.lastMs, options.clock.timeZone);
-  if (key !== null && cacheDir !== null) {
-    try {
-      if (await keyStillMatches(entry.path, key)) await storeWebCached(cacheDir, { key, keptFrom: keepFrom, summaries: exported.summaries, skipped: state.skipped, complete: exported.complete, lastMs: exported.totals.lastMs });
-    } catch {
-      // 캐시를 쓰지 못해도 점검은 이어 간다. 다음 점검이 다시 읽는다
-    }
-  }
+  if (options.cacheDir !== null) await primeWebCache(options.cacheDir, entry.path, key, exported, keepFrom, options.clock.timeZone);
   return result(exported.summaries);
 }
 
-/** 넣을 때 읽은 것으로 캐시를 만든다. 다음 점검이 파일을 다시 읽지 않는다. 읽기 전에 본 크기와 수정 시각이 지금과 다르면(읽는 동안 바뀌었으면) 만들지 않는다 */
-export async function primeWebCache(cacheRoot: string, file: { path: string; size: number; mtimeMs: number }, exported: ExportRead, keepFrom: LocalDate, timeZone: string): Promise<void> {
+/** 읽은 것으로 캐시를 만든다. before는 읽기 전에 만든 열쇠다. 읽은 뒤의 열쇠가 그것과 다르면(읽는 동안 바뀌었으면) 만들지 않는다 */
+export async function primeWebCache(cacheRoot: string, path: string, before: CacheKey | null, exported: ExportRead, keepFrom: LocalDate, timeZone: string): Promise<void> {
   try {
-    const key = await cacheKeyFor({ path: file.path, normPath: normalizePath(file.path), size: file.size, mtimeMs: file.mtimeMs }, WEB_PARSER_ID, timeZone);
-    if (key === null) return;
+    if (before === null) return;
+    const key = await exportKey(path, timeZone);
+    if (key === null || !sameKey(key, before)) return;
     const skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
     await storeWebCached(join(cacheRoot, "web"), { key, keptFrom: keepFrom, summaries: exported.summaries, skipped, complete: exported.complete, lastMs: exported.totals.lastMs });
   } catch {

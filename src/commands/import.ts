@@ -5,7 +5,7 @@ import { localDateOf, makeWindows } from "../adapters/common/dates.ts";
 import type { WebToolId } from "../adapters/web/conversation.ts";
 import { ExportError, readExport } from "../adapters/web/source.ts";
 import type { EvalClock } from "../collect/claude.ts";
-import { primeWebCache } from "../collect/web.ts";
+import { exportKey, primeWebCache } from "../collect/web.ts";
 import { TOOL_NAMES } from "../core/copy/common.ts";
 import { fill } from "../core/copy/format.ts";
 import type { Lang } from "../core/copy/lang.ts";
@@ -90,15 +90,16 @@ async function entriesFor(stateDir: string): Promise<{ entries: WebExportEntry[]
 export async function runImportAdd(path: string, options: ImportOptions): Promise<ImportOutcome> {
   const copy = COPY[options.lang];
   const absolute = resolve(path);
-  let info;
   try {
-    info = await stat(absolute);
+    await stat(absolute);
   } catch {
     throw failure("not-found", `no file at ${absolute}`);
   }
   const { entries, broken } = await entriesFor(options.stateDir);
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const keepFrom = windows.collectDates[0]!;
+  // 읽기 전의 열쇠. 읽는 동안 바뀌었으면 캐시를 만들지 않는다
+  const before = options.cache ? await exportKey(absolute, options.clock.timeZone).catch(() => null) : null;
   let exported;
   try {
     exported = await readExport(absolute, options.clock.timeZone, keepFrom);
@@ -109,7 +110,7 @@ export async function runImportAdd(path: string, options: ImportOptions): Promis
   const tool = exported.tool;
   const replaced = entries.find((entry) => entry.tool === tool && entry.path !== absolute)?.path ?? null;
   await writeWebExports(options.stateDir, withExport(entries, { tool, path: absolute, addedAt: new Date(options.clock.nowMs).toISOString() }));
-  if (options.cache) await primeWebCache(join(options.stateDir, "cache"), { path: absolute, size: info.size, mtimeMs: info.mtimeMs }, exported, keepFrom, options.clock.timeZone);
+  if (options.cache) await primeWebCache(join(options.stateDir, "cache"), absolute, before, exported, keepFrom, options.clock.timeZone);
 
   const dateOf = (ms: number | null): string | null => (ms === null ? null : localDateOf(ms, options.clock.timeZone));
   const added: ImportAdded = {

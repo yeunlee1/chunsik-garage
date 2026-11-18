@@ -1,7 +1,7 @@
 // 춘식이 정비소 AQ 점검 실행 파일. src/를 묶은 빌드 결과라 직접 고치지 않는다.
 
 // src/cli.ts
-import { homedir, tmpdir } from "node:os";
+import { homedir, tmpdir as tmpdir2 } from "node:os";
 
 // src/commands/badge.ts
 import { mkdir as mkdir2, rename, rm, writeFile } from "node:fs/promises";
@@ -231,13 +231,14 @@ var MIN_DAYS_FOR_AQ = 3;
 function aqOfAxes(scores) {
   return roundHalfUp(scores.reduce((sum2, score) => sum2 + score, 0) / scores.length);
 }
-function overall(axes, humanRequests, activeDays2) {
+function overall(axes, humanRequests, activeDays2, webOnly = false) {
   const measured2 = axes.flatMap((axis) => axis.score === null ? [] : [axis.score]);
   const missingAxes = axes.filter((axis) => axis.score === null).map((axis) => axis.axis);
   const withheld = [];
   if (humanRequests < MIN_REQUESTS_FOR_AQ) withheld.push("too_few_requests");
   if (activeDays2 < MIN_DAYS_FOR_AQ) withheld.push("too_few_days");
   if (measured2.length === 0) withheld.push("no_axes");
+  if (webOnly) withheld.push("no_setup_tools");
   if (withheld.length > 0) return { aq: null, grade: null, tier: null, withheld, missingAxes };
   const aq = aqOfAxes(measured2);
   return { aq, ...gradeOf(aq), withheld, missingAxes };
@@ -336,7 +337,7 @@ async function runBadge(options) {
 }
 
 // src/commands/checkup.ts
-import { join as join28 } from "node:path";
+import { join as join31 } from "node:path";
 
 // src/adapters/common/dates.ts
 var SCORE_WINDOW_DAYS = 30;
@@ -472,6 +473,34 @@ function candidatesOf(tool, skills, servers, day, self) {
   return [...make(tool, "A1", "E5", a1), ...make(tool, "A2", "E5", a2), ...make(tool, "A3", "E6", a3)];
 }
 
+// src/core/measure.ts
+var scored = (value, evidence) => ({ status: "scored", value, evidence });
+var unmeasured = (reason, evidence) => ({ status: "unmeasured", reason, evidence });
+var blank = (evidence) => Object.fromEntries(Object.keys(evidence).map((key) => [key, null]));
+function countGate(sees2, denominator, minimum, evidence) {
+  if (!sees2) return unmeasured("unsupported", blank(evidence));
+  if (denominator <= 0) return unmeasured("no_data", evidence);
+  if (denominator < minimum) return unmeasured("too_little", evidence);
+  return null;
+}
+
+// src/core/installs/gate.ts
+var BLANK_INSTALL_EVIDENCE = { enabled: null, judgeable: null, judged: null, structural: null, unused: null, used: null };
+function measureInstalls(enabled, complete, minimum) {
+  const structural = enabled.filter((item2) => item2.structural).length;
+  const judgeable = enabled.length - structural;
+  const used = enabled.filter((item2) => !item2.structural && item2.verdict === "used").length;
+  const unused = enabled.filter((item2) => !item2.structural && item2.verdict === "unused").length;
+  const judged = used + unused;
+  const evidence = { enabled: enabled.length, judgeable, judged, structural, unused, used };
+  if (enabled.length === 0) return unmeasured("not_applicable", evidence);
+  if (judgeable === 0) return unmeasured("unsupported", evidence);
+  if (!complete) return unmeasured("incomplete", evidence);
+  if (judgeable < minimum) return unmeasured("too_little", evidence);
+  if (judged * 2 < judgeable || judged < minimum) return unmeasured("watching", evidence);
+  return scored(unused / judged, evidence);
+}
+
 // src/core/installs/signals.ts
 function collectNames(summaries, windows, namesOf) {
   const score = new Set(windows.scoreDates);
@@ -573,17 +602,6 @@ function restartDates(listings, recordNames, today) {
   return dates;
 }
 
-// src/core/measure.ts
-var scored = (value, evidence) => ({ status: "scored", value, evidence });
-var unmeasured = (reason, evidence) => ({ status: "unmeasured", reason, evidence });
-var blank = (evidence) => Object.fromEntries(Object.keys(evidence).map((key) => [key, null]));
-function countGate(sees2, denominator, minimum, evidence) {
-  if (!sees2) return unmeasured("unsupported", blank(evidence));
-  if (denominator <= 0) return unmeasured("no_data", evidence);
-  if (denominator < minimum) return unmeasured("too_little", evidence);
-  return null;
-}
-
 // src/core/order.ts
 function byContent(a, b) {
   const left = JSON.stringify(a);
@@ -610,23 +628,6 @@ function enablementUnread(facts) {
 }
 function mcpPlacesUnread(facts) {
   return unread(facts.claudeJson) || unread(facts.pluginsFile) || facts.projects.some((project) => unread(project.mcpJsonStatus)) || facts.plugins.some((plugin) => plugin.enabled && (!plugin.compositionKnown || plugin.mcpUnreadable)) || facts.pluginsWithoutInstall.length > 0 || facts.unreadableSkillPlaces.user || facts.unreadableSkillPlaces.projects.length > 0;
-}
-
-// src/core/installs/gate.ts
-var BLANK_INSTALL_EVIDENCE = { enabled: null, judgeable: null, judged: null, structural: null, unused: null, used: null };
-function measureInstalls(enabled, complete, minimum) {
-  const structural = enabled.filter((item2) => item2.structural).length;
-  const judgeable = enabled.length - structural;
-  const used = enabled.filter((item2) => !item2.structural && item2.verdict === "used").length;
-  const unused = enabled.filter((item2) => !item2.structural && item2.verdict === "unused").length;
-  const judged = used + unused;
-  const evidence = { enabled: enabled.length, judgeable, judged, structural, unused, used };
-  if (enabled.length === 0) return unmeasured("not_applicable", evidence);
-  if (judgeable === 0) return unmeasured("unsupported", evidence);
-  if (!complete) return unmeasured("incomplete", evidence);
-  if (judgeable < minimum) return unmeasured("too_little", evidence);
-  if (judged * 2 < judgeable || judged < minimum) return unmeasured("watching", evidence);
-  return scored(unused / judged, evidence);
 }
 
 // src/core/installs/same.ts
@@ -1041,9 +1042,9 @@ function codexSafeguard(setup) {
 function geminiSafeguard(setup) {
   if (geminiSettingsUnread(setup) || setup.safety.shellAutoApproved === null) return { tool: "gemini", guardHook: null, permissionChecks: null };
   const contexts = [setup.safety, ...setup.projects.flatMap((project) => project.scanned && project.trusted && project.safety !== null ? [project.safety] : [])];
-  const open6 = contexts.filter((context) => context.shellAutoApproved === true);
-  if (open6.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
-  if (open6.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
+  const open9 = contexts.filter((context) => context.shellAutoApproved === true);
+  if (open9.some((context) => context.sandbox === false)) return { tool: "gemini", guardHook: false, permissionChecks: false };
+  if (open9.some((context) => context.sandbox === null)) return { tool: "gemini", guardHook: null, permissionChecks: null };
   return { tool: "gemini", guardHook: false, permissionChecks: true };
 }
 function safeguardOf(tool) {
@@ -1105,7 +1106,8 @@ function s5(tool) {
 function mergedSetupRules(tools2) {
   const safeguards = tools2.map(safeguardOf);
   const setupProblems = countedProblems(tools2);
-  return { S1: s1(tools2), S2: s2(safeguards), S3: s3(setupProblems), safeguards, setupProblems };
+  const S3 = tools2.length === 0 ? unmeasured("no_data", { danglingLinks: 0, noFrontmatter: 0, problems: 0, unparsable: 0 }) : s3(setupProblems);
+  return { S1: s1(tools2), S2: s2(safeguards), S3, safeguards, setupProblems };
 }
 function setupToolRules(tool) {
   return { S5: s5(tool) };
@@ -1236,7 +1238,18 @@ function toolTotals(summaries, windows, shellTools) {
 }
 
 // src/core/evaluate.ts
+var setupTools = (tools2) => tools2.filter((tool) => tool.setup !== null);
 var byText7 = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function webToolRules(tool) {
+  const install = unmeasured("unsupported", blank(BLANK_INSTALL_EVIDENCE));
+  return {
+    ...usageRules(tool.totals, tool.coverage, tool.tool),
+    S5: unmeasured("unsupported", { enabledServers: null, failedSessions: null, mainSessions: null }),
+    F5: unmeasured("unsupported", { differingCopies: null, identicalCopies: null, skillKinds: null }),
+    E5: install,
+    E6: install
+  };
+}
 var span = (dates) => ({ from: dates[0], to: dates[dates.length - 1] });
 function evaluate(input) {
   const windows = makeWindows(input.clock.nowMs, input.clock.timeZone);
@@ -1245,14 +1258,15 @@ function evaluate(input) {
   const records = recordMap(input.installs);
   const all = [...input.tools].sort((a, b) => byText7(a.tool, b.tool)).map((tool) => ({ input: tool, totals: toolTotals(tool.summaries, windows, tool.shellTools) }));
   const scored2 = all.filter((tool) => tool.totals.responses > 0);
-  const setups = scored2.map(({ input: tool, totals: totals2 }) => {
+  const withSetup = scored2.filter((tool) => tool.input.setup !== null);
+  const setups = withSetup.map(({ input: tool, totals: totals2 }) => {
     const common = { totals: totals2, coverage: tool.coverage, highestVersion: highestMainVersion(tool.summaries) };
     if (tool.tool === "codex") return { ...common, tool: "codex", setup: tool.setup };
     if (tool.tool === "gemini") return { ...common, tool: "gemini", setup: tool.setup };
     return { ...common, tool: "claude-code", setup: tool.setup };
   });
   const usage2 = projectUsage(setups, lookup);
-  const judged = scored2.map((tool, index) => {
+  const judged = withSetup.map((tool, index) => {
     const setup = setups[index];
     const { summaries } = tool.input;
     const base = { day, windows, records };
@@ -1267,9 +1281,12 @@ function evaluate(input) {
     };
     return { tool: setup.tool, skills: skills.bundles, servers: servers.servers, candidates, measured: measured2 };
   });
+  const web = scored2.filter((tool) => tool.input.setup === null).map(({ input: tool, totals: totals2 }) => ({ tool: tool.tool, responses: totals2.responses, rules: webToolRules({ tool: tool.tool, totals: totals2, coverage: tool.coverage }), candidates: [] }));
+  const usages = scored2.map(({ input: tool, totals: totals2 }) => ({ tool: tool.tool, totals: totals2, coverage: tool.coverage }));
   const { S1, S2, S3, safeguards, setupProblems } = mergedSetupRules(setups);
   const { F3, F4, F6, missingInstructions, worstOverlap } = mergedFitRules(setups, usage2, input.projects);
-  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(setups, usage2) }, tools: judged.map((tool) => tool.measured) });
+  const measuredTools = [...judged.map((tool) => tool.measured), ...web].sort((a, b) => byText7(a.tool, b.tool));
+  const board = scoreboard({ merged: { S1, S2, S3, F3, F4, F6, ...intensityRules(usages, usage2) }, tools: measuredTools });
   const humanRequests = scored2.reduce((sum2, tool) => sum2 + tool.totals.humanRequests, 0);
   const activeDays2 = new Set(scored2.flatMap((tool) => tool.totals.activeDates)).size;
   const judgedByTool = new Map(judged.map((tool) => [tool.tool, tool]));
@@ -1280,7 +1297,7 @@ function evaluate(input) {
       const own = judgedByTool.get(tool.input.tool);
       return { tool: tool.input.tool, scored: tool.totals.responses > 0, inCalendar: tool.totals.collectResponses > 0, totals: tool.totals, skills: own?.skills ?? [], servers: own?.servers ?? [] };
     }),
-    score: overall(board.axes, humanRequests, activeDays2),
+    score: overall(board.axes, humanRequests, activeDays2, scored2.length > 0 && withSetup.length === 0),
     axes: board.axes,
     findings: board.findings,
     candidates: judged.flatMap((tool) => tool.candidates),
@@ -1296,7 +1313,9 @@ function evaluate(input) {
 var TOOL_NAMES = {
   "claude-code": { en: "Claude Code", ko: "Claude Code" },
   codex: { en: "Codex", ko: "Codex" },
-  gemini: { en: "Gemini CLI", ko: "Gemini CLI" }
+  gemini: { en: "Gemini CLI", ko: "Gemini CLI" },
+  "web-chatgpt": { en: "ChatGPT", ko: "ChatGPT" },
+  "web-claude": { en: "Claude.ai", ko: "Claude.ai" }
 };
 var AXIS_NAMES = {
   setup: { en: "Setup", ko: "\uC14B\uD305" },
@@ -2294,8 +2313,8 @@ var GRADE_COPY = {
   }
 };
 var WITHHELD_COPY = {
-  en: { records: "There are not enough records for a score yet. Try another checkup after more use has been recorded.", noAxes: "No criterion could be measured, so there is no score." },
-  ko: { records: "\uC810\uC218\uB97C \uB0B4\uB294 \uB370 \uD544\uC694\uD55C \uAE30\uB85D\uC774 \uBD80\uC871\uD569\uB2C8\uB2E4. \uC0AC\uC6A9 \uAE30\uB85D\uC774 \uB354 \uC313\uC778 \uB4A4 \uB2E4\uC2DC \uC810\uAC80\uD574 \uBCF4\uC138\uC694.", noAxes: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uC5C6\uC5B4 \uC810\uC218\uB97C \uB0B4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." }
+  en: { records: "There are not enough records for a score yet. Try another checkup after more use has been recorded.", noAxes: "No criterion could be measured, so there is no score.", webOnly: "Only web chats were used lately, so there is no score. Use Claude Code, Codex, or Gemini CLI and check again." },
+  ko: { records: "\uC810\uC218\uB97C \uB0B4\uB294 \uB370 \uD544\uC694\uD55C \uAE30\uB85D\uC774 \uBD80\uC871\uD569\uB2C8\uB2E4. \uC0AC\uC6A9 \uAE30\uB85D\uC774 \uB354 \uC313\uC778 \uB4A4 \uB2E4\uC2DC \uC810\uAC80\uD574 \uBCF4\uC138\uC694.", noAxes: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uC5C6\uC5B4 \uC810\uC218\uB97C \uB0B4\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.", webOnly: "\uCD5C\uADFC\uC5D0\uB294 \uC6F9 \uCC44\uD305\uB9CC \uC368\uC11C \uC810\uC218\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. Claude Code, Codex, Gemini CLI\uB97C \uC4F4 \uB4A4 \uB2E4\uC2DC \uC810\uAC80\uD574 \uBCF4\uC138\uC694." }
 };
 var EMPTY_COPY = {
   en: { strengths: "No clear strength was found yet. Let's start with the fixes, one at a time.", repairs: "Nothing needs fixing right now." },
@@ -2305,7 +2324,7 @@ function resultText(score, categories, lang) {
   const fewRecords = score.withheld.includes("too_few_requests") || score.withheld.includes("too_few_days");
   return {
     grade: score.tier === null ? null : GRADE_COPY[score.tier][lang].name,
-    diagnosis: score.tier !== null ? GRADE_COPY[score.tier][lang].diagnosis : fewRecords ? WITHHELD_COPY[lang].records : WITHHELD_COPY[lang].noAxes,
+    diagnosis: score.tier !== null ? GRADE_COPY[score.tier][lang].diagnosis : fewRecords ? WITHHELD_COPY[lang].records : score.withheld.includes("no_setup_tools") ? WITHHELD_COPY[lang].webOnly : WITHHELD_COPY[lang].noAxes,
     noStrengths: categories.includes("strength") ? null : EMPTY_COPY[lang].strengths,
     noRepairs: categories.includes("repair") ? null : EMPTY_COPY[lang].repairs
   };
@@ -2337,7 +2356,8 @@ function nextGradeText(next, nameOf, lang) {
 var WITHHELD_COPY2 = {
   too_few_requests: { en: "There were fewer than 20 requests from you in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC758 \uC0AC\uB78C \uC694\uCCAD\uC774 20\uAC1C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
   too_few_days: { en: "The tools were used on fewer than 3 days in the scoring window.", ko: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC4F4 \uB0A0\uC774 3\uC77C\uC5D0 \uBABB \uBBF8\uCE69\uB2C8\uB2E4." },
-  no_axes: { en: "None of the four criteria could be measured.", ko: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4." }
+  no_axes: { en: "None of the four criteria could be measured.", ko: "\uC7B4 \uC218 \uC788\uB294 \uAE30\uC900\uC774 \uD558\uB098\uB3C4 \uC5C6\uC2B5\uB2C8\uB2E4." },
+  no_setup_tools: { en: "Only web chats were used in the scoring window. The AQ needs use of Claude Code, Codex, or Gemini CLI, whose setup can be checked.", ko: "\uC810\uC218 \uAD6C\uAC04\uC5D0 \uC6F9 \uCC44\uD305\uB9CC \uC37C\uC2B5\uB2C8\uB2E4. AQ\uB294 \uC14B\uD305\uC744 \uBCFC \uC218 \uC788\uB294 Claude Code, Codex, Gemini CLI\uB97C \uC4F4 \uAE30\uB85D\uC774 \uC788\uC5B4\uC57C \uB0C5\uB2C8\uB2E4." }
 };
 var METRIC = {
   skills: { en: "skill use", ko: "\uC2A4\uD0AC \uC0AC\uC6A9" },
@@ -2372,19 +2392,37 @@ var UNCOUNTED2 = {
   mcp_unreadable: { en: "MCP definitions could not be read", ko: "MCP \uC815\uC758\uB97C \uC77D\uC9C0 \uBABB\uD568" },
   hooks_unreadable: { en: "hooks could not be read", ko: "\uD6C5\uC744 \uC77D\uC9C0 \uBABB\uD568" }
 };
-var UNCLASSIFIED_GROUPS = ["compaction", "denial", "hook", "thread_source", "item"];
+var UNCLASSIFIED_GROUPS = ["compaction", "denial", "hook", "thread_source", "item", "content"];
 var UNCLASSIFIED = {
   compaction: { en: "{count} {count:compaction|compactions}", ko: "\uC555\uCD95 {count}\uAC1C" },
   denial: { en: "{count} {count:denial marker|denial markers}", ko: "\uAC70\uC808 \uD45C\uC2DC {count}\uAC1C" },
   hook: { en: "{count} {count:hook attachment|hook attachments}", ko: "\uD6C5 \uCCA8\uBD80 {count}\uAC1C" },
   thread_source: { en: "{count} {count:session|sessions} of unknown origin counted as main", ko: "\uC8FC \uC138\uC158\uC73C\uB85C \uC13C \uCD9C\uCC98 \uBAA8\uB97C \uC138\uC158 {count}\uAC1C" },
-  item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "\uC885\uB958\uB97C \uBAA8\uB974\uB294 \uC2E4\uD589 \uD56D\uBAA9 {count}\uAC1C" }
+  item: { en: "{count} {count:work item|work items} of an unknown kind", ko: "\uC885\uB958\uB97C \uBAA8\uB974\uB294 \uC2E4\uD589 \uD56D\uBAA9 {count}\uAC1C" },
+  // 웹 채팅 내보내기에서 꼴을 모르는 메시지(0.5.0). 꼴의 이름은 문장에 넣지 않는다
+  content: { en: "{count} {count:message|messages} of an unknown shape", ko: "\uAF34\uC744 \uBAA8\uB974\uB294 \uBA54\uC2DC\uC9C0 {count}\uAC1C" }
 };
+var WEB_PROBLEM = {
+  "not-file": { en: "not a file", ko: "\uD30C\uC77C\uC774 \uC544\uB2D8" },
+  "no-conversations": { en: "no conversation file inside", ko: "\uC548\uC5D0 \uB300\uD654 \uD30C\uC77C\uC774 \uC5C6\uC74C" },
+  "folder-too-large": { en: "the folder has too many items to look through", ko: "\uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC544 \uB2E4 \uBCF4\uC9C0 \uBABB\uD568" },
+  "not-array": { en: "the conversation file is not a list", ko: "\uB300\uD654 \uD30C\uC77C\uC774 \uBAA9\uB85D\uC774 \uC544\uB2D8" },
+  "unknown-service": { en: "not an export of this service", ko: "\uC774 \uC11C\uBE44\uC2A4\uC758 \uB0B4\uBCF4\uB0B4\uAE30\uAC00 \uC544\uB2D8" },
+  zip: { en: "the zip could not be unpacked", ko: "zip\uC744 \uD480\uC9C0 \uBABB\uD568" },
+  unreadable: { en: "the file could not be opened", ko: "\uD30C\uC77C\uC744 \uC5F4\uC9C0 \uBABB\uD568" }
+};
+var webProblem = (problem, lang) => (problem.startsWith("zip-") ? WEB_PROBLEM.zip : WEB_PROBLEM[problem] ?? WEB_PROBLEM.unreadable)[lang];
 var TOP_ITEM_KINDS = 3;
 var LINES = {
   en: {
     withheld: "No AQ was given. {reasons}",
     state_reset: "The state file was broken, so a new one was started. The record of watched installs builds up again from the start.",
+    web_exports_reset: "The list of added web chat exports was broken, so web chats were left out. Add the export files again to count them.",
+    web_export_missing: "{tool}: the export file you added is no longer there, so it was left out. Add the export file again to count it.",
+    web_export_unreadable: "{tool}: the export file could not be read ({why}), so it was left out.",
+    web_export_partial: "{tool}: {count} {count:conversation in the export was|conversations in the export were} left out (too large, broken, or of an unknown shape). Only what was read is counted.",
+    webTruncated: "{tool}: the export could not be read to the end (the file ended early or the folder has too many items). Only what was read is counted.",
+    web_export_until: "{tool}: the export has conversations up to {date}. Later days count as days without use. Export again and add the file to count them.",
     credentials_in_config: "{tool}: {count} {count:place in the settings has|places in the settings have} an API key or token written as it is. Move {count:it|them} into environment variables. The values were not shown or saved.",
     record_unreadable: "{tool}: {files} {files:file|files} and {dirs} {dirs:folder|folders} of records could not be read. Only what was read is counted.",
     record_skipped: "{tool}: {files} compressed record {files:file was|files were} skipped because this Node.js cannot unpack zstd. Node.js 22.15.0 or later on 22, 23.8.0 or later on 23, and any version from 24 read them.",
@@ -2411,6 +2449,12 @@ var LINES = {
   ko: {
     withheld: "AQ\uB97C \uB0B4\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4. {reasons}",
     state_reset: "\uC0C1\uD0DC \uD30C\uC77C\uC774 \uAE68\uC838 \uC0C8\uB85C \uC2DC\uC791\uD588\uC2B5\uB2C8\uB2E4. \uC124\uCE58\uB97C \uC9C0\uCF1C\uBCF8 \uAE30\uB85D\uC774 \uCC98\uC74C\uBD80\uD130 \uB2E4\uC2DC \uC313\uC785\uB2C8\uB2E4.",
+    web_exports_reset: "\uB123\uC740 \uC6F9 \uCC44\uD305 \uB0B4\uBCF4\uB0B4\uAE30\uC758 \uBAA9\uB85D\uC774 \uAE68\uC838 \uC6F9 \uCC44\uD305\uC744 \uBE7C\uACE0 \uC14C\uC2B5\uB2C8\uB2E4. \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC744 \uB2E4\uC2DC \uB123\uC73C\uBA74 \uC149\uB2C8\uB2E4.",
+    web_export_missing: "{tool} \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC774 \uB123\uC740 \uC790\uB9AC\uC5D0 \uC5C6\uC5B4 \uC774\uBC88 \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC744 \uB2E4\uC2DC \uB123\uC73C\uBA74 \uC149\uB2C8\uB2E4.",
+    web_export_unreadable: "{tool} \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC744 \uC77D\uC9C0 \uBABB\uD574({why}) \uC774\uBC88 \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4.",
+    web_export_partial: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uC5D0\uC11C \uB300\uD654 {count}\uAC1C\uB97C \uBE7C\uACE0 \uC14C\uC2B5\uB2C8\uB2E4(\uB108\uBB34 \uD06C\uAC70\uB098 \uAE68\uC84C\uAC70\uB098 \uAF34\uC744 \uBAA8\uB984). \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
+    webTruncated: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB05D\uAE4C\uC9C0 \uC77D\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4(\uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACBC\uAC70\uB098 \uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC74C). \uC77D\uC740 \uB300\uD654\uB9CC \uC14C\uC2B5\uB2C8\uB2E4.",
+    web_export_until: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uC5D0\uB294 {date}\uAE4C\uC9C0\uC758 \uB300\uD654\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uADF8 \uB4A4\uC758 \uB0A0\uC740 \uC4F0\uC9C0 \uC54A\uC740 \uB0A0\uB85C \uC149\uB2C8\uB2E4. \uB2E4\uC2DC \uB0B4\uBCF4\uB0B4 \uB123\uC73C\uBA74 \uADF8 \uB4A4\uB3C4 \uC149\uB2C8\uB2E4.",
     credentials_in_config: "{tool} \uC124\uC815 {count}\uACF3\uC5D0 API \uD0A4\uB098 \uD1A0\uD070\uC774 \uADF8\uB300\uB85C \uC801\uD600 \uC788\uC2B5\uB2C8\uB2E4. \uD658\uACBD \uBCC0\uC218\uB85C \uC62E\uAE30\uC138\uC694. \uAC12\uC740 \uBCF4\uC5EC \uC8FC\uAC70\uB098 \uC800\uC7A5\uD558\uC9C0 \uC54A\uC558\uC2B5\uB2C8\uB2E4.",
     record_unreadable: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC77D\uC9C0 \uBABB\uD55C \uD30C\uC77C {files}\uAC1C\uC640 \uD3F4\uB354 {dirs}\uAC1C\uAC00 \uC788\uC2B5\uB2C8\uB2E4. \uC77D\uC740 \uAC83\uB9CC\uC73C\uB85C \uACC4\uC0B0\uD588\uC2B5\uB2C8\uB2E4.",
     record_skipped: "{tool} \uAE30\uB85D \uAC00\uC6B4\uB370 \uC774 Node.js\uAC00 zstd \uC555\uCD95\uC744 \uD480\uC9C0 \uBABB\uD574 \uAC74\uB108\uB6F4 \uD30C\uC77C\uC774 {files}\uAC1C \uC788\uC2B5\uB2C8\uB2E4. Node.js 22\uB294 22.15.0 \uC774\uC0C1, 23\uC740 23.8.0 \uC774\uC0C1, 24\uBD80\uD130\uB294 \uBAA8\uB4E0 \uBC84\uC804\uC5D0\uC11C \uC77D\uD799\uB2C8\uB2E4.",
@@ -2453,6 +2497,18 @@ function noticeText(notice, lang) {
       return fill(lines.withheld, { reasons: notice.reasons.map((reason) => WITHHELD_COPY2[reason][lang]).join(" ") });
     case "state_reset":
       return lines.state_reset;
+    case "web_exports_reset":
+      return lines.web_exports_reset;
+    case "web_export_missing":
+      return fill(lines.web_export_missing, { tool });
+    case "web_export_unreadable":
+      return fill(lines.web_export_unreadable, { tool, why: webProblem(notice.problem, lang) });
+    case "web_export_partial": {
+      const parts = [notice.skipped > 0 ? fill(lines.web_export_partial, { tool, count: notice.skipped }) : null, notice.truncated ? fill(lines.webTruncated, { tool }) : null];
+      return parts.filter((part) => part !== null).join(" ");
+    }
+    case "web_export_until":
+      return fill(lines.web_export_until, { tool, date: notice.lastDate });
     case "credentials_in_config":
       return fill(lines.credentials_in_config, { tool, count: notice.places.length });
     case "record_unreadable":
@@ -2627,7 +2683,7 @@ function toolsDiffer(claude, codex) {
   return shared * 2 < fewer ? { kind: "tools_instructions_differ", shared, lines: { "claude-code": claude.lineHashes.length, codex: codex.lineHashes.length } } : null;
 }
 function deepHints(input) {
-  const tools2 = [...input.tools].sort((a, b) => byText8(a.tool, b.tool));
+  const tools2 = setupTools(input.tools).sort((a, b) => byText8(a.tool, b.tool));
   const hints = tools2.flatMap((tool) => toolHints(tool.tool, hintSetup(tool, input)));
   const claude = tools2.find((tool) => tool.tool === "claude-code");
   const codex = tools2.find((tool) => tool.tool === "codex");
@@ -2644,7 +2700,7 @@ function deepFiles(input) {
     seen.add(key);
     files.push({ ...entry, path: file.path, bytes: file.bytes });
   };
-  for (const tool of [...input.tools].sort((a, b) => byText8(a.tool, b.tool))) {
+  for (const tool of setupTools(input.tools).sort((a, b) => byText8(a.tool, b.tool))) {
     const setup = hintSetup(tool, input);
     for (const file of setup.globalInstructions.files) add(file, { tool: tool.tool, scope: "global", project: null, selected: true });
     for (const project of setup.projects) for (const file of project.instructions.files) if (!file.sameAsGlobal) add(file, { tool: tool.tool, scope: "project", project: project.root, selected: false });
@@ -2657,21 +2713,28 @@ var VERIFIED_VERSIONS = {
   "claude-code": { from: "2.1.220", to: "2.1.322" },
   codex: { from: "0.140.0", to: "0.169.0" },
   // 제미나이 CLI는 세션 기록에 버전을 적지 않아 이 범위로 견줄 버전이 없다. 해석 규약은 공개 소스 v0.68.0으로 확인했다(설계 「0.4.0에서 정한 것」)
-  gemini: { from: "0.68.0", to: "0.68.0" }
+  gemini: { from: "0.68.0", to: "0.68.0" },
+  "web-chatgpt": null,
+  "web-claude": null
 };
 var WEAK_REQUEST_SHARE = 0.1;
 var NOTICE_KINDS = [
   "score_withheld",
   "state_reset",
+  "web_exports_reset",
   "credentials_in_config",
   "record_unreadable",
   "record_skipped",
   "record_partial",
+  "web_export_missing",
+  "web_export_unreadable",
+  "web_export_partial",
   "observation_incomplete",
   "setup_unreadable",
   "plugins_uncounted",
   "setup_problems_unscored",
   "projects_gone",
+  "web_export_until",
   "version_unverified",
   "weak_human_requests",
   "overlapping_responses",
@@ -2743,7 +2806,8 @@ function setupNotices(input, evaluation, run2) {
   const notices2 = [];
   if (evaluation.score.withheld.length > 0) notices2.push({ kind: "score_withheld", reasons: [...evaluation.score.withheld] });
   if (run2.stateBroken) notices2.push({ kind: "state_reset" });
-  for (const tool of input.tools) {
+  if (run2.webExportsBroken === true) notices2.push({ kind: "web_exports_reset" });
+  for (const tool of setupTools(input.tools)) {
     if (tool.setup.secrets.length > 0) notices2.push({ kind: "credentials_in_config", tool: tool.tool, places: [...tool.setup.secrets] });
     if (tool.tool === "codex") {
       notices2.push(...codexSetupNotices(tool.setup, input.projects));
@@ -2790,6 +2854,15 @@ function setupNotices(input, evaluation, run2) {
   if (gone.length > 0) notices2.push({ kind: "projects_gone", projects: sortedUnique(gone) });
   return sortNotices(notices2);
 }
+function webRecordNotices(tool, state, today) {
+  if (state.path === null) return [];
+  if (state.missing) return [{ kind: "web_export_missing", tool, path: state.path }];
+  if (state.problem !== null) return [{ kind: "web_export_unreadable", tool, path: state.path, problem: state.problem }];
+  const notices2 = [];
+  if (state.skipped > 0 || state.truncated) notices2.push({ kind: "web_export_partial", tool, skipped: state.skipped, truncated: state.truncated });
+  if (state.lastDate !== null && state.lastDate < today) notices2.push({ kind: "web_export_until", tool, lastDate: state.lastDate });
+  return notices2;
+}
 function codexRecordNotices(tool, codex) {
   const notices2 = [];
   if (codex.skippedFiles.length > 0) notices2.push({ kind: "record_skipped", tool, files: [...codex.skippedFiles].sort(byText9) });
@@ -2818,15 +2891,18 @@ function recordNotices(input, evaluation, collected) {
       }
       if (found.overlappingSessions > 0) notices2.push({ kind: "overlapping_responses", tool: id, sessions: found.overlappingSessions });
       if (found.codex !== void 0) notices2.push(...codexRecordNotices(id, found.codex));
+      if (found.web !== void 0) notices2.push(...webRecordNotices(id, found.web, evaluation.windows.today));
     }
     const verified = VERIFIED_VERSIONS[id];
-    const [from, to] = [parseVersion(verified.from), parseVersion(verified.to)];
-    const outside2 = /* @__PURE__ */ new Map();
-    for (const summary of tool.summaries) {
-      const version = parseVersion(summary.version);
-      if (version !== null && (compareVersions(version, from) < 0 || compareVersions(version, to) > 0)) outside2.set(summary.version, version);
+    if (verified !== null) {
+      const [from, to] = [parseVersion(verified.from), parseVersion(verified.to)];
+      const outside2 = /* @__PURE__ */ new Map();
+      for (const summary of tool.summaries) {
+        const version = parseVersion(summary.version);
+        if (version !== null && (compareVersions(version, from) < 0 || compareVersions(version, to) > 0)) outside2.set(summary.version, version);
+      }
+      if (outside2.size > 0) notices2.push({ kind: "version_unverified", tool: id, versions: [...outside2].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
     }
-    if (outside2.size > 0) notices2.push({ kind: "version_unverified", tool: id, versions: [...outside2].sort((a, b) => compareVersions(a[1], b[1])).map(([text]) => text), verified: { ...verified } });
     let total = 0;
     let weak = 0;
     for (const summary of tool.summaries) {
@@ -2846,6 +2922,7 @@ function recordNotices(input, evaluation, collected) {
       if (summary.codex?.unknownThreadSource != null) add(`thread_source:${summary.codex.unknownThreadSource}`, 1);
       for (const [kind, count] of Object.entries(summary.codex?.unknownItemTypes ?? {})) add(`item:${kind}`, count);
       for (const [kind, count] of Object.entries(summary.notes.unknownHookKinds)) add(`hook:${kind}`, count);
+      if (tool.setup === null) for (const [kind, count] of Object.entries(summary.missing.unconfirmedTypes)) add(`content:${kind}`, count);
       for (const day of Object.values(summary.days)) {
         for (const [kind, count] of Object.entries(day.unknownDenialKinds)) add(`denial:${kind}`, count);
         add("compaction", day.unknownCompactions);
@@ -2886,7 +2963,7 @@ function mergedObserved(rule2, tools2) {
 }
 
 // src/core/result/tools.ts
-var FORMATS = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"] };
+var FORMATS = { "claude-code": ["claude-code-jsonl"], codex: ["codex-jsonl"], gemini: ["gemini-jsonl", "gemini-json"], "web-chatgpt": ["chatgpt-export"], "web-claude": ["claude-export"] };
 var inRange2 = (date, range) => date >= range.from && date <= range.to;
 function resultTools(input, evaluation, collected) {
   return evaluation.tools.map((tool) => {
@@ -2894,6 +2971,8 @@ function resultTools(input, evaluation, collected) {
     const summaries = input.tools.find((item2) => item2.tool === tool.tool)?.summaries ?? [];
     const subSessions = summaries.filter((summary) => summary.kind === "sub" && Object.entries(summary.days).some(([date, day]) => inRange2(date, evaluation.windows.score) && day.responses > 0)).length;
     const visibleFrom2 = found?.visibleFrom ?? null;
+    const lastDate = found?.web?.lastDate ?? null;
+    const visibleTo = lastDate !== null && lastDate < evaluation.windows.today ? lastDate : evaluation.windows.today;
     return {
       tool: tool.tool,
       detected: found?.detected ?? false,
@@ -2904,7 +2983,8 @@ function resultTools(input, evaluation, collected) {
       subSessions,
       humanRequests: tool.totals.humanRequests,
       responses: tool.totals.responses,
-      visible: visibleFrom2 === null ? null : { from: visibleFrom2, to: evaluation.windows.today }
+      // 내보내기가 모두 수집 구간보다 오래되면 볼 수 있는 날이 없다(짝 검토 5 필수 8)
+      visible: visibleFrom2 === null || visibleTo < visibleFrom2 ? null : { from: visibleFrom2, to: visibleTo }
     };
   });
 }
@@ -2938,7 +3018,7 @@ function resultUsage(input, evaluation, collected) {
     tool: tool.tool,
     mainSessions: tool.totals.mainSessions.length,
     activeDays: tool.totals.activeDates.length,
-    outputTokens: tool.totals.tokens.output,
+    outputTokens: inputs.get(tool.tool).coverage.responsesAndTokens === "unsupported" ? null : tool.totals.tokens.output,
     cacheHit: e12?.tools.find((value) => value.tool === tool.tool)?.value ?? null,
     shellNonZero: share(shellCounts(inputs.get(tool.tool), score))
   }));
@@ -2949,16 +3029,21 @@ function resultUsage(input, evaluation, collected) {
       for (const [date, day] of Object.entries(summary.days)) responsesByDate.set(date, (responsesByDate.get(date) ?? 0) + day.responses);
     }
   }
-  const visibleFroms = collected.map((tool) => tool.visibleFrom).filter((date) => date !== null);
+  const today = evaluation.windows.today;
+  const ranges = collected.flatMap((tool) => {
+    if (tool.visibleFrom === null) return [];
+    const last = tool.web?.lastDate ?? null;
+    return [{ from: tool.visibleFrom, to: last !== null && last < today ? last : today }];
+  });
   const calendar2 = makeWindows(input.clock.nowMs, input.clock.timeZone).collectDates.map((date) => {
     const responses = responsesByDate.get(date) ?? 0;
-    const state = responses > 0 ? "used" : visibleFroms.some((from) => from <= date) ? "unused" : "unseen";
+    const state = responses > 0 ? "used" : ranges.some((range) => range.from <= date && date <= range.to) ? "unused" : "unseen";
     return { date, responses, state };
   });
   return {
     mainSessions: byTool.reduce((sum2, tool) => sum2 + tool.mainSessions, 0),
     activeDays: new Set(scored2.flatMap((tool) => tool.totals.activeDates)).size,
-    outputTokens: byTool.reduce((sum2, tool) => sum2 + tool.outputTokens, 0),
+    outputTokens: byTool.length > 0 && byTool.every((tool) => tool.outputTokens === null) ? null : byTool.reduce((sum2, tool) => sum2 + (tool.outputTokens ?? 0), 0),
     cacheHit: e12?.value ?? null,
     shellNonZero: shells.length === 0 ? null : share({ results: shells.reduce((sum2, counts) => sum2 + counts.results, 0), errors: shells.reduce((sum2, counts) => sum2 + counts.errors, 0) }),
     calendar: calendar2,
@@ -2997,7 +3082,7 @@ function failedMcpServers(evaluation) {
 }
 function credentialPlaces(input) {
   const names2 = new Map(input.projects.map((project) => [project.normRoot, project.name]));
-  return [...input.tools].sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key, ...secret.copy === void 0 ? {} : { copy: secret.copy } })));
+  return setupTools(input.tools).sort((a, b) => byText10(a.tool, b.tool)).flatMap((tool) => tool.setup.secrets.map((secret) => ({ tool: tool.tool, scope: secret.scope, server: secret.server, projectName: secret.projectRoot === null ? null : names2.get(secret.projectRoot) ?? null, field: secret.field, key: secret.key, ...secret.copy === void 0 ? {} : { copy: secret.copy } })));
 }
 function checkupResult(source) {
   const { input, evaluation, collected } = source;
@@ -3045,7 +3130,15 @@ function summaryNotice(notice) {
   switch (notice.kind) {
     case "score_withheld":
     case "state_reset":
+    case "web_exports_reset":
+    case "web_export_missing":
       return { kind: notice.kind, tool, detail: null, count: null };
+    case "web_export_unreadable":
+      return { kind: notice.kind, tool, detail: notice.problem, count: null };
+    case "web_export_partial":
+      return { kind: notice.kind, tool, detail: notice.truncated ? "truncated" : null, count: notice.skipped };
+    case "web_export_until":
+      return { kind: notice.kind, tool, detail: notice.lastDate, count: null };
     case "credentials_in_config":
       return { kind: notice.kind, tool, detail: null, count: notice.places.length };
     case "record_unreadable":
@@ -3956,7 +4049,7 @@ dialog.card h2{font-size:16px;text-transform:none;letter-spacing:0;margin:0 0 12
 
 // src/report/html.ts
 var RAMP = ["#cde2fb", "#86b6ef", "#3987e5", "#184f95"];
-var TOOL_COLORS = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70" };
+var TOOL_COLORS = { "claude-code": "#2a78d6", codex: "#c8660a", gemini: "#199e70", "web-chatgpt": "#e87ba4", "web-claude": "#4a3aa7" };
 var REPO = "chunsik-garage";
 function esc(value) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
@@ -4154,14 +4247,17 @@ function tools(view) {
   const list = view.usage.byTool;
   if (list.length === 0) return { chart: `<p class="empty">${both(REPORT_COPY.noTools)}</p>`, table: `<p class="empty">${both(REPORT_COPY.noTools)}</p>` };
   const width = (part, total) => Math.round(part / (total || 1) * 1e4) / 100;
-  const row = (label, value, format) => {
-    const total = list.reduce((sum2, tool) => sum2 + value(tool), 0);
+  const row = (label, pick, format) => {
+    const shown = list.filter((tool) => pick(tool) !== null);
+    const value = (tool) => pick(tool) ?? 0;
+    const total = shown.reduce((sum2, tool) => sum2 + value(tool), 0);
+    if (shown.length === 0) return "";
     return perLang(
-      (lang) => `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(list.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${list.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${list.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`
+      (lang) => `<div class="t"><span>${esc(label[lang])}</span><b>${esc(format(total, lang))}</b><div class="splitbar" role="img" aria-label="${esc(shown.map((tool) => `${TOOL_NAMES[tool.tool][lang]} ${format(value(tool), lang)}`).join(", "))}">${shown.map((tool) => `<i style="width:${width(value(tool), total)}%;background:${TOOL_COLORS[tool.tool]}"></i>`).join("")}</div><div class="lg">${shown.map((tool) => `<small><i class="sw" style="background:${TOOL_COLORS[tool.tool]}"></i>${esc(TOOL_NAMES[tool.tool][lang])} ${esc(format(value(tool), lang))}</small>`).join("")}</div></div>`
     );
   };
   const chart = `<div class="tools">${row(REPORT_COPY.kMain, (tool) => tool.mainSessions, (count) => groupDigits(count))}${row(REPORT_COPY.kOut, (tool) => tool.outputTokens, shortTokens)}</div>`;
-  const rows = list.map((tool) => `<tr><th scope="row">${both(TOOL_NAMES[tool.tool])}</th><td class="n">${groupDigits(tool.mainSessions)}</td><td class="n">${groupDigits(tool.outputTokens)}</td></tr>`).join("");
+  const rows = list.map((tool) => `<tr><th scope="row">${both(TOOL_NAMES[tool.tool])}</th><td class="n">${groupDigits(tool.mainSessions)}</td><td class="n">${tool.outputTokens === null ? "\u2014" : groupDigits(tool.outputTokens)}</td></tr>`).join("");
   const table = `<table class="tv"><caption class="sr">${both(REPORT_COPY.toolsTable)}</caption><thead><tr><th scope="col">${both(REPORT_COPY.thTool)}</th><th scope="col">${both(REPORT_COPY.kMain)}</th><th scope="col">${both(REPORT_COPY.kOut)}</th></tr></thead><tbody>${rows}</tbody></table>`;
   return { chart, table };
 }
@@ -4183,7 +4279,7 @@ function usage(view, lang) {
   const kpis = [
     kpi(groupDigits(view.usage.mainSessions), REPORT_COPY.kMain),
     kpi(`${view.usage.activeDays}/${days}`, REPORT_COPY.kDays),
-    kpi(both(textsOf2((l) => shortTokens(view.usage.outputTokens, l))), REPORT_COPY.kOut),
+    kpi(view.usage.outputTokens === null ? "\u2014" : both(textsOf2((l) => shortTokens(view.usage.outputTokens, l))), REPORT_COPY.kOut),
     kpi(view.usage.cacheHit === null ? "\u2014" : percent(view.usage.cacheHit), REPORT_COPY.kCache)
   ].join("");
   const cal = calendar(view, lang);
@@ -4625,6 +4721,7 @@ function reviveDay(v) {
   }
   return out;
 }
+var TOOL_IDS = /* @__PURE__ */ new Set(["claude-code", "codex", "gemini", "web-chatgpt", "web-claude"]);
 var ID_FALLBACKS = /* @__PURE__ */ new Set(["first-line-unreadable", "first-line-not-meta", "meta-without-id", "no-lines"]);
 function reviveCodex(v) {
   if (!isObject2(v) || typeof v.recordId !== "string" || !isNullableString(v.unknownThreadSource) || typeof v.baselineMissing !== "boolean") return null;
@@ -4644,7 +4741,7 @@ function reviveCodex(v) {
 function reviveSummary(value) {
   if (!isObject2(value)) return null;
   const v = value;
-  if (v.tool !== "claude-code" && v.tool !== "codex" && v.tool !== "gemini" || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
+  if (!TOOL_IDS.has(v.tool) || typeof v.sessionId !== "string" || v.kind !== "main" && v.kind !== "sub") return null;
   if (!isNullableString(v.parentSessionId) || !isNullableString(v.cwd) || !isNullableString(v.version)) return null;
   if (!isNullableString(v.firstDate) || v.firstDate !== null && !DATE_KEY.test(v.firstDate)) return null;
   if (!isObject2(v.days)) return null;
@@ -4714,7 +4811,9 @@ var STATE_ENTRIES = [
   { name: "notified", kind: "dir", removedBy: "all" },
   { name: "tune", kind: "dir", removedBy: "all" },
   // AQ 배지 그림(0.2.0). 가장 최근 것 하나만 둔다
-  { name: "badge.svg", kind: "file", removedBy: "all" }
+  { name: "badge.svg", kind: "file", removedBy: "all" },
+  // 가져온 웹 채팅 내보내기 파일의 자리(0.5.0). 내보내기 파일 자체는 복사하지 않는다
+  { name: "web-exports.json", kind: "file", removedBy: "all" }
 ];
 var isMissing2 = (error) => error?.code === "ENOENT";
 async function treeSize(path) {
@@ -5207,8 +5306,8 @@ async function writeResult(stateDir2, stamp, result) {
   await writeJson(path, result);
   return path;
 }
-async function writeTempResult(tmpdir2, stamp, result) {
-  const path = join9(tmpdir2, `${TEMP_PREFIX}${stamp}.json`);
+async function writeTempResult(tmpdir3, stamp, result) {
+  const path = join9(tmpdir3, `${TEMP_PREFIX}${stamp}.json`);
   await writeJson(path, result);
   return path;
 }
@@ -5219,8 +5318,8 @@ async function writeReport(stateDir2, stamp, html) {
   await writeText(path, html);
   return path;
 }
-async function writeTempReport(tmpdir2, stamp, html) {
-  const path = join9(tmpdir2, `${TEMP_REPORT_PREFIX}${stamp}.html`);
+async function writeTempReport(tmpdir3, stamp, html) {
+  const path = join9(tmpdir3, `${TEMP_REPORT_PREFIX}${stamp}.html`);
   await writeText(path, html);
   return path;
 }
@@ -5263,9 +5362,79 @@ async function pruneReports(stateDir2, keep = KEEP_REPORTS, keepStamp = null) {
   return { removed: result.removed, skipped: result.linked > 0 ? "reports" : null };
 }
 
+// src/state/web-exports.ts
+import { mkdir as mkdir6, readFile as readFile5, rename as rename5, rm as rm4, writeFile as writeFile5 } from "node:fs/promises";
+import { join as join10 } from "node:path";
+
+// src/adapters/web/observation.ts
+var WEB_TOOLS = ["web-chatgpt", "web-claude"];
+var WEB_COVERAGE = {
+  responsesAndTokens: "unsupported",
+  humanRequests: "measured",
+  toolCalls: "unsupported",
+  toolErrors: "unsupported",
+  shellExitCodes: "unsupported",
+  deniedAndLengthStops: "unsupported",
+  interruptedTurns: "unsupported",
+  autoCompaction: "unsupported",
+  effort: "unsupported",
+  loadedNames: "unsupported",
+  skillUsage: "unsupported",
+  mcpCalls: "unsupported",
+  mcpFailuresAndHooks: "unsupported",
+  instructionSize: "unsupported",
+  subagents: "unsupported"
+};
+var WEB_OBSERVATION = { complete: false, reasons: ["not-recorded"] };
+
+// src/state/web-exports.ts
+var WEB_EXPORTS_FILE = "web-exports.json";
+var WEB_EXPORTS_SCHEMA = 1;
+var isTool = (value) => WEB_TOOLS.includes(value);
+async function readWebExports(stateDir2) {
+  let text;
+  try {
+    text = await readFile5(join10(stateDir2, WEB_EXPORTS_FILE), "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return { status: "missing", entries: [] };
+    return { status: "broken", entries: [] };
+  }
+  try {
+    const value = JSON.parse(text);
+    if (value === null || typeof value !== "object" || value.schema !== WEB_EXPORTS_SCHEMA || !Array.isArray(value.exports)) return { status: "broken", entries: [] };
+    const entries = [];
+    for (const item2 of value.exports) {
+      const entry = item2;
+      if (entry === null || typeof entry !== "object" || !isTool(entry.tool) || typeof entry.path !== "string" || entry.path === "" || typeof entry.addedAt !== "string") return { status: "broken", entries: [] };
+      if (entries.some((other) => other.tool === entry.tool)) return { status: "broken", entries: [] };
+      entries.push({ tool: entry.tool, path: entry.path, addedAt: entry.addedAt });
+    }
+    entries.sort((a, b) => a.tool < b.tool ? -1 : 1);
+    return { status: "ok", entries };
+  } catch {
+    return { status: "broken", entries: [] };
+  }
+}
+async function writeWebExports(stateDir2, entries) {
+  const path = join10(stateDir2, WEB_EXPORTS_FILE);
+  if (entries.length === 0) {
+    await rm4(path, { force: true });
+    return;
+  }
+  await mkdir6(stateDir2, { recursive: true });
+  const sorted = [...entries].sort((a, b) => a.tool < b.tool ? -1 : 1);
+  const temporary = `${path}.${process.pid}.tmp`;
+  await writeFile5(temporary, `${JSON.stringify({ schema: WEB_EXPORTS_SCHEMA, exports: sorted }, null, 2)}
+`);
+  await rename5(temporary, path);
+}
+function withExport(entries, entry) {
+  return [...entries.filter((other) => other.tool !== entry.tool), entry];
+}
+
 // src/hook/notify.ts
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 var isMissing3 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -5280,18 +5449,18 @@ function readObject(path) {
 }
 var keysOf = (value) => typeof value === "object" && value !== null && !Array.isArray(value) ? Object.keys(value) : [];
 function notifyNames(env, homedir2) {
-  const configDir = env.CLAUDE_CONFIG_DIR || join10(homedir2, ".claude");
+  const configDir = env.CLAUDE_CONFIG_DIR || join11(homedir2, ".claude");
   const names2 = /* @__PURE__ */ new Set();
   let complete = true;
   try {
-    for (const entry of readdirSync(join10(configDir, "skills"), { withFileTypes: true })) if (entry.isDirectory() || entry.isSymbolicLink()) names2.add(`skill:${entry.name}`);
+    for (const entry of readdirSync(join11(configDir, "skills"), { withFileTypes: true })) if (entry.isDirectory() || entry.isSymbolicLink()) names2.add(`skill:${entry.name}`);
   } catch (error) {
     if (!isMissing3(error)) complete = false;
   }
-  const settings = readObject(join10(configDir, "settings.json"));
+  const settings = readObject(join11(configDir, "settings.json"));
   if (settings === void 0) complete = false;
   for (const id of keysOf(settings?.enabledPlugins)) names2.add(`plugin:${id}`);
-  const global = readObject(env.CLAUDE_CONFIG_DIR ? join10(env.CLAUDE_CONFIG_DIR, ".claude.json") : join10(homedir2, ".claude.json"));
+  const global = readObject(env.CLAUDE_CONFIG_DIR ? join11(env.CLAUDE_CONFIG_DIR, ".claude.json") : join11(homedir2, ".claude.json"));
   if (global === void 0) complete = false;
   for (const name of keysOf(global?.mcpServers)) names2.add(`mcp:${name}`);
   return { names: [...names2].sort(), complete };
@@ -5301,7 +5470,7 @@ function nextNames(previous, current) {
 }
 
 // src/version.ts
-var PROGRAM_VERSION = "0.4.0";
+var PROGRAM_VERSION = "0.5.0";
 
 // src/adapters/claude/observation.ts
 var CLAUDE_COVERAGE = {
@@ -6907,7 +7076,7 @@ var GeminiSessionParser = class {
 };
 
 // src/collect/claude.ts
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 
 // src/adapters/common/lines.ts
 import { open as open3, stat as stat2 } from "node:fs/promises";
@@ -7086,7 +7255,7 @@ async function collectClaude(options) {
 }
 async function collectFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const cacheDir = options.cacheDir === null ? null : join11(options.cacheDir, "claude-code");
+  const cacheDir = options.cacheDir === null ? null : join12(options.cacheDir, "claude-code");
   const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
   const summaries = [];
   const unreadableFiles = [...list.unreadableFiles];
@@ -7198,20 +7367,20 @@ function overlappingSessions(summaries) {
 }
 
 // src/collect/codex.ts
-import { join as join13 } from "node:path";
+import { join as join14 } from "node:path";
 
 // src/adapters/codex/locate.ts
 import { readdir as readdir5, stat as stat3 } from "node:fs/promises";
-import { join as join12, resolve as resolve2 } from "node:path";
+import { join as join13, resolve as resolve2 } from "node:path";
 function codexHome(env, homedir2) {
   const fromEnv = env.CODEX_HOME?.trim();
-  return fromEnv ? resolve2(fromEnv) : join12(homedir2, ".codex");
+  return fromEnv ? resolve2(fromEnv) : join13(homedir2, ".codex");
 }
 var isMissing4 = (error) => error?.code === "ENOENT";
 var DIGITS = /^\d+$/;
 var ROLLOUT = /^rollout-.*?-(?:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl(\.zst)?$/i;
 async function listCodexFiles(home, minChangedMs, statFile = stat3) {
-  const sessions = join12(home, "sessions");
+  const sessions = join13(home, "sessions");
   const files = [];
   const unreadableDirs = [];
   let olderThanWindow = 0;
@@ -7226,7 +7395,7 @@ async function listCodexFiles(home, minChangedMs, statFile = stat3) {
       return true;
     }
     for (const entry of entries) {
-      const path = join12(dir, entry.name);
+      const path = join13(dir, entry.name);
       if (depth < 3) {
         if (DIGITS.test(entry.name) && !entry.isFile()) await walk(path, depth + 1);
         else if (DIGITS.test(entry.name) && entry.isFile()) unreadableDirs.push(path);
@@ -7387,7 +7556,7 @@ async function scanZstdFrames(path, maxBytes = Infinity, seen = { endedEarly: fa
     const size = Math.min((await handle.stat()).size, maxBytes);
     if (Number.isFinite(maxBytes) && size < maxBytes) seen.endedEarly = true;
     const small = Buffer.alloc(18);
-    const readAt = async (position2, length) => {
+    const readAt2 = async (position2, length) => {
       let offset = 0;
       while (offset < length) {
         const { bytesRead } = await handle.read(small, offset, length - offset, position2 + offset);
@@ -7404,13 +7573,13 @@ async function scanZstdFrames(path, maxBytes = Infinity, seen = { endedEarly: fa
     if (size === 0) return { status: "invalid", frames: 0, ranges, brokenFrameStart: null };
     while (position < size) {
       const left = size - position;
-      const lead = await readAt(position, Math.min(4, left));
+      const lead = await readAt2(position, Math.min(4, left));
       if (lead.length < 4) return { status: magicPrefix(lead) ? "truncated" : "invalid", frames, ranges, brokenFrameStart: null };
       const magic = lead.readUInt32LE(0);
       frameStart = null;
       if ((magic & SKIPPABLE_MASK) >>> 0 === SKIPPABLE_MAGIC) {
         if (left < 8) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
-        const field = await readAt(position + 4, 4);
+        const field = await readAt2(position + 4, 4);
         if (field.length < 4) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
         const length = field.readUInt32LE(0);
         position += 8 + length;
@@ -7421,7 +7590,7 @@ async function scanZstdFrames(path, maxBytes = Infinity, seen = { endedEarly: fa
       frameStart = position;
       position += 4;
       if (position >= size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
-      const descriptorByte = await readAt(position, 1);
+      const descriptorByte = await readAt2(position, 1);
       if (descriptorByte.length < 1) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
       const descriptor = descriptorByte[0];
       const fcsFlag = descriptor >> 6;
@@ -7435,7 +7604,7 @@ async function scanZstdFrames(path, maxBytes = Infinity, seen = { endedEarly: fa
       if (position > size) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
       for (; ; ) {
         if (size - position < 3) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
-        const head = await readAt(position, 3);
+        const head = await readAt2(position, 3);
         if (head.length < 3) return { status: "truncated", frames, ranges, brokenFrameStart: frameStart };
         const value = head[0] | head[1] << 8 | head[2] << 16;
         const last = value & 1;
@@ -7545,14 +7714,14 @@ async function parseCopy(file, inherited, options) {
 }
 async function readGroup(group, options, zstd, cacheDir) {
   const canonical = group.copies[0];
-  let failure5 = null;
+  let failure6 = null;
   for (const file of group.copies) {
     if (file.size === null || file.mtimeMs === null) {
-      failure5 ??= "unknown-size";
+      failure6 ??= "unknown-size";
       continue;
     }
     if (file.compressed && !zstd) {
-      failure5 ??= "skipped";
+      failure6 ??= "skipped";
       continue;
     }
     try {
@@ -7570,10 +7739,10 @@ async function readGroup(group, options, zstd, cacheDir) {
       const parsed = await parseCopy(file, null, options);
       return { canonical, file, key, ...parsed, digest: sharedDigest(parsed.prints, null), fromCache: false, failed: false };
     } catch {
-      failure5 ??= "failed";
+      failure6 ??= "failed";
     }
   }
-  return failure5 ?? "failed";
+  return failure6 ?? "failed";
 }
 async function collectCodex(options) {
   const home = codexHome(options.env, options.homedir);
@@ -7582,7 +7751,7 @@ async function collectCodex(options) {
 async function collectCodexFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
   const lowerBound = options.rescan ? null : windows.collectStartLowerBoundMs;
-  const cacheDir = options.cacheDir === null ? null : join13(options.cacheDir, "codex");
+  const cacheDir = options.cacheDir === null ? null : join14(options.cacheDir, "codex");
   const zstd = options.zstd ?? zstdAvailable();
   const groups = groupCopies(list.files).map((group) => ({ ...group, copies: [...group.copies] })).sort((a, b) => byPath(a.copies[0], b.copies[0]));
   const inWindow = groups.filter((group) => lowerBound === null || group.copies[0].changedMs === null || group.copies[0].changedMs >= lowerBound);
@@ -7779,20 +7948,20 @@ async function collectCodexFromList(home, list, options) {
 }
 
 // src/collect/gemini.ts
-import { readFile as readFile6 } from "node:fs/promises";
-import { join as join15 } from "node:path";
+import { readFile as readFile7 } from "node:fs/promises";
+import { join as join16 } from "node:path";
 
 // src/adapters/gemini/locate.ts
-import { readdir as readdir6, readFile as readFile5, stat as stat5 } from "node:fs/promises";
-import { join as join14, resolve as resolve3 } from "node:path";
+import { readdir as readdir6, readFile as readFile6, stat as stat5 } from "node:fs/promises";
+import { join as join15, resolve as resolve3 } from "node:path";
 function geminiHome(env, homedir2) {
   const fromEnv = env.GEMINI_CLI_HOME?.trim();
-  return join14(fromEnv ? resolve3(fromEnv) : homedir2, ".gemini");
+  return join15(fromEnv ? resolve3(fromEnv) : homedir2, ".gemini");
 }
 function geminiRecordHomes(env, homedir2) {
   const fromEnv = env.GEMINI_CLI_HOME?.trim();
   const base = fromEnv ? resolve3(fromEnv) : homedir2;
-  return [join14(base, ".gemini"), join14(base, ".cache", ".gemini")];
+  return [join15(base, ".gemini"), join15(base, ".cache", ".gemini")];
 }
 var isMissing5 = (error) => error?.code === "ENOENT";
 var MAIN_FILE = /^session-.*\.(jsonl|json)$/;
@@ -7800,16 +7969,16 @@ var PROJECT_ROOT_FILE = ".project_root";
 var PROJECT_ROOT_MAX = 4096;
 async function projectRootOf(dir) {
   try {
-    const info = await stat5(join14(dir, PROJECT_ROOT_FILE));
+    const info = await stat5(join15(dir, PROJECT_ROOT_FILE));
     if (!info.isFile() || info.size > PROJECT_ROOT_MAX) return null;
-    const text = (await readFile5(join14(dir, PROJECT_ROOT_FILE), "utf8")).trim();
+    const text = (await readFile6(join15(dir, PROJECT_ROOT_FILE), "utf8")).trim();
     return text === "" ? null : text;
   } catch {
     return null;
   }
 }
 async function listGeminiFiles(home, minMtimeMs) {
-  const tmp = join14(home, "tmp");
+  const tmp = join15(home, "tmp");
   const files = [];
   const unreadableDirs = [];
   const unreadableFiles = [];
@@ -7837,8 +8006,8 @@ async function listGeminiFiles(home, minMtimeMs) {
   };
   for (const project of projectEntries) {
     if (!project.isDirectory()) continue;
-    const projectDir = join14(tmp, project.name);
-    const chats = join14(projectDir, "chats");
+    const projectDir = join15(tmp, project.name);
+    const chats = join15(projectDir, "chats");
     let entries;
     try {
       entries = await readdir6(chats, { withFileTypes: true });
@@ -7852,11 +8021,11 @@ async function listGeminiFiles(home, minMtimeMs) {
       if (entry.isFile() && MAIN_FILE.test(entry.name)) {
         const legacy = entry.name.endsWith(".json");
         if (legacy && names2.has(`${entry.name}l`)) continue;
-        await consider(join14(chats, entry.name), { sessionId: entry.name.slice(0, entry.name.lastIndexOf(".")), kind: "main", parentSessionId: null, cwd, legacy });
+        await consider(join15(chats, entry.name), { sessionId: entry.name.slice(0, entry.name.lastIndexOf(".")), kind: "main", parentSessionId: null, cwd, legacy });
         continue;
       }
       if (!entry.isDirectory()) continue;
-      const subDir = join14(chats, entry.name);
+      const subDir = join15(chats, entry.name);
       let subs;
       try {
         subs = await readdir6(subDir, { withFileTypes: true });
@@ -7866,7 +8035,7 @@ async function listGeminiFiles(home, minMtimeMs) {
       }
       for (const sub of subs) {
         if (sub.isFile() && sub.name.endsWith(".jsonl")) {
-          await consider(join14(subDir, sub.name), { sessionId: sub.name.slice(0, -".jsonl".length), kind: "sub", parentSessionId: entry.name, cwd, legacy: false });
+          await consider(join15(subDir, sub.name), { sessionId: sub.name.slice(0, -".jsonl".length), kind: "sub", parentSessionId: entry.name, cwd, legacy: false });
         }
       }
     }
@@ -7910,13 +8079,13 @@ async function parseLegacy(file, parser) {
     parser.tooLong();
     return { bytesRead: 0 };
   }
-  const text = await readFile6(file.path, "utf8");
+  const text = await readFile7(file.path, "utf8");
   parser.legacy(text);
   return { bytesRead: Buffer.byteLength(text) };
 }
 async function collectGeminiFromList(home, list, options) {
   const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
-  const cacheDir = options.cacheDir === null ? null : join15(options.cacheDir, "gemini");
+  const cacheDir = options.cacheDir === null ? null : join16(options.cacheDir, "gemini");
   const files = [...list.files].sort((a, b) => a.normPath < b.normPath ? -1 : a.normPath > b.normPath ? 1 : 0);
   const summaries = [];
   const unreadableFiles = [...list.unreadableFiles];
@@ -7995,14 +8164,857 @@ async function collectGeminiFromList(home, list, options) {
   };
 }
 
+// src/collect/web.ts
+import { createHash as createHash4 } from "node:crypto";
+import { mkdir as mkdir7, open as open7, readFile as readFile8, rename as rename6, stat as stat7, writeFile as writeFile6 } from "node:fs/promises";
+import { join as join18 } from "node:path";
+
+// src/adapters/web/source.ts
+import { createReadStream as createReadStream3 } from "node:fs";
+import { mkdtemp, open as open6, readdir as readdir7, rm as rm5, stat as stat6 } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename as basename3, join as join17 } from "node:path";
+
+// src/adapters/web/chatgpt.ts
+var obj4 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+var str4 = (value) => typeof value === "string" && value.length > 0 ? value : null;
+function secondsToMs(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.round(value * 1e3) : null;
+}
+var CONTEXT_TYPES = /* @__PURE__ */ new Set(["user_editable_context", "model_editable_context"]);
+var KNOWN_TYPES = /* @__PURE__ */ new Set([
+  "text",
+  "multimodal_text",
+  "code",
+  "execution_output",
+  "thoughts",
+  "reasoning_recap",
+  "tether_browsing_display",
+  "tether_quote",
+  "system_error",
+  "sonic_webpage",
+  "computer_output",
+  ...CONTEXT_TYPES
+]);
+var KNOWN_ROLES = /* @__PURE__ */ new Set(["user", "assistant", "tool", "system"]);
+function chatgptConversation(value) {
+  const conversation = obj4(value);
+  if (conversation === null) return null;
+  const mapping = obj4(conversation.mapping);
+  const id = str4(conversation.conversation_id) ?? str4(conversation.id);
+  if (mapping === null || id === null) return null;
+  const defaultModel = str4(conversation.default_model_slug);
+  const fallbackMs = secondsToMs(conversation.create_time);
+  const unknownKinds = nameRecord();
+  const note = (kind) => {
+    unknownKinds[kind] = (unknownKinds[kind] ?? 0) + 1;
+  };
+  const nodes = /* @__PURE__ */ new Map();
+  for (const [key, raw] of Object.entries(mapping)) {
+    const node = obj4(raw);
+    if (node === null) {
+      note("(node)");
+      continue;
+    }
+    const parent = str4(node.parent);
+    const message = obj4(node.message);
+    if (message === null) {
+      nodes.set(key, { key, parent, role: null, atMs: null, model: null });
+      continue;
+    }
+    const role = str4(obj4(message.author)?.role);
+    const metadata = obj4(message.metadata);
+    const contentType = str4(obj4(message.content)?.content_type);
+    if (contentType !== null && !KNOWN_TYPES.has(contentType)) note(contentType);
+    if (role !== null && !KNOWN_ROLES.has(role)) note(`role:${role}`);
+    const hidden = metadata?.is_visually_hidden_from_conversation === true || metadata?.is_user_system_message === true || contentType !== null && CONTEXT_TYPES.has(contentType);
+    const shown = hidden ? null : role === "user" || role === "assistant" ? role : role === "tool" ? "tool" : null;
+    nodes.set(key, { key, parent, role: shown, atMs: secondsToMs(message.create_time) ?? fallbackMs, model: shown === "assistant" ? str4(metadata?.model_slug) ?? defaultModel : null });
+  }
+  const BROKEN_DEPTH = 1e6;
+  const depthCache = /* @__PURE__ */ new Map();
+  const depthOf = (start) => {
+    const chain = [];
+    const seen = /* @__PURE__ */ new Set();
+    let node = start;
+    let base = 0;
+    while (node !== void 0) {
+      if (seen.has(node.key)) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      const known2 = depthCache.get(node.key);
+      if (known2 !== void 0) {
+        base = known2 + 1;
+        break;
+      }
+      seen.add(node.key);
+      chain.push(node);
+      if (node.parent === null) break;
+      const parent = nodes.get(node.parent);
+      if (parent === void 0) {
+        base = BROKEN_DEPTH;
+        break;
+      }
+      node = parent;
+    }
+    for (let index = chain.length - 1; index >= 0; index--) depthCache.set(chain[index].key, base + (chain.length - 1 - index));
+    return depthCache.get(start.key);
+  };
+  const visibleAbove = (start) => {
+    const seen = /* @__PURE__ */ new Set();
+    for (let key = start; key !== null; ) {
+      if (seen.has(key)) return "missing";
+      seen.add(key);
+      const node = nodes.get(key);
+      if (node === void 0) return "missing";
+      if (node.role === "user" || node.role === "assistant") return node.role;
+      key = node.parent;
+    }
+    return "root";
+  };
+  for (const key of [...nodes.keys()].sort()) depthOf(nodes.get(key));
+  const order = (a, b) => (a.atMs ?? Number.POSITIVE_INFINITY) - (b.atMs ?? Number.POSITIVE_INFINITY) || depthOf(a) - depthOf(b) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+  const visible = [...nodes.values()].filter((node) => node.role === "user" || node.role === "assistant").sort(order);
+  const events = [];
+  visible.forEach((node, index) => {
+    if (node.role === "user") {
+      events.push({ kind: "request", atMs: node.atMs, model: null });
+      return;
+    }
+    const above = visibleAbove(node.parent);
+    const starts = above === "missing" ? index === 0 || visible[index - 1].role === "user" : above === "user" || above === "root";
+    if (starts) events.push({ kind: "response", atMs: node.atMs, model: node.model });
+  });
+  return { id, events, unknownKinds };
+}
+var looksLikeChatgpt = (value) => {
+  const conversation = obj4(value);
+  return conversation !== null && obj4(conversation.mapping) !== null;
+};
+
+// src/adapters/web/claude-ai.ts
+var obj5 = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+var str5 = (value) => typeof value === "string" && value.length > 0 ? value : null;
+function isoToMs(value) {
+  if (typeof value !== "string") return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) && ms > 0 ? ms : null;
+}
+function claudeConversation(value) {
+  const conversation = obj5(value);
+  if (conversation === null) return null;
+  const id = str5(conversation.uuid);
+  const messages = conversation.chat_messages;
+  if (id === null || !Array.isArray(messages)) return null;
+  const fallbackMs = isoToMs(conversation.created_at);
+  const model = str5(conversation.model);
+  const events = [];
+  const unknownKinds = nameRecord();
+  for (const raw of messages) {
+    const message = obj5(raw);
+    const sender = message === null ? null : str5(message.sender);
+    if (message === null || sender === null) {
+      unknownKinds["(message)"] = (unknownKinds["(message)"] ?? 0) + 1;
+      continue;
+    }
+    const atMs = isoToMs(message.created_at) ?? fallbackMs;
+    if (sender === "human") events.push({ kind: "request", atMs, model: null });
+    else if (sender === "assistant") events.push({ kind: "response", atMs, model });
+    else unknownKinds[`sender:${sender}`] = (unknownKinds[`sender:${sender}`] ?? 0) + 1;
+  }
+  return { id, events, unknownKinds };
+}
+var looksLikeClaude = (value) => {
+  const conversation = obj5(value);
+  return conversation !== null && str5(conversation.uuid) !== null && Array.isArray(conversation.chat_messages);
+};
+
+// src/adapters/web/conversation.ts
+var conversationKey = (tool, id) => `${tool}:${fnv1a64(id)}`;
+function webSummary(tool, conversation, timeZone, keepFrom) {
+  const days = {};
+  let firstDate = null;
+  let undated = 0;
+  for (const event of conversation.events) {
+    if (event.atMs === null) {
+      undated++;
+      continue;
+    }
+    const date = localDateOf(event.atMs, timeZone);
+    if (firstDate === null || date < firstDate) firstDate = date;
+    if (keepFrom !== null && date < keepFrom) continue;
+    const day = days[date] ??= emptyDay();
+    if (event.kind === "request") day.humanRequests++;
+    else {
+      day.responses++;
+      if (event.model !== null) day.models[event.model] = (Object.hasOwn(day.models, event.model) ? day.models[event.model] : 0) + 1;
+    }
+  }
+  const sorted = {};
+  for (const date of Object.keys(days).sort()) sorted[date] = canonicalDay(days[date]);
+  const unconfirmedTypes = nameRecord();
+  for (const kind of Object.keys(conversation.unknownKinds).sort()) unconfirmedTypes[kind] = conversation.unknownKinds[kind];
+  return {
+    tool,
+    sessionId: conversationKey(tool, conversation.id),
+    kind: "main",
+    parentSessionId: null,
+    cwd: null,
+    version: null,
+    firstDate,
+    days: sorted,
+    instructionChars: null,
+    initialSkills: null,
+    initialMcpServers: null,
+    missing: { lines: conversation.events.length, brokenLines: 0, tailFragments: 0, tooLongLines: 0, unconfirmedTypes },
+    firstResponseIdHashes: [],
+    notes: { syntheticResponses: 0, responsesWithoutId: 0, undatedLines: undated, unknownHookKinds: nameRecord() }
+  };
+}
+
+// src/adapters/web/json-array.ts
+var OPEN_BRACE = 123;
+var CLOSE_BRACE = 125;
+var OPEN_BRACKET = 91;
+var CLOSE_BRACKET = 93;
+var QUOTE = 34;
+var BACKSLASH2 = 92;
+var COMMA = 44;
+var isSpace = (byte) => byte === 32 || byte === 9 || byte === 10 || byte === 13;
+var JsonArraySplitter = class {
+  constructor(sink, maxElementBytes) {
+    this.sink = sink;
+    this.maxElementBytes = maxElementBytes;
+  }
+  sink;
+  maxElementBytes;
+  state = "start";
+  depth = 0;
+  inString = false;
+  escaped = false;
+  /** 원소가 괄호 없는 값(수, 문자열, 참거짓)이다 */
+  bare = false;
+  parts = [];
+  size = 0;
+  dropped = false;
+  bom = 0;
+  push(chunk) {
+    let index = 0;
+    while (this.state === "start" && this.bom < 3 && index < chunk.length && chunk[index] === [239, 187, 191][this.bom]) {
+      this.bom++;
+      index++;
+    }
+    let elementStart = -1;
+    for (; index < chunk.length; index++) {
+      const byte = chunk[index];
+      switch (this.state) {
+        case "start":
+          if (isSpace(byte)) continue;
+          if (byte === OPEN_BRACKET) this.state = "between";
+          else {
+            this.state = "notArray";
+            return;
+          }
+          continue;
+        case "between":
+          if (isSpace(byte) || byte === COMMA) continue;
+          if (byte === CLOSE_BRACKET) {
+            this.state = "done";
+            return;
+          }
+          this.state = "element";
+          this.depth = 0;
+          this.inString = false;
+          this.escaped = false;
+          this.bare = byte !== OPEN_BRACE && byte !== OPEN_BRACKET;
+          this.parts = [];
+          this.size = 0;
+          this.dropped = false;
+          elementStart = index;
+          index--;
+          continue;
+        case "element": {
+          if (this.inString) {
+            if (this.escaped) this.escaped = false;
+            else if (byte === BACKSLASH2) this.escaped = true;
+            else if (byte === QUOTE) this.inString = false;
+            continue;
+          }
+          if (byte === QUOTE) {
+            this.inString = true;
+            continue;
+          }
+          if (this.bare) {
+            if (byte === COMMA || byte === CLOSE_BRACKET || isSpace(byte)) {
+              this.finishElement(chunk, elementStart, index);
+              elementStart = -1;
+              this.state = byte === CLOSE_BRACKET ? "done" : "between";
+              if (this.state === "done") return;
+            }
+            continue;
+          }
+          if (byte === OPEN_BRACE || byte === OPEN_BRACKET) this.depth++;
+          else if (byte === CLOSE_BRACE || byte === CLOSE_BRACKET) {
+            this.depth--;
+            if (this.depth === 0) {
+              this.finishElement(chunk, elementStart, index + 1);
+              elementStart = -1;
+              this.state = "between";
+            }
+          }
+          continue;
+        }
+        case "done":
+        case "notArray":
+          return;
+      }
+    }
+    if (this.state === "element") this.keep(chunk, elementStart === -1 ? 0 : elementStart, chunk.length);
+  }
+  /** 파일이 끝났다. 닫히지 않은 원소는 내지 않는다 */
+  end() {
+    return { closed: this.state === "done", notArray: this.state === "notArray" || this.state === "start" };
+  }
+  keep(chunk, from, to) {
+    if (this.dropped || to <= from) return;
+    this.size += to - from;
+    if (this.size > this.maxElementBytes) {
+      this.dropped = true;
+      this.parts = [];
+      return;
+    }
+    this.parts.push(Buffer.from(chunk.subarray(from, to)));
+  }
+  finishElement(chunk, from, to) {
+    this.keep(chunk, from === -1 ? 0 : from, to);
+    if (this.dropped) this.sink.tooLong();
+    else this.sink.element(Buffer.concat(this.parts, this.size).toString("utf8"));
+    this.parts = [];
+    this.size = 0;
+    this.dropped = false;
+  }
+};
+
+// src/adapters/web/zip.ts
+import { createReadStream as createReadStream2 } from "node:fs";
+import { open as open5 } from "node:fs/promises";
+import { pipeline } from "node:stream";
+import * as zlib2 from "node:zlib";
+var ZipError = class extends Error {
+  constructor(code) {
+    super(`zip: ${code}`);
+    this.code = code;
+  }
+  code;
+};
+var EOCD = 101010256;
+var ZIP64_LOCATOR = 117853008;
+var ZIP64_EOCD = 101075792;
+var CENTRAL = 33639248;
+var LOCAL = 67324752;
+var TAIL_SEARCH = 22 + 65535;
+async function readAt(handle, position, length) {
+  const buffer = Buffer.alloc(length);
+  let offset = 0;
+  while (offset < length) {
+    const { bytesRead } = await handle.read(buffer, offset, length - offset, position + offset);
+    if (bytesRead === 0) break;
+    offset += bytesRead;
+  }
+  return offset === length ? buffer : buffer.subarray(0, offset);
+}
+var u64 = (buffer, offset) => {
+  const value = buffer.readBigUInt64LE(offset);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new ZipError("broken-directory");
+  return Number(value);
+};
+async function candidateDirectory(handle, source, eocdAt, record) {
+  const disk = record.readUInt16LE(4);
+  const directoryDisk = record.readUInt16LE(6);
+  if (disk !== 0 || directoryDisk !== 0) return "multi-disk";
+  let entries = record.readUInt16LE(10);
+  let size = record.readUInt32LE(12);
+  let offset = record.readUInt32LE(16);
+  const needs64 = entries === 65535 || size === 4294967295 || offset === 4294967295;
+  let directoryEnd = eocdAt;
+  const locator = eocdAt >= 20 ? await readAt(handle, source.start + eocdAt - 20, 20) : Buffer.alloc(0);
+  if (locator.length === 20 && locator.readUInt32LE(0) === ZIP64_LOCATOR) {
+    if (locator.readUInt32LE(4) !== 0 || locator.readUInt32LE(16) > 1) return "multi-disk";
+    const recordAt = u64(locator, 8);
+    if (recordAt + 56 > eocdAt - 20) return null;
+    const zip64 = await readAt(handle, source.start + recordAt, 56);
+    if (zip64.length < 56 || zip64.readUInt32LE(0) !== ZIP64_EOCD) return null;
+    if (zip64.readUInt32LE(16) !== 0 || zip64.readUInt32LE(20) !== 0) return "multi-disk";
+    entries = u64(zip64, 32);
+    size = u64(zip64, 40);
+    offset = u64(zip64, 48);
+    directoryEnd = recordAt;
+  } else if (needs64) return null;
+  if (offset + size !== directoryEnd) return null;
+  if (entries === 0) return size === 0 ? { offset, size, entries } : null;
+  const head = await readAt(handle, source.start + offset, 4);
+  if (head.length < 4 || head.readUInt32LE(0) !== CENTRAL) return null;
+  return { offset, size, entries };
+}
+async function* directoryCandidates(handle, source) {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  for (let index = tail.length - 22; index >= 0; index--) {
+    if (tail.readUInt32LE(index) !== EOCD || index + 22 + tail.readUInt16LE(index + 20) > tail.length) continue;
+    const directory = await candidateDirectory(handle, source, from + index, tail.subarray(index, index + 22));
+    if (directory !== null) yield directory;
+  }
+}
+function zip64Values(extra, wanted) {
+  if (!wanted.size && !wanted.compressed && !wanted.offset) return {};
+  for (let at = 0; at + 4 <= extra.length; ) {
+    const id = extra.readUInt16LE(at);
+    const length = extra.readUInt16LE(at + 2);
+    const body = extra.subarray(at + 4, at + 4 + length);
+    if (id === 1) {
+      const out = {};
+      let cursor = 0;
+      const take = () => {
+        if (cursor + 8 > body.length) throw new ZipError("broken-directory");
+        const value = u64(body, cursor);
+        cursor += 8;
+        return value;
+      };
+      if (wanted.size) out.size = take();
+      if (wanted.compressed) out.compressed = take();
+      if (wanted.offset) out.offset = take();
+      return out;
+    }
+    at += 4 + length;
+  }
+  throw new ZipError("broken-directory");
+}
+async function wholeFile(path) {
+  const handle = await open5(path, "r");
+  try {
+    return { path, start: 0, size: (await handle.stat()).size };
+  } finally {
+    await handle.close();
+  }
+}
+async function readDirectory(handle, source, directory) {
+  const data = await readAt(handle, source.start + directory.offset, directory.size);
+  if (data.length !== directory.size) throw new ZipError("truncated");
+  const entries = [];
+  let at = 0;
+  for (let count = 0; count < directory.entries; count++) {
+    if (at + 46 > data.length || data.readUInt32LE(at) !== CENTRAL) throw new ZipError("broken-directory");
+    const flags = data.readUInt16LE(at + 8);
+    const method = data.readUInt16LE(at + 10);
+    const crc322 = data.readUInt32LE(at + 16);
+    let compressedSize = data.readUInt32LE(at + 20);
+    let size = data.readUInt32LE(at + 24);
+    const nameLength = data.readUInt16LE(at + 28);
+    const extraLength = data.readUInt16LE(at + 30);
+    const commentLength = data.readUInt16LE(at + 32);
+    let localOffset = data.readUInt32LE(at + 42);
+    const nameStart = at + 46;
+    const extraStart = nameStart + nameLength;
+    const next = extraStart + extraLength + commentLength;
+    if (next > data.length) throw new ZipError("broken-directory");
+    const name = data.subarray(nameStart, extraStart).toString((flags & 2048) !== 0 ? "utf8" : "latin1");
+    const big = zip64Values(data.subarray(extraStart, extraStart + extraLength), { size: size === 4294967295, compressed: compressedSize === 4294967295, offset: localOffset === 4294967295 });
+    if (big.size !== void 0) size = big.size;
+    if (big.compressed !== void 0) compressedSize = big.compressed;
+    if (big.offset !== void 0) localOffset = big.offset;
+    entries.push({ name, method, compressedSize, size, crc32: crc322, localOffset, encrypted: (flags & 1) !== 0 });
+    at = next;
+  }
+  if (at !== data.length) throw new ZipError("broken-directory");
+  return entries;
+}
+async function zipEntries(source) {
+  const handle = await open5(source.path, "r");
+  try {
+    let found = false;
+    let multiDisk = false;
+    let failure6 = null;
+    for await (const directory of directoryCandidates(handle, source)) {
+      found = true;
+      if (directory === "multi-disk") {
+        multiDisk = true;
+        continue;
+      }
+      try {
+        return await readDirectory(handle, source, directory);
+      } catch (error) {
+        if (!(error instanceof ZipError)) throw error;
+        failure6 ??= error;
+      }
+    }
+    if (multiDisk) throw new ZipError("multi-disk");
+    if (failure6 !== null) throw failure6;
+    throw new ZipError(found ? "broken-directory" : await hasEndRecord(handle, source) ? "broken-directory" : "not-zip");
+  } finally {
+    await handle.close();
+  }
+}
+async function hasEndRecord(handle, source) {
+  const from = Math.max(0, source.size - TAIL_SEARCH);
+  const tail = await readAt(handle, source.start + from, source.size - from);
+  for (let index = tail.length - 22; index >= 0; index--) if (tail.readUInt32LE(index) === EOCD && index + 22 + tail.readUInt16LE(index + 20) <= tail.length) return true;
+  return false;
+}
+async function dataStartOf(source, entry) {
+  const handle = await open5(source.path, "r");
+  try {
+    const header2 = await readAt(handle, source.start + entry.localOffset, 30);
+    if (header2.length < 30 || header2.readUInt32LE(0) !== LOCAL) throw new ZipError("broken-directory");
+    const start = entry.localOffset + 30 + header2.readUInt16LE(26) + header2.readUInt16LE(28);
+    if (start + entry.compressedSize > source.size) throw new ZipError("truncated");
+    return source.start + start;
+  } finally {
+    await handle.close();
+  }
+}
+async function storedSource(source, entry) {
+  if (entry.method !== 0 || entry.encrypted || entry.compressedSize !== entry.size) return null;
+  return { path: source.path, start: await dataStartOf(source, entry), size: entry.size };
+}
+async function* zipEntryChunks(source, entry) {
+  if (entry.encrypted) throw new ZipError("encrypted");
+  if (entry.method !== 0 && entry.method !== 8) throw new ZipError("method");
+  const dataStart = await dataStartOf(source, entry);
+  if (entry.compressedSize === 0) {
+    if (entry.size !== 0) throw new ZipError("truncated");
+    return;
+  }
+  const input = createReadStream2(source.path, { start: dataStart, end: dataStart + entry.compressedSize - 1 });
+  const output = entry.method === 0 ? input : pipeline(input, zlib2.createInflateRaw(), () => {
+  });
+  const crc = typeof zlib2.crc32 === "function" ? zlib2.crc32 : null;
+  let produced = 0;
+  let check = 0;
+  try {
+    for await (const chunk of output) {
+      produced += chunk.length;
+      if (produced > entry.size) throw new ZipError("truncated");
+      if (crc !== null) check = crc(chunk, check);
+      yield chunk;
+    }
+  } catch (error) {
+    if (error instanceof ZipError) throw error;
+    throw new ZipError("truncated");
+  } finally {
+    input.destroy();
+    if (output !== input) output.destroy();
+  }
+  if (produced !== entry.size) throw new ZipError("truncated");
+  if (crc !== null && check >>> 0 !== entry.crc32) throw new ZipError("crc");
+}
+
+// src/adapters/web/source.ts
+var MAX_CONVERSATION_BYTES = 64 * 1024 * 1024;
+var CONVERSATION_FILE = /^conversations(?:-\d+)?\.json$/i;
+var CONVERSATION_ZIP = /^conversations.*\.zip$/i;
+var ExportError = class extends Error {
+  constructor(problem) {
+    super(`web export: ${problem}`);
+    this.problem = problem;
+  }
+  problem;
+};
+function consume(collector, text, timeZone, keepFrom) {
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    collector.skipped.broken++;
+    return;
+  }
+  if (collector.tool === null) {
+    if (looksLikeChatgpt(value)) collector.tool = "web-chatgpt";
+    else if (looksLikeClaude(value)) collector.tool = "web-claude";
+  }
+  const conversation = collector.tool === "web-chatgpt" ? chatgptConversation(value) : collector.tool === "web-claude" ? claudeConversation(value) : null;
+  if (conversation === null || collector.tool === null) {
+    collector.skipped.unrecognized++;
+    return;
+  }
+  const key = conversationKey(collector.tool, conversation.id);
+  if (collector.seen.has(key)) return;
+  collector.seen.add(key);
+  for (const event of conversation.events) {
+    if (event.kind === "request") collector.totals.requests++;
+    else collector.totals.responses++;
+    if (event.atMs === null) continue;
+    if (collector.totals.firstMs === null || event.atMs < collector.totals.firstMs) collector.totals.firstMs = event.atMs;
+    if (collector.totals.lastMs === null || event.atMs > collector.totals.lastMs) collector.totals.lastMs = event.atMs;
+  }
+  collector.summaries.push(webSummary(collector.tool, conversation, timeZone, keepFrom));
+}
+async function readArray(name, chunks, collector, timeZone, keepFrom) {
+  const splitter = new JsonArraySplitter({ element: (text) => consume(collector, text, timeZone, keepFrom), tooLong: () => collector.skipped.tooLong++ }, MAX_CONVERSATION_BYTES);
+  for await (const chunk of chunks) {
+    collector.bytesRead += chunk.length;
+    splitter.push(chunk);
+  }
+  const end = splitter.end();
+  if (end.notArray) throw new ExportError("not-array");
+  collector.files.push(name);
+  if (!end.closed) collector.complete = false;
+}
+var byName = (a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+var baseName2 = (name) => basename3(name.replaceAll("\\", "/"));
+async function readZip(source, prefix, collector, timeZone, keepFrom) {
+  const entries = await zipEntries(source);
+  const files = entries.filter((entry) => CONVERSATION_FILE.test(baseName2(entry.name))).sort(byName);
+  for (const entry of files) await readArray(prefix + entry.name, zipEntryChunks(source, entry), collector, timeZone, keepFrom);
+  if (files.length > 0 || prefix !== "") return files.length;
+  let count = 0;
+  for (const entry of entries.filter((item2) => CONVERSATION_ZIP.test(baseName2(item2.name))).sort(byName)) {
+    const inner = await storedSource(source, entry);
+    if (inner !== null) {
+      count += await readZip(inner, `${entry.name}/`, collector, timeZone, keepFrom);
+      continue;
+    }
+    const dir = await mkdtemp(join17(tmpdir(), "aq-web-"));
+    try {
+      const path = join17(dir, "inner.zip");
+      const handle = await open6(path, "w");
+      try {
+        for await (const chunk of zipEntryChunks(source, entry)) await handle.write(chunk);
+      } finally {
+        await handle.close();
+      }
+      count += await readZip(await wholeFile(path), `${entry.name}/`, collector, timeZone, keepFrom);
+    } finally {
+      await rm5(dir, { recursive: true, force: true });
+    }
+  }
+  return count;
+}
+var FOLDER_DEPTH = 2;
+var FOLDER_ENTRY_LIMIT = 2e4;
+async function exportFolderFiles(dir, limit = FOLDER_ENTRY_LIMIT) {
+  const found = [];
+  let seen = 0;
+  let limited = false;
+  const walk = async (path, rel, depth) => {
+    const entries = await readdir7(path, { withFileTypes: true });
+    for (const entry of entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+      if (limited) return;
+      if (++seen > limit) {
+        limited = true;
+        return;
+      }
+      const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+      const child = join17(path, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < FOLDER_DEPTH) await walk(child, childRel, depth + 1);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const zip = CONVERSATION_ZIP.test(entry.name);
+      if (!zip && !CONVERSATION_FILE.test(entry.name)) continue;
+      const info = await stat6(child);
+      found.push({ rel: childRel, path: child, size: info.size, mtimeMs: info.mtimeMs, zip });
+    }
+  };
+  await walk(dir, "", 0);
+  return { files: found.sort((a, b) => a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0), limited };
+}
+var isZip = async (path) => {
+  const handle = await open6(path, "r");
+  try {
+    const head = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(head, 0, 4, 0);
+    return bytesRead === 4 && head.readUInt32LE(0) === 67324752;
+  } finally {
+    await handle.close();
+  }
+};
+async function readExport(path, timeZone, keepFrom, folderLimit = FOLDER_ENTRY_LIMIT) {
+  const info = await stat6(path);
+  if (!info.isFile() && !info.isDirectory()) throw new ExportError("not-file");
+  const collector = { tool: null, summaries: [], seen: /* @__PURE__ */ new Set(), skipped: { tooLong: 0, broken: 0, unrecognized: 0 }, totals: { requests: 0, responses: 0, firstMs: null, lastMs: null }, files: [], bytesRead: 0, complete: true };
+  try {
+    if (info.isDirectory()) {
+      const { files, limited } = await exportFolderFiles(path, folderLimit);
+      if (files.length === 0) throw new ExportError(limited ? "folder-too-large" : "no-conversations");
+      if (limited) collector.complete = false;
+      for (const file of files) {
+        if (file.zip) await readZip(await wholeFile(file.path), `${file.rel}/`, collector, timeZone, keepFrom);
+        else await readArray(file.rel, createReadStream3(file.path), collector, timeZone, keepFrom);
+      }
+    } else if (await isZip(path)) {
+      if (await readZip(await wholeFile(path), "", collector, timeZone, keepFrom) === 0) throw new ExportError("no-conversations");
+    } else await readArray(basename3(path), createReadStream3(path), collector, timeZone, keepFrom);
+  } catch (error) {
+    if (error instanceof ZipError) throw new ExportError(`zip-${error.code}`);
+    throw error;
+  }
+  if (collector.tool === null) throw new ExportError("unknown-service");
+  return { tool: collector.tool, summaries: collector.summaries, skipped: collector.skipped, files: collector.files, bytesRead: collector.bytesRead, totals: collector.totals, complete: collector.complete };
+}
+
+// src/collect/web.ts
+var WEB_PARSER_VERSION = 2;
+var WEB_PARSER_ID = `web@${WEB_PARSER_VERSION}`;
+var emptyRead = () => ({ files: 0, listedBytes: 0, bytes: 0, fromCache: 0, inProgress: 0, olderThanWindow: 0, unreadableFiles: [], unreadableFileBytes: 0, unknownSizeFiles: 0, unreadableDirs: [] });
+var DATE3 = /^\d{4}-\d{2}-\d{2}$/;
+async function loadWebCached(dir, key, keepFrom, tool) {
+  try {
+    const entry = JSON.parse(await readFile8(entryPath(dir, key.normPath), "utf8"));
+    if (entry.key === void 0 || !sameKey(entry.key, key) || typeof entry.keptFrom !== "string" || !DATE3.test(entry.keptFrom) || entry.keptFrom > keepFrom) return null;
+    if (!Array.isArray(entry.summaries) || typeof entry.skipped !== "number" || !Number.isSafeInteger(entry.skipped) || entry.skipped < 0 || typeof entry.complete !== "boolean") return null;
+    if (entry.lastMs !== null && (typeof entry.lastMs !== "number" || !Number.isFinite(entry.lastMs))) return null;
+    const summaries = [];
+    for (const value of entry.summaries) {
+      const summary = reviveSummary(value);
+      if (summary === null || summary.tool !== tool) return null;
+      summaries.push(summary);
+    }
+    return { key: entry.key, keptFrom: entry.keptFrom, summaries, skipped: entry.skipped, complete: entry.complete, lastMs: entry.lastMs ?? null };
+  } catch {
+    return null;
+  }
+}
+async function storeWebCached(dir, entry) {
+  await mkdir7(dir, { recursive: true });
+  const target = entryPath(dir, entry.key.normPath);
+  const temporary = `${target}.${process.pid}.tmp`;
+  await writeFile6(temporary, JSON.stringify(entry));
+  await rename6(temporary, target);
+}
+var sha2562 = (text) => createHash4("sha256").update(text).digest("hex");
+async function readFull(handle, buffer, position) {
+  for (let offset = 0; offset < buffer.length; ) {
+    const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, position + offset);
+    if (bytesRead === 0) return false;
+    offset += bytesRead;
+  }
+  return true;
+}
+async function edges(path, size) {
+  const handle = await open7(path, "r");
+  try {
+    const length = Math.min(4096, size);
+    const head = Buffer.alloc(length);
+    const tail = Buffer.alloc(length);
+    if (!await readFull(handle, head, 0) || !await readFull(handle, tail, size - length)) return null;
+    return createHash4("sha256").update(head).update(tail).digest("hex");
+  } finally {
+    await handle.close();
+  }
+}
+async function exportKey(path, timeZone) {
+  const info = await stat7(path);
+  if (info.isFile()) return cacheKeyFor({ path, normPath: normalizePath(path), size: info.size, mtimeMs: info.mtimeMs }, WEB_PARSER_ID, timeZone);
+  if (!info.isDirectory()) return null;
+  const { files, limited } = await exportFolderFiles(path);
+  const lines = [];
+  for (const file of files) {
+    const fingerprint = await edges(file.path, file.size);
+    if (fingerprint === null) return null;
+    lines.push(`${file.rel}|${file.size}|${file.mtimeMs}|${fingerprint}`);
+  }
+  const list = `${limited ? "limited" : "all"}
+${lines.join("\n")}`;
+  return {
+    normPath: normalizePath(path),
+    size: files.reduce((sum2, file) => sum2 + file.size, 0),
+    mtimeMs: files.reduce((latest, file) => Math.max(latest, file.mtimeMs), 0),
+    head: sha2562(list),
+    tail: sha2562(`folder:${files.length}`),
+    cacheFormat: CACHE_FORMAT_VERSION,
+    parser: WEB_PARSER_ID,
+    timeZone
+  };
+}
+async function collectOne(tool, entry, options) {
+  const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
+  const keepFrom = windows.collectDates[0];
+  const state = { path: entry?.path ?? null, missing: false, problem: null, skipped: 0, truncated: false, lastDate: null };
+  const read = emptyRead();
+  const result = (summaries) => ({ tool, detected: entry !== void 0, summaries, read, visibleFrom: visibleFrom(summaries, 0, keepFrom), state });
+  if (entry === void 0) return result([]);
+  let info;
+  try {
+    info = await stat7(entry.path);
+  } catch (error) {
+    if (error.code === "ENOENT") state.missing = true;
+    else {
+      state.problem = "unreadable";
+      read.files = 1;
+      read.unreadableFiles = [entry.path];
+      read.unknownSizeFiles = 1;
+    }
+    return result([]);
+  }
+  read.files = 1;
+  read.listedBytes = info.isFile() ? info.size : 0;
+  const isFolder = info.isDirectory();
+  const fail = (problem) => {
+    state.problem = problem;
+    read.unreadableFiles = [entry.path];
+    read.unreadableFileBytes = read.listedBytes;
+    return result([]);
+  };
+  if (!info.isFile() && !isFolder) return fail("not-file");
+  const cacheDir = options.cacheDir === null ? null : join18(options.cacheDir, "web");
+  let key = null;
+  try {
+    if (cacheDir !== null || isFolder) key = await exportKey(entry.path, options.clock.timeZone);
+    if (isFolder && key !== null) read.listedBytes = key.size;
+    if (cacheDir !== null) {
+      const hit = key === null || options.rescan ? null : await loadWebCached(cacheDir, key, keepFrom, tool);
+      if (hit !== null) {
+        read.bytes = read.listedBytes;
+        read.fromCache = 1;
+        state.skipped = hit.skipped;
+        state.truncated = !hit.complete;
+        state.lastDate = hit.lastMs === null ? null : localDateOf(hit.lastMs, options.clock.timeZone);
+        return result(hit.summaries);
+      }
+    }
+  } catch {
+    key = null;
+  }
+  let exported;
+  try {
+    exported = await readExport(entry.path, options.clock.timeZone, keepFrom);
+  } catch (error) {
+    return fail(error instanceof ExportError ? error.problem : "unreadable");
+  }
+  if (exported.tool !== tool) return fail("unknown-service");
+  read.bytes = read.listedBytes;
+  state.skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
+  state.truncated = !exported.complete;
+  state.lastDate = exported.totals.lastMs === null ? null : localDateOf(exported.totals.lastMs, options.clock.timeZone);
+  if (options.cacheDir !== null) await primeWebCache(options.cacheDir, entry.path, key, exported, keepFrom, options.clock.timeZone);
+  return result(exported.summaries);
+}
+async function primeWebCache(cacheRoot, path, before, exported, keepFrom, timeZone) {
+  try {
+    if (before === null) return;
+    const key = await exportKey(path, timeZone);
+    if (key === null || !sameKey(key, before)) return;
+    const skipped = exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized;
+    await storeWebCached(join18(cacheRoot, "web"), { key, keptFrom: keepFrom, summaries: exported.summaries, skipped, complete: exported.complete, lastMs: exported.totals.lastMs });
+  } catch {
+  }
+}
+async function collectWeb(entries, options) {
+  const out = [];
+  for (const tool of WEB_TOOLS) out.push(await collectOne(tool, entries.find((entry) => entry.tool === tool), options));
+  return out;
+}
+
 // src/scan/claude.ts
-import { basename as basename6, join as join22, relative as relative3 } from "node:path";
+import { basename as basename7, join as join25, relative as relative3 } from "node:path";
 
 // src/scan/claude-json.ts
-import { join as join17, resolve as resolve5 } from "node:path";
+import { join as join20, resolve as resolve5 } from "node:path";
 
 // src/scan/fs.ts
-import { lstat as lstat4, readdir as readdir7, readFile as readFile7, realpath as realpath4, stat as stat6 } from "node:fs/promises";
+import { lstat as lstat4, readdir as readdir8, readFile as readFile9, realpath as realpath4, stat as stat8 } from "node:fs/promises";
 var isMissing6 = (error) => {
   const code = error?.code;
   return code === "ENOENT" || code === "ENOTDIR";
@@ -8010,7 +9022,7 @@ var isMissing6 = (error) => {
 var stripBom = (text) => text.charCodeAt(0) === 65279 ? text.slice(1) : text;
 async function readText(path) {
   try {
-    return { status: "ok", text: stripBom(await readFile7(path, "utf8")) };
+    return { status: "ok", text: stripBom(await readFile9(path, "utf8")) };
   } catch (error) {
     return isMissing6(error) ? { status: "missing" } : { status: "unreadable" };
   }
@@ -8026,7 +9038,7 @@ async function readJson(path) {
 }
 async function listDir(path) {
   try {
-    return { status: "ok", names: (await readdir7(path)).sort() };
+    return { status: "ok", names: (await readdir8(path)).sort() };
   } catch (error) {
     return isMissing6(error) ? { status: "missing" } : { status: "unreadable" };
   }
@@ -8047,7 +9059,7 @@ async function entryInfo(path) {
   let target = own;
   if (isLink) {
     try {
-      target = await stat6(path);
+      target = await stat8(path);
     } catch {
       target = null;
     }
@@ -8071,7 +9083,7 @@ async function entryInfo(path) {
 }
 
 // src/scan/plugins.ts
-import { basename as basename3, join as join16, resolve as resolve4 } from "node:path";
+import { basename as basename4, join as join19, resolve as resolve4 } from "node:path";
 
 // src/scan/hooks.ts
 var SHELL_TOOLS2 = ["Bash", "PowerShell"];
@@ -8226,7 +9238,7 @@ function declarationsOf(value) {
 var SKILLS_DIR = "skills-dir";
 async function isIntroEntry(root, name) {
   const lower = name.toLowerCase();
-  const info = await entryInfo(join16(root, name));
+  const info = await entryInfo(join19(root, name));
   if (info.isFile) return INTRO_FILES.test(name) || lower.endsWith(".md") && lower !== "skill.md";
   if (info.isDir) return HELPER_DIRS.has(lower);
   return false;
@@ -8248,7 +9260,7 @@ function mcpMapOf(value) {
 }
 async function readMarketplaceEntries(claudeHome2) {
   const markets = /* @__PURE__ */ new Map();
-  const known2 = await readJson(join16(claudeHome2, "plugins", "known_marketplaces.json"));
+  const known2 = await readJson(join19(claudeHome2, "plugins", "known_marketplaces.json"));
   if (known2.status === "missing") return { file: "missing", markets };
   if (known2.status !== "ok" || !isObject5(known2.value)) return { file: "unreadable", markets };
   for (const [market, info] of Object.entries(known2.value)) {
@@ -8257,7 +9269,7 @@ async function readMarketplaceEntries(claudeHome2) {
       continue;
     }
     const location = info.installLocation;
-    const read = await readJson((await entryInfo(location)).isFile ? location : join16(location, ".claude-plugin", "marketplace.json"));
+    const read = await readJson((await entryInfo(location)).isFile ? location : join19(location, ".claude-plugin", "marketplace.json"));
     if (read.status === "missing") {
       markets.set(market, "missing");
       continue;
@@ -8326,7 +9338,7 @@ async function readPluginInstall(group, markets) {
   if (!plugin.exists) return unknown();
   plugin.installRealPath = installInfo.realPath;
   const listing = await listDir(installPath);
-  const manifestRead = await readJson(join16(installPath, ".claude-plugin", "plugin.json"));
+  const manifestRead = await readJson(join19(installPath, ".claude-plugin", "plugin.json"));
   let manifest = null;
   if (manifestRead.status === "ok" && isObject5(manifestRead.value) && typeof manifestRead.value.name === "string" && manifestRead.value.name !== "") {
     plugin.manifest = "ok";
@@ -8421,7 +9433,7 @@ async function readPluginInstall(group, markets) {
     if (events === null) plugin.hooksUnreadable = true;
     else hookSources.push(events);
   };
-  const defaultHooks = join16(installPath, "hooks", "hooks.json");
+  const defaultHooks = join19(installPath, "hooks", "hooks.json");
   if (await insideRoot(defaultHooks)) await addHookFile(defaultHooks, false);
   else plugin.hooksUnreadable = true;
   if (manifest !== null) {
@@ -8453,7 +9465,7 @@ async function readPluginInstall(group, markets) {
     }
     addMap(read.status === "ok" ? mcpMapOf(read.value) : null);
   };
-  await addMcpFile(join16(installPath, ".mcp.json"), false);
+  await addMcpFile(join19(installPath, ".mcp.json"), false);
   for (const declaration of declarationsOf(base.mcpServers)) {
     if (declaration === null || typeof declaration === "string" && URL_LIKE.test(declaration)) plugin.mcpUnreadable = true;
     else if (typeof declaration === "string") {
@@ -8479,7 +9491,7 @@ async function readPluginInstall(group, markets) {
     if (accepted === null) plugin.unknownEntries.push(`${from}:skills=..`);
     else skillRoots.push(accepted);
   }
-  const defaultSkills = join16(installPath, "skills");
+  const defaultSkills = join19(installPath, "skills");
   const defaultIsRoot = await isPluginRoot(defaultSkills);
   if (defaultIsRoot) plugin.unknownEntries.push("skills=.");
   const entrySkillsOnly = entry.skills !== void 0 && typeof entry.source === "string" && MARKET_ROOT_SOURCES.has(entry.source);
@@ -8490,16 +9502,16 @@ async function readPluginInstall(group, markets) {
 async function readSkillsDirPlugins(refs) {
   const out = [];
   for (const ref of refs) {
-    const read = await readJson(join16(ref.path, ".claude-plugin", "plugin.json"));
+    const read = await readJson(join19(ref.path, ".claude-plugin", "plugin.json"));
     const declared = read.status === "ok" && isObject5(read.value) ? read.value.name : void 0;
-    const name = typeof declared === "string" && declared !== "" ? declared : basename3(ref.path);
+    const name = typeof declared === "string" && declared !== "" ? declared : basename4(ref.path);
     const group = { id: `${name}@${SKILLS_DIR}`, installPath: ref.path, scopes: /* @__PURE__ */ new Set([ref.scope]), projectPaths: new Set(ref.projectRoot === null ? [] : [ref.projectRoot]) };
     out.push(await readPluginInstall(group, { file: "ok", markets: /* @__PURE__ */ new Map() }));
   }
   return out;
 }
 async function scanPlugins(claudeHome2) {
-  const read = await readJson(join16(claudeHome2, "plugins", "installed_plugins.json"));
+  const read = await readJson(join19(claudeHome2, "plugins", "installed_plugins.json"));
   if (read.status !== "ok") return { file: read.status, plugins: [] };
   if (!isObject5(read.value) || !isObject5(read.value.plugins)) return { file: "unparsable", plugins: [] };
   const groups = /* @__PURE__ */ new Map();
@@ -8528,7 +9540,7 @@ async function scanPlugins(claudeHome2) {
 // src/scan/claude-json.ts
 function claudeJsonPath(env, homedir2) {
   const fromEnv = env.CLAUDE_CONFIG_DIR?.trim();
-  return fromEnv ? join17(resolve5(fromEnv), ".claude.json") : join17(homedir2, ".claude.json");
+  return fromEnv ? join20(resolve5(fromEnv), ".claude.json") : join20(homedir2, ".claude.json");
 }
 var MAX_DATE_MS = 864e13;
 var isObject6 = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -8584,9 +9596,9 @@ async function readClaudeJson(path) {
 }
 
 // src/scan/instructions.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 import { lstat as lstat5, readlink } from "node:fs/promises";
-import { basename as basename4, dirname as dirname3, isAbsolute, join as join18, parse, resolve as resolve6 } from "node:path";
+import { basename as basename5, dirname as dirname3, isAbsolute, join as join21, parse, resolve as resolve6 } from "node:path";
 var MIN_LINE_CHARS = 20;
 var RULES_MAX_DEPTH = 8;
 var MAX_IMPORT_HOPS = 4;
@@ -8595,7 +9607,7 @@ function emptyInstructionSet() {
   return { files: [], bytes: 0, chars: { ascii: 0, other: 0 }, lineHashes: [], unreadable: [], unreadableDirs: [] };
 }
 function lineHash(line) {
-  return createHash4("sha256").update(line).digest("hex").slice(0, 32);
+  return createHash5("sha256").update(line).digest("hex").slice(0, 32);
 }
 function countChars(text) {
   let ascii = 0;
@@ -8622,7 +9634,7 @@ async function markdownFilesUnder(dir) {
     if (listing.status === "unreadable") unreadableDirs.push(current);
     if (listing.status !== "ok") return;
     for (const name of listing.names) {
-      const path = join18(current, name);
+      const path = join21(current, name);
       let info;
       try {
         info = await lstat5(path);
@@ -8646,7 +9658,7 @@ function countMentions(text, targets) {
   for (const target of targets) {
     const path = target.normRoot.toLowerCase();
     let count = unified.split(path).length - 1;
-    const name = basename4(target.root).toLowerCase();
+    const name = basename5(target.root).toLowerCase();
     if ([...name].length >= 3) {
       const word = new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(name)}(?![\\p{L}\\p{N}_])`, "gu");
       const withoutPaths = path.length > 0 ? unified.split(path).join(" ") : unified;
@@ -8704,7 +9716,7 @@ function importsOf(text, style = "claude") {
 var NETWORK_PATH = /^(\\\\|\/\/)/;
 function importTarget(token, from, homedir2) {
   if (NETWORK_PATH.test(token)) return null;
-  const target = token.startsWith("~/") || token.startsWith("~\\") ? join18(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve6(dirname3(from), token);
+  const target = token.startsWith("~/") || token.startsWith("~\\") ? join21(homedir2, token.slice(2)) : isAbsolute(token) ? token : resolve6(dirname3(from), token);
   return NETWORK_PATH.test(target) ? null : target;
 }
 function geminiImportTarget(token, from) {
@@ -8722,7 +9734,7 @@ async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
     let current = root;
     let followed = false;
     for (let index = 0; index < parts.length && !followed; index++) {
-      current = join18(current, parts[index]);
+      current = join21(current, parts[index]);
       let info;
       try {
         info = await ops.lstat(current);
@@ -8737,7 +9749,7 @@ async function reachesNetwork(path, ops = { lstat: lstat5, readlink }) {
         return false;
       }
       if (NETWORK_PATH.test(target)) return true;
-      pending = join18(resolve6(dirname3(current), target), ...parts.slice(index + 1));
+      pending = join21(resolve6(dirname3(current), target), ...parts.slice(index + 1));
       followed = true;
     }
     if (!followed) return false;
@@ -8798,15 +9810,15 @@ async function readInstructionSet(paths, mentionTargets = [], sameAsGlobal = /* 
   return { set, mentions };
 }
 async function globalInstructionPaths(claudeHome2) {
-  const rules = await markdownFilesUnder(join18(claudeHome2, "rules"));
-  return { paths: [join18(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
+  const rules = await markdownFilesUnder(join21(claudeHome2, "rules"));
+  return { paths: [join21(claudeHome2, "CLAUDE.md"), ...rules.paths], unreadableDirs: rules.unreadableDirs };
 }
 async function projectInstructionPaths(root) {
-  const claudeFiles = [join18(root, "CLAUDE.md"), join18(root, ".claude", "CLAUDE.md"), join18(root, "CLAUDE.local.md")];
+  const claudeFiles = [join21(root, "CLAUDE.md"), join21(root, ".claude", "CLAUDE.md"), join21(root, "CLAUDE.local.md")];
   const present = [];
   for (const path of claudeFiles) if ((await entryInfo(path)).isFile) present.push(path);
-  const rules = await markdownFilesUnder(join18(root, ".claude", "rules"));
-  const paths = present.length > 0 ? [...present, ...rules.paths] : [join18(root, "AGENTS.md"), join18(root, ".claude", "AGENTS.md"), ...rules.paths];
+  const rules = await markdownFilesUnder(join21(root, ".claude", "rules"));
+  const paths = present.length > 0 ? [...present, ...rules.paths] : [join21(root, "AGENTS.md"), join21(root, ".claude", "AGENTS.md"), ...rules.paths];
   return { paths, unreadableDirs: rules.unreadableDirs };
 }
 async function readGlobalInstructions(claudeHome2, mentionTargets, options = null) {
@@ -8832,8 +9844,8 @@ function definitionHash(saltHex, definition) {
   return text === null ? null : createHmac("sha256", Buffer.from(saltHex, "hex")).update(text).digest("hex");
 }
 var wildcard = (pattern) => new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
-function matcherHits(matcher, names2, definition, byName = true) {
-  if (byName && matcher.serverName !== void 0 && names2.includes(matcher.serverName)) return true;
+function matcherHits(matcher, names2, definition, byName2 = true) {
+  if (byName2 && matcher.serverName !== void 0 && names2.includes(matcher.serverName)) return true;
   if (matcher.serverUrl !== void 0 && definition !== null && typeof definition.url === "string" && wildcard(matcher.serverUrl).test(definition.url)) return true;
   if (matcher.serverCommand !== void 0 && definition !== null && typeof definition.command === "string") {
     const args = Array.isArray(definition.args) ? definition.args : [];
@@ -9021,14 +10033,14 @@ function conflictPairs(user, project, local) {
 }
 
 // src/scan/projects.ts
-import { dirname as dirname4, isAbsolute as isAbsolute2, join as join19, parse as parse2, resolve as resolve7 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute2, join as join22, parse as parse2, resolve as resolve7 } from "node:path";
 async function mainRootFromGitFile(dir, dotGit) {
   const text = await readText(dotGit);
   if (text.status !== "ok") return null;
   const match = /^gitdir:\s*(.+?)\s*$/m.exec(text.text);
   if (match === null) return null;
   const gitDir = isAbsolute2(match[1]) ? match[1] : resolve7(dir, match[1]);
-  const common = await readText(join19(gitDir, "commondir"));
+  const common = await readText(join22(gitDir, "commondir"));
   if (common.status !== "ok") return null;
   const commonDir = resolve7(gitDir, common.text.trim());
   return parse2(commonDir).base.toLowerCase() === ".git" ? dirname4(commonDir) : null;
@@ -9036,7 +10048,7 @@ async function mainRootFromGitFile(dir, dotGit) {
 async function gitRootFrom(start) {
   let dir = start;
   for (; ; ) {
-    const dotGit = join19(dir, ".git");
+    const dotGit = join22(dir, ".git");
     const info = await entryInfo(dotGit);
     if (info.exists && info.isDir) return dir;
     if (info.exists && info.isFile) return await mainRootFromGitFile(dir, dotGit) ?? dir;
@@ -9048,7 +10060,7 @@ async function gitRootFrom(start) {
 var under = (path, base) => path === base || path.startsWith(base.endsWith("/") ? base : `${base}/`);
 function isExcludedFolder(normRoot, normCwd, context) {
   const norm = (path) => normalizePath(path, context.platform);
-  const specials = [context.homedir, join19(context.homedir, "Desktop"), join19(context.homedir, "Documents"), join19(context.homedir, "Downloads")].map(norm);
+  const specials = [context.homedir, join22(context.homedir, "Desktop"), join22(context.homedir, "Documents"), join22(context.homedir, "Downloads")].map(norm);
   const tmp = norm(context.tmpdir);
   const driveRoot = /^[a-z]:\/?$/i.test(normRoot) || normRoot === "/";
   return specials.includes(normRoot) || driveRoot || under(normRoot, tmp) || under(normCwd, tmp);
@@ -9089,7 +10101,7 @@ async function groupProjects(cwds, context) {
 }
 
 // src/scan/settings.ts
-import { join as join20 } from "node:path";
+import { join as join23 } from "node:path";
 var MERGE_MAX_DEPTH = 32;
 function managedSettingsDir(platform) {
   if (platform === "win32") return "C:\\Program Files\\ClaudeCode";
@@ -9191,12 +10203,12 @@ async function readManagedLayer(dir) {
     if (value !== null) merged = mergeSettings(merged ?? {}, sanitizeManagedPart(value));
     if (value !== null && Object.hasOwn(value, "hooks") && value.hooks !== null) hookSources.push({ path, hooks: value.hooks });
   };
-  await take(join20(dir, "managed-settings.json"));
-  const dropIns = await listDir(join20(dir, "managed-settings.d"));
+  await take(join23(dir, "managed-settings.json"));
+  const dropIns = await listDir(join23(dir, "managed-settings.d"));
   if (dropIns.status === "ok") {
-    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join20(dir, "managed-settings.d", name));
+    for (const name of dropIns.names) if (!name.startsWith(".") && name.toLowerCase().endsWith(".json")) await take(join23(dir, "managed-settings.d", name));
   } else if (dropIns.status === "unreadable") {
-    parts.push({ path: join20(dir, "managed-settings.d"), status: "unreadable" });
+    parts.push({ path: join23(dir, "managed-settings.d"), status: "unreadable" });
   }
   return { parts, value: merged, hookSources };
 }
@@ -9246,9 +10258,9 @@ function viewOf(value) {
 }
 
 // src/scan/skills.ts
-import { createHash as createHash5 } from "node:crypto";
-import { lstat as lstat6, readdir as readdir8, readFile as readFile8, realpath as realpath5 } from "node:fs/promises";
-import { basename as basename5, join as join21, relative as relative2 } from "node:path";
+import { createHash as createHash6 } from "node:crypto";
+import { lstat as lstat6, readdir as readdir9, readFile as readFile10, realpath as realpath5 } from "node:fs/promises";
+import { basename as basename6, join as join24, relative as relative2 } from "node:path";
 var CONTENT_HASH_MAX_BYTES = 32 * 1024 * 1024;
 var SIMPLE_ESCAPES2 = {
   "0": "\0",
@@ -9386,12 +10398,12 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
   const walk = async (current) => {
     let names2;
     try {
-      names2 = (await readdir8(current)).sort();
+      names2 = (await readdir9(current)).sort();
     } catch {
       return false;
     }
     for (const name of names2) {
-      const path = join21(current, name);
+      const path = join24(current, name);
       let info;
       try {
         info = await lstat6(path);
@@ -9408,22 +10420,22 @@ async function contentHash(dir, maxBytes = CONTENT_HASH_MAX_BYTES) {
       if (total > maxBytes) return false;
       let data;
       try {
-        data = await readFile8(path);
+        data = await readFile10(path);
       } catch {
         return false;
       }
       const rel = relative2(base, path).replace(/\\/g, "/");
-      entries.push(`${rel}\0${createHash5("sha256").update(data).digest("hex")}`);
+      entries.push(`${rel}\0${createHash6("sha256").update(data).digest("hex")}`);
     }
     return true;
   };
   if (!await walk(base)) return null;
-  return createHash5("sha256").update(entries.sort().join("\n")).digest("hex");
+  return createHash6("sha256").update(entries.sort().join("\n")).digest("hex");
 }
 async function readSkillFolder(path, dirName) {
   const info = await entryInfo(path);
   if (!info.isDir) return null;
-  const skillMd = await readText(join21(path, "SKILL.md"));
+  const skillMd = await readText(join24(path, "SKILL.md"));
   if (skillMd.status === "missing") return null;
   const front = skillMd.status === "ok" ? parseFrontmatter(skillMd.text) : { present: false, fields: /* @__PURE__ */ Object.create(null), unreadable: [] };
   const name = front.fields.name;
@@ -9450,13 +10462,13 @@ async function scanSkillRoot(dir, options = {}) {
   if (listing.status === "unreadable") out.unreadableDirs.push(dir);
   if (listing.status !== "ok") return out;
   for (const name of listing.names) {
-    const path = join21(dir, name);
+    const path = join24(dir, name);
     const info = await entryInfo(path);
     if (info.dangling) {
       out.danglingLinks.push(path);
       continue;
     }
-    if (options.pluginDirs === true && info.isDir && (await entryInfo(join21(path, ".claude-plugin", "plugin.json"))).isFile) {
+    if (options.pluginDirs === true && info.isDir && (await entryInfo(join24(path, ".claude-plugin", "plugin.json"))).isFile) {
       out.pluginDirs.push(path);
       continue;
     }
@@ -9466,8 +10478,8 @@ async function scanSkillRoot(dir, options = {}) {
   return out;
 }
 async function scanSkillPath(path) {
-  if ((await entryInfo(join21(path, "SKILL.md"))).isFile) {
-    const single = await readSkillFolder(path, basename5(path));
+  if ((await entryInfo(join24(path, "SKILL.md"))).isFile) {
+    const single = await readSkillFolder(path, basename6(path));
     return { skills: single === null ? [] : [single], danglingLinks: [], unreadableDirs: [], pluginDirs: [] };
   }
   return scanSkillRoot(path);
@@ -9521,7 +10533,7 @@ function usageOf2(times) {
 var USER_PLACE_HEADS = ["~", "$CLAUDE_CONFIG_DIR", "$CODEX_HOME"];
 function projectNamesOf(refs) {
   const sorted = [...refs].sort((x, y) => x.normRoot < y.normRoot ? -1 : x.normRoot > y.normRoot ? 1 : 0);
-  const original = (ref) => basename6(ref.root) || ref.root;
+  const original = (ref) => basename7(ref.root) || ref.root;
   const reading = (ref) => ref.exists && !ref.excluded;
   const reserved = new Set(sorted.filter(reading).map((ref) => original(ref).toLowerCase()));
   const taken = new Set(USER_PLACE_HEADS.map((head) => head.toLowerCase()));
@@ -9541,14 +10553,14 @@ function projectNamesOf(refs) {
 }
 var slashed = (path) => path.replace(/\\/g, "/");
 async function defaultCopySecrets(input) {
-  const defaultHome = join22(input.homedir, ".claude");
+  const defaultHome = join25(input.homedir, ".claude");
   if (!input.env.CLAUDE_CONFIG_DIR?.trim() || normalizePath(claudeHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
   const found = [];
-  const settings = await readJson(join22(defaultHome, "settings.json"));
+  const settings = await readJson(join25(defaultHome, "settings.json"));
   if (settings.status === "ok" && typeof settings.value === "object" && settings.value !== null) {
     for (const key of envSecretKeys(settings.value.env)) found.push({ scope: "settings", server: null, projectRoot: null, field: "env", key });
   }
-  const claudeJson = await readClaudeJson(join22(input.homedir, ".claude.json"));
+  const claudeJson = await readClaudeJson(join25(input.homedir, ".claude.json"));
   for (const entry of claudeJson.userMcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "user", server: entry.name, projectRoot: null, ...spot });
   for (const project of claudeJson.projects) for (const entry of project.mcpServers) for (const spot of secretSpots(entry.definition)) found.push({ scope: "local", server: entry.name, projectRoot: project.normKey, ...spot });
   return sortSecrets(found).map((secret) => ({ ...secret, copy: "default" }));
@@ -9557,7 +10569,7 @@ async function scanClaudeSetup(input) {
   const home = claudeHome(input.env, input.homedir);
   const claudeJsonFile = claudeJsonPath(input.env, input.homedir);
   const claudeJson = await readClaudeJson(claudeJsonFile);
-  const userLayer = await readLayer(join22(home, "settings.json"));
+  const userLayer = await readLayer(join25(home, "settings.json"));
   const managedLayer = await readManagedLayer(input.managedDir ?? managedSettingsDir(input.platform));
   const userView = viewOf(userLayer.value);
   const managedView = viewOf(managedLayer.value);
@@ -9580,8 +10592,8 @@ async function scanClaudeSetup(input) {
   const projectNames = projectNamesOf(refs);
   const projectPlace = (ref, path) => `${projectNames.get(ref.normRoot)}/${slashed(relative3(ref.root, path))}`;
   for (const ref of active) {
-    const project = await readLayer(join22(ref.root, ".claude", "settings.json"));
-    const local = await readLayer(join22(ref.root, ".claude", "settings.local.json"));
+    const project = await readLayer(join25(ref.root, ".claude", "settings.json"));
+    const local = await readLayer(join25(ref.root, ".claude", "settings.local.json"));
     unparsableUser(project, (path) => projectPlace(ref, path));
     unparsableUser(local, (path) => projectPlace(ref, path));
     projectLayers.set(ref.normRoot, { project, local });
@@ -9596,9 +10608,9 @@ async function scanClaudeSetup(input) {
   }
   const everyContext = [global, ...contexts.values()];
   const globalRead = await readGlobalInstructions(home, active, { homedir: input.homedir });
-  const userSkillScan = await scanSkillRoot(join22(home, "skills"), { pluginDirs: true });
+  const userSkillScan = await scanSkillRoot(join25(home, "skills"), { pluginDirs: true });
   const projectSkillScans = /* @__PURE__ */ new Map();
-  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join22(ref.root, ".claude", "skills"), { pluginDirs: true }));
+  for (const ref of active) projectSkillScans.set(ref.normRoot, await scanSkillRoot(join25(ref.root, ".claude", "skills"), { pluginDirs: true }));
   const skillsDirRefs = [
     ...userSkillScan.pluginDirs.map((path) => ({ path, scope: "user", projectRoot: null })),
     ...active.flatMap((ref) => projectSkillScans.get(ref.normRoot).pluginDirs.map((path) => ({ path, scope: "project", projectRoot: ref.normRoot })))
@@ -9670,7 +10682,7 @@ async function scanClaudeSetup(input) {
   const plugins = [];
   const mcpServers = [];
   for (const plugin of allPlugins) {
-    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join22(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
+    if (plugin.manifest === "unparsable") problems.push({ kind: "unparsable", owner: "plugin", path: join25(plugin.installPath, ".claude-plugin", "plugin.json"), place: null });
     const enabledIn = pluginContexts(plugin).filter((context) => pluginEnabledIn(context, plugin.id, plugin.defaultEnabled));
     const hasHooks = plugin.components.includes("hooks");
     const pluginNames = [.../* @__PURE__ */ new Set([plugin.name, plugin.entryName])];
@@ -9778,7 +10790,7 @@ async function scanClaudeSetup(input) {
       seen.add(identity);
       addServer("local", entry, ref.normRoot, mcpAllowed(context.mcp, mcpRecordNames(entry.name, null), entry.definition));
     }
-    const file = join22(ref.root, ".mcp.json");
+    const file = join25(ref.root, ".mcp.json");
     const read = await readJson(file);
     const entries = read.status === "ok" ? mcpMapOf(read.value) : null;
     const status = read.status !== "ok" ? read.status : entries === null ? "unparsable" : "ok";
@@ -9880,7 +10892,7 @@ async function scanClaudeSetup(input) {
 }
 
 // src/scan/codex.ts
-import { isAbsolute as isAbsolute3, join as join26, relative as relative5, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join29, relative as relative5, resolve as resolve10 } from "node:path";
 
 // node_modules/smol-toml/dist/error.js
 /*!
@@ -10352,10 +11364,10 @@ function parseNumber(ctx, startPtr, startChr, sign, endChr) {
   }
   if (!(state & 1))
     TomlError.x("unfinished numeric value", ctx, startPtr);
-  let str4 = ctx.s.slice(startPtr, ctx.p);
+  let str6 = ctx.s.slice(startPtr, ctx.p);
   if (hasUnderscores)
-    str4 = str4.replaceAll("_", "");
-  return state > 1 ? parseFloat(str4) : parseInteger(ctx, str4, 10, startPtr);
+    str6 = str6.replaceAll("_", "");
+  return state > 1 ? parseFloat(str6) : parseInteger(ctx, str6, 10, startPtr);
 }
 function parseIntegerBaseN(ctx, startPtr, base, endChr) {
   let c, underscore = 1;
@@ -10371,15 +11383,15 @@ function parseIntegerBaseN(ctx, startPtr, base, endChr) {
   }
   if (underscore & 1)
     TomlError.x("unfinished numeric value", ctx);
-  let str4 = ctx.s.slice(startPtr + 2, ctx.p);
+  let str6 = ctx.s.slice(startPtr + 2, ctx.p);
   if (underscore)
-    str4 = str4.replaceAll("_", "");
-  return parseInteger(ctx, str4, base, startPtr);
+    str6 = str6.replaceAll("_", "");
+  return parseInteger(ctx, str6, base, startPtr);
 }
-function parseInteger(ctx, str4, base, startPtr) {
+function parseInteger(ctx, str6, base, startPtr) {
   if (ctx.bi !== true)
     int: {
-      let val = parseInt(str4, base);
+      let val = parseInt(str6, base);
       if (!Number.isSafeInteger(val)) {
         if (ctx.bi)
           break int;
@@ -10387,7 +11399,7 @@ function parseInteger(ctx, str4, base, startPtr) {
       }
       return val;
     }
-  return base === 10 ? BigInt(str4) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str4);
+  return base === 10 ? BigInt(str6) : BigInt((base === 2 ? "0b" : base === 8 ? "0o" : "0x") + str6);
 }
 function parseDate(ctx, c, endChr) {
   let startPtr = ctx.p++, unsafeSeparator;
@@ -10434,25 +11446,25 @@ function parseTime(ctx, c, endChr) {
   let t = ctx.s.slice(start, ctx.p);
   return readDate(ctx, t, 4, false, start);
 }
-function readDate(ctx, str4, type, unsafeDelim, errPtr, temporalSuffix) {
+function readDate(ctx, str6, type, unsafeDelim, errPtr, temporalSuffix) {
   if (ctx.ld) {
-    let date = new TomlDate(str4, type, unsafeDelim);
+    let date = new TomlDate(str6, type, unsafeDelim);
     if (!date.isValid())
       TomlError.x("invalid date", ctx, errPtr);
     return date;
   }
   try {
     if (temporalSuffix)
-      str4 += temporalSuffix;
+      str6 += temporalSuffix;
     switch (type) {
       case 1:
-        return Temporal.ZonedDateTime.from(str4);
+        return Temporal.ZonedDateTime.from(str6);
       case 2:
-        return Temporal.PlainDateTime.from(str4);
+        return Temporal.PlainDateTime.from(str6);
       case 3:
-        return Temporal.PlainDate.from(str4);
+        return Temporal.PlainDate.from(str6);
       case 4:
-        return Temporal.PlainTime.from(str4);
+        return Temporal.PlainTime.from(str6);
     }
   } catch (e) {
     TomlError.x(e instanceof Error ? e.message : "" + e, ctx, errPtr);
@@ -10966,12 +11978,12 @@ function tomlToJson(value) {
 }
 
 // src/scan/codex-instructions.ts
-import { join as join23 } from "node:path";
+import { join as join26 } from "node:path";
 var NAMES = ["AGENTS.override.md", "AGENTS.md"];
 async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
   const unreadable = [];
   for (const name of NAMES) {
-    const path = join23(codexHome2, name);
+    const path = join26(codexHome2, name);
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status === "unreadable") unreadable.push(path);
@@ -10986,7 +11998,7 @@ async function readCodexGlobalInstructions(codexHome2, mentionTargets) {
 }
 async function readCodexProjectInstructions(root, fallback) {
   for (const name of [...NAMES, ...fallback]) {
-    const path = join23(root, name);
+    const path = join26(root, name);
     if ((await entryInfo(path)).isFile) return (await readInstructionSet([path])).set;
   }
   return emptyInstructionSet();
@@ -11049,12 +12061,12 @@ function codexMcpFacts(input) {
 }
 
 // src/scan/codex-plugins.ts
-import { join as join25, relative as relative4, resolve as resolve8, sep } from "node:path";
+import { join as join28, relative as relative4, resolve as resolve8, sep } from "node:path";
 import { lstat as lstat7 } from "node:fs/promises";
 
 // src/scan/codex-skills.ts
-import { readFile as readFile9 } from "node:fs/promises";
-import { basename as basename7, dirname as dirname5, join as join24 } from "node:path";
+import { readFile as readFile11 } from "node:fs/promises";
+import { basename as basename8, dirname as dirname5, join as join27 } from "node:path";
 var MAX_DEPTH = 6;
 var LIMITS = { maxDirectories: 2e3, maxEntries: 2e4 };
 var CODEX_MANIFEST_PATHS = [".codex-plugin/plugin.json", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json"];
@@ -11069,7 +12081,7 @@ function codexFrontmatterOk(bytes) {
 }
 async function manifestNamespace(pluginRoot) {
   for (const relative7 of CODEX_MANIFEST_PATHS) {
-    const path = join24(pluginRoot, ...relative7.split("/"));
+    const path = join27(pluginRoot, ...relative7.split("/"));
     if (!(await entryInfo(path)).isFile) continue;
     const read = await readText(path);
     if (read.status !== "ok") return null;
@@ -11077,7 +12089,7 @@ async function manifestNamespace(pluginRoot) {
       const value = JSON.parse(read.text);
       const name = value?.name === void 0 ? "" : value.name;
       if (typeof name !== "string") return null;
-      return name.trim() === "" ? basename7(pluginRoot) : name;
+      return name.trim() === "" ? basename8(pluginRoot) : name;
     } catch {
       return null;
     }
@@ -11106,7 +12118,7 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
         break walk;
       }
       entries++;
-      const path = join24(dir, name);
+      const path = join27(dir, name);
       const info = await entryInfo(path);
       if (info.dangling) {
         out.danglingLinks.push(path);
@@ -11142,12 +12154,12 @@ async function scanCodexSkillRoot(root, limits = LIMITS, namespace = null) {
     }
   };
   for (const { dir, viaLink } of found) {
-    const folder = await readSkillFolder(dir, basename7(dir));
+    const folder = await readSkillFolder(dir, basename8(dir));
     if (folder === null) continue;
-    const skillFile = join24(dir, "SKILL.md");
+    const skillFile = join27(dir, "SKILL.md");
     let bytes = null;
     try {
-      bytes = await readFile9(skillFile);
+      bytes = await readFile11(skillFile);
     } catch {
       bytes = null;
     }
@@ -11242,12 +12254,12 @@ async function installRoot(base) {
   const versions = [];
   for (const name of listing.names) {
     if (name === "." || name === ".." || !VERSION_SEGMENT.test(name)) continue;
-    const info = await entryInfo(join25(base, name));
+    const info = await entryInfo(join28(base, name));
     if (info.isDir && !info.isLink) versions.push(name);
   }
   if (versions.length === 0) return { install: "missing", root: null };
   const chosen = versions.includes("local") ? "local" : versions.reduce((best, version) => compareCodexPluginVersions(version, best) > 0 ? version : best);
-  return { install: "ok", root: join25(base, chosen) };
+  return { install: "ok", root: join28(base, chosen) };
 }
 async function findManifest(root) {
   const own = async (path) => {
@@ -11258,7 +12270,7 @@ async function findManifest(root) {
       return error.code === "ENOENT" ? { kind: "none" } : null;
     }
   };
-  const agentPath = join25(root, "plugin.json");
+  const agentPath = join28(root, "plugin.json");
   const agent = await own(agentPath);
   if (agent === null) return { status: "unreadable" };
   if (agent.kind === "dir" || agent.kind === "other") return { status: "missing" };
@@ -11275,11 +12287,11 @@ async function findManifest(root) {
   }
   for (const relativePath of CODEX_MANIFEST_PATHS) {
     const [dir, file] = relativePath.split("/");
-    const parent = await own(join25(root, dir));
+    const parent = await own(join28(root, dir));
     if (parent === null) return { status: "unreadable" };
     if (parent.kind === "none") continue;
     if (parent.kind !== "dir") return { status: "missing" };
-    const path = join25(root, dir, file);
+    const path = join28(root, dir, file);
     const manifest = await own(path);
     if (manifest === null) return { status: "unreadable" };
     if (manifest.kind === "none") continue;
@@ -11316,7 +12328,7 @@ async function readCodexPlugin(codexHome2, id) {
   const out = { id, idValid: codexPluginIdValid(id), root: null, install: "missing", manifest: "missing", namespace: null, skillRoots: [], mcpServers: [], mcpUnreadable: false, compositionKnown: true };
   if (!out.idValid) return out;
   const at = id.lastIndexOf("@");
-  const located = await installRoot(join25(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
+  const located = await installRoot(join28(codexHome2, "plugins", "cache", id.slice(at + 1), id.slice(0, at)));
   out.install = located.install;
   out.root = located.root;
   out.compositionKnown = located.install !== "unreadable";
@@ -11356,15 +12368,15 @@ async function readCodexPlugin(codexHome2, id) {
   }
   const listed = typeof manifest.skills === "string" ? [manifest.skills] : Array.isArray(manifest.skills) && manifest.skills.every((item2) => typeof item2 === "string") ? manifest.skills : [];
   const declared = listed.map((raw) => manifestPath(root, raw)).filter((path) => path !== null);
-  const roots = declared.length > 0 ? declared : (await entryInfo(join25(root, "skills"))).isDir ? [join25(root, "skills")] : [];
-  if ((await entryInfo(join25(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join25(root, ".codex-plugin", "migrated-command-skills"));
+  const roots = declared.length > 0 ? declared : (await entryInfo(join28(root, "skills"))).isDir ? [join28(root, "skills")] : [];
+  if ((await entryInfo(join28(root, ".codex-plugin", "migrated-command-skills"))).isDir) roots.push(join28(root, ".codex-plugin", "migrated-command-skills"));
   out.skillRoots = [...new Set(roots)].sort();
   if (isObject5(manifest.mcpServers)) {
     out.mcpServers = serversOf2(manifest.mcpServers);
     return out;
   }
   const declaredFile = manifestPath(root, manifest.mcpServers);
-  const file = declaredFile ?? ((await entryInfo(join25(root, ".mcp.json"))).isFile ? join25(root, ".mcp.json") : null);
+  const file = declaredFile ?? ((await entryInfo(join28(root, ".mcp.json"))).isFile ? join28(root, ".mcp.json") : null);
   if (file === null) return out;
   const text = await readText(file);
   if (text.status === "missing") return out;
@@ -11447,7 +12459,7 @@ var cmp4 = (a, b) => (a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0;
 var SKILL_SCOPE_ORDER2 = { user: 0, project: 1, plugin: 2 };
 var OWNER_ORDER2 = { user: 0, managed: 1, plugin: 2, tool: 3 };
 async function rulePath(raw, home, homedir2) {
-  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join26(homedir2, raw.slice(2)) : raw;
+  const expanded = raw === "~" ? homedir2 : raw.startsWith("~/") || raw.startsWith("~\\") ? join29(homedir2, raw.slice(2)) : raw;
   const absolute = isAbsolute3(expanded) ? expanded : resolve10(home, expanded);
   return (await entryInfo(absolute)).realPath ?? normalizePath(absolute);
 }
@@ -11479,15 +12491,15 @@ function configuredIn(merged, id) {
 }
 var loadable = (plugin) => plugin.idValid && plugin.install === "ok" && plugin.manifest === "ok";
 async function codexDefaultCopySecrets(input) {
-  const defaultHome = join26(input.homedir, ".codex");
+  const defaultHome = join29(input.homedir, ".codex");
   if (!input.env.CODEX_HOME?.trim() || normalizePath(codexHome(input.env, input.homedir)) === normalizePath(defaultHome)) return [];
-  const read = await readCodexConfig(join26(defaultHome, "config.toml"));
+  const read = await readCodexConfig(join29(defaultHome, "config.toml"));
   if (read.status !== "ok") return [];
   return codexMcpSecrets(read.value, []).map((secret) => ({ ...secret, copy: "default" }));
 }
 async function scanCodexSetup(input) {
   const home = codexHome(input.env, input.homedir);
-  const userFile = join26(home, "config.toml");
+  const userFile = join29(home, "config.toml");
   const userRead = await readCodexConfig(userFile);
   const user = userRead.status === "ok" ? userRead.value : {};
   const problems = [];
@@ -11505,11 +12517,11 @@ async function scanCodexSetup(input) {
   const perProject = /* @__PURE__ */ new Map();
   for (const ref of active) {
     const trust = trustOf(user, ref.root, input.platform);
-    if (trust !== "trusted" || await sameAsHome(join26(ref.root, ".codex"))) {
+    if (trust !== "trusted" || await sameAsHome(join29(ref.root, ".codex"))) {
       perProject.set(ref.normRoot, { status: null, merged: user, safety: null });
       continue;
     }
-    const file = join26(ref.root, ".codex", "config.toml");
+    const file = join29(ref.root, ".codex", "config.toml");
     const text = await readText(file);
     const layer = text.status === "ok" ? parseCodexConfig(text.text) : null;
     let status = text.status === "ok" ? layer === null ? "unparsable" : "ok" : text.status;
@@ -11581,13 +12593,13 @@ async function scanCodexSetup(input) {
     }
   };
   const userRoots = [
-    { dir: join26(home, "skills"), place: codexPlace },
-    { dir: join26(input.homedir, ".agents", "skills"), place: homePlace }
+    { dir: join29(home, "skills"), place: codexPlace },
+    { dir: join29(input.homedir, ".agents", "skills"), place: homePlace }
   ].filter((root, index, all) => all.findIndex((other) => normalizePath(other.dir) === normalizePath(root.dir)) === index);
   for (const root of userRoots) addScan(root.dir, await scanCodexSkillRoot(root.dir), root.place, { scope: "user" });
   for (const ref of active) {
-    const dirs = [join26(ref.root, ".agents", "skills")];
-    if (!await sameAsHome(join26(ref.root, ".codex"))) dirs.push(join26(ref.root, ".codex", "skills"));
+    const dirs = [join29(ref.root, ".agents", "skills")];
+    if (!await sameAsHome(join29(ref.root, ".codex"))) dirs.push(join29(ref.root, ".codex", "skills"));
     for (const dir of dirs) addScan(dir, await scanCodexSkillRoot(dir), (path) => projectPlace(ref, path), { scope: "project", projectRoot: ref.normRoot });
   }
   for (const plugin of reads) {
@@ -11647,12 +12659,12 @@ async function scanCodexSetup(input) {
 
 // src/scan/gemini.ts
 import { lstat as lstat8 } from "node:fs/promises";
-import { dirname as dirname7, isAbsolute as isAbsolute4, join as join27, relative as relative6, resolve as resolve11 } from "node:path";
+import { dirname as dirname7, isAbsolute as isAbsolute4, join as join30, relative as relative6, resolve as resolve11 } from "node:path";
 
 // src/scan/gemini-settings.ts
 import { dirname as dirname6, posix, win32 } from "node:path";
-var QUOTE = 34;
-var BACKSLASH2 = 92;
+var QUOTE2 = 34;
+var BACKSLASH3 = 92;
 var SLASH = 47;
 var STAR = 42;
 var NEWLINE = 10;
@@ -11664,16 +12676,16 @@ function stripJsonComments(text) {
     const code = text.charCodeAt(index);
     if (inString) {
       out += text[index];
-      if (code === BACKSLASH2 && index + 1 < text.length) {
+      if (code === BACKSLASH3 && index + 1 < text.length) {
         out += text[index + 1];
         index += 2;
         continue;
       }
-      if (code === QUOTE) inString = false;
+      if (code === QUOTE2) inString = false;
       index++;
       continue;
     }
-    if (code === QUOTE) {
+    if (code === QUOTE2) {
       inString = true;
       out += text[index];
       index++;
@@ -11852,7 +12864,7 @@ async function importBoundary(dir, markers, ops = LOCAL_BOUNDARY_OPS) {
   for (let current = start; ; ) {
     for (const marker2 of markers) {
       if (marker2 === "" || isAbsolute4(marker2) || marker2.includes("..")) continue;
-      const path = join27(current, marker2);
+      const path = join30(current, marker2);
       if (await ops.reachesNetwork(path)) continue;
       if (await ops.exists(path)) return current;
     }
@@ -11867,7 +12879,7 @@ function serverOn(filter, name) {
 }
 async function scanGeminiSetup(input) {
   const home = geminiHome(input.env, input.homedir);
-  const userFile = join27(home, "settings.json");
+  const userFile = join30(home, "settings.json");
   const userRead = await readGeminiSettings(userFile);
   const user = userRead.value;
   const problems = [];
@@ -11884,7 +12896,7 @@ async function scanGeminiSetup(input) {
   const outerKnown = known(userRead.status) && known(defaultsRead.status) && known(systemRead.status);
   const layersWith = (project) => [defaultsRead.value, user, ...project === null ? [] : [project], systemRead.value];
   const folderTrust = folderTrustOn(layersWith(null));
-  const defaultTrustFile = join27(home, "trustedFolders.json");
+  const defaultTrustFile = join30(home, "trustedFolders.json");
   const trustFile = input.env.GEMINI_CLI_TRUSTED_FOLDERS_PATH?.trim() || defaultTrustFile;
   const trustRead = await readGeminiSettings(trustFile);
   const trustStatus = trustRead.status === "ok" && !trustRulesValid(trustRead.value) ? "unparsable" : trustRead.status;
@@ -11901,7 +12913,7 @@ async function scanGeminiSetup(input) {
   const homeReal = (await entryInfo(home)).realPath ?? normalizePath(home);
   const markers = boundaryMarkersOf(layersWith(null));
   const globalRead = await readInstructionSet(
-    contextFileNames(layersWith(null)).map((name) => join27(home, name)),
+    contextFileNames(layersWith(null)).map((name) => join30(home, name)),
     active,
     /* @__PURE__ */ new Set(),
     { homedir: input.homedir, within: await importBoundary(home, markers), style: "gemini" }
@@ -11914,14 +12926,14 @@ async function scanGeminiSetup(input) {
       projects.push({ normRoot: ref.normRoot, scanned: ref.exists && !ref.excluded, trusted, settingsStatus: null, instructions: emptyInstructionSet(), safety: null });
       continue;
     }
-    const dir = join27(ref.root, ".gemini");
+    const dir = join30(ref.root, ".gemini");
     const sameAsHome = normalizePath(dir) === normalizePath(home) || (await entryInfo(dir)).realPath === homeReal;
-    const file = join27(dir, "settings.json");
+    const file = join30(dir, "settings.json");
     const read = sameAsHome ? { status: "missing", value: {} } : await readGeminiSettings(file);
     if (read.status === "unparsable") problems.push({ kind: "unparsable", owner: "user", path: file, place: projectPlace(ref, file) });
     const layers = layersWith(read.value);
     const within = await importBoundary(ref.root, boundaryMarkersOf(layers));
-    const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join27(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
+    const instructions = (await readInstructionSet(contextFileNames(layers).map((name) => join30(ref.root, name)), [], realPaths(globalRead.set), { homedir: input.homedir, within, style: "gemini" })).set;
     projects.push({ normRoot: ref.normRoot, scanned: true, trusted: true, settingsStatus: read.status, instructions, safety: outerKnown && known(read.status) ? geminiSafetyOf(layers, input.platform) : null });
     if (read.status === "ok") projectLayers.push({ normRoot: ref.normRoot, layer: read.value });
   }
@@ -12001,6 +13013,7 @@ async function gatherCheckupInput(options) {
   const claude = await collectClaude(collectOptions);
   const codex = await collectCodex(collectOptions);
   const gemini = await collectGemini(collectOptions);
+  const web = await collectWeb(options.webExports ?? [], collectOptions);
   const collectDates = new Set(makeWindows(options.clock.nowMs, options.clock.timeZone).collectDates);
   const cwds = /* @__PURE__ */ new Set();
   const normalizedCwds = /* @__PURE__ */ Object.create(null);
@@ -12057,7 +13070,9 @@ async function gatherCheckupInput(options) {
         shellTools: [...GEMINI_SHELL_TOOLS].sort(),
         complete: { skills: geminiObserved.skills.complete, mcp: geminiObserved.mcp.complete },
         setup: geminiFacts
-      }
+      },
+      // 웹 채팅은 셋팅이 없고 작업 폴더도 없어 프로젝트 목록에 들지 않는다(설계 「0.5.0에서 정한 것」)
+      ...web.map((item2) => ({ tool: item2.tool, summaries: item2.summaries, coverage: WEB_COVERAGE, shellTools: [], complete: { skills: false, mcp: false }, setup: null }))
     ],
     // Codex와 제미나이의 프로젝트 몫은 정규화한 뿌리로 잇는다(「5단계 2부 계획 전 결정」 9번)
     projects: claudeFacts.projects,
@@ -12090,9 +13105,13 @@ async function gatherCheckupInput(options) {
         idFallbacks: codex.idFallbacks
       }
     },
-    { tool: "gemini", detected: gemini.detected, visibleFrom: gemini.visibleFrom, overlappingSessions: gemini.overlappingSessions, read: geminiRead, observation: geminiObserved }
+    { tool: "gemini", detected: gemini.detected, visibleFrom: gemini.visibleFrom, overlappingSessions: gemini.overlappingSessions, read: geminiRead, observation: geminiObserved },
+    ...web.map((item2) => {
+      const { fromCache: _webFromCache, ...read } = item2.read;
+      return { tool: item2.tool, detected: item2.detected, visibleFrom: item2.visibleFrom, overlappingSessions: 0, read, observation: { skills: WEB_OBSERVATION, mcp: WEB_OBSERVATION }, web: item2.state };
+    })
   ];
-  return { input, collected: { claude, codex, gemini }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools: tools2 };
+  return { input, collected: { claude, codex, gemini, web }, facts: { claude: claudeFacts, codex: codexFacts, gemini: geminiFacts }, tools: tools2 };
 }
 
 // src/commands/run-notices.ts
@@ -12157,13 +13176,13 @@ function runNoticeText(notice, lang) {
 
 // src/commands/self.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname8 } from "node:path";
+import { basename as basename9, dirname as dirname8 } from "node:path";
 var SELF_SKILL_NAMES = ["aq"];
 var SELF_PLUGIN_NAMES = ["chunsik-garage"];
 var BUNDLE_FILE = "aq.mjs";
 async function selfIdentity(entryFile) {
   const skillRealPaths = [];
-  if (basename8(entryFile) === BUNDLE_FILE && basename8(dirname8(entryFile)) === "scripts") {
+  if (basename9(entryFile) === BUNDLE_FILE && basename9(dirname8(entryFile)) === "scripts") {
     try {
       skillRealPaths.push(normalizePath(await realpath6(dirname8(dirname8(entryFile)))));
     } catch {
@@ -12178,20 +13197,22 @@ async function runCheckup(options) {
   const now = options.now ?? Date.now;
   const started = now();
   const opened = await openState(options.stateDir);
+  const webExports = await readWebExports(options.stateDir);
   const gathered = await gatherCheckupInput({
     env: options.env,
     homedir: options.homedir,
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join28(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join31(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
-    ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir }
+    ...options.managedDir === void 0 ? {} : { managedDir: options.managedDir },
+    webExports: webExports.entries
   });
   const evaluation = evaluate(gathered.input);
-  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken }, ignored: opened.broken ? [] : opened.state.ignoredRules ?? [] });
+  const result = checkupResult({ input: gathered.input, evaluation, collected: gathered.tools, appVersion: PROGRAM_VERSION, lang: options.lang, run: { stateBroken: opened.broken, webExportsBroken: webExports.status === "broken" }, ignored: opened.broken ? [] : opened.state.ignoredRules ?? [] });
   const stamp = resultStamp(options.clock.nowMs);
   const notices2 = [];
   let saved = false;
@@ -12261,7 +13282,7 @@ async function withLatestNotify(next, stateDir2, env, homedir2) {
 }
 
 // src/commands/deep-hints.ts
-import { join as join29 } from "node:path";
+import { join as join32 } from "node:path";
 
 // src/core/copy/deep-hints.ts
 var DEEP_HINT_COPY = {
@@ -12303,7 +13324,7 @@ async function runDeepHints(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.save ? join29(options.stateDir, "cache") : null,
+    cacheDir: options.save ? join32(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -12389,18 +13410,127 @@ async function runIgnore(action, rule2, options) {
   return { ignored: next, run: { text: (action === "add" ? copy2.added : copy2.removed).replace("{name}", nameOf(id)) } };
 }
 
+// src/commands/import.ts
+import { stat as stat9 } from "node:fs/promises";
+import { join as join33, resolve as resolve12 } from "node:path";
+var COPY5 = {
+  en: {
+    added: "Added the {tool} export: {count} {count:conversation|conversations}{range}. The next checkup counts it.",
+    range: " from {first} to {last}",
+    replaced: " It replaces the export added before.",
+    skipped: " {count} {count:conversation|conversations} could not be read and {count:is|are} left out.",
+    truncated: " The export could not be read to the end (the file ended early or the folder has too many items), so only what was read is counted.",
+    listReset: " The list of added exports was broken, so it was started again. Add any other export again.",
+    removedReset: "The list of added exports was broken, so it was emptied. Add the exports you want again.",
+    removed: "Removed the {tool} export from the checkup. The export file itself was not touched.",
+    notAdded: "No {tool} export has been added.",
+    list: "Added exports: {tools}.",
+    none: "No web chat export has been added."
+  },
+  ko: {
+    added: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB123\uC5C8\uC2B5\uB2C8\uB2E4. \uB300\uD654 {count}\uAC1C{range}. \uB2E4\uC74C \uC810\uAC80\uBD80\uD130 \uC149\uB2C8\uB2E4.",
+    range: ", {first}\uBD80\uD130 {last}\uAE4C\uC9C0\uC785\uB2C8\uB2E4",
+    replaced: " \uC55E\uC11C \uB123\uC740 \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uBC14\uAFE8\uC2B5\uB2C8\uB2E4.",
+    skipped: " \uC77D\uC9C0 \uBABB\uD55C \uB300\uD654 {count}\uAC1C\uB294 \uBE90\uC2B5\uB2C8\uB2E4.",
+    truncated: " \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB05D\uAE4C\uC9C0 \uC77D\uC9C0 \uBABB\uD574(\uD30C\uC77C\uC774 \uC911\uAC04\uC5D0 \uB04A\uACBC\uAC70\uB098 \uD3F4\uB354\uC758 \uD56D\uBAA9\uC774 \uB108\uBB34 \uB9CE\uC74C) \uC77D\uC740 \uB300\uD654\uB9CC \uC149\uB2C8\uB2E4.",
+    listReset: " \uB123\uC740 \uBAA9\uB85D\uC774 \uAE68\uC838 \uC0C8\uB85C \uB9CC\uB4E4\uC5C8\uC2B5\uB2C8\uB2E4. \uB2E4\uB978 \uB0B4\uBCF4\uB0B4\uAE30\uB294 \uB2E4\uC2DC \uB123\uC5B4 \uC8FC\uC138\uC694.",
+    removedReset: "\uB123\uC740 \uBAA9\uB85D\uC774 \uAE68\uC838 \uBE44\uC6E0\uC2B5\uB2C8\uB2E4. \uC140 \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uB2E4\uC2DC \uB123\uC5B4 \uC8FC\uC138\uC694.",
+    removed: "{tool} \uB0B4\uBCF4\uB0B4\uAE30\uB97C \uC810\uAC80\uC5D0\uC11C \uBE90\uC2B5\uB2C8\uB2E4. \uB0B4\uBCF4\uB0B4\uAE30 \uD30C\uC77C\uC740 \uADF8\uB300\uB85C \uB450\uC5C8\uC2B5\uB2C8\uB2E4.",
+    notAdded: "\uB123\uC740 {tool} \uB0B4\uBCF4\uB0B4\uAE30\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+    list: "\uB123\uC740 \uB0B4\uBCF4\uB0B4\uAE30\uB294 {tools}\uC785\uB2C8\uB2E4.",
+    none: "\uB123\uC740 \uC6F9 \uCC44\uD305 \uB0B4\uBCF4\uB0B4\uAE30\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4."
+  }
+};
+var failure4 = (code, message) => Object.assign(new Error(message), { code });
+function webToolOf(text) {
+  const value = text?.trim().toLowerCase() ?? "";
+  if (value === "chatgpt" || value === "web-chatgpt") return "web-chatgpt";
+  if (value === "claude" || value === "claude.ai" || value === "web-claude") return "web-claude";
+  return null;
+}
+async function entriesFor(stateDir2) {
+  const loaded = await readWebExports(stateDir2);
+  return { entries: loaded.entries, broken: loaded.status === "broken" };
+}
+async function runImportAdd(path, options) {
+  const copy2 = COPY5[options.lang];
+  const absolute = resolve12(path);
+  try {
+    await stat9(absolute);
+  } catch {
+    throw failure4("not-found", `no file at ${absolute}`);
+  }
+  const { entries, broken } = await entriesFor(options.stateDir);
+  const windows = makeWindows(options.clock.nowMs, options.clock.timeZone);
+  const keepFrom = windows.collectDates[0];
+  const before = options.cache ? await exportKey(absolute, options.clock.timeZone).catch(() => null) : null;
+  let exported;
+  try {
+    exported = await readExport(absolute, options.clock.timeZone, keepFrom);
+  } catch (error) {
+    if (error instanceof ExportError) throw failure4(error.problem, `not a readable ChatGPT or Claude.ai export: ${error.problem}`);
+    throw error;
+  }
+  const tool = exported.tool;
+  const replaced = entries.find((entry) => entry.tool === tool && entry.path !== absolute)?.path ?? null;
+  await writeWebExports(options.stateDir, withExport(entries, { tool, path: absolute, addedAt: new Date(options.clock.nowMs).toISOString() }));
+  if (options.cache) await primeWebCache(join33(options.stateDir, "cache"), absolute, before, exported, keepFrom, options.clock.timeZone);
+  const dateOf = (ms) => ms === null ? null : localDateOf(ms, options.clock.timeZone);
+  const added = {
+    tool,
+    path: absolute,
+    conversations: exported.summaries.length,
+    requests: exported.totals.requests,
+    responses: exported.totals.responses,
+    firstDate: dateOf(exported.totals.firstMs),
+    lastDate: dateOf(exported.totals.lastMs),
+    skipped: exported.skipped.tooLong + exported.skipped.broken + exported.skipped.unrecognized,
+    truncated: !exported.complete,
+    replaced,
+    listReset: broken
+  };
+  const name = TOOL_NAMES[tool][options.lang];
+  const range = added.firstDate !== null && added.lastDate !== null ? fill(copy2.range, { first: added.firstDate, last: added.lastDate }) : "";
+  let text = fill(copy2.added, { tool: name, count: added.conversations, range });
+  if (replaced !== null) text += copy2.replaced;
+  if (added.skipped > 0) text += fill(copy2.skipped, { count: added.skipped });
+  if (added.truncated) text += copy2.truncated;
+  if (broken) text += copy2.listReset;
+  return { action: "add", added, run: { text } };
+}
+async function runImportRemove(which, options) {
+  const tool = webToolOf(which);
+  if (tool === null) throw failure4("unknown-tool", `not a web chat: ${which ?? "(none)"}; use chatgpt or claude`);
+  const { entries, broken } = await entriesFor(options.stateDir);
+  if (broken) {
+    await writeWebExports(options.stateDir, []);
+    return { action: "remove", removed: null, run: { text: COPY5[options.lang].removedReset } };
+  }
+  const removed = entries.find((entry) => entry.tool === tool) ?? null;
+  if (removed !== null) await writeWebExports(options.stateDir, entries.filter((entry) => entry.tool !== tool));
+  const name = TOOL_NAMES[tool][options.lang];
+  return { action: "remove", removed, run: { text: fill(removed === null ? COPY5[options.lang].notAdded : COPY5[options.lang].removed, { tool: name }) } };
+}
+async function runImportList(options) {
+  const loaded = await readWebExports(options.stateDir);
+  const copy2 = COPY5[options.lang];
+  const exports = loaded.entries;
+  const text = exports.length === 0 ? copy2.none : fill(copy2.list, { tools: exports.map((entry) => TOOL_NAMES[entry.tool][options.lang]).join(", ") });
+  return { action: "list", exports, run: { text } };
+}
+
 // src/commands/tune-plan.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { join as join33 } from "node:path";
+import { join as join37 } from "node:path";
 
 // src/tune/items.ts
-import { createHash as createHash6 } from "node:crypto";
-import { lstat as lstat9, readFile as readFile10 } from "node:fs/promises";
-import { dirname as dirname9, join as join30 } from "node:path";
+import { createHash as createHash7 } from "node:crypto";
+import { lstat as lstat9, readFile as readFile12 } from "node:fs/promises";
+import { dirname as dirname9, join as join34 } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-var fingerprintOf = (bytes) => createHash6("sha256").update(bytes).digest("hex");
+var fingerprintOf = (bytes) => createHash7("sha256").update(bytes).digest("hex");
 function targetPath(candidate, home) {
-  return join30(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
+  return join34(home, candidate.unit === "A4" ? "config.toml" : "settings.json");
 }
 async function readTarget(path) {
   const folder = await lstat9(dirname9(path)).then(
@@ -12415,7 +13545,7 @@ async function readTarget(path) {
     return code === "ENOENT" || code === "ENOTDIR" ? { status: "missing", folder } : { status: "unreadable" };
   }
   try {
-    return { status: "ok", bytes: await readFile10(path), regular: file.isFile() && folder };
+    return { status: "ok", bytes: await readFile12(path), regular: file.isFile() && folder };
   } catch {
     return { status: "unreadable" };
   }
@@ -12880,42 +14010,46 @@ function verifyText(result, lang) {
 }
 
 // src/tune/plan.ts
-import { mkdir as mkdir6 } from "node:fs/promises";
-import { join as join31 } from "node:path";
+import { mkdir as mkdir8 } from "node:fs/promises";
+import { join as join35 } from "node:path";
 var TUNE_VERIFIED = {
   "claude-code": { from: "2.1.220", to: "2.1.325" },
   codex: { from: "0.166.0", to: "0.166.0" },
   // 제미나이는 정비하지 않는다. 기록에 버전이 없어 늘 범위 밖이다(설계 「0.4.0에서 정한 것」)
-  gemini: { from: "0.68.0", to: "0.68.0" }
+  gemini: { from: "0.68.0", to: "0.68.0" },
+  // 웹 채팅은 셋팅이 없어 정비하지 않는다(설계 「0.5.0에서 정한 것」)
+  "web-chatgpt": null,
+  "web-claude": null
 };
 function versionVerified(tool, version) {
   const parsed = parseVersion(version);
   if (parsed === null) return false;
   const range = TUNE_VERIFIED[tool];
+  if (range === null) return false;
   return compareVersions(parsed, parseVersion(range.from)) >= 0 && compareVersions(parsed, parseVersion(range.to)) <= 0;
 }
 function planIdOf(nowMs, random) {
   return `${resultStamp(nowMs)}-${random}`;
 }
-var PLANS_DIR = join31("tune", "plans");
+var PLANS_DIR = join35("tune", "plans");
 async function writePlan(stateDir2, plan) {
-  const dir = join31(stateDir2, PLANS_DIR);
-  await mkdir6(dir, { recursive: true });
-  const path = join31(dir, `${plan.planId}.json`);
+  const dir = join35(stateDir2, PLANS_DIR);
+  await mkdir8(dir, { recursive: true });
+  const path = join35(dir, `${plan.planId}.json`);
   await writeJson(path, plan);
   return path;
 }
 
 // src/tune/work.ts
-import { chmod, mkdir as mkdir7, open as open5, readdir as readdir9, readFile as readFile11, rename as rename5, rm as rm4, unlink as unlink2 } from "node:fs/promises";
-import { join as join32 } from "node:path";
+import { chmod, mkdir as mkdir9, open as open8, readdir as readdir10, readFile as readFile13, rename as rename7, rm as rm6, unlink as unlink2 } from "node:fs/promises";
+import { join as join36 } from "node:path";
 var ID_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-[0-9a-f]{6}$/;
 var TUNE_DIR = "tune";
-var LOCK_FILE = join32(TUNE_DIR, "lock");
+var LOCK_FILE = join36(TUNE_DIR, "lock");
 async function writeDurable(path, data, mode) {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    const handle = await open5(temporary, "w");
+    const handle = await open8(temporary, "w");
     try {
       await handle.writeFile(data);
       await handle.sync();
@@ -12923,15 +14057,15 @@ async function writeDurable(path, data, mode) {
       await handle.close();
     }
     if (mode !== void 0 && process.platform !== "win32") await chmod(temporary, mode);
-    await rename5(temporary, path);
+    await rename7(temporary, path);
   } catch (error) {
-    await rm4(temporary, { force: true }).catch(() => void 0);
+    await rm6(temporary, { force: true }).catch(() => void 0);
     throw error;
   }
 }
-var workPath = (stateDir2, workId) => join32(stateDir2, TUNE_DIR, `${workId}.json`);
+var workPath = (stateDir2, workId) => join36(stateDir2, TUNE_DIR, `${workId}.json`);
 async function saveWork(stateDir2, work) {
-  await mkdir7(join32(stateDir2, TUNE_DIR), { recursive: true });
+  await mkdir9(join36(stateDir2, TUNE_DIR), { recursive: true });
   await writeDurable(workPath(stateDir2, work.workId), `${JSON.stringify(work, null, 2)}
 `);
 }
@@ -12942,7 +14076,7 @@ var isWork = (value) => {
 async function loadWork(stateDir2, workId) {
   if (!ID_PATTERN.test(workId)) return null;
   try {
-    const value = JSON.parse(await readFile11(workPath(stateDir2, workId), "utf8"));
+    const value = JSON.parse(await readFile13(workPath(stateDir2, workId), "utf8"));
     return isWork(value) && value.workId === workId ? value : null;
   } catch {
     return null;
@@ -12951,7 +14085,7 @@ async function loadWork(stateDir2, workId) {
 async function listWorks(stateDir2) {
   let names2;
   try {
-    names2 = await readdir9(join32(stateDir2, TUNE_DIR));
+    names2 = await readdir10(join36(stateDir2, TUNE_DIR));
   } catch {
     return [];
   }
@@ -12973,11 +14107,11 @@ function isAlive(pid) {
   }
 }
 async function takeLock(stateDir2, alive = isAlive) {
-  const path = join32(stateDir2, LOCK_FILE);
-  await mkdir7(join32(stateDir2, TUNE_DIR), { recursive: true });
+  const path = join36(stateDir2, LOCK_FILE);
+  await mkdir9(join36(stateDir2, TUNE_DIR), { recursive: true });
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const handle = await open5(path, "wx");
+      const handle = await open8(path, "wx");
       try {
         await handle.writeFile(JSON.stringify({ pid: process.pid, at: (/* @__PURE__ */ new Date()).toISOString() }));
       } finally {
@@ -12989,7 +14123,7 @@ async function takeLock(stateDir2, alive = isAlive) {
     }
     let pid;
     try {
-      pid = JSON.parse(await readFile11(path, "utf8")).pid;
+      pid = JSON.parse(await readFile13(path, "utf8")).pid;
     } catch {
       return null;
     }
@@ -13037,7 +14171,7 @@ async function judgeTune(options) {
     tmpdir: options.tmpdir,
     platform: options.platform,
     clock: options.clock,
-    cacheDir: options.cache ? join33(options.stateDir, "cache") : null,
+    cacheDir: options.cache ? join37(options.stateDir, "cache") : null,
     rescan: options.rescan,
     state: opened.state,
     self: await selfIdentity(options.entryFile),
@@ -13047,7 +14181,7 @@ async function judgeTune(options) {
   const reads = /* @__PURE__ */ new Map();
   const items = [];
   for (const candidate of evaluation.candidates) {
-    const input = gathered.input.tools.find((tool) => tool.tool === candidate.tool);
+    const input = setupTools(gathered.input.tools).find((tool) => tool.tool === candidate.tool);
     const judged = evaluation.tools.find((tool) => tool.tool === candidate.tool);
     const home = input.setup.home;
     const path = targetPath(candidate, home);
@@ -13084,12 +14218,12 @@ async function runTunePlan(options) {
 
 // src/commands/tune-run.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
-import { readFile as readFile12 } from "node:fs/promises";
-import { join as join34 } from "node:path";
+import { readFile as readFile14 } from "node:fs/promises";
+import { join as join38 } from "node:path";
 import { isDeepStrictEqual as isDeepStrictEqual4 } from "node:util";
 
 // src/tune/engine.ts
-import { stat as stat7 } from "node:fs/promises";
+import { stat as stat10 } from "node:fs/promises";
 
 // src/tune/json-edit.ts
 import { isDeepStrictEqual as isDeepStrictEqual2 } from "node:util";
@@ -13174,10 +14308,10 @@ function unitOf(text) {
   return unit ?? "  ";
 }
 var indentAt = (text, pos) => /^[ \t]*/.exec(text.slice(text.lastIndexOf("\n", pos - 1) + 1))[0];
-var containerText = (open6, close, entries, indent, style) => {
-  if (indent === null) return `${open6}${entries.map((entry) => entry(null)).join(", ")}${close}`;
+var containerText = (open9, close, entries, indent, style) => {
+  if (indent === null) return `${open9}${entries.map((entry) => entry(null)).join(", ")}${close}`;
   const inner = indent + style.unit;
-  return `${open6}${style.eol}${entries.map((entry) => inner + entry(inner)).join(`,${style.eol}`)}${style.eol}${indent}${close}`;
+  return `${open9}${style.eol}${entries.map((entry) => inner + entry(inner)).join(`,${style.eol}`)}${style.eol}${indent}${close}`;
 };
 var member = (key, value) => (indent) => `${JSON.stringify(key)}: ${value(indent)}`;
 var scalar = (value) => () => JSON.stringify(value);
@@ -13186,9 +14320,9 @@ var spansOf = (node) => node.type === "object" ? node.members.map((m) => ({ star
 var bracketsOf = (node) => node.type === "object" ? ["{", "}"] : ["[", "]"];
 function insertInto(text, node, entry, style, multiline) {
   const spans = spansOf(node);
-  const [open6, close] = bracketsOf(node);
+  const [open9, close] = bracketsOf(node);
   const last = spans[spans.length - 1];
-  if (last === void 0) return { start: node.start, end: node.end, text: containerText(open6, close, [entry], multiline ? indentAt(text, node.start) : null, style) };
+  if (last === void 0) return { start: node.start, end: node.end, text: containerText(open9, close, [entry], multiline ? indentAt(text, node.start) : null, style) };
   if (text.slice(node.start, spans[0].start).includes("\n")) {
     const indent = indentAt(text, last.start);
     return { start: last.end, end: last.end, text: `,${style.eol}${indent}${entry(indent)}` };
@@ -13197,8 +14331,8 @@ function insertInto(text, node, entry, style, multiline) {
 }
 function removeAt(node, index) {
   const spans = spansOf(node);
-  const [open6, close] = bracketsOf(node);
-  if (spans.length === 1) return { start: node.start, end: node.end, text: open6 + close };
+  const [open9, close] = bracketsOf(node);
+  if (spans.length === 1) return { start: node.start, end: node.end, text: open9 + close };
   if (index > 0) return { start: spans[index - 1].end, end: spans[index].end, text: "" };
   return { start: spans[0].start, end: spans[1].start, text: "" };
 }
@@ -13216,9 +14350,9 @@ function editOne(text, op) {
   if (parentAt < 0) {
     if (op.op === "delete" || op.op === "remove") return null;
     const child = op.op === "append" ? serverEntry(op.entry.serverName) : member(op.name, scalar(op.value));
-    const open6 = op.op === "append" ? "[" : "{";
+    const open9 = op.op === "append" ? "[" : "{";
     const close = op.op === "append" ? "]" : "}";
-    edit = insertInto(text, root, member(op.parent, (indent) => containerText(open6, close, [child], indent, style)), style, multiline);
+    edit = insertInto(text, root, member(op.parent, (indent) => containerText(open9, close, [child], indent, style)), style, multiline);
   } else {
     const node = root.members[parentAt].value;
     if (op.op === "append" || op.op === "remove") {
@@ -13377,7 +14511,7 @@ function tomlMeaningOk(original, candidate, ops) {
 
 // src/tune/engine.ts
 async function replaceSetting(path, data) {
-  const mode = await stat7(path).then(
+  const mode = await stat10(path).then(
     (info) => info.mode & 4095,
     () => void 0
   );
@@ -13477,10 +14611,10 @@ async function runFiles(work, io, planned) {
 }
 
 // src/commands/tune-run.ts
-var failure4 = (code, message) => Object.assign(new Error(message), { code });
+var failure5 = (code, message) => Object.assign(new Error(message), { code });
 async function withLock(options, body) {
   const lock = await takeLock(options.stateDir, options.alive);
-  if (lock === null) throw failure4("locked", `another tune run holds the lock: ${join34(options.stateDir, LOCK_FILE)}`);
+  if (lock === null) throw failure5("locked", `another tune run holds the lock: ${join38(options.stateDir, LOCK_FILE)}`);
   try {
     return await body();
   } finally {
@@ -13490,7 +14624,7 @@ async function withLock(options, body) {
 async function loadPlan(stateDir2, planId) {
   if (!ID_PATTERN.test(planId)) return null;
   try {
-    const plan = JSON.parse(await readFile12(join34(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
+    const plan = JSON.parse(await readFile14(join38(stateDir2, PLANS_DIR, `${planId}.json`), "utf8"));
     return plan !== null && plan.planId === planId && Array.isArray(plan.items) && Array.isArray(plan.files) ? plan : null;
   } catch {
     return null;
@@ -13531,9 +14665,9 @@ async function runTuneApply(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const plan = await loadPlan(options.stateDir, options.planId);
-    if (plan === null) throw failure4("plan-not-found", `no saved plan: ${options.planId}`);
+    if (plan === null) throw failure5("plan-not-found", `no saved plan: ${options.planId}`);
     const unknown = options.itemIds.filter((id) => !plan.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure4("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure5("item-not-in-plan", `not in the plan: ${unknown.join(", ")}`);
     const { items: fresh } = await judgeTune({ ...options, cache: true });
     const work = newWork(options, "apply", plan.planId, null);
     for (const id of options.itemIds) {
@@ -13561,10 +14695,10 @@ async function runTuneUndo(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = options.workId === null ? await latestUndoable(options.stateDir) : await loadWork(options.stateDir, options.workId);
-    if (target === null && options.workId === null) throw failure4("nothing-to-undo", "no apply run has changes left to undo");
-    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null && options.workId === null) throw failure5("nothing-to-undo", "no apply run has changes left to undo");
+    if (target === null || target.kind !== "apply") throw failure5("work-not-found", `no apply run: ${options.workId}`);
     const unknown = options.itemIds.filter((id) => !target.items.some((item2) => item2.id === id));
-    if (unknown.length > 0) throw failure4("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
+    if (unknown.length > 0) throw failure5("item-not-in-work", `not in the run: ${unknown.join(", ")}`);
     const chosen = options.itemIds.length > 0 ? target.items.filter((item2) => options.itemIds.includes(item2.id)) : target.items.filter(isUndoable);
     const work = newWork(options, "undo", null, target.workId);
     work.items = chosen.map((item2) => ({ ...item2, before: item2.after, after: item2.before, state: isUndoable(item2) ? "planned" : "not_applied", reason: isUndoable(item2) ? null : "not-written" }));
@@ -13601,7 +14735,7 @@ async function runTuneVerify(options) {
   return withLock(options, async () => {
     const reconciled = await reconcileWorks(options.stateDir);
     const target = await loadWork(options.stateDir, options.workId);
-    if (target === null || target.kind !== "apply") throw failure4("work-not-found", `no apply run: ${options.workId}`);
+    if (target === null || target.kind !== "apply") throw failure5("work-not-found", `no apply run: ${options.workId}`);
     const judged = await judgeTune({ ...options, cache: true });
     const results = [];
     for (const item2 of target.items) {
@@ -13629,23 +14763,23 @@ function openerFor(platform, path) {
 function openInBrowser(path, platform = process.platform, start = spawn) {
   const opener = openerFor(platform, path);
   if (opener === null) return Promise.resolve(false);
-  return new Promise((resolve12) => {
+  return new Promise((resolve13) => {
     try {
       const child = start(opener.command, opener.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
-      child.once("error", () => resolve12(false));
+      child.once("error", () => resolve13(false));
       child.once("spawn", () => {
         child.unref();
-        resolve12(true);
+        resolve13(true);
       });
     } catch {
-      resolve12(false);
+      resolve13(false);
     }
   });
 }
 
 // src/commands/clean.ts
-import { lstat as lstat10, readdir as readdir10, realpath as realpath7 } from "node:fs/promises";
-import { join as join35 } from "node:path";
+import { lstat as lstat10, readdir as readdir11, realpath as realpath7 } from "node:fs/promises";
+import { join as join39 } from "node:path";
 var isMissing7 = (error) => error?.code === "ENOENT";
 async function lstatOrNull(path) {
   try {
@@ -13656,17 +14790,17 @@ async function lstatOrNull(path) {
   }
 }
 async function cleanReports(path, boundary) {
-  const names2 = (await readdir10(path)).sort();
+  const names2 = (await readdir11(path)).sort();
   const base = (name) => name.replace(/\.[^.]*$/, "");
   let latest = null;
   for (const name of names2) {
-    const info = await lstat10(join35(path, name));
+    const info = await lstat10(join39(path, name));
     if (info.isFile() && (latest === null || base(name) > latest)) latest = base(name);
   }
   const removed = { name: "reports", files: 0, bytes: 0 };
   const kept = { name: "reports", files: 0, bytes: 0 };
   for (const name of names2) {
-    const full = join35(path, name);
+    const full = join39(path, name);
     const info = await lstat10(full);
     if (info.isFile() && base(name) === latest) {
       kept.files++;
@@ -13680,7 +14814,7 @@ async function cleanReports(path, boundary) {
   return { removed, kept };
 }
 async function cleanEntry(dir, boundary, spec, level, report) {
-  const path = join35(dir, spec.name);
+  const path = join39(dir, spec.name);
   const info = await lstatOrNull(path);
   if (info === null) return;
   if (spec.name === "reports" && level === "clean") {
@@ -13722,18 +14856,18 @@ async function clean(dir, level) {
 }
 
 // src/commands/doctor.ts
-import { mkdir as mkdir8, rm as rm5, writeFile as writeFile5 } from "node:fs/promises";
-import { join as join36 } from "node:path";
-import * as zlib2 from "node:zlib";
+import { mkdir as mkdir10, rm as rm7, stat as stat11, writeFile as writeFile7 } from "node:fs/promises";
+import { join as join40 } from "node:path";
+import * as zlib3 from "node:zlib";
 function hasZstd() {
-  return typeof zlib2.createZstdDecompress === "function";
+  return typeof zlib3.createZstdDecompress === "function";
 }
 async function canWrite(dir) {
-  const probe = join36(dir, `.write-probe-${process.pid}`);
+  const probe = join40(dir, `.write-probe-${process.pid}`);
   try {
-    await mkdir8(dir, { recursive: true });
-    await writeFile5(probe, "ok");
-    await rm5(probe, { force: true });
+    await mkdir10(dir, { recursive: true });
+    await writeFile7(probe, "ok");
+    await rm7(probe, { force: true });
     return true;
   } catch {
     return false;
@@ -13747,6 +14881,17 @@ async function doctor(input) {
   const groups = groupCopies(records.files);
   const gemini = geminiHome(input.env, input.homedir);
   const geminiList = await listGeminiRecordFiles(geminiRecordHomes(input.env, input.homedir), null);
+  const web = await readWebExports(input.stateDir);
+  const exports = await Promise.all(
+    web.entries.map(async (entry) => {
+      try {
+        const info = await stat11(entry.path);
+        return { tool: entry.tool, path: entry.path, exists: info.isFile() || info.isDirectory(), bytes: info.isFile() ? info.size : null };
+      } catch {
+        return { tool: entry.tool, path: entry.path, exists: false, bytes: null };
+      }
+    })
+  );
   return {
     node: { version: input.nodeVersion, ok: input.nodeOk },
     zstd: hasZstd(),
@@ -13759,13 +14904,14 @@ async function doctor(input) {
       unreadable: records.unreadableDirs.length + records.files.filter((file) => file.size === null).length
     },
     gemini: { home: gemini, tmpFound: geminiList.tmpFound, sessionFiles: geminiList.files.length, unreadable: geminiList.unreadableDirs.length + geminiList.unreadableFiles.length },
+    web: { list: web.status, exports },
     state: { dir: input.stateDir, writable: await canWrite(input.stateDir) }
   };
 }
 
 // src/commands/where.ts
-import { lstat as lstat11, readdir as readdir11 } from "node:fs/promises";
-import { join as join37 } from "node:path";
+import { lstat as lstat11, readdir as readdir12 } from "node:fs/promises";
+import { join as join41 } from "node:path";
 var isMissing8 = (error) => error?.code === "ENOENT";
 async function where(dir) {
   const report = { dir, exists: false, link: false, entries: [], files: 0, bytes: 0, others: [], noSaveResultsInOsTemp: true };
@@ -13782,11 +14928,11 @@ async function where(dir) {
     const entry = { name: spec.name, kind: spec.kind, exists: false, link: false, files: 0, bytes: 0, removedBy: spec.removedBy, unreadable: false };
     if (inside2) {
       try {
-        const info = await lstat11(join37(dir, spec.name));
+        const info = await lstat11(join41(dir, spec.name));
         entry.exists = true;
         entry.link = info.isSymbolicLink();
         if (!entry.link) {
-          const size = await treeSize(join37(dir, spec.name));
+          const size = await treeSize(join41(dir, spec.name));
           entry.files = size.files;
           entry.bytes = size.bytes;
         }
@@ -13800,7 +14946,7 @@ async function where(dir) {
   }
   if (inside2) {
     const known2 = new Set(STATE_ENTRIES.map((spec) => spec.name));
-    report.others = (await readdir11(dir)).filter((name) => !known2.has(name)).sort();
+    report.others = (await readdir12(dir)).filter((name) => !known2.has(name)).sort();
   }
   return report;
 }
@@ -13902,6 +15048,21 @@ async function run(command, rest, context) {
     printJson(await runIgnore(action, rule2, { stateDir: stateDir(context.homedir), lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale) }));
     return 0;
   }
+  if (command === "import" && (rest[0] === "add" || rest[0] === "remove" || rest[0] === "list")) {
+    const action = rest[0];
+    const target = action === "list" ? null : rest[1] ?? null;
+    const args2 = checkupArgs(rest.slice(action === "list" ? 1 : 2), action === "add" ? /* @__PURE__ */ new Set(["--no-save"]) : /* @__PURE__ */ new Set());
+    if (args2 === null || action !== "list" && (target === null || target.startsWith("--"))) return null;
+    const common = {
+      stateDir: stateDir(context.homedir),
+      clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale)
+    };
+    if (action === "add") printJson(await runImportAdd(target, { ...common, cache: !args2.flags.has("--no-save") }));
+    else if (action === "remove") printJson(await runImportRemove(target, common));
+    else printJson(await runImportList(common));
+    return 0;
+  }
   if (command === "deep-hints") {
     const args2 = checkupArgs(rest, TUNE_PLAN_FLAGS);
     if (args2 === null) return null;
@@ -13909,7 +15070,7 @@ async function run(command, rest, context) {
       await runDeepHints({
         env: context.env,
         homedir: context.homedir,
-        tmpdir: context.tmpdir ?? tmpdir(),
+        tmpdir: context.tmpdir ?? tmpdir2(),
         platform: context.platform ?? process.platform,
         clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
@@ -13929,7 +15090,7 @@ async function run(command, rest, context) {
       await runTunePlan({
         env: context.env,
         homedir: context.homedir,
-        tmpdir: context.tmpdir ?? tmpdir(),
+        tmpdir: context.tmpdir ?? tmpdir2(),
         platform: context.platform ?? process.platform,
         clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
@@ -13949,7 +15110,7 @@ async function run(command, rest, context) {
     const options = {
       env: context.env,
       homedir: context.homedir,
-      tmpdir: context.tmpdir ?? tmpdir(),
+      tmpdir: context.tmpdir ?? tmpdir2(),
       platform: context.platform ?? process.platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       lang: pickLang(args2.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
@@ -13967,11 +15128,11 @@ async function run(command, rest, context) {
   const args = command === "checkup" ? checkupArgs(rest) : null;
   if (args !== null) {
     const platform = context.platform ?? process.platform;
-    const open6 = context.open ?? ((path) => openInBrowser(path, platform));
+    const open9 = context.open ?? ((path) => openInBrowser(path, platform));
     const outcome = await runCheckup({
       env: context.env,
       homedir: context.homedir,
-      tmpdir: context.tmpdir ?? tmpdir(),
+      tmpdir: context.tmpdir ?? tmpdir2(),
       platform,
       clock: context.clock ?? { nowMs: Date.now(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
       lang: pickLang(args.lang, context.locale ?? Intl.DateTimeFormat().resolvedOptions().locale),
@@ -13980,7 +15141,7 @@ async function run(command, rest, context) {
       rescan: args.flags.has("--rescan"),
       entryFile: context.entryFile ?? process.argv[1] ?? "",
       ...context.managedDir === void 0 ? {} : { managedDir: context.managedDir },
-      ...args.flags.has("--no-open") ? {} : { open: open6 }
+      ...args.flags.has("--no-open") ? {} : { open: open9 }
     });
     printJson({ summary: outcome.summary, run: outcome.run });
     return 0;

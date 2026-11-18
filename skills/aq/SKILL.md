@@ -1,6 +1,6 @@
 ---
 name: aq
-description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code, Codex, and Gemini CLI records, scores how well the user sets up and uses these AI coding tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools. Korean requests such as "AQ 점검해 줘", "AQ 지수", or "춘식이 정비소" mean the same. Also use when the user wants to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it (Korean such as "안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"). Also use to turn the session start notices on or off, for a deep checkup of the instruction files, to find or clean up the files the checkup keeps (Korean such as "AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), to make an AQ badge for a README ("AQ 배지 만들어 줘"), to fix what it found ("고쳐 줘"), or to leave an item as is ("이건 그대로 둘래").
+description: Run an AQ checkup with Chunsik's Garage. A program on this PC reads the local Claude Code, Codex, and Gemini CLI records, plus ChatGPT and Claude.ai data exports the user adds, scores how well the user sets up and uses these AI tools, writes a one-page report and opens it in the browser, and returns a short summary to relay in the terminal. Use when the user asks for an AQ checkup, their AQ score, or how well they use their AI coding tools ("AQ 점검해 줘", "AQ 지수", "춘식이 정비소"), or gives a ChatGPT or Claude.ai export file to add ("ChatGPT 내보낸 파일 넣어 줘"). Also use to turn off the unused skills, plugins, or MCP servers the checkup found, check that change, or undo it ("안 쓰는 것 정리해 줘", "정비해 줘", "되돌려 줘"), to turn the session start notices on or off, for a deep checkup of the instruction files, to find or clean up the files the checkup keeps ("AQ 알림 켜 줘", "정밀 점검해 줘", "AQ 점검 파일 어디 있어?", "AQ 기록 정리해 줘"), to make an AQ badge ("AQ 배지 만들어 줘"), to fix what it found ("고쳐 줘"), or to leave an item as is ("이건 그대로 둘래").
 allowed-tools: Bash(node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" *)
 ---
 
@@ -172,6 +172,7 @@ This never changes the score. Do it only when the user asks for a deep checkup o
    ```
 
 3. Relay what was removed and what was kept. Never delete files in that folder yourself.
+4. `clean --all` also forgets the web chat exports the user added (section 12). The export files themselves are not touched.
 
 ## 9. AQ badge
 
@@ -205,3 +206,29 @@ node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" ignore add <rule ID> --lang <lang>
 - The program prints `{"ignored": [...], "run": {"text": ...}}`. Relay `run.text`. The item still counts in the score. From the next checkup on, it is left out of what to fix first and the next-grade steps, and `summary.ignored` lists it.
 - To put it back, run `ignore remove <rule ID>`. To see the list, run `ignore list`.
 - `unknown-rule` means the rule ID is not one of the checkup's rules. `state-broken` means the state file could not be read, so offer a checkup first.
+
+## 12. Adding ChatGPT and Claude.ai chats
+
+The checkup can also count the user's web chats from the data export file the user downloads from ChatGPT or Claude.ai. It counts when and how much the user asked and got replies. The program never puts conversation text, titles, or attachment names in its output.
+
+1. When the user gives the path of an export file (the downloaded zip, the folder it was unzipped to, or a `conversations.json` taken out of it), run:
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" import add "<path>" --lang <lang>
+   ```
+
+   Relay `run.text`, then offer a checkup. Never open, read, unzip, or summarize the export file yourself.
+2. If the user asks how to get the file: in ChatGPT it is Settings, then Data controls, then Export data. In Claude.ai it is Settings, then Privacy, then Export data. The service sends a download link by email. Menu names can change, so suggest looking for Export in the settings if these are not there.
+3. The program keeps only where the file is and does not keep the export itself. If the user deletes or moves the file, it drops out of the next checkup with a notice. An export covers chats up to the day it was made, so a new export counts later days.
+4. To see or take out what was added, run one of these. `remove` takes `chatgpt` or `claude`, and it does not touch the export file.
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" import list --lang <lang>
+   ```
+
+   ```bash
+   node "${CLAUDE_SKILL_DIR}/scripts/aq.mjs" import remove chatgpt --lang <lang>
+   ```
+
+5. If the program stops with `{"error": {...}}`: `not-found` means there is no file at that path. `not-file`, `no-conversations`, `not-array`, and `unknown-service` mean it is not a ChatGPT or Claude.ai export file. `folder-too-large` means the folder has too many items, so suggest giving the zip or the folder that holds the conversation files. A code starting with `zip-` means the zip could not be unpacked, so suggest downloading it again. Say only that, in one line as Chunsik with `(;_;)`.
+6. Web chats have no settings, so they count only toward the days of use and the requests per day. If the latest checkup had only web chats, the program gives no AQ and says why.
